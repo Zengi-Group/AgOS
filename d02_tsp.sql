@@ -2,6 +2,8 @@
 -- AGOS Schema: d02_tsp
 -- Project: TURAN Agricultural Operating System
 -- Consolidated: 2026-03-05 (pre-development baseline)
+-- Extended:    2026-06-15 — M4 (Batch/Pool/Offer v1.0) + M6 (TSP Flow v1.0)
+--              merged from d09_tsp_m4m6_patch.sql (see SECTION 7).
 --
 -- Market / TSP (Transparent Supply Pool) module.
 Batches, Pools, Matches, Delivery, Prices.
@@ -944,6 +946,677 @@ values (
     array['expert_assessment','regional_markets'],
     'monthly'
 ) on conflict (code) do nothing;
+
+-- ============================================================
+-- SECTION 7: M4 + M6 EXTENSION (merged 2026-06-15)
+-- ============================================================
+-- Source: d09_tsp_m4m6_patch.sql v1.0 — consolidated into canonical file
+-- per CLAUDE.md ("separate patch files are FORBIDDEN").
+-- All statements idempotent: safe to re-run on existing DB.
+--
+-- Decisions implemented:
+--   M4 §1.1:  livestock_categories, livestock_category_rules,
+--             reference_prices, minimum_prices, batch_events;
+--             Offer entity (broadcast-механика);
+--             Pool = PoolRequest absorbed (pool_requests deprecated).
+--   D-M6-1,3,9: tsp_config (offer_window=24h, mpk_window=24h,
+--                publish_lead=7d, price_step_down=100₸/kg).
+--   D-M6-4:   pool_regions (rayon-level matching).
+--   D-M6-5/12: batches.status 'confirmed' (identity revealed at confirmed).
+--   D-M6-6:   batches.ready_from / ready_to.
+--   D-M6-7:   batches.scheduled_publish_at + 'scheduled' status.
+--   D-M6-8:   pools.delivery_from / delivery_to (overlap predicate).
+--   D-M6-10:  batches dispatched/delivered at batch level (two-sided handshake).
+--   D-M6-11:  review_dimensions, deal_reviews, deal_review_dimension_scores.
+--   D-M6-12:  visible_at double-blind reveal.
+--   D-M6-13:  pool_lines (container model), batches.pool_line_id,
+--             pools.total_target_volume_kg.
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- 7.1: EXTEND batches TABLE
+-- ------------------------------------------------------------
+
+-- 7.1.1 Temporal model: delivery window on Batch (D-M6-6)
+alter table public.batches
+    add column if not exists ready_from date,
+    add column if not exists ready_to   date;
+
+comment on column public.batches.ready_from is
+    'D-M6-6: Earliest date farmer can dispatch this batch. Invariant: ready_to >= ready_from.
+     Locked when batch reaches state=matched. Drives scheduled_publish_at.';
+comment on column public.batches.ready_to is
+    'D-M6-6: Latest date farmer can hold batch ready for dispatch.
+     Matching predicate: batch.ready_window ∩ pool.delivery_window ≠ ∅ (D-M6-8).';
+
+-- 7.1.2 Deferred publication (D-M6-7)
+alter table public.batches
+    add column if not exists scheduled_publish_at timestamptz;
+
+comment on column public.batches.scheduled_publish_at is
+    'D-M6-7: = ready_from − tsp_config.publish_lead_days.
+     NULL or ≤ now → spot (immediate matching).
+     > now → batch enters state=scheduled until system job fires at this timestamp.';
+
+-- 7.1.3 Price fields (M4 §2)
+alter table public.batches
+    add column if not exists farmer_price_per_kg int check (farmer_price_per_kg > 0),
+    add column if not exists deal_price_per_kg   int check (deal_price_per_kg > 0);
+
+comment on column public.batches.farmer_price_per_kg is
+    'M4 §2: ₸/kg set by farmer at publication. Soft-warned if < minimum_price (Art.171 PK RK).
+     Can be lowered in awaiting_price_decision → triggers new broadcast (D-M6-3, fixed 100₸ step).';
+comment on column public.batches.deal_price_per_kg is
+    'M4 §2: Locked deal price. = winning pool.mpk_price (auto-match)
+     or offer.offered_price (broadcast-match). Immutable after match. ₸/kg.';
+
+-- 7.1.4 Pool line FK — column added here; FK constraint added after pool_lines created (7.4)
+alter table public.batches
+    add column if not exists pool_line_id uuid;
+
+comment on column public.batches.pool_line_id is
+    'D-M6-13: FK → pool_lines.id. Replaces conceptual batch.pool_id.
+     NULL = unmatched (or returned after pool closure). Locked at state=matched.
+     FK constraint added in 7.4 after pool_lines table creation.';
+
+-- 7.1.5 FSM timestamps (M4 §3 + M6 §3)
+alter table public.batches
+    add column if not exists scheduled_at               timestamptz,
+    add column if not exists offering_at                timestamptz,
+    add column if not exists awaiting_price_decision_at timestamptz,
+    add column if not exists confirmed_at               timestamptz,
+    add column if not exists dispatched_at              timestamptz,
+    add column if not exists delivered_at               timestamptz;
+
+-- 7.1.6 Expand status CHECK to include all M4 + M6 states
+-- M4 §3.1 states: draft, published, offering, awaiting_price_decision,
+--                 matched, confirmed, dispatched, delivered, cancelled, failed
+-- M6 §3 adds:     scheduled
+-- Legacy kept:    expired (backward compat, deprecated going forward)
+do $$
+declare v_cname text;
+begin
+    select conname into v_cname
+      from pg_constraint
+     where conrelid = 'public.batches'::regclass
+       and contype = 'c'
+       and pg_get_constraintdef(oid) ilike '%status%'
+     limit 1;
+    if v_cname is not null then
+        execute 'alter table public.batches drop constraint ' || quote_ident(v_cname);
+    end if;
+end $$;
+
+alter table public.batches
+    add constraint batches_status_check check (status in (
+        -- M4 + M6 canonical states
+        'draft',                    -- editable, not visible to market
+        'scheduled',                -- D-M6-7: future publish; waiting for scheduled_publish_at
+        'published',                -- visible, no match yet; retry-match on new Pool
+        'offering',                 -- M4 §5: broadcast Offers sent to MPKs, FCFS 24h
+        'awaiting_price_decision',  -- M4 §2.6: all Offers expired; farmer decides price
+        'matched',                  -- in a Pool.pool_line, awaiting pool close
+        'confirmed',                -- D-M6-5: pool closed, deal locked; identity revealed
+        'dispatched',               -- D-M6-10: farmer confirmed dispatch (BT-16 amended)
+        'delivered',                -- D-M6-10: MPK confirmed receipt at batch level
+        'cancelled',                -- terminal negative (farmer or admin)
+        'failed',                   -- M4: terminal error state
+        -- Legacy (backward compat only — do not use in new code)
+        'expired'                   -- DEPRECATED: use pool expiry logic
+    ));
+
+comment on column public.batches.status is
+    'FSM (M4 §3 + M6 §3):
+     draft → scheduled|published|offering|matched → confirmed → dispatched → delivered.
+     Parallel unhappy: → awaiting_price_decision → offering (price lowered).
+     Terminal: cancelled, failed. Legacy ''expired'' kept for compat.';
+
+-- ------------------------------------------------------------
+-- 7.2: EXTEND pools TABLE
+-- ------------------------------------------------------------
+
+-- 7.2.1 Pool is now self-contained (M4: PoolRequest absorbed → pool_request_id nullable)
+alter table public.pools
+    alter column pool_request_id drop not null;
+
+comment on column public.pools.pool_request_id is
+    'M4: PoolRequest absorbed into Pool. DEPRECATED FK.
+     New Pool records: pool_request_id = NULL.
+     Old records retain their value. pool_requests table is deprecated.';
+
+-- 7.2.2 Aggregate volume target — container model (D-M6-13)
+alter table public.pools
+    add column if not exists total_target_volume_kg int check (total_target_volume_kg > 0);
+
+comment on column public.pools.total_target_volume_kg is
+    'D-M6-13: Aggregate target in kg across all pool_lines.
+     Pool "filled" when Σ(matched batch volumes by line) reaches this.
+     Complements target_heads (kept for backward compat).';
+
+-- 7.2.3 Pool delivery window — overlap matching predicate (D-M6-8)
+alter table public.pools
+    add column if not exists delivery_from date,
+    add column if not exists delivery_to   date;
+
+comment on column public.pools.delivery_from is
+    'D-M6-8: Pool delivery window start.
+     Matching predicate: batch.[ready_from,ready_to] ∩ pool.[delivery_from,delivery_to] ≠ ∅.';
+comment on column public.pools.delivery_to is
+    'D-M6-8: Pool delivery window end.';
+
+-- 7.2.4 Expand pools status CHECK (M4 §4.1)
+-- M4 canonical: draft, filling, awaiting_mpk_decision, closed_filled,
+--               closed_partial, closed_unfilled, executing, completed,
+--               cancelled, expired_empty
+-- Legacy kept:  filled, dispatched, delivered, executed, closed
+do $$
+declare v_cname text;
+begin
+    select conname into v_cname
+      from pg_constraint
+     where conrelid = 'public.pools'::regclass
+       and contype = 'c'
+       and pg_get_constraintdef(oid) ilike '%status%'
+     limit 1;
+    if v_cname is not null then
+        execute 'alter table public.pools drop constraint ' || quote_ident(v_cname);
+    end if;
+end $$;
+
+alter table public.pools
+    add constraint pools_status_check check (status in (
+        -- M4 §4.1 canonical states
+        'draft',                -- MPK configuring, not yet published
+        'filling',              -- published, accepting batch matches
+        'awaiting_mpk_decision',-- window expired, partial fill; MPK must decide
+        'closed_filled',        -- target reached (incl. overshoot); batches → confirmed
+        'closed_partial',       -- MPK accepted partial fill
+        'closed_unfilled',      -- MPK returned batches (or default after decision window)
+        'executing',            -- dispatch started
+        'completed',            -- all batches delivered
+        'cancelled',            -- MPK cancelled before close
+        'expired_empty',        -- window expired, zero batches matched
+        -- Legacy (backward compat only — do not use in new code)
+        'filled',       -- DEPRECATED → use closed_filled
+        'dispatched',   -- DEPRECATED at pool level → use batch dispatched
+        'delivered',    -- DEPRECATED at pool level → use batch delivered
+        'executed',     -- DEPRECATED → use completed
+        'closed'        -- DEPRECATED → use closed_filled/closed_partial/closed_unfilled
+    ));
+
+-- 7.2.5 Pool FSM timestamps
+alter table public.pools
+    add column if not exists published_at          timestamptz,
+    add column if not exists awaiting_decision_at  timestamptz,
+    add column if not exists cancelled_at          timestamptz,
+    add column if not exists completed_at          timestamptz;
+
+-- ------------------------------------------------------------
+-- 7.3: DEPRECATE pool_requests TABLE
+-- ------------------------------------------------------------
+
+comment on table public.pool_requests is
+    'DEPRECATED — M4 decision 2026-05-16: PoolRequest entity absorbed into Pool.
+     Table and existing rows kept for backward compat. Do NOT create new pool_request records.
+     New MPK pools are created via rpc_create_pool() with pool_lines array.
+     pools.pool_request_id FK is now nullable.';
+
+-- ------------------------------------------------------------
+-- 7.4: NEW TABLE — pool_lines
+-- Category-level rows within an MPK Pool container (D-M6-13)
+-- ------------------------------------------------------------
+
+create table if not exists public.pool_lines (
+    id                  uuid    primary key default gen_random_uuid(),
+    pool_id             uuid    not null references public.pools(id) on delete cascade,
+    -- Category link (tsp_sku until livestock_categories is seeded — D-M6-13)
+    tsp_sku_id          uuid    references public.tsp_skus(id),
+    category_label      text,   -- human-readable label (used until classifier finalised)
+    -- MPK pricing
+    mpk_price_per_kg    int     not null check (mpk_price_per_kg > 0),
+    -- Volume (D-M6-13: MAX allowed, MIN not — MIN creates unfillable states)
+    max_volume_kg       int     check (max_volume_kg > 0),          -- optional cap per category
+    current_volume_kg   int     not null default 0
+                                    check (current_volume_kg >= 0), -- running total matched
+    is_active           boolean not null default true,
+    created_at          timestamptz not null default now(),
+    updated_at          timestamptz not null default now()
+);
+
+comment on table public.pool_lines is
+    'D-M6-13: One row = one category within an MPK Pool container.
+     Pool carries total_target_volume_kg (aggregate) + N lines (per-category demand).
+     Rule: MAX allowed (caps overfill), MIN not allowed (would create unfillable states).
+     mpk_price_per_kg >= minimum_price enforced by rpc_create_pool RPC.
+     batch.pool_line_id FK → this table (replaces batch.pool_id concept D-TSP-1/D-TSP-2).
+     current_volume_kg updated atomically by matching RPC on each Batch add.';
+comment on column public.pool_lines.max_volume_kg is
+    'D-M6-13: Optional per-category volume cap (kg). NULL = no upper limit.
+     System stops matching new batches to this line when current_volume_kg >= max_volume_kg.';
+
+create index if not exists idx_pool_lines_pool_id    on public.pool_lines (pool_id);
+create index if not exists idx_pool_lines_tsp_sku_id on public.pool_lines (tsp_sku_id);
+
+alter table public.pool_lines enable row level security;
+
+-- FK from batches.pool_line_id → pool_lines.id (column added in 7.1.4)
+do $$
+begin
+    alter table public.batches
+        add constraint batches_pool_line_id_fk
+            foreign key (pool_line_id)
+            references public.pool_lines (id)
+            on delete set null;
+exception when duplicate_object then null;
+end $$;
+
+create index if not exists idx_batches_pool_line_id
+    on public.batches (pool_line_id)
+    where pool_line_id is not null;
+
+-- ------------------------------------------------------------
+-- 7.5: NEW TABLE — pool_regions
+-- Rayon-level region targeting for Pools (D-M6-4)
+-- ------------------------------------------------------------
+
+create table if not exists public.pool_regions (
+    id              uuid    primary key default gen_random_uuid(),
+    pool_id         uuid    not null references public.pools(id) on delete cascade,
+    region_type     text    not null check (region_type in ('oblast', 'rayon')),
+    region_id       uuid    not null references public.regions(id),
+    created_at      timestamptz not null default now(),
+    unique (pool_id, region_id)
+);
+
+comment on table public.pool_regions is
+    'D-M6-4: Rayon-level region targeting. Pool specifies N region rows.
+     region_type=rayon  → specific rayon; batch.region_id must match exactly.
+     region_type=oblast → all rayons of that oblast match
+                          (join via regions.parent_id in matching RPC).
+     "Вся область" UI option = insert one oblast row (not all its rayons individually).
+     Additive: add rows to expand, delete to restrict pool coverage.
+     Consequence D-M6-4: stricter market → higher frequency of issuance C (published state).';
+
+create index if not exists idx_pool_regions_pool_id   on public.pool_regions (pool_id);
+create index if not exists idx_pool_regions_region_id on public.pool_regions (region_id);
+
+alter table public.pool_regions enable row level security;
+
+-- ------------------------------------------------------------
+-- 7.6: NEW TABLE — offers
+-- Broadcast offer entity; FCFS 24h (M4 §5)
+-- ------------------------------------------------------------
+
+create table if not exists public.offers (
+    id                      uuid    primary key default gen_random_uuid(),
+    batch_id                uuid    not null references public.batches(id),
+    mpk_org_id              uuid    not null references public.organizations(id),
+    offered_price_per_kg    int     not null check (offered_price_per_kg > 0),
+    status                  text    not null default 'pending'
+                                        check (status in (
+                                            'pending',    -- awaiting MPK response
+                                            'accepted',   -- MPK accepted → batch matched
+                                            'rejected',   -- MPK explicitly rejected
+                                            'expired',    -- offer_window elapsed, no response
+                                            'withdrawn'   -- system closed (sibling accepted /
+                                                          -- batch cancelled / pool filled)
+                                        )),
+    expires_at              timestamptz not null,  -- = created_at + offer_window_hours
+    responded_at            timestamptz,
+    responded_by            uuid    references public.users(id),
+    created_at              timestamptz not null default now(),
+    unique (batch_id, mpk_org_id)   -- one active Offer per batch per MPK
+);
+
+comment on table public.offers is
+    'M4 §5: Broadcast offer — created when batch has no auto-match (step 3 of publish_batch).
+     System sends one Offer per matching MPK organisation. FCFS: first MPK to accept wins.
+     On accept: all other pending Offers for same batch → withdrawn (atomically).
+     offer_window_hours from tsp_config (confirmed: 24h, D-M6-1).
+     unique(batch_id, mpk_org_id): MPK cannot receive duplicate Offers for same batch.
+     After all Offers expire → batch → awaiting_price_decision (M4 §2.6).';
+
+create index if not exists idx_offers_batch_id     on public.offers (batch_id);
+create index if not exists idx_offers_mpk_org_id   on public.offers (mpk_org_id);
+create index if not exists idx_offers_pending       on public.offers (expires_at)
+    where status = 'pending';  -- for scheduled-job sweep
+
+alter table public.offers enable row level security;
+
+-- ------------------------------------------------------------
+-- 7.7: NEW TABLE — livestock_categories
+-- TSP sales taxonomy — derived by classifier (M4 §1.1)
+-- ------------------------------------------------------------
+
+create table if not exists public.livestock_categories (
+    id              uuid    primary key default gen_random_uuid(),
+    code            text    not null unique,
+    name_ru         text    not null,
+    description_ru  text,
+    is_active       boolean not null default true,
+    sort_order      int     not null default 0,
+    created_at      timestamptz not null default now()
+);
+
+comment on table public.livestock_categories is
+    'M4 §1.1: TSP sales taxonomy. Distinct from HerdGroup animal classification (D29).
+     Derived automatically via livestock_category_rules — farmer never selects manually.
+     Seed data: pending Q-TSP-CATEGORY-CLASSIFIER (finalisation with zoologist, before pilot).
+     reference_prices and minimum_prices reference this table.';
+
+-- ------------------------------------------------------------
+-- 7.8: NEW TABLE — livestock_category_rules
+-- Rules for rpc_derive_category (M4 §1.1)
+-- ------------------------------------------------------------
+
+create table if not exists public.livestock_category_rules (
+    id              uuid    primary key default gen_random_uuid(),
+    category_id     uuid    not null references public.livestock_categories(id),
+    version         int     not null default 1,
+    -- Matching criteria (NULL = wildcard / any value accepted)
+    breed_group     text    check (breed_group in ('elite_meat','local','crossbred')),
+    sex             text    check (sex in ('bull','heifer','cow')),
+    age_min_months  int,
+    age_max_months  int,    -- null = no upper bound
+    weight_min_kg   int,
+    weight_max_kg   int,    -- null = no upper bound
+    bcs_min         numeric(3,1),
+    bcs_max         numeric(3,1),
+    -- Tiebreak: highest priority wins when multiple rules match
+    priority        int     not null default 0,
+    is_active       boolean not null default true,
+    created_at      timestamptz not null default now()
+);
+
+comment on table public.livestock_category_rules is
+    'M4 §1.1: Rule set for rpc_derive_category(breed_group, sex, age_months, weight_kg, bcs).
+     Versioned: admin prepares new ruleset (version N+1) without breaking active rules.
+     Matching: all non-null criteria must match; highest priority rule wins on multi-match.
+     P8: standards-as-data — classifier update = INSERT new rules, not code deploy.
+     Q-TSP-CATEGORY-CLASSIFIER: pending finalisation with zoologist before pilot.';
+
+create index if not exists idx_category_rules_category on public.livestock_category_rules (category_id);
+create index if not exists idx_category_rules_active   on public.livestock_category_rules (is_active, priority desc);
+
+-- ------------------------------------------------------------
+-- 7.9: NEW TABLE — reference_prices
+-- TURAN recommended prices per livestock category (M4 §1.1)
+-- ------------------------------------------------------------
+
+create table if not exists public.reference_prices (
+    id                      uuid    primary key default gen_random_uuid(),
+    category_id             uuid    not null references public.livestock_categories(id),
+    region_id               uuid    references public.regions(id),  -- null = national
+    price_per_kg            int     not null check (price_per_kg > 0),
+    -- Mandatory antitrust disclaimer (Art. 171 PK RK / §5.9)
+    legal_disclaimer_shown  boolean not null default true,
+    valid_from              date    not null,
+    valid_to                date,
+    is_active               boolean not null default false,
+    approved_by             uuid    references public.users(id),
+    approved_at             timestamptz,
+    created_at              timestamptz not null default now(),
+    unique (category_id, region_id, valid_from)
+);
+
+comment on table public.reference_prices is
+    'M4 §1.1: TURAN recommended (indicative) price per LivestockCategory.
+     ANTITRUST (Art.171 PK RK, §5.9 Tier 3): indicative only, NOT binding.
+     Disclaimer MANDATORY when displayed: «Справочные цены являются индикативными
+     рыночными ориентирами. TURAN не устанавливает и не гарантирует цены сделок.»
+     AI LAYER RESTRICTION: AI may ONLY reference this table for price hints
+     (never aggregated transaction data — Dok5 §6 antitrust constraint).
+     region_id=NULL = national fallback.';
+
+-- ------------------------------------------------------------
+-- 7.10: NEW TABLE — minimum_prices
+-- Protective floor per livestock category (M4 §1.1)
+-- ------------------------------------------------------------
+
+create table if not exists public.minimum_prices (
+    id              uuid    primary key default gen_random_uuid(),
+    category_id     uuid    not null references public.livestock_categories(id),
+    region_id       uuid    references public.regions(id),
+    price_per_kg    int     not null check (price_per_kg > 0),
+    valid_from      date    not null,
+    valid_to        date,
+    is_active       boolean not null default false,
+    approved_by     uuid    references public.users(id),
+    approved_at     timestamptz,
+    created_at      timestamptz not null default now(),
+    unique (category_id, region_id, valid_from)
+);
+
+comment on table public.minimum_prices is
+    'M4 §1.1: Protective floor price per category.
+     rpc_publish_batch: soft-warns farmer if farmer_price_per_kg < floor (not a hard block).
+     rpc_create_pool: enforces mpk_price_per_kg >= floor for each pool_line (hard block).
+     D-M6-3 stop-rule: rpc_lower_batch_price clamps suggested price to floor; system never
+     auto-suggests below. Farmer can still set custom price below with explicit confirmation.
+     Art. 171 PK RK: floor = TURAN association standard (farmer protection), not price fixing.';
+
+-- ------------------------------------------------------------
+-- 7.11: NEW TABLE — tsp_config
+-- TSP operational parameters — standards-as-data (M6 §1)
+-- ------------------------------------------------------------
+
+create table if not exists public.tsp_config (
+    id                          uuid    primary key default gen_random_uuid(),
+    offer_window_hours          int     not null default 24 check (offer_window_hours > 0),
+    mpk_decision_window_hours   int     not null default 24 check (mpk_decision_window_hours > 0),
+    publish_lead_days           int     not null default 7  check (publish_lead_days >= 0),
+    price_step_down_amount      int     not null default 100 check (price_step_down_amount > 0),
+    is_active                   boolean not null default false,
+    valid_from                  timestamptz not null default now(),
+    created_by                  uuid    references public.users(id),
+    created_at                  timestamptz not null default now(),
+    -- Invariant: at most one active config at a time
+    constraint tsp_config_one_active exclude using btree (is_active with =)
+        where (is_active = true) deferrable initially deferred
+);
+
+comment on table public.tsp_config is
+    'M6 §1: Association-level TSP parameters. P8: change = row update, not code deploy.
+     offer_window_hours=24:        MPK has 24h to accept/reject a broadcast Offer.     [CEO confirmed D-M6-1]
+     mpk_decision_window_hours=24: MPK has 24h to decide on underfilled pool.
+                                   Default on silence = return batches (farmer-friendly). [CEO confirmed D-M6-1]
+     publish_lead_days=7:          Batch published this many days before ready_from.    [CEO confirmed D-M6-9]
+     price_step_down_amount=100:   Fixed ₸/kg step (replaces price_step_down_pct).
+                                   Stop-rule: clamp to minimum_price.                   [CEO confirmed D-M6-3]';
+
+-- Seed: active config with CEO-confirmed values
+-- NOTE: cannot use ON CONFLICT — only constraint is deferrable EXCLUDE,
+-- which PG forbids as ON CONFLICT arbiter. Use WHERE NOT EXISTS for idempotency.
+insert into public.tsp_config (
+    offer_window_hours, mpk_decision_window_hours,
+    publish_lead_days, price_step_down_amount,
+    is_active
+)
+select 24, 24, 7, 100, true
+where not exists (select 1 from public.tsp_config where is_active = true);
+
+-- ------------------------------------------------------------
+-- 7.12: NEW TABLE — batch_events
+-- Append-only FSM event log per Batch (M4 §1.1)
+-- ------------------------------------------------------------
+
+create table if not exists public.batch_events (
+    id          uuid    primary key default gen_random_uuid(),
+    batch_id    uuid    not null references public.batches(id),
+    event_type  text    not null,
+    -- Canonical event_type values (non-exhaustive):
+    --   published, auto_matched, broadcast_sent, offer_accepted, offer_expired,
+    --   matched, price_lowered, confirmed, dispatched, delivered,
+    --   cancelled_after_match, cancelled_during_execution,
+    --   scheduled, auto_published  (D-M6-7, M6 §3.3)
+    metadata    jsonb,
+    created_by  uuid    references public.users(id),
+    created_at  timestamptz not null default now()
+);
+
+comment on table public.batch_events is
+    'M4 §1.1: Append-only audit log. NEVER updated — INSERT only.
+     Drives behavioural reputation scoring (D-TSP-14 preserved alongside D-M6-11 reviews).
+     Key event: cancelled_after_match (BT-15) flagged for future rating penalty.
+     M6 §3.3 adds: scheduled, auto_published.';
+
+create index if not exists idx_batch_events_batch_id on public.batch_events (batch_id);
+create index if not exists idx_batch_events_type     on public.batch_events (event_type);
+create index if not exists idx_batch_events_created  on public.batch_events (created_at desc);
+
+alter table public.batch_events enable row level security;
+
+drop policy if exists batch_events_farmer_read on public.batch_events;
+create policy batch_events_farmer_read
+    on public.batch_events for select
+    using (
+        batch_id in (
+            select id from public.batches
+             where organization_id = any(fn_my_org_ids())
+        )
+    );
+
+-- ------------------------------------------------------------
+-- 7.13: NEW TABLE — review_dimensions
+-- Lookup for review quality dimensions (D-M6-11)
+-- ------------------------------------------------------------
+
+create table if not exists public.review_dimensions (
+    id              uuid    primary key default gen_random_uuid(),
+    code            text    not null unique,
+    name_ru         text    not null,
+    applicable_role text    not null check (applicable_role in ('farmer', 'mpk', 'both')),
+    is_pilot_primary boolean not null default false,
+    description_ru  text,
+    sort_order      int     not null default 0,
+    is_active       boolean not null default true,
+    created_at      timestamptz not null default now()
+);
+
+comment on table public.review_dimensions is
+    'D-M6-11: Quality dimensions for mutual deal reviews. P8: admin-managed.
+     Pilot flow: overall (1-5) + 1 role-specific dimension (is_pilot_primary=true).
+     Farmer→MPK pilot dimension: weight_accuracy.
+     MPK→Farmer pilot dimension: livestock_condition.
+     Schema holds N dimensions — additive expansion post-pilot.
+     Q-TSP-REVIEW-DIMENSIONS: full list to be finalised post-pilot.';
+
+-- Seed pilot dimensions
+insert into public.review_dimensions
+    (code, name_ru, applicable_role, is_pilot_primary, description_ru, sort_order)
+values
+    ('weight_accuracy',
+     'Соответствие заявленному весу',
+     'farmer', true,
+     'Насколько фактический вес партии совпал с заявленным фермером', 1),
+    ('livestock_condition',
+     'Соответствие кондиции описанию',
+     'mpk', true,
+     'Насколько состояние скота соответствовало описанию в карточке партии', 2),
+    ('communication',
+     'Коммуникация и оперативность',
+     'both', false,
+     'Качество общения, скорость ответа на вопросы и запросы', 3),
+    ('delivery_punctuality',
+     'Пунктуальность поставки',
+     'both', false,
+     'Соблюдение согласованного окна поставки', 4)
+on conflict (code) do nothing;
+
+-- ------------------------------------------------------------
+-- 7.14: NEW TABLE — deal_reviews
+-- Mutual batch reviews, double-blind reveal (D-M6-11, D-M6-12)
+-- ------------------------------------------------------------
+
+create table if not exists public.deal_reviews (
+    id              uuid    primary key default gen_random_uuid(),
+    batch_id        uuid    not null references public.batches(id),
+    reviewer_org_id uuid    not null references public.organizations(id),
+    reviewer_role   text    not null check (reviewer_role in ('farmer', 'mpk')),
+    overall_score   int     not null check (overall_score between 1 and 5),
+    comment         text,
+    submitted_at    timestamptz not null default now(),
+    -- Double-blind (D-M6-12): null until both sides submit, or window expires
+    visible_at      timestamptz,
+    created_at      timestamptz not null default now(),
+    unique (batch_id, reviewer_org_id)
+);
+
+comment on table public.deal_reviews is
+    'D-M6-11: Mutual review. One record per reviewer per batch (after delivered state).
+     Double-blind (D-M6-12): visible_at set by system when BOTH parties submit,
+     or when review_window expires (7-day default — pending UX validation).
+     Before visible_at: reviewer sees own review only; other side sees nothing.
+     After visible_at: both reviews become mutually visible.
+     Pre-deal: org reputation (★ aggregate) shown anonymously — D-M6-12 anti-discrimination.
+     Org reputation = derived view (P4), never stored as a field.';
+
+create index if not exists idx_deal_reviews_batch_id     on public.deal_reviews (batch_id);
+create index if not exists idx_deal_reviews_reviewer_org on public.deal_reviews (reviewer_org_id);
+create index if not exists idx_deal_reviews_visible      on public.deal_reviews (visible_at)
+    where visible_at is not null;
+
+alter table public.deal_reviews enable row level security;
+
+drop policy if exists deal_reviews_read on public.deal_reviews;
+create policy deal_reviews_read
+    on public.deal_reviews for select
+    using (
+        -- reviewer sees own review always
+        reviewer_org_id = any(fn_my_org_ids())
+        -- all see after double-blind reveal
+        or (visible_at is not null and visible_at <= now())
+    );
+
+-- ------------------------------------------------------------
+-- 7.15: NEW TABLE — deal_review_dimension_scores
+-- Per-dimension scores within a deal_review (D-M6-11)
+-- ------------------------------------------------------------
+
+create table if not exists public.deal_review_dimension_scores (
+    id              uuid    primary key default gen_random_uuid(),
+    deal_review_id  uuid    not null references public.deal_reviews(id) on delete cascade,
+    dimension_id    uuid    not null references public.review_dimensions(id),
+    score           int     not null check (score between 1 and 5),
+    created_at      timestamptz not null default now(),
+    unique (deal_review_id, dimension_id)
+);
+
+comment on table public.deal_review_dimension_scores is
+    'D-M6-11: One row per dimension score within a deal_review.
+     Pilot: 1 row per review (is_pilot_primary dimension for the reviewer role).
+     N rows per review post-pilot — additive expansion.
+     Inherits visibility rules from parent deal_reviews via deal_review_id.
+     Cascade delete: removing a review removes its dimension scores.';
+
+create index if not exists idx_review_dim_scores_review    on public.deal_review_dimension_scores (deal_review_id);
+create index if not exists idx_review_dim_scores_dimension on public.deal_review_dimension_scores (dimension_id);
+
+-- ============================================================
+-- SECTION 7 SUMMARY (M4 + M6 EXTENSION)
+-- ============================================================
+-- Tables altered (additive):
+--   batches    +8 columns, status CHECK expanded (12 states + 1 legacy)
+--   pools      +5 columns, status CHECK expanded (10 states + 5 legacy),
+--              pool_request_id NOT NULL → nullable
+--   pool_requests  deprecated (comment only, rows preserved)
+--
+-- Tables created (12):
+--   pool_lines, pool_regions, offers,
+--   livestock_categories, livestock_category_rules,
+--   reference_prices, minimum_prices, tsp_config,
+--   batch_events, review_dimensions, deal_reviews, deal_review_dimension_scores
+--
+-- FK added: batches.pool_line_id → pool_lines.id
+-- Indexes: 14 | RLS enabled: 5 tables | Policies: 2 | Seeds: 1+4 rows
+--
+-- Pending (implementation sprint):
+--   □ RLS policies for pool_lines, pool_regions (MPK org ownership model)
+--   □ updated_at triggers on pool_lines, deal_reviews
+--   □ rpc_derive_category() — awaiting livestock_categories seed data
+--   □ rpc_create_pool(pool_lines[], pool_regions[]) — replaces rpc_create_pool_request
+--   □ Seed livestock_categories + rules — Q-TSP-CATEGORY-CLASSIFIER (with zoologist)
+-- ============================================================
 
 -- ============================================================
 -- MIGRATION COMPLETE

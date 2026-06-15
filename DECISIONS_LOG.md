@@ -95,6 +95,70 @@
 
 ## Decisions
 
+### 2026-06-15 — M4 + M6 schema merged into d02_tsp.sql
+
+**What:** Содержимое `d09_tsp_m4m6_patch.sql` (688 строк) перенесено в `d02_tsp.sql`
+как новая `SECTION 7: M4 + M6 EXTENSION (merged 2026-06-15)`. Patch-файл удалён.
+
+**Why:** CLAUDE.md прямо запрещает `_patch.sql` файлы ("separate patch files are
+FORBIDDEN"); имя `d09_*` дополнительно конфликтовало с уже существующим
+`d09_consulting.sql`. По правилу "all changes into canonical SQL files" сливаем
+M4/M6 в канонический d02 как append-only секцию.
+
+**Files:**
+- `d02_tsp.sql` — добавлена SECTION 7 (15 подсекций: 7.1–7.15), шапка
+  обновлена строкой `Extended: 2026-06-15`. Существующие секции 1–6
+  не изменены ни одной строкой.
+- `d09_tsp_m4m6_patch.sql` — удалён.
+
+**Содержание SECTION 7 (additive):**
+- batches: +8 колонок (ready_from/to, scheduled_publish_at, farmer_price_per_kg,
+  deal_price_per_kg, pool_line_id, +6 FSM-timestamps), CHECK status расширен
+  до 12 канонических состояний + 1 legacy (expired).
+- pools: +5 колонок (total_target_volume_kg, delivery_from/to, +4 FSM-timestamps),
+  pool_request_id → nullable, CHECK status расширен до 10 канонических + 5 legacy.
+- pool_requests: помечена DEPRECATED через COMMENT ON (rows сохранены).
+- 12 новых таблиц: pool_lines, pool_regions, offers, livestock_categories,
+  livestock_category_rules, reference_prices, minimum_prices, tsp_config,
+  batch_events, review_dimensions, deal_reviews, deal_review_dimension_scores.
+- 14 индексов, RLS включён на 5 новых таблицах (2 политики), seed: tsp_config (1 строка)
+  + review_dimensions (4 строки).
+
+**Consequences:**
+- Easy: канонический файл — один источник правды по TSP-схеме; cross_check.sh
+  и deploy_sql.py работают без правок (порядок apply d01→d02 не сменился).
+- Easy: legacy-значения CHECK сохранены — старые batches/pools со статусами
+  draft/published/matched/cancelled/expired и filling/.../closed остаются валидными.
+- Hard: реальную БД после применения нужно сверить — старая FSM `published →
+  matched` остаётся валидной, но новые M4-переходы (`published → offering`,
+  `awaiting_price_decision → offering`) пока без RPC. Все RPC (rpc_create_pool,
+  rpc_lower_batch_price, rpc_derive_category) — TODO для следующего спринта.
+- Hard: RLS-политики для pool_lines/pool_regions пока не созданы (только
+  enable row level security). До их написания pool_lines/pool_regions
+  доступны только service_role.
+
+**Verification:**
+- `cross_check.sh` — passed (0 critical / 0 significant / 0 minor).
+- Live dry-run на prod Supabase (`mwtbozflyldcadypherr`, PG 17.6) через Supabase
+  MCP с обёрткой `BEGIN; … ROLLBACK;` — passed после 2 фиксов (см. ниже).
+  Подтверждено: 12 таблиц создаются, 12 новых колонок в batches, 7 в pools,
+  seed tsp_config (1 строка) + review_dimensions (4 строки) применяются,
+  2 RLS policies создаются. ROLLBACK откатил всё — БД не тронута.
+
+**Defects найдены и исправлены в ходе dry-run:**
+1. `create policy if not exists` — невалидный синтаксис в Postgres (включая
+   PG 17). Заменено на идемпотентный `drop policy if exists … ; create policy …`
+   в двух местах: `batch_events_farmer_read`, `deal_reviews_read`.
+2. `INSERT INTO tsp_config … ON CONFLICT DO NOTHING` — падает с
+   `55000: ON CONFLICT does not support deferrable unique constraints/exclusion
+   constraints as arbiters`. Единственный uniqueness-constraint на tsp_config —
+   это `EXCLUDE … DEFERRABLE INITIALLY DEFERRED`, который запрещено использовать
+   как arbiter для ON CONFLICT. Заменено на `INSERT … SELECT … WHERE NOT EXISTS
+   (SELECT 1 FROM public.tsp_config WHERE is_active = true)` — идемпотентно
+   без зависимости от constraint'а.
+
+---
+
 ### D-S8-1 — Slice 8: Архитектура унификации рационов и консалтинга
 
 **Date:** 2026-04-09  
