@@ -164,7 +164,13 @@ rpc_add_animal_category|rpc_deprecate_animal_category|rpc_migrate_animal_categor
 rpc_list_construction_materials|rpc_list_infrastructure_norms|\
 rpc_upsert_construction_material|rpc_upsert_infrastructure_norm|\
 rpc_list_capex_surcharges|\
-rpc_list_livestock_prices|rpc_upsert_livestock_price|rpc_retire_livestock_price"
+rpc_list_livestock_prices|rpc_upsert_livestock_price|rpc_retire_livestock_price|\
+rpc_admin_upsert_livestock_category|rpc_admin_deactivate_livestock_category|\
+rpc_admin_set_category_rule|rpc_admin_activate_rule_version|\
+rpc_admin_map_sku_to_category|\
+rpc_admin_set_minimum_price|rpc_admin_set_reference_price|\
+rpc_admin_list_categories_with_stats|rpc_admin_list_category_rules|\
+rpc_admin_get_sku_coverage|rpc_admin_list_prices"
 sig_count_before=$SIGNIFICANT
 
 for f in "${SQL_FILES[@]}"; do

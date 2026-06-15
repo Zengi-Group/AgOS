@@ -1617,6 +1617,57 @@ comment on table public.deal_review_dimension_scores is
 create index if not exists idx_review_dim_scores_review    on public.deal_review_dimension_scores (deal_review_id);
 create index if not exists idx_review_dim_scores_dimension on public.deal_review_dimension_scores (dimension_id);
 
+-- ------------------------------------------------------------
+-- 7.16: NEW TABLE — tsp_sku_category_map
+-- Bridge: tsp_skus → livestock_categories  (D-TSP-CATEGORY-BRIDGE, 2026-06-15)
+-- Architecture: Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md §2.1
+-- ------------------------------------------------------------
+-- Closes Q-TSP-CATEGORY-CLASSIFIER via admin self-service (no seed, no brief).
+-- Many SKU → one Category. Versioned: admin can stage version=N+1 with
+-- is_active=false, then atomically flip via rpc_admin_map_sku_to_category.
+-- Floor-clamp lookups read ONLY is_active=true rows → empty map degrades
+-- gracefully (v_floor=NULL, clamp is no-op). Schema can ship before zoologist
+-- fills data; pilot unblocks the moment 30/30 SKU are mapped.
+
+create table if not exists public.tsp_sku_category_map (
+    id              uuid    primary key default gen_random_uuid(),
+    tsp_sku_id      uuid    not null references public.tsp_skus(id),
+    category_id     uuid    not null references public.livestock_categories(id),
+    version         int     not null default 1,
+    is_active       boolean not null default true,
+    created_by      uuid    references public.users(id),
+    created_at      timestamptz not null default now()
+);
+
+comment on table public.tsp_sku_category_map is
+    'D-TSP-CATEGORY-BRIDGE (A2, 2026-06-15): bridge tsp_skus → livestock_categories
+     (many SKU → one Category). Versioned: admin can stage version=N+1 with
+     is_active=false, then atomically flip via rpc_admin_map_sku_to_category.
+     Floor-check reads only is_active=true rows → empty map → no clamp
+     (graceful degradation in rpc_lower_batch_price and rpc_create_pool).';
+
+-- Enforce "one active mapping per SKU" via partial unique index (a UNIQUE
+-- constraint cannot carry a WHERE clause; an index can).
+create unique index if not exists ux_skumap_active_sku
+    on public.tsp_sku_category_map (tsp_sku_id)
+    where is_active = true;
+
+create index if not exists idx_skumap_sku on public.tsp_sku_category_map (tsp_sku_id) where is_active = true;
+create index if not exists idx_skumap_cat on public.tsp_sku_category_map (category_id) where is_active = true;
+
+alter table public.tsp_sku_category_map enable row level security;
+
+drop policy if exists skumap_read_auth on public.tsp_sku_category_map;
+create policy skumap_read_auth
+    on public.tsp_sku_category_map for select
+    using (auth.uid() is not null);
+
+drop policy if exists skumap_admin_write on public.tsp_sku_category_map;
+create policy skumap_admin_write
+    on public.tsp_sku_category_map for all
+    using (public.fn_is_admin())
+    with check (public.fn_is_admin());
+
 -- ============================================================
 -- SECTION 7 SUMMARY (M4 + M6 EXTENSION)
 -- ============================================================
@@ -1626,21 +1677,23 @@ create index if not exists idx_review_dim_scores_dimension on public.deal_review
 --              pool_request_id NOT NULL → nullable
 --   pool_requests  deprecated (comment only, rows preserved)
 --
--- Tables created (12):
+-- Tables created (13):
 --   pool_lines, pool_regions, offers,
 --   livestock_categories, livestock_category_rules,
 --   reference_prices, minimum_prices, tsp_config,
---   batch_events, review_dimensions, deal_reviews, deal_review_dimension_scores
+--   batch_events, review_dimensions, deal_reviews, deal_review_dimension_scores,
+--   tsp_sku_category_map (D-TSP-CATEGORY-BRIDGE, 2026-06-15)
 --
 -- FK added: batches.pool_line_id → pool_lines.id
--- Indexes: 14 | RLS enabled: 5 tables | Policies: 2 | Seeds: 1+4 rows
+-- Indexes: 17 | RLS enabled: 6 tables | Policies: 4 | Seeds: 1+4 rows
 --
 -- Pending (implementation sprint):
 --   □ RLS policies for pool_lines, pool_regions (MPK org ownership model)
 --   □ updated_at triggers on pool_lines, deal_reviews
---   □ rpc_derive_category() — awaiting livestock_categories seed data
---   □ rpc_create_pool(pool_lines[], pool_regions[]) — replaces rpc_create_pool_request
---   □ Seed livestock_categories + rules — Q-TSP-CATEGORY-CLASSIFIER (with zoologist)
+--   □ rpc_derive_category() — defer until AI Gateway needs photo/text classification
+--   ✅ rpc_create_pool(pool_lines[], pool_regions[]) — replaces rpc_create_pool_request
+--   ✅ D-TSP-CATEGORY-BRIDGE: admin self-service via A-CAT-01..04 screens
+--      (closes Q-TSP-CATEGORY-CLASSIFIER; CEO+zoologist fill data in admin UI)
 -- ============================================================
 
 -- ============================================================
@@ -2123,11 +2176,13 @@ on conflict (sql_name) do update set notes = excluded.notes, created_in = exclud
 --   a vestigial pool_request stub to preserve this ownership chain until a
 --   future schema migration adds pools.organization_id directly.
 --
--- Known gap (Q-TSP-CATEGORY-CLASSIFIER):
---   pool_lines stores tsp_sku_id (transitional D-M6-13). minimum_prices and
---   reference_prices reference livestock_categories — no bridge yet between
---   them. Floor enforcement runs only when livestock_category_id is provided
---   explicitly by the caller as an optional jsonb field on a pool_line.
+-- Closed (Q-TSP-CATEGORY-CLASSIFIER, 2026-06-15) — D-TSP-CATEGORY-BRIDGE (A2):
+--   New table tsp_sku_category_map bridges tsp_skus → livestock_categories
+--   (many SKU → one Category). rpc_lower_batch_price and rpc_create_pool now
+--   resolve category via the bridge transparently. Empty bridge ⇒ floor check
+--   is a no-op (graceful), so schema ships safely before the admin fills data.
+--   A-CAT-01..04 admin screens (AC-1..7 write + AR-1..4 read RPCs in §8 below)
+--   let TURAN admin own this dataset via self-service. P8: standards-as-data.
 --
 -- Closed (Q-TSP-RETRY-MATCH, 2026-06-15):
 --   rpc_publish_pool calls rpc_retry_match_pool inline (same transaction).
@@ -2219,7 +2274,18 @@ begin
                 using errcode = 'P0001';
         end if;
 
-        v_category_id := nullif(v_line->>'livestock_category_id', '')::uuid;
+        -- D-TSP-CATEGORY-BRIDGE (A2, 2026-06-15): explicit livestock_category_id
+        -- still wins (back-compat); when caller omits it, resolve via bridge
+        -- (tsp_sku_id → tsp_sku_category_map → category_id). Empty bridge →
+        -- v_category_id stays NULL → floor check is skipped (graceful).
+        v_category_id := coalesce(
+            nullif(v_line->>'livestock_category_id', '')::uuid,
+            (select m.category_id
+               from public.tsp_sku_category_map m
+              where m.tsp_sku_id = nullif(v_line->>'tsp_sku_id', '')::uuid
+                and m.is_active  = true
+              limit 1)
+        );
         if v_category_id is not null then
             -- Strictest floor across all covered regions (D-M6-13: hard floor must
             -- be satisfied for EVERY region in pool_regions). MAX wins, with national
@@ -2336,11 +2402,12 @@ begin
 end; $$;
 
 comment on function public.rpc_create_pool(uuid, jsonb, jsonb, date, date, int) is
-    'M4 §2.4 + D-M6-13 | Container Pool model | Caller: MPK org member.
+    'M4 §2.4 + D-M6-13 + D-TSP-CATEGORY-BRIDGE | Container Pool model | Caller: MPK org member.
      Creates Pool (status=draft) + N pool_lines + M pool_regions atomically.
-     Floor enforcement runs only when livestock_category_id is provided per line.
-     Returns: {pool_id, pool_line_ids[]}.
-     Note: creates pool_request stub for MPK ownership (DEF-TSP-M4-OWNERSHIP).';
+     Floor enforcement: explicit livestock_category_id per line wins; otherwise
+     tsp_sku_id is resolved via tsp_sku_category_map (bridge). Empty bridge →
+     floor check skipped (graceful), preserving back-compat behaviour.
+     Returns: {pool_id, pool_line_ids[]}.';
 
 
 -- ------------------------------------------------------------
@@ -2941,15 +3008,26 @@ begin
             v_batch.status using errcode = 'P0001';
     end if;
 
-    -- D-M6-3 floor clamp: SKIPPED while Q-TSP-CATEGORY-CLASSIFIER is open.
-    -- pool_lines / batches carry tsp_sku_id, but minimum_prices is keyed by
-    -- livestock_categories.id with no bridge. Applying a wrong-category floor
-    -- would silently clamp to the wrong number and break Art.171 floor semantics
-    -- — strictly worse than no clamp. Once the classifier is finalised, resolve
-    -- v_batch.tsp_sku_id -> category_id and reinstate the lookup (with region
-    -- match: exact rayon first, national fallback).
-    v_floor := null;
-    v_clamped := p_new_price_per_kg;
+    -- D-M6-3 floor clamp — enabled via D-TSP-CATEGORY-BRIDGE (A2, 2026-06-15).
+    -- Resolution: batch.tsp_sku_id → tsp_sku_category_map → minimum_prices.
+    -- Region match: exact rayon wins; national (region_id IS NULL) fallback.
+    -- When the bridge is empty for this SKU OR no minimum_prices row matches,
+    -- v_floor stays NULL → clamp is no-op (graceful degradation).
+    select mp.price_per_kg
+      into v_floor
+    from public.tsp_sku_category_map m
+    join public.minimum_prices mp on mp.category_id = m.category_id
+    where m.tsp_sku_id = v_batch.tsp_sku_id
+      and m.is_active  = true
+      and mp.is_active = true
+      and (mp.region_id = v_batch.region_id or mp.region_id is null)
+      and (mp.valid_to is null or mp.valid_to >= current_date)
+    order by (mp.region_id = v_batch.region_id) desc nulls last,
+             mp.valid_from desc
+    limit 1;
+
+    v_clamped     := greatest(p_new_price_per_kg, coalesce(v_floor, p_new_price_per_kg));
+    v_was_clamped := (v_floor is not null and p_new_price_per_kg < v_floor);
 
     -- Move batch -> offering with new price
     update public.batches
@@ -3733,6 +3811,590 @@ comment on function public.rpc_get_minimum_price(uuid, uuid, uuid) is
 
 
 -- ============================================================
+-- SECTION 8a: A-CAT ADMIN RPC (D-TSP-CATEGORY-BRIDGE, 2026-06-15)
+-- ============================================================
+-- Source: Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md §2.4
+-- All RPCs gated by fn_is_admin() and return jsonb {ok, id?, error?}
+-- (write RPCs) or TABLE (read RPCs). No platform_events emitted —
+-- spec is silent; pending Dok 4 admin-event family (Architect call).
+-- ------------------------------------------------------------
+
+-- AC-1: rpc_admin_upsert_livestock_category
+create or replace function public.rpc_admin_upsert_livestock_category(
+    p_code              text,
+    p_name_ru           text,
+    p_description_ru    text default null,
+    p_sort_order        int  default 0
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_id uuid;
+begin
+    if not public.fn_is_admin() then
+        return jsonb_build_object('ok', false, 'error', 'FORBIDDEN');
+    end if;
+    if p_code is null or btrim(p_code) = '' or p_name_ru is null or btrim(p_name_ru) = '' then
+        return jsonb_build_object('ok', false, 'error', 'INVALID_INPUT');
+    end if;
+
+    insert into public.livestock_categories (code, name_ru, description_ru, sort_order, is_active)
+    values (p_code, p_name_ru, p_description_ru, coalesce(p_sort_order, 0), true)
+    on conflict (code) do update
+        set name_ru        = excluded.name_ru,
+            description_ru = excluded.description_ru,
+            sort_order     = excluded.sort_order,
+            is_active      = true
+    returning id into v_id;
+
+    return jsonb_build_object('ok', true, 'id', v_id);
+end; $$;
+
+comment on function public.rpc_admin_upsert_livestock_category(text, text, text, int) is
+    'A-CAT AC-1 | Admin upsert of livestock_categories by code. Re-activates on collision.';
+
+
+-- AC-2: rpc_admin_deactivate_livestock_category
+create or replace function public.rpc_admin_deactivate_livestock_category(
+    p_category_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+    if not public.fn_is_admin() then
+        return jsonb_build_object('ok', false, 'error', 'FORBIDDEN');
+    end if;
+    if p_category_id is null then
+        return jsonb_build_object('ok', false, 'error', 'INVALID_INPUT');
+    end if;
+    if not exists (select 1 from public.livestock_categories where id = p_category_id) then
+        return jsonb_build_object('ok', false, 'error', 'CATEGORY_NOT_FOUND');
+    end if;
+
+    -- Hard-block: any active SKU mapping or active price referencing this category.
+    if exists (
+        select 1 from public.tsp_sku_category_map
+         where category_id = p_category_id and is_active = true
+    ) or exists (
+        select 1 from public.minimum_prices
+         where category_id = p_category_id and is_active = true
+    ) or exists (
+        select 1 from public.reference_prices
+         where category_id = p_category_id and is_active = true
+    ) then
+        return jsonb_build_object('ok', false, 'error', 'CATEGORY_IN_USE');
+    end if;
+
+    update public.livestock_categories
+       set is_active = false
+     where id = p_category_id;
+
+    return jsonb_build_object('ok', true);
+end; $$;
+
+comment on function public.rpc_admin_deactivate_livestock_category(uuid) is
+    'A-CAT AC-2 | Admin deactivate category. Blocks if active SKU mappings or active prices reference it.';
+
+
+-- AC-3: rpc_admin_set_category_rule
+create or replace function public.rpc_admin_set_category_rule(
+    p_category_id   uuid,
+    p_breed_group   text default null,
+    p_sex           text default null,
+    p_age_min       int  default null,
+    p_age_max       int  default null,
+    p_weight_min    int  default null,
+    p_weight_max    int  default null,
+    p_bcs_min       numeric(3,1) default null,
+    p_bcs_max       numeric(3,1) default null,
+    p_priority      int  default 0,
+    p_version       int  default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_version int;
+    v_id      uuid;
+begin
+    if not public.fn_is_admin() then
+        return jsonb_build_object('ok', false, 'error', 'FORBIDDEN');
+    end if;
+    if p_category_id is null then
+        return jsonb_build_object('ok', false, 'error', 'INVALID_INPUT');
+    end if;
+    if not exists (select 1 from public.livestock_categories where id = p_category_id) then
+        return jsonb_build_object('ok', false, 'error', 'CATEGORY_NOT_FOUND');
+    end if;
+
+    -- Caller may pin a version; otherwise stage as next (max+1).
+    v_version := coalesce(
+        p_version,
+        (select coalesce(max(version), 0) + 1
+           from public.livestock_category_rules
+          where category_id = p_category_id)
+    );
+
+    insert into public.livestock_category_rules (
+        category_id, version,
+        breed_group, sex,
+        age_min_months, age_max_months,
+        weight_min_kg, weight_max_kg,
+        bcs_min, bcs_max,
+        priority, is_active
+    ) values (
+        p_category_id, v_version,
+        p_breed_group, p_sex,
+        p_age_min, p_age_max,
+        p_weight_min, p_weight_max,
+        p_bcs_min, p_bcs_max,
+        coalesce(p_priority, 0),
+        false  -- staged inactive; rpc_admin_activate_rule_version flips it on
+    )
+    returning id into v_id;
+
+    return jsonb_build_object('ok', true, 'id', v_id, 'version', v_version);
+end; $$;
+
+comment on function public.rpc_admin_set_category_rule(uuid, text, text, int, int, int, int, numeric, numeric, int, int) is
+    'A-CAT AC-3 | Admin stage a new category rule (inactive). Activate via rpc_admin_activate_rule_version.';
+
+
+-- AC-4: rpc_admin_activate_rule_version
+create or replace function public.rpc_admin_activate_rule_version(
+    p_category_id   uuid,
+    p_version       int
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_activated int;
+begin
+    if not public.fn_is_admin() then
+        return jsonb_build_object('ok', false, 'error', 'FORBIDDEN');
+    end if;
+    if p_category_id is null or p_version is null then
+        return jsonb_build_object('ok', false, 'error', 'INVALID_INPUT');
+    end if;
+    if not exists (
+        select 1 from public.livestock_category_rules
+         where category_id = p_category_id and version = p_version
+    ) then
+        return jsonb_build_object('ok', false, 'error', 'VERSION_NOT_FOUND');
+    end if;
+
+    -- Atomic flip within a single transaction.
+    update public.livestock_category_rules
+       set is_active = false
+     where category_id = p_category_id
+       and version    <> p_version
+       and is_active   = true;
+
+    update public.livestock_category_rules
+       set is_active = true
+     where category_id = p_category_id
+       and version     = p_version
+       and is_active   = false;
+    get diagnostics v_activated = row_count;
+
+    return jsonb_build_object('ok', true, 'activated_count', v_activated, 'version', p_version);
+end; $$;
+
+comment on function public.rpc_admin_activate_rule_version(uuid, int) is
+    'A-CAT AC-4 | Admin atomically switch the active rule version for a category.';
+
+
+-- AC-5: rpc_admin_map_sku_to_category
+create or replace function public.rpc_admin_map_sku_to_category(
+    p_tsp_sku_id    uuid,
+    p_category_id   uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_prev_version int := 0;
+    v_id           uuid;
+begin
+    if not public.fn_is_admin() then
+        return jsonb_build_object('ok', false, 'error', 'FORBIDDEN');
+    end if;
+    if p_tsp_sku_id is null or p_category_id is null then
+        return jsonb_build_object('ok', false, 'error', 'INVALID_INPUT');
+    end if;
+    if not exists (select 1 from public.tsp_skus where id = p_tsp_sku_id) then
+        return jsonb_build_object('ok', false, 'error', 'SKU_NOT_FOUND');
+    end if;
+    if not exists (
+        select 1 from public.livestock_categories
+         where id = p_category_id and is_active = true
+    ) then
+        return jsonb_build_object('ok', false, 'error', 'CATEGORY_NOT_FOUND_OR_INACTIVE');
+    end if;
+
+    select coalesce(max(version), 0) into v_prev_version
+      from public.tsp_sku_category_map
+     where tsp_sku_id = p_tsp_sku_id;
+
+    -- Partial unique index ux_skumap_active_sku enforces ≤1 active row per SKU.
+    update public.tsp_sku_category_map
+       set is_active = false
+     where tsp_sku_id = p_tsp_sku_id
+       and is_active  = true;
+
+    insert into public.tsp_sku_category_map (
+        tsp_sku_id, category_id, version, is_active, created_by
+    ) values (
+        p_tsp_sku_id, p_category_id, v_prev_version + 1, true,
+        public.fn_current_user_id()
+    )
+    returning id into v_id;
+
+    return jsonb_build_object('ok', true, 'id', v_id, 'version', v_prev_version + 1);
+end; $$;
+
+comment on function public.rpc_admin_map_sku_to_category(uuid, uuid) is
+    'A-CAT AC-5 | Admin atomic re-map: deactivate prior active mapping, insert new (version+1).';
+
+
+-- AC-6: rpc_admin_set_minimum_price
+create or replace function public.rpc_admin_set_minimum_price(
+    p_category_id   uuid,
+    p_region_id     uuid,
+    p_price_per_kg  int,
+    p_valid_from    date,
+    p_valid_to      date default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_id uuid;
+begin
+    if not public.fn_is_admin() then
+        return jsonb_build_object('ok', false, 'error', 'FORBIDDEN');
+    end if;
+    if p_category_id is null or p_valid_from is null
+       or p_price_per_kg is null or p_price_per_kg <= 0 then
+        return jsonb_build_object('ok', false, 'error', 'INVALID_INPUT');
+    end if;
+    if not exists (
+        select 1 from public.livestock_categories
+         where id = p_category_id and is_active = true
+    ) then
+        return jsonb_build_object('ok', false, 'error', 'CATEGORY_NOT_FOUND_OR_INACTIVE');
+    end if;
+    if p_valid_to is not null and p_valid_to < p_valid_from then
+        return jsonb_build_object('ok', false, 'error', 'INVALID_PERIOD');
+    end if;
+
+    -- Deactivate currently-active rows for the same (category, region).
+    -- IS NOT DISTINCT FROM treats NULL=NULL (national row matches national).
+    update public.minimum_prices
+       set is_active = false
+     where category_id = p_category_id
+       and region_id is not distinct from p_region_id
+       and is_active = true;
+
+    -- Versioned by valid_from. If the exact tuple already exists, refresh it.
+    insert into public.minimum_prices (
+        category_id, region_id, price_per_kg,
+        valid_from, valid_to, is_active,
+        approved_by, approved_at
+    ) values (
+        p_category_id, p_region_id, p_price_per_kg,
+        p_valid_from, p_valid_to, true,
+        public.fn_current_user_id(), now()
+    )
+    on conflict (category_id, region_id, valid_from) do update
+        set price_per_kg = excluded.price_per_kg,
+            valid_to     = excluded.valid_to,
+            is_active    = true,
+            approved_by  = excluded.approved_by,
+            approved_at  = excluded.approved_at
+    returning id into v_id;
+
+    return jsonb_build_object('ok', true, 'id', v_id);
+end; $$;
+
+comment on function public.rpc_admin_set_minimum_price(uuid, uuid, int, date, date) is
+    'A-CAT AC-6 | Admin set/refresh protective floor (versioned).
+     Deactivates current active row for (category, region) first.
+     Art.171 PK RK: floor = TURAN association standard, not price-fixing.';
+
+
+-- AC-7: rpc_admin_set_reference_price
+create or replace function public.rpc_admin_set_reference_price(
+    p_category_id   uuid,
+    p_region_id     uuid,
+    p_price_per_kg  int,
+    p_valid_from    date,
+    p_valid_to      date default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_id uuid;
+begin
+    if not public.fn_is_admin() then
+        return jsonb_build_object('ok', false, 'error', 'FORBIDDEN');
+    end if;
+    if p_category_id is null or p_valid_from is null
+       or p_price_per_kg is null or p_price_per_kg <= 0 then
+        return jsonb_build_object('ok', false, 'error', 'INVALID_INPUT');
+    end if;
+    if not exists (
+        select 1 from public.livestock_categories
+         where id = p_category_id and is_active = true
+    ) then
+        return jsonb_build_object('ok', false, 'error', 'CATEGORY_NOT_FOUND_OR_INACTIVE');
+    end if;
+    if p_valid_to is not null and p_valid_to < p_valid_from then
+        return jsonb_build_object('ok', false, 'error', 'INVALID_PERIOD');
+    end if;
+
+    update public.reference_prices
+       set is_active = false
+     where category_id = p_category_id
+       and region_id is not distinct from p_region_id
+       and is_active = true;
+
+    insert into public.reference_prices (
+        category_id, region_id, price_per_kg,
+        legal_disclaimer_shown,
+        valid_from, valid_to, is_active,
+        approved_by, approved_at
+    ) values (
+        p_category_id, p_region_id, p_price_per_kg,
+        true,
+        p_valid_from, p_valid_to, true,
+        public.fn_current_user_id(), now()
+    )
+    on conflict (category_id, region_id, valid_from) do update
+        set price_per_kg = excluded.price_per_kg,
+            valid_to     = excluded.valid_to,
+            is_active    = true,
+            approved_by  = excluded.approved_by,
+            approved_at  = excluded.approved_at,
+            legal_disclaimer_shown = true
+    returning id into v_id;
+
+    return jsonb_build_object('ok', true, 'id', v_id);
+end; $$;
+
+comment on function public.rpc_admin_set_reference_price(uuid, uuid, int, date, date) is
+    'A-CAT AC-7 | Admin set/refresh indicative price (versioned).
+     legal_disclaimer_shown always true — Art.171 PK RK disclaimer mandatory.';
+
+
+-- AR-1: rpc_admin_list_categories_with_stats
+create or replace function public.rpc_admin_list_categories_with_stats()
+returns table (
+    id                  uuid,
+    code                text,
+    name_ru             text,
+    description_ru      text,
+    sort_order          int,
+    is_active           boolean,
+    active_rule_count   bigint,
+    sku_mapped_count    bigint,
+    has_minimum_price   boolean,
+    has_reference_price boolean
+)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+stable
+as $$
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin role required' using errcode = 'P0001';
+    end if;
+    return query
+    select
+        lc.id, lc.code, lc.name_ru, lc.description_ru, lc.sort_order, lc.is_active,
+        (select count(*)::bigint from public.livestock_category_rules r
+            where r.category_id = lc.id and r.is_active = true),
+        (select count(*)::bigint from public.tsp_sku_category_map m
+            where m.category_id = lc.id and m.is_active = true),
+        exists(select 1 from public.minimum_prices mp
+            where mp.category_id = lc.id and mp.is_active = true),
+        exists(select 1 from public.reference_prices rp
+            where rp.category_id = lc.id and rp.is_active = true)
+    from public.livestock_categories lc
+    order by lc.sort_order, lc.code;
+end; $$;
+
+comment on function public.rpc_admin_list_categories_with_stats() is
+    'A-CAT AR-1 | Admin list of categories + derived stats for A-CAT-01 screen.';
+
+
+-- AR-2: rpc_admin_list_category_rules
+create or replace function public.rpc_admin_list_category_rules(
+    p_category_id uuid
+)
+returns table (
+    id              uuid,
+    version         int,
+    breed_group     text,
+    sex             text,
+    age_min_months  int,
+    age_max_months  int,
+    weight_min_kg   int,
+    weight_max_kg   int,
+    bcs_min         numeric(3,1),
+    bcs_max         numeric(3,1),
+    priority        int,
+    is_active       boolean,
+    created_at      timestamptz
+)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+stable
+as $$
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin role required' using errcode = 'P0001';
+    end if;
+    if p_category_id is null then
+        raise exception 'INVALID_INPUT: p_category_id required' using errcode = 'P0001';
+    end if;
+    return query
+    select r.id, r.version, r.breed_group, r.sex,
+           r.age_min_months, r.age_max_months,
+           r.weight_min_kg, r.weight_max_kg,
+           r.bcs_min, r.bcs_max,
+           r.priority, r.is_active, r.created_at
+      from public.livestock_category_rules r
+     where r.category_id = p_category_id
+     order by r.version desc, r.priority desc, r.created_at desc;
+end; $$;
+
+comment on function public.rpc_admin_list_category_rules(uuid) is
+    'A-CAT AR-2 | Admin list of all rule versions (active + staged) for a category.';
+
+
+-- AR-3: rpc_admin_get_sku_coverage
+create or replace function public.rpc_admin_get_sku_coverage()
+returns table (
+    tsp_sku_id          uuid,
+    sku_code            text,
+    breed_group         text,
+    sex                 text,
+    age_group           text,
+    weight_category     text,
+    grade_code          text,
+    map_id              uuid,
+    category_id         uuid,
+    category_code       text,
+    category_name_ru    text
+)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+stable
+as $$
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin role required' using errcode = 'P0001';
+    end if;
+    return query
+    select
+        s.id, s.sku_code, s.breed_group, s.sex, s.age_group,
+        s.weight_category, g.code,
+        m.id, m.category_id, lc.code, lc.name_ru
+      from public.tsp_skus s
+      left join public.grade_standards g on g.id = s.grade_id
+      left join public.tsp_sku_category_map m
+        on m.tsp_sku_id = s.id and m.is_active = true
+      left join public.livestock_categories lc on lc.id = m.category_id
+     where s.is_active = true
+     order by s.sort_order, s.sku_code;
+end; $$;
+
+comment on function public.rpc_admin_get_sku_coverage() is
+    'A-CAT AR-3 | Admin 30-SKU × current mapping projection for A-CAT-03 screen.
+     NULL category_id ⇒ SKU not yet mapped (red plate in UI).';
+
+
+-- AR-4: rpc_admin_list_prices
+create or replace function public.rpc_admin_list_prices(
+    p_kind text
+)
+returns table (
+    id                  uuid,
+    category_id         uuid,
+    category_code       text,
+    category_name_ru    text,
+    region_id           uuid,
+    region_name_ru      text,
+    price_per_kg        int,
+    valid_from          date,
+    valid_to            date,
+    is_active           boolean,
+    approved_by         uuid,
+    approved_at         timestamptz
+)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+stable
+as $$
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin role required' using errcode = 'P0001';
+    end if;
+    if p_kind not in ('minimum', 'reference') then
+        raise exception 'INVALID_INPUT: p_kind must be minimum or reference'
+            using errcode = 'P0001';
+    end if;
+
+    if p_kind = 'minimum' then
+        return query
+        select mp.id, mp.category_id, lc.code, lc.name_ru,
+               mp.region_id, r.name_ru, mp.price_per_kg,
+               mp.valid_from, mp.valid_to, mp.is_active,
+               mp.approved_by, mp.approved_at
+          from public.minimum_prices mp
+          join public.livestock_categories lc on lc.id = mp.category_id
+          left join public.regions r on r.id = mp.region_id
+         where mp.is_active = true
+         order by lc.code, r.name_ru nulls first, mp.valid_from desc;
+    else
+        return query
+        select rp.id, rp.category_id, lc.code, lc.name_ru,
+               rp.region_id, r.name_ru, rp.price_per_kg,
+               rp.valid_from, rp.valid_to, rp.is_active,
+               rp.approved_by, rp.approved_at
+          from public.reference_prices rp
+          join public.livestock_categories lc on lc.id = rp.category_id
+          left join public.regions r on r.id = rp.region_id
+         where rp.is_active = true
+         order by lc.code, r.name_ru nulls first, rp.valid_from desc;
+    end if;
+end; $$;
+
+comment on function public.rpc_admin_list_prices(text) is
+    'A-CAT AR-4 | Admin list of active prices (minimum | reference) for A-CAT-04 screen.
+     region_name_ru NULL ⇒ national row.';
+
+
+-- ============================================================
 -- SECTION 8 REGISTRY (M4 + M6 RPCs)
 -- ============================================================
 insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
@@ -3749,7 +4411,19 @@ insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, creat
     ('rpc_pool_accept_partial',   'rpc_pool_accept_partial',   null, 'd02_tsp.sql (Section 8 / M4+M6)', 'D-TSP-10: awaiting_mpk_decision -> closed_partial; matched -> confirmed'),
     ('rpc_get_reference_price',   'rpc_get_reference_price',   null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §1.1: indicative price + mandatory disclaimer (Art.171)'),
     ('rpc_get_minimum_price',     'rpc_get_minimum_price',     null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §1.1 + D-M6-3: floor price + mandatory disclaimer (Art.171)'),
-    ('rpc_cancel_pool',           'rpc_cancel_pool',           null, 'd02_tsp.sql (Section 8 / M4+M6 addendum)', 'Microstep4 §4.1 / Microstep6 §4f step 8a: filling -> cancelled (MPK)')
+    ('rpc_cancel_pool',           'rpc_cancel_pool',           null, 'd02_tsp.sql (Section 8 / M4+M6 addendum)', 'Microstep4 §4.1 / Microstep6 §4f step 8a: filling -> cancelled (MPK)'),
+    -- A-CAT admin RPCs (D-TSP-CATEGORY-BRIDGE, 2026-06-15) — closes Q-TSP-CATEGORY-CLASSIFIER
+    ('rpc_admin_upsert_livestock_category',     'A-CAT AC-1', null, 'd02_tsp.sql (Section 8a / A-CAT)', 'Admin upsert livestock_categories by code'),
+    ('rpc_admin_deactivate_livestock_category', 'A-CAT AC-2', null, 'd02_tsp.sql (Section 8a / A-CAT)', 'Admin deactivate category; blocks on active SKU map / prices'),
+    ('rpc_admin_set_category_rule',             'A-CAT AC-3', null, 'd02_tsp.sql (Section 8a / A-CAT)', 'Admin stage livestock_category_rules row (inactive)'),
+    ('rpc_admin_activate_rule_version',         'A-CAT AC-4', null, 'd02_tsp.sql (Section 8a / A-CAT)', 'Admin atomic switch of active rule version per category'),
+    ('rpc_admin_map_sku_to_category',           'A-CAT AC-5', null, 'd02_tsp.sql (Section 8a / A-CAT)', 'Admin atomic re-map of tsp_sku → livestock_category (versioned)'),
+    ('rpc_admin_set_minimum_price',             'A-CAT AC-6', null, 'd02_tsp.sql (Section 8a / A-CAT)', 'Admin set/refresh protective floor (versioned, Art.171 standard)'),
+    ('rpc_admin_set_reference_price',           'A-CAT AC-7', null, 'd02_tsp.sql (Section 8a / A-CAT)', 'Admin set/refresh indicative price (versioned, Art.171 disclaimer)'),
+    ('rpc_admin_list_categories_with_stats',    'A-CAT AR-1', null, 'd02_tsp.sql (Section 8a / A-CAT)', 'Admin list categories + rule_count + sku_count + price flags'),
+    ('rpc_admin_list_category_rules',           'A-CAT AR-2', null, 'd02_tsp.sql (Section 8a / A-CAT)', 'Admin list all rule versions for a category'),
+    ('rpc_admin_get_sku_coverage',              'A-CAT AR-3', null, 'd02_tsp.sql (Section 8a / A-CAT)', 'Admin 30-SKU × current mapping projection (for A-CAT-03)'),
+    ('rpc_admin_list_prices',                   'A-CAT AR-4', null, 'd02_tsp.sql (Section 8a / A-CAT)', 'Admin list active minimum_prices | reference_prices (for A-CAT-04)')
 on conflict (sql_name) do update
     set dok3_name = excluded.dok3_name,
         notes     = excluded.notes,
