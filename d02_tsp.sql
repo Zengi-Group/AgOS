@@ -701,13 +701,11 @@ create policy "pool_req_write_own"  on public.pool_requests for all
 
 -- Pools: MPK + matched farmers (only own); admin all
 -- D40: farmer sees pool only AFTER their batch is matched
+-- DEF-TSP-M4-OWNERSHIP (resolved): MPK ownership checked via pools.organization_id.
 create policy "pools_read"          on public.pools for select
     using (
         public.fn_is_admin()
-        or pool_request_id in (
-            select id from public.pool_requests
-            where organization_id = any(public.fn_my_org_ids())
-        )
+        or organization_id = any(public.fn_my_org_ids())
         or id in (
             select pm.pool_id from public.pool_matches pm
             join public.batches b on b.id = pm.batch_id
@@ -725,9 +723,8 @@ create policy "pool_matches_read"   on public.pool_matches for select
             where organization_id = any(public.fn_my_org_ids())
         )
         or pool_id in (
-            select p.id from public.pools p
-            join public.pool_requests pr on pr.id = p.pool_request_id
-            where pr.organization_id = any(public.fn_my_org_ids())
+            select id from public.pools
+            where organization_id = any(public.fn_my_org_ids())
         )
     );
 create policy "pool_matches_admin_write" on public.pool_matches for all using (public.fn_is_admin());
@@ -739,14 +736,14 @@ create policy "delivery_mpk_write"  on public.delivery_records for update
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 
 -- Pool manifests: D40 — only matched MPK + admin
+-- DEF-TSP-M4-OWNERSHIP (resolved): MPK ownership checked via pools.organization_id.
 create policy "manifests_read"      on public.pool_manifests for select
     using (
         public.fn_is_admin()
         or pool_id in (
-            select p.id from public.pools p
-            join public.pool_requests pr on pr.id = p.pool_request_id
-            where pr.organization_id = any(public.fn_my_org_ids())
-            and p.status in ('executing','dispatched','delivered','executed')
+            select id from public.pools
+            where organization_id = any(public.fn_my_org_ids())
+              and status in ('executing','dispatched','delivered','executed')
         )
     );
 create policy "manifests_admin_write" on public.pool_manifests for all using (public.fn_is_admin());
@@ -1083,6 +1080,34 @@ comment on column public.pools.pool_request_id is
     'M4: PoolRequest absorbed into Pool. DEPRECATED FK.
      New Pool records: pool_request_id = NULL.
      Old records retain their value. pool_requests table is deprecated.';
+
+-- 7.2.1.1 DEF-TSP-M4-OWNERSHIP — Pool owns its MPK organization_id directly.
+-- Before this fix: ownership was derived via LEFT JOIN to pool_requests, which forced
+-- rpc_create_pool to insert a "stub" pool_request row only to carry the MPK org id.
+-- This fix denormalises organization_id onto pools, removes the stub workaround,
+-- and lets all owner-checks use a single column comparison (faster, simpler, RLS-clean).
+alter table public.pools
+    add column if not exists organization_id uuid references public.organizations(id);
+
+-- Backfill legacy rows from their pool_request stub (idempotent — only fills NULLs).
+update public.pools p
+   set organization_id = pr.organization_id
+  from public.pool_requests pr
+ where pr.id = p.pool_request_id
+   and p.organization_id is null
+   and pr.organization_id is not null;
+
+-- After backfill, ownership is required for every pool (M4 invariant).
+-- Idempotent: SET NOT NULL is a no-op if the column is already NOT NULL.
+alter table public.pools
+    alter column organization_id set not null;
+
+create index if not exists idx_pools_org_status on public.pools (organization_id, status);
+
+comment on column public.pools.organization_id is
+    'D-M6-OWNERSHIP: MPK organization that owns this pool.
+     Denormalised onto pools so owner-checks do not need a join through
+     the deprecated pool_requests table. NOT NULL — every pool has exactly one MPK owner.';
 
 -- 7.2.2 Aggregate volume target — container model (D-M6-13)
 alter table public.pools
@@ -2104,10 +2129,12 @@ on conflict (sql_name) do update set notes = excluded.notes, created_in = exclud
 --   them. Floor enforcement runs only when livestock_category_id is provided
 --   explicitly by the caller as an optional jsonb field on a pool_line.
 --
--- Known gap (Q-TSP-RETRY-MATCH):
---   rpc_publish_pool does NOT auto-match existing published batches. Backend
---   job handles retry-match cadence. Re-broadcast on price lowering is
---   implemented inline in rpc_lower_batch_price (per CEO direction 2026-06-15).
+-- Closed (Q-TSP-RETRY-MATCH, 2026-06-15):
+--   rpc_publish_pool calls rpc_retry_match_pool inline (same transaction).
+--   Eligible batches in published state receive Offers immediately; FCFS
+--   semantics preserved via rpc_accept_offer. Re-broadcast on price lowering
+--   remains inline in rpc_lower_batch_price. rpc_retry_match_pool is
+--   idempotent and safe to invoke from a periodic sweep job if added later.
 -- ============================================================
 
 
@@ -2237,26 +2264,21 @@ begin
     -- Legacy column placeholder (pools.target_heads is NOT NULL > 0; 400kg assumed)
     v_target_heads := greatest(1, ceil(p_total_target_volume_kg::numeric / 400)::int);
 
-    -- pool_request stub preserves MPK ownership (DEF-TSP-M4-OWNERSHIP)
-    insert into public.pool_requests (
-        organization_id, total_heads, target_month, region_id, status, notes, activated_at
-    ) values (
-        p_organization_id, v_target_heads, p_delivery_from, null, 'active',
-        'M4 stub — created by rpc_create_pool to carry MPK organization_id',
-        now()
-    )
-    returning id into v_pool_request_id;
-
-    -- pools row
+    -- DEF-TSP-M4-OWNERSHIP (resolved): pools.organization_id is the source of truth
+    -- for MPK ownership. No more pool_request stub.
+    -- pool_request_id stays NULL on M4-native pools.
     -- filling_deadline = p_delivery_to: pool stops accepting new matches when
     -- the delivery window closes. Backend offer-expiry job reads filling_deadline
     -- and triggers awaiting_mpk_decision when reached without total reached.
+    v_pool_request_id := null;
     insert into public.pools (
-        pool_request_id, target_heads, matched_heads, status,
+        organization_id, pool_request_id,
+        target_heads, matched_heads, status,
         total_target_volume_kg, delivery_from, delivery_to,
         filling_deadline
     ) values (
-        v_pool_request_id, v_target_heads, 0, 'draft',
+        p_organization_id, null,
+        v_target_heads, 0, 'draft',
         p_total_target_volume_kg, p_delivery_from, p_delivery_to,
         p_delivery_to
     )
@@ -2324,8 +2346,9 @@ comment on function public.rpc_create_pool(uuid, jsonb, jsonb, date, date, int) 
 -- ------------------------------------------------------------
 -- RPC-M6-02: rpc_publish_pool (M4 §2.4)
 -- Caller: MPK organization member (owner of the pool).
--- FSM: draft -> filling. Retry-match against published batches deferred
---      to background job (Q-TSP-RETRY-MATCH).
+-- FSM: draft -> filling. Calls rpc_retry_match_pool inline so any batches
+--      already in published state get Offers atomically with publication
+--      (Q-TSP-RETRY-MATCH / BT-05).
 -- ------------------------------------------------------------
 create or replace function public.rpc_publish_pool(
     p_organization_id   uuid,
@@ -2338,20 +2361,18 @@ set search_path = public, pg_temp
 as $$
 declare
     v_pool          record;
-    v_mpk_org_id    uuid;
 begin
-    select p.*, pr.organization_id as mpk_org_id
+    -- DEF-TSP-M4-OWNERSHIP (resolved): owner-check via pools.organization_id column.
+    select p.*
       into v_pool
     from public.pools p
-    left join public.pool_requests pr on pr.id = p.pool_request_id
     where p.id = p_pool_id
     for update;
     if not found then
         raise exception 'POOL_NOT_FOUND' using errcode = 'P0001';
     end if;
 
-    v_mpk_org_id := v_pool.mpk_org_id;
-    if v_mpk_org_id is null or v_mpk_org_id != p_organization_id then
+    if v_pool.organization_id != p_organization_id then
         raise exception 'FORBIDDEN: caller does not own pool %', p_pool_id
             using errcode = 'P0001';
     end if;
@@ -2380,12 +2401,191 @@ begin
         true
     );
 
+    -- Q-TSP-RETRY-MATCH / BT-05: broadcast offers to batches already in published
+    -- state that fit this pool's lines. Same transaction — guarantees visibility
+    -- of the new pool to all eligible published batches at the moment of publish.
+    perform public.rpc_retry_match_pool(p_organization_id, p_pool_id);
+
     return true;
 end; $$;
 
 comment on function public.rpc_publish_pool(uuid, uuid) is
     'M4 §2.4 | FSM pools: draft -> filling | Caller: MPK org member.
-     Idempotent. Retry-match against published batches handled by backend job (Q-TSP-RETRY-MATCH).';
+     Idempotent. Inline call to rpc_retry_match_pool broadcasts offers to
+     batches already in published state (Q-TSP-RETRY-MATCH / BT-05).';
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-02b: rpc_retry_match_pool (Q-TSP-RETRY-MATCH / BT-05)
+-- Caller: system / internal (called inline by rpc_publish_pool; safe to
+--         invoke from a periodic sweep job — idempotent via offers
+--         unique(batch_id, mpk_org_id)).
+-- Scans batches.status='published' that fit at least one pool_line of the
+-- given filling pool and upserts an Offer for the pool's MPK org. Does NOT
+-- transition batch FSM — FCFS semantics preserved through rpc_accept_offer
+-- (mirrors the re-broadcast pattern of rpc_lower_batch_price, 2026-06-15).
+-- Match predicate (mirrors rpc_lower_batch_price, inverted on direction):
+--   pool.status='filling'
+--   pool_line.is_active AND pool_line.mpk_price_per_kg >= batch.farmer_price_per_kg
+--   (pool_line.tsp_sku_id IS NULL OR pool_line.tsp_sku_id = batch.tsp_sku_id)
+--   capacity:  pl.current_volume_kg + heads*avg_weight_kg <= pl.max_volume_kg
+--   region:    rayon exact OR oblast contains batch.region_id / its parent
+--   window:    [ready_from, ready_to] overlaps [delivery_from, delivery_to]
+-- ------------------------------------------------------------
+create or replace function public.rpc_retry_match_pool(
+    p_organization_id   uuid,
+    p_pool_id           uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_pool                  record;
+    v_mpk_org_id            uuid;
+    v_offer_window_hours    int;
+    v_offers_upserted       int := 0;
+    v_batches_count         int := 0;
+begin
+    -- DEF-TSP-M4-OWNERSHIP (resolved): owner comes from pools.organization_id.
+    select p.* into v_pool
+    from public.pools p
+    where p.id = p_pool_id;
+    if not found then
+        raise exception 'POOL_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    -- Only filling pools accept new matches. Other statuses are no-ops
+    -- (idempotent: callers shouldn't have to pre-check).
+    if v_pool.status != 'filling' then
+        return jsonb_build_object(
+            'offers_created', 0,
+            'batches_matched_count', 0,
+            'skipped_reason', 'pool_status_' || v_pool.status
+        );
+    end if;
+
+    v_mpk_org_id := v_pool.organization_id;
+    if v_mpk_org_id is null then
+        raise exception 'POOL_HAS_NO_MPK_ORG: pool %', p_pool_id
+            using errcode = 'P0001';
+    end if;
+    if v_mpk_org_id != p_organization_id then
+        raise exception
+            'ORG_MISMATCH: p_organization_id (%) does not match pool owner (%)',
+            p_organization_id, v_mpk_org_id
+            using errcode = 'P0001';
+    end if;
+
+    select offer_window_hours into v_offer_window_hours
+    from public.tsp_config where is_active = true limit 1;
+    v_offer_window_hours := coalesce(v_offer_window_hours, 24);
+
+    with eligible as (
+        select distinct b.id          as batch_id,
+                        b.farmer_price_per_kg
+        from public.batches b
+        join public.pool_lines pl
+            on  pl.pool_id = p_pool_id
+            and pl.is_active = true
+            and pl.mpk_price_per_kg >= b.farmer_price_per_kg
+            and (pl.tsp_sku_id is null or pl.tsp_sku_id = b.tsp_sku_id)
+            and (pl.max_volume_kg is null
+                 or pl.current_volume_kg
+                    + coalesce(b.heads * b.avg_weight_kg, 0)::int
+                    <= pl.max_volume_kg)
+        where b.status = 'published'
+          and b.farmer_price_per_kg is not null
+          -- window overlap (D-M6-8)
+          and (v_pool.delivery_from is null or b.ready_to   is null
+               or v_pool.delivery_from <= b.ready_to)
+          and (v_pool.delivery_to   is null or b.ready_from is null
+               or v_pool.delivery_to   >= b.ready_from)
+          -- region overlap (D-M6-4)
+          and exists (
+              select 1 from public.pool_regions pgr
+              where pgr.pool_id = p_pool_id
+                and (
+                    (pgr.region_type = 'rayon'
+                        and pgr.region_id = b.region_id)
+                    or (pgr.region_type = 'oblast' and (
+                        pgr.region_id = b.region_id
+                        or pgr.region_id = (
+                            select parent_id from public.regions
+                            where id = b.region_id
+                        )
+                    ))
+                )
+          )
+    ),
+    upserted as (
+        insert into public.offers (
+            batch_id, mpk_org_id, offered_price_per_kg, status, expires_at, created_at
+        )
+        select e.batch_id, v_mpk_org_id, e.farmer_price_per_kg, 'pending',
+               now() + make_interval(hours => v_offer_window_hours), now()
+        from eligible e
+        on conflict (batch_id, mpk_org_id) do update
+            set offered_price_per_kg = excluded.offered_price_per_kg,
+                status               = 'pending',
+                expires_at           = excluded.expires_at,
+                responded_at         = null,
+                responded_by         = null
+        returning batch_id
+    )
+    select count(*), count(distinct batch_id)
+      into v_offers_upserted, v_batches_count
+    from upserted;
+
+    if v_offers_upserted > 0 then
+        insert into public.batch_events (batch_id, event_type, metadata, created_by)
+        select u.batch_id,
+               'broadcast_sent',
+               jsonb_build_object(
+                   'trigger', 'retry_match_pool',
+                   'pool_id', p_pool_id,
+                   'mpk_org_id', v_mpk_org_id
+               ),
+               null
+        from (
+            select distinct o.batch_id
+            from public.offers o
+            where o.mpk_org_id = v_mpk_org_id
+              and o.status = 'pending'
+              and o.batch_id in (
+                  select b.id from public.batches b where b.status = 'published'
+              )
+        ) u;
+
+        insert into public.platform_events (
+            event_type, entity_type, entity_id, organization_id,
+            actor_type, actor_id, payload, is_audit
+        ) values (
+            'market.pool.retry_match', 'pools', p_pool_id, v_mpk_org_id,
+            'system', null,
+            jsonb_build_object(
+                'pool_id', p_pool_id,
+                'offers_created', v_offers_upserted,
+                'batches_matched_count', v_batches_count
+            ),
+            true
+        );
+    end if;
+
+    return jsonb_build_object(
+        'offers_created', v_offers_upserted,
+        'batches_matched_count', v_batches_count
+    );
+end; $$;
+
+comment on function public.rpc_retry_match_pool(uuid, uuid) is
+    'Q-TSP-RETRY-MATCH / BT-05 | Caller: system (inline from rpc_publish_pool
+     or periodic sweep). p_organization_id MUST equal pools.organization_id
+     (sanity-check, P-AI-2). Scans published batches that fit any pool_line of
+     the given filling pool and upserts Offers for the pool MPK org. Idempotent
+     via offers unique(batch_id, mpk_org_id). Does NOT transition batch FSM —
+     FCFS semantics preserved via rpc_accept_offer.';
 
 
 -- ------------------------------------------------------------
@@ -2448,9 +2648,9 @@ begin
     end if;
 
     -- Find MPK's best-matching pool_line for this batch.
-    -- LEFT JOIN on pool_requests + COALESCE: tolerates direct M4 pools (pool_request_id
-    -- = NULL) once DEF-TSP-M4-OWNERSHIP is resolved. Region filter mirrors D-M6-4
-    -- (rayon-exact OR oblast-via-parent_id) to enforce geographic match.
+    -- DEF-TSP-M4-OWNERSHIP (resolved): owner-check via pools.organization_id column.
+    -- Region filter mirrors D-M6-4 (rayon-exact OR oblast-via-parent_id) to enforce
+    -- geographic match.
     select pl.id as pl_id,
            pl.pool_id as p_id,
            pl.mpk_price_per_kg as pl_price,
@@ -2462,9 +2662,8 @@ begin
       into v_pool_line
     from public.pool_lines pl
     join public.pools p               on p.id = pl.pool_id
-    left join public.pool_requests pr on pr.id = p.pool_request_id
     where p.status = 'filling'
-      and coalesce(pr.organization_id, null) = p_organization_id
+      and p.organization_id = p_organization_id
       and pl.is_active = true
       and (pl.tsp_sku_id is null or pl.tsp_sku_id = v_batch.tsp_sku_id)
       and pl.mpk_price_per_kg <= v_offer.offered_price_per_kg
@@ -2769,12 +2968,12 @@ begin
     -- Capacity predicate mirrors rpc_accept_offer (line + batch volume <= max);
     -- a 1-kg gap on a line should NOT trigger an offer for a multi-tonne batch.
     with matching_mpks as (
-        select distinct pr.organization_id as mpk_org_id
+        -- DEF-TSP-M4-OWNERSHIP (resolved): owner comes from pools.organization_id.
+        select distinct p.organization_id as mpk_org_id
         from public.pools p
-        join public.pool_requests pr on pr.id = p.pool_request_id
         join public.pool_lines pl    on pl.pool_id = p.id and pl.is_active = true
         where p.status = 'filling'
-          and pr.organization_id is not null
+          and p.organization_id is not null
           and pl.mpk_price_per_kg >= v_clamped
           and (pl.tsp_sku_id is null or pl.tsp_sku_id = v_batch.tsp_sku_id)
           and (pl.max_volume_kg is null
@@ -2920,7 +3119,7 @@ comment on function public.rpc_confirm_dispatch(uuid, uuid) is
 
 -- ------------------------------------------------------------
 -- RPC-M6-07: rpc_confirm_delivery (D-M6-10)
--- Caller: MPK (derived via batch.pool_line_id -> pools -> pool_requests).
+-- Caller: MPK (derived via batch.pool_line_id -> pools.organization_id).
 -- FSM: dispatched -> delivered.
 -- ------------------------------------------------------------
 create or replace function public.rpc_confirm_delivery(
@@ -2936,12 +3135,12 @@ declare
     v_batch         record;
     v_mpk_org_id    uuid;
 begin
-    select b.*, pr.organization_id as mpk_org_id
+    -- DEF-TSP-M4-OWNERSHIP (resolved): owner-check via pools.organization_id column.
+    select b.*, p.organization_id as mpk_org_id
       into v_batch
     from public.batches b
-    left join public.pool_lines pl    on pl.id = b.pool_line_id
-    left join public.pools p          on p.id = pl.pool_id
-    left join public.pool_requests pr on pr.id = p.pool_request_id
+    left join public.pool_lines pl on pl.id = b.pool_line_id
+    left join public.pools p       on p.id = pl.pool_id
     where b.id = p_batch_id
     for update;
     if not found then
@@ -3034,12 +3233,12 @@ begin
         raise exception 'UNKNOWN_DIMENSION: %', p_dimension_id using errcode = 'P0001';
     end if;
 
-    select b.*, pr.organization_id as mpk_org_id
+    -- DEF-TSP-M4-OWNERSHIP (resolved): owner-check via pools.organization_id column.
+    select b.*, p.organization_id as mpk_org_id
       into v_batch
     from public.batches b
-    left join public.pool_lines pl    on pl.id = b.pool_line_id
-    left join public.pools p          on p.id = pl.pool_id
-    left join public.pool_requests pr on pr.id = p.pool_request_id
+    left join public.pool_lines pl on pl.id = b.pool_line_id
+    left join public.pools p       on p.id = pl.pool_id
     where b.id = p_batch_id;
     if not found then
         raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
@@ -3133,22 +3332,20 @@ set search_path = public, pg_temp
 as $$
 declare
     v_pool          record;
-    v_mpk_org_id    uuid;
     v_count         int := 0;
     v_batch_id      uuid;
 begin
-    select p.*, pr.organization_id as mpk_org_id
+    -- DEF-TSP-M4-OWNERSHIP (resolved): owner-check via pools.organization_id column.
+    select p.*
       into v_pool
     from public.pools p
-    left join public.pool_requests pr on pr.id = p.pool_request_id
     where p.id = p_pool_id
     for update;
     if not found then
         raise exception 'POOL_NOT_FOUND' using errcode = 'P0001';
     end if;
 
-    v_mpk_org_id := v_pool.mpk_org_id;
-    if v_mpk_org_id is null or v_mpk_org_id != p_organization_id then
+    if v_pool.organization_id != p_organization_id then
         raise exception 'FORBIDDEN: caller does not own pool %', p_pool_id
             using errcode = 'P0001';
     end if;
@@ -3240,22 +3437,20 @@ set search_path = public, pg_temp
 as $$
 declare
     v_pool          record;
-    v_mpk_org_id    uuid;
     v_count         int := 0;
     v_batch_id      uuid;
 begin
-    select p.*, pr.organization_id as mpk_org_id
+    -- DEF-TSP-M4-OWNERSHIP (resolved): owner-check via pools.organization_id column.
+    select p.*
       into v_pool
     from public.pools p
-    left join public.pool_requests pr on pr.id = p.pool_request_id
     where p.id = p_pool_id
     for update;
     if not found then
         raise exception 'POOL_NOT_FOUND' using errcode = 'P0001';
     end if;
 
-    v_mpk_org_id := v_pool.mpk_org_id;
-    if v_mpk_org_id is null or v_mpk_org_id != p_organization_id then
+    if v_pool.organization_id != p_organization_id then
         raise exception 'FORBIDDEN: caller does not own pool %', p_pool_id
             using errcode = 'P0001';
     end if;
@@ -3308,6 +3503,123 @@ end; $$;
 comment on function public.rpc_pool_accept_partial(uuid, uuid) is
     'D-TSP-10 / Microstep6 §4f step 6B | FSM pools: awaiting_mpk_decision -> closed_partial.
      All matched batches -> confirmed. Returns: count of confirmed batches.';
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-13: rpc_cancel_pool (Microstep4 §4.1 + Microstep6 §4f шаг 8a)
+-- Caller: MPK (pool owner). FSM pools: filling -> cancelled.
+-- Strict (option A): cancel allowed only from 'filling'. Draft pools should
+-- use a delete RPC (not implemented in this pass).
+-- Atomically: withdraw pending offers, return matched batches to 'published'
+-- (pool_line_id=NULL, deal_price=NULL), zero out pool_line volumes, mark pool.
+-- Idempotent: returns 0 if already cancelled.
+-- ------------------------------------------------------------
+create or replace function public.rpc_cancel_pool(
+    p_organization_id   uuid,
+    p_pool_id           uuid,
+    p_reason            text default null
+)
+returns int
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_pool          record;
+    v_count         int := 0;
+    v_batch_id      uuid;
+begin
+    -- DEF-TSP-M4-OWNERSHIP (resolved): owner-check via pools.organization_id column.
+    select p.* into v_pool
+    from public.pools p
+    where p.id = p_pool_id
+    for update;
+    if not found then
+        raise exception 'POOL_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    if v_pool.organization_id != p_organization_id then
+        raise exception 'FORBIDDEN: caller does not own pool %', p_pool_id
+            using errcode = 'P0001';
+    end if;
+
+    if v_pool.status = 'cancelled' then
+        return 0;
+    end if;
+    if v_pool.status != 'filling' then
+        raise exception 'INVALID_STATUS: cancel allowed only from filling (current %)',
+            v_pool.status using errcode = 'P0001';
+    end if;
+
+    -- Withdraw any pending offers for matched batches BEFORE resetting pool_line_id
+    update public.offers o
+    set status = 'withdrawn', responded_at = now()
+    from public.batches b
+    join public.pool_lines pl on pl.id = b.pool_line_id
+    where pl.pool_id = p_pool_id
+      and b.id = o.batch_id
+      and o.status = 'pending';
+
+    -- Return each matched batch -> published
+    for v_batch_id in
+        select b.id
+        from public.batches b
+        join public.pool_lines pl on pl.id = b.pool_line_id
+        where pl.pool_id = p_pool_id
+          and b.status = 'matched'
+        for update
+    loop
+        update public.batches
+        set status            = 'published',
+            pool_line_id      = null,
+            deal_price_per_kg = null,
+            updated_at        = now()
+        where id = v_batch_id;
+
+        insert into public.batch_events (batch_id, event_type, metadata, created_by)
+        values (v_batch_id, 'returned_to_pool_cancelled',
+            jsonb_build_object('pool_id', p_pool_id, 'reason', p_reason),
+            public.fn_current_user_id());
+
+        v_count := v_count + 1;
+    end loop;
+
+    -- Reset pool_line running volumes
+    update public.pool_lines
+    set current_volume_kg = 0,
+        updated_at        = now()
+    where pool_id = p_pool_id;
+
+    -- Pool -> cancelled
+    update public.pools
+    set status        = 'cancelled',
+        matched_heads = 0,
+        cancelled_at  = now(),
+        updated_at    = now()
+    where id = p_pool_id;
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.pool.cancelled', 'pools', p_pool_id, p_organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object(
+            'pool_id', p_pool_id,
+            'reason', p_reason,
+            'returned_batches', v_count
+        ),
+        true
+    );
+
+    return v_count;
+end; $$;
+
+comment on function public.rpc_cancel_pool(uuid, uuid, text) is
+    'Microstep4 §4.1 / Microstep6 §4f step 8a | FSM pools: filling -> cancelled.
+     Caller: MPK (pool owner). Atomically withdraws pending offers, returns matched
+     batches to published, resets pool_line volumes, marks pool cancelled.
+     Returns: count of batches returned to published. Idempotent (already cancelled = 0).';
 
 
 -- ------------------------------------------------------------
@@ -3425,7 +3737,8 @@ comment on function public.rpc_get_minimum_price(uuid, uuid, uuid) is
 -- ============================================================
 insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
     ('rpc_create_pool',           'rpc_create_pool',           null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §2.4 + D-M6-13: create Pool + N pool_lines + M pool_regions'),
-    ('rpc_publish_pool',          'rpc_publish_pool',          null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §2.4: pools draft -> filling'),
+    ('rpc_publish_pool',          'rpc_publish_pool',          null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §2.4: pools draft -> filling; calls rpc_retry_match_pool inline'),
+    ('rpc_retry_match_pool',      'rpc_retry_match_pool',      null, 'd02_tsp.sql (Section 8 / M4+M6)', 'Q-TSP-RETRY-MATCH / BT-05: scan published batches, broadcast Offers to pool MPK; idempotent'),
     ('rpc_accept_offer',          'rpc_accept_offer',          null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §2.3 + §5: FCFS accept; withdraw siblings; batch -> matched'),
     ('rpc_reject_offer',          'rpc_reject_offer',          null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §2.3: offer -> rejected'),
     ('rpc_lower_batch_price',     'rpc_lower_batch_price',     null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §2.6 + D-M6-3: clamp to floor, re-broadcast offers'),
@@ -3435,7 +3748,8 @@ insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, creat
     ('rpc_pool_return_batches',   'rpc_pool_return_batches',   null, 'd02_tsp.sql (Section 8 / M4+M6)', 'D-TSP-10: awaiting_mpk_decision -> closed_unfilled; matched -> published'),
     ('rpc_pool_accept_partial',   'rpc_pool_accept_partial',   null, 'd02_tsp.sql (Section 8 / M4+M6)', 'D-TSP-10: awaiting_mpk_decision -> closed_partial; matched -> confirmed'),
     ('rpc_get_reference_price',   'rpc_get_reference_price',   null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §1.1: indicative price + mandatory disclaimer (Art.171)'),
-    ('rpc_get_minimum_price',     'rpc_get_minimum_price',     null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §1.1 + D-M6-3: floor price + mandatory disclaimer (Art.171)')
+    ('rpc_get_minimum_price',     'rpc_get_minimum_price',     null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §1.1 + D-M6-3: floor price + mandatory disclaimer (Art.171)'),
+    ('rpc_cancel_pool',           'rpc_cancel_pool',           null, 'd02_tsp.sql (Section 8 / M4+M6 addendum)', 'Microstep4 §4.1 / Microstep6 §4f step 8a: filling -> cancelled (MPK)')
 on conflict (sql_name) do update
     set dok3_name = excluded.dok3_name,
         notes     = excluded.notes,

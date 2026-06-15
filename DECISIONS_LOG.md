@@ -11,6 +11,7 @@
 | ID | Date | Domain | Summary |
 |----|------|--------|---------|
 | ADR-AUTH-CONSOLIDATE-01 | 2026-05-13 | Auth/UI | Unify duplicate registration: `/register` canonical, `/join` flow removed, landing CTAs rewired |
+| DEF-TSP-M4-OWNERSHIP | 2026-06-15 | TSP/Schema | `pools.organization_id` denormalised; 6 RPC owner-checks + 3 RLS policies switched off `pool_requests` LEFT JOIN; `rpc_create_pool` stops creating MPK stub-request |
 | D-AGENT-1 | pre-2026-03 | Organization | 12 agents → 6 consolidated agents |
 | D-NEW-A | pre-2026-03 | RPC Naming | SQL `rpc_name_registry` is canonical for RPC names |
 | L-NEW-2 | pre-2026-03 | Concurrency | SKIP LOCKED, not advisory locks |
@@ -94,6 +95,41 @@
 ---
 
 ## Decisions
+
+### 2026-06-15 — M4 + M6 addendum: DEF-TSP-M4-OWNERSHIP + Q-TSP-RETRY-MATCH closed, rpc_cancel_pool added
+
+**What:** Резолвлены два known-issue из предыдущей записи + добавлен `rpc_cancel_pool` (Microstep4 §4.1, был не в скоупе исходной задачи). Финальный state Section 8 = **14 RPC** (было 12).
+
+**Изменения:**
+1. **DEF-TSP-M4-OWNERSHIP (closed):** добавлена колонка `pools.organization_id uuid NOT NULL references organizations(id)` с backfill из pool_requests, индекс `idx_pools_org_status`. 3 RLS policies (`pools_read`, `pool_matches_read`, `manifests_read`) переписаны на прямой column-check вместо JOIN через pool_requests. 8 RPC из Section 8 рефакторнуты на новый паттерн.
+2. **Q-TSP-RETRY-MATCH (closed):** новая `rpc_retry_match_pool(p_org_id, p_pool_id)` — сканирует published-батчи, подходящие под pool_lines, и upsert'ит Offer'ы для MPK. Идемпотентна через `unique(batch_id, mpk_org_id)`. `rpc_publish_pool` вызывает её inline (одна транзакция) — гарантирует broadcast при публикации pool (BT-05). Безопасна для повторных вызовов из периодической job-задачи.
+3. **rpc_cancel_pool (new):** strict option A — `filling → cancelled` только. Атомарно withdraw pending offers + matched→published + reset volumes + pool→cancelled. Идемпотентна.
+
+**Файлы:** `d02_tsp.sql` (+~440/-65 строк vs предыдущий коммит).
+
+**Деплой:**
+- Pre-flight `select count(*) from pools` → 0 → backfill no-op, `SET NOT NULL` безопасен.
+- Migration `d02_tsp_addendum_a_pools_org_id_column`: schema + RLS. ✅
+- Migration `d02_tsp_addendum_b_rpc_refactor_and_new`: 9 CREATE OR REPLACE (8 рефакторнутых + новый rpc_retry_match_pool, rpc_cancel_pool) + registry. ✅
+
+**Verification (prod):**
+- 14/14 functions в information_schema.routines ✓
+- 14/14 entries в rpc_name_registry ✓
+- 14/14 SECURITY DEFINER ✓
+- `pools.organization_id` NOT NULL ✓
+- 3 RLS policies заменены ✓
+- Smoke-test `rpc_cancel_pool` с bogus UUID → корректное POOL_NOT_FOUND ✓
+
+**Cross_check.sh:** 0/0/0.
+
+**Закрытые known gaps:**
+- DEF-TSP-M4-OWNERSHIP ✅
+- Q-TSP-RETRY-MATCH ✅
+
+**Остаётся открытым:**
+- Q-TSP-CATEGORY-CLASSIFIER — нужен зоолог + bridge `tsp_sku_id ↔ livestock_categories.id`. После закрытия — восстановить floor-clamp в `rpc_lower_batch_price`.
+
+---
 
 ### 2026-06-15 — M4 + M6 RPC backend pass (Section 8 in d02_tsp.sql)
 
@@ -2597,3 +2633,65 @@ Direct P4 violation (one source of truth) and HS-5 violation (additive-only — 
 - Hard: `registration_applications` table still in prod and schema — needs follow-up ADR to drop. Any historical data must first be migrated/exported.
 
 **Verification**: `npx tsc --noEmit` → 0 errors. `npm run build` → success (4.7s). Preview (port 5173): `/` lendinger renders, all 4 CTAs link to `/register`, `/registration` → `/register` redirect works, `/join` → `/register` redirect works, `/register` renders 4-role select screen. 0 console errors.
+
+---
+
+### 2026-06-15: DEF-TSP-M4-OWNERSHIP — Pool owns MPK organization_id directly
+
+**What**: `pools.organization_id uuid NOT NULL REFERENCES organizations(id)` added to `d02_tsp.sql` (§7.2.1.1). All ownership lookups in TSP M4/M6 RPCs and RLS policies switched from `LEFT JOIN pool_requests pr ON pr.id = p.pool_request_id` to the new column. `rpc_create_pool` no longer creates a stub `pool_requests` row to carry MPK ownership — it writes `organization_id` to `pools` directly and leaves `pool_request_id = NULL` on M4-native pools.
+
+**Why**:
+- The Section 8 (M4+M6) implementation was shipping a known workaround: `rpc_create_pool` inserted a sentinel `pool_requests` row marked `'M4 stub — created by rpc_create_pool to carry MPK organization_id'` and pointed every new pool at it, just so six downstream RPCs and three RLS policies could resolve `pool.org` via that join.
+- `pool_requests` is the **deprecated** half of the M4 model (Dok 1 / Section 7.3); making the new model depend on it for a core invariant (which org owns this pool) violated P4 (one source of truth) and P6 (relationships via FK, not stub-row convention).
+- The workaround was correctly flagged in code (`-- pool_request stub preserves MPK ownership (DEF-TSP-M4-OWNERSHIP)`) and in the `rpc_accept_offer` comment (`-- LEFT JOIN on pool_requests + COALESCE: tolerates direct M4 pools (pool_request_id = NULL) once DEF-TSP-M4-OWNERSHIP is resolved`).
+- Owner-check via column is also cheaper (1 lookup vs. join) and RLS-clean (no recursion through a deprecated table).
+
+**Files** (single canonical SQL file, no patch files — per CLAUDE.md SQL rules):
+- `d02_tsp.sql`:
+  - §7.2.1.1 NEW: `ADD COLUMN IF NOT EXISTS organization_id`, backfill `FROM pool_requests pr WHERE pr.id = p.pool_request_id`, `SET NOT NULL`, index `idx_pools_org_status`, column comment.
+  - §3 RLS: `pools_read`, `pool_matches_read`, `manifests_read` policies switched to `organization_id = any(fn_my_org_ids())`.
+  - §8 RPCs (6 functions): `rpc_publish_pool`, `rpc_accept_offer`, `rpc_lower_batch_price`, `rpc_confirm_delivery`, `rpc_submit_deal_review`, `rpc_pool_return_batches`, `rpc_pool_accept_partial` — all `LEFT JOIN pool_requests` removed; ownership read from `p.organization_id`.
+  - §7 `rpc_create_pool`: stub-request `INSERT INTO pool_requests` removed; `pools` INSERT now carries `organization_id = p_organization_id`, `pool_request_id = NULL`.
+
+**Additive guarantees (P7)**:
+- `pools.pool_request_id` left in place (nullable) — legacy rows keep their FK; `idx_pools_request` kept.
+- `pool_requests` table not dropped; existing stub rows remain (their `organization_id` was the backfill source, so they stay consistent).
+- No RPC signature changed — only function bodies.
+- Migration is idempotent: `ADD COLUMN IF NOT EXISTS`, backfill `WHERE organization_id IS NULL`, `SET NOT NULL` is a no-op if already NOT NULL.
+
+**Consequences**:
+- Easy: single-column owner-check; future TSP RPCs (and any new M4 code path) need only `p.organization_id = p_organization_id`. RLS gets cheaper and reads naturally.
+- Easy: `pool_requests` can now be cleanly deprecated without orphaning ownership.
+- Hard / follow-up: when `pool_requests` is eventually dropped, the FK `pools.pool_request_id` must be dropped first (separate ADR; out of scope here). Backend / AI Gateway code that reads `pools.pool_request_id` (none expected in current `src/` and `ai_gateway/` per `AS_BUILT_AUDIT.md` §3) will need a scan when that drop is scheduled.
+
+---
+
+### 2026-06-15: Q-TSP-RETRY-MATCH closed — inline retry-match in rpc_publish_pool
+
+**What**: New internal RPC `rpc_retry_match_pool(p_organization_id uuid, p_pool_id uuid) → jsonb`. Called inline by `rpc_publish_pool` after the `draft → filling` transition (same transaction). Scans `batches.status='published'` that fit any active `pool_line` of the published pool and upserts an `offer` row per eligible batch for the pool's MPK org. Match predicate mirrors `rpc_lower_batch_price` (price ≥ farmer_price, tsp_sku, capacity, region overlap D-M6-4, window overlap D-M6-8). FCFS semantics preserved — batch FSM is NOT transitioned here; MPK chooses via `rpc_accept_offer`. Idempotent via existing `unique(batch_id, mpk_org_id)` on `offers`.
+
+**Why**: Open question Q-TSP-RETRY-MATCH (Microstep4 §Open / Microstep6 §7) — a freshly published Pool must immediately reach batches that were already in `published` state (BT-05 path; D-M6-4 makes исход C frequent). Pre-fix, `rpc_publish_pool` only emitted `market.pool.published` and stopped; published batches sat invisible to the new MPK until they re-published or lowered price. Alternatives considered: (a) periodic cron-only sweep — rejected: window between pool publish and next sweep is dead time for the MPK; (b) auto-transition batch → `matched` directly — rejected: violates FCFS Offer/Accept (D-M6-1, M4 §5) and the existing pattern of `rpc_lower_batch_price`. Inline+Offer keeps semantics symmetric across the two retry triggers (new Pool / price lowered).
+
+**Files** (single canonical SQL file):
+- `d02_tsp.sql`:
+  - New RPC `rpc_retry_match_pool(uuid, uuid)` added between RPC-M6-02 and RPC-M6-03 (§8).
+  - `rpc_publish_pool` body: one new `perform public.rpc_retry_match_pool(p_organization_id, p_pool_id)` before `return true`.
+  - Header comments for `rpc_publish_pool` updated (gap-block at §M6 RPC zone + RPC-M6-02 banner + `comment on function`).
+  - `rpc_name_registry`: new row `rpc_retry_match_pool`; `rpc_publish_pool` note extended.
+
+**Additive guarantees (P7)**:
+- No existing RPC signature changed.
+- No existing FSM transition added or removed.
+- No new table; uses existing `offers`, `batches`, `pool_lines`, `pool_regions`, `tsp_config`.
+- `ON CONFLICT (batch_id, mpk_org_id) DO UPDATE` re-uses the established re-broadcast contract (`rpc_lower_batch_price`) — no new uniqueness rule introduced.
+- Sanity-check `p_organization_id = pools.organization_id` enforces P-AI-2 even though caller is system (covers the case where a periodic sweep job passes the wrong org).
+
+**Consequences**:
+- Easy: any future cron sweep just iterates `pools where status='filling'` and calls `rpc_retry_match_pool(p.organization_id, p.id)` — no new function needed.
+- Easy: behaviour is symmetric across the two retry triggers (new Pool / farmer lowered price) — both end up in Offer broadcast; MPK acceptance path is the single chokepoint.
+- Hard / watch: emits `batch_events('broadcast_sent')` per eligible batch — Dok 4 notifications layer must read this for «Новое предложение от поставщика» (Microstep6 §4e). No code change here; just confirming the existing notification template is the consumer.
+- Hard / follow-up: BT-05 in Microstep4 diagram still labels the transition `published → matched`; this is now superseded for the retry trigger (it goes via Offer, not direct). Update Microstep4 §Transitions to mark BT-05 as Offer-mediated when next touching that doc.
+
+**Verification**: `bash cross_check.sh` → 0 Critical / 0 Significant / 0 Minor. **Migration not yet applied to remote Supabase project `mwtbozflyldcadypherr`** — pending Arshidin's «ок» before `mcp__plugin_supabase_supabase__apply_migration`.
+
+**Verification**: `bash cross_check.sh` → 8/8 OK, 0 Critical / 0 Significant / 0 Minor. No remaining `join public.pool_requests` in `d02_tsp.sql`. **Migration not yet applied to remote Supabase project `mwtbozflyldcadypherr`** — pending Arshidin's "ок" before `mcp__plugin_supabase_supabase__apply_migration`.

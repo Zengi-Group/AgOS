@@ -45,12 +45,19 @@ Slice 5b: RPC-14..20 + pool/pricing management (7 RPCs, DEF-021..026 resolved)
 Slice 6a: RPC-28,29,31,32,44,45 + rpc_activate_vaccination_plan
 In progress: rpc_list_vaccination_plans, rpc_list_vaccination_plan_items, rpc_list_vaccines (READ-RPCs, d04)
 
-## M4+M6 RPCs (Section 8, d02_tsp.sql — file-level, awaiting deploy)
+## M4+M6 RPCs — DEPLOYED ✅ (Section 8, d02_tsp.sql, 14 functions)
+
+Migrations applied 2026-06-15:
+- `d02_tsp_section7_m4_m6_extension` (schema)
+- `d02_tsp_section8_m4_m6_rpcs` (initial 12 RPCs)
+- `d02_tsp_addendum_a_pools_org_id_column` (DEF-TSP-M4-OWNERSHIP resolution)
+- `d02_tsp_addendum_b_rpc_refactor_and_new` (refactor 8 RPCs + `rpc_retry_match_pool` + `rpc_cancel_pool`)
 
 | Function | Caller | FSM |
 |----------|--------|-----|
-| rpc_create_pool | MPK | Pool draft + N lines + M regions (atomic) |
-| rpc_publish_pool | MPK | pools: draft → filling |
+| rpc_create_pool | MPK | Pool draft + N lines + M regions (atomic) — uses `pools.organization_id` directly |
+| rpc_publish_pool | MPK | pools: draft → filling, inline call to rpc_retry_match_pool |
+| rpc_retry_match_pool | system | Q-TSP-RETRY-MATCH/BT-05: scan published batches, broadcast Offers; idempotent |
 | rpc_accept_offer | MPK | FCFS accept, withdraw siblings, batch → matched, auto-close |
 | rpc_reject_offer | MPK | offer → rejected |
 | rpc_lower_batch_price | Farmer | awaiting_price_decision → offering, re-broadcast |
@@ -58,6 +65,7 @@ In progress: rpc_list_vaccination_plans, rpc_list_vaccination_plan_items, rpc_li
 | rpc_confirm_delivery | MPK | batch: dispatched → delivered (D-M6-10) |
 | rpc_submit_deal_review | Farmer ∨ MPK | deal_reviews + dimension; double-blind reveal |
 | rpc_pool_return_batches | MPK | awaiting_mpk_decision → closed_unfilled; matched → published |
+| rpc_cancel_pool | MPK | filling → cancelled; withdraw offers, return matched batches |
 | rpc_pool_accept_partial | MPK | awaiting_mpk_decision → closed_partial; matched → confirmed |
 | rpc_get_reference_price | any | STABLE read + mandatory disclaimer (Art.171) |
 | rpc_get_minimum_price | any | STABLE read + mandatory disclaimer (Art.171) |
