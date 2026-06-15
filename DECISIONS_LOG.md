@@ -138,7 +138,7 @@
 - Duplicate scan по 10 SQL-файлам: каждая функция определена ровно 1 раз.
 - Registry coverage: 12/12; comment-on coverage: 12/12.
 
-**Verification (prod):** ⏸ pending — требуется отдельный пас deploy + information_schema re-check.
+**Verification (prod):** ✅ deployed 2026-06-15 via Supabase MCP `apply_migration` (name=`d02_tsp_section8_m4_m6_rpcs`). information_schema re-check: 12/12 functions, 12/12 registry, 12/12 SECURITY DEFINER, 12/12 search_path=public,pg_temp. Smoke-test `rpc_get_minimum_price` / `rpc_get_reference_price` executed cleanly, returned jsonb with Art.171 disclaimers.
 
 **Code review (independent, adversarial) — 13 findings:**
 

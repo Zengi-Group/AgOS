@@ -62,7 +62,7 @@ In progress: rpc_list_vaccination_plans, rpc_list_vaccination_plan_items, rpc_li
 | rpc_get_reference_price | any | STABLE read + mandatory disclaimer (Art.171) |
 | rpc_get_minimum_price | any | STABLE read + mandatory disclaimer (Art.171) |
 
-Status: ✅ file-level (cross_check.sh 0/0/0); 🟡 deploy + prod verify pending CEO approval.
+Status: ✅ **deployed 2026-06-15** (migration `d02_tsp_section8_m4_m6_rpcs`). Prod-verify: 12/12 functions in information_schema, 12/12 in rpc_name_registry, 12/12 SECURITY DEFINER + search_path. Smoke-test on rpc_get_minimum_price / rpc_get_reference_price ✓ (disclaimers returned).
 
 ## Blocked / Deferred
 
