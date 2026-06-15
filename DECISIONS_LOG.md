@@ -11,7 +11,12 @@
 | ID | Date | Domain | Summary |
 |----|------|--------|---------|
 | ADR-AUTH-CONSOLIDATE-01 | 2026-05-13 | Auth/UI | Unify duplicate registration: `/register` canonical, `/join` flow removed, landing CTAs rewired |
+| DOC-SYNC-M4M6-01 | 2026-06-15 | Docs | Dok 1 v1.9 patch (12 entities + FSM extensions) + Dok 3 §4a (14 RPC catalog) + Dok 4 §3.3a (15 events) — синхронизированы с реализацией M4+M6 в d02_tsp.sql |
 | DEF-TSP-M4-OWNERSHIP | 2026-06-15 | TSP/Schema | `pools.organization_id` denormalised; 6 RPC owner-checks + 3 RLS policies switched off `pool_requests` LEFT JOIN; `rpc_create_pool` stops creating MPK stub-request |
+| D-TSP-CATEGORY-BRIDGE | 2026-06-15 | TSP/Schema | Q-TSP-CATEGORY-CLASSIFIER architectural closure: **A2 (bridge table)** chosen. `tsp_sku_category_map` (many-SKU → one-Category). ✅ SQL deployed commit `0450823` (DB Agent, 2026-06-15). |
+| D-TSP-CATEGORY-ADMIN | 2026-06-15 | TSP/Admin UI | Closure path for Q-TSP-CATEGORY-CLASSIFIER pivoted from brief→seed-PR to **admin UI self-service** (P8). 1 bridge table + 11 admin RPC + 4 admin screens (A-CAT-01..04). Brief deleted; spec in `Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md`. |
+| **A-CAT-DB-DEPLOY-01** | 2026-06-15 | TSP/Schema+RPC | ✅ DB Agent slice closed: bridge table + 2 RPC patches (floor-clamp `rpc_lower_batch_price` ✅ enabled через bridge JOIN + `rpc_create_pool` floor-resolve через bridge) + 11 admin RPC (AC-1..7 + AR-1..4). Deployed commit `0450823`. Verified 10/10 information_schema checks. cross_check.sh 0/0/0. |
+| **DOC-SYNC-A-CAT-01** | 2026-06-15 | Docs | Dok 1 §8 (статус Q-TSP-CATEGORY-CLASSIFIER → SQL closed, A-CAT entity rows updated) + Dok 3 **§4b (11 A-CAT admin RPC)** + RPC-M4-01/RPC-M4-06 stale floor-clamp описания обновлены + Dok 4 **§3.3b (A-CAT events deferral decision)** + SPRINT_STATUS A-CAT slice ✅ + Recommended next step → UI Agent only. |
 | D-AGENT-1 | pre-2026-03 | Organization | 12 agents → 6 consolidated agents |
 | D-NEW-A | pre-2026-03 | RPC Naming | SQL `rpc_name_registry` is canonical for RPC names |
 | L-NEW-2 | pre-2026-03 | Concurrency | SKIP LOCKED, not advisory locks |
@@ -95,6 +100,129 @@
 ---
 
 ## Decisions
+
+### 2026-06-15 — DOC-SYNC-A-CAT-01: Dok 1 / Dok 3 / Dok 4 + SPRINT_STATUS sync с A-CAT SQL deploy
+
+**What:** Architect-side документация синхронизирована с реальным состоянием прод-схемы после DB Agent commit `0450823` (A-CAT bridge + 11 admin RPC + 2 floor-clamp patches). До этой правки Dok 3 §4a содержал stale упоминания «floor отключён до Q-TSP-CATEGORY-CLASSIFIER», Dok 1 описывал bridge как «будет создан», Dok 4 не имел секции про A-CAT events. Все три расхождения закрыты.
+
+**Изменения:**
+
+| Документ | Что добавлено / поправлено |
+|----------|----------------------------|
+| `Docs/AGOS-Dok1-v1_8.md` §8 | Q-TSP-CATEGORY-CLASSIFIER status: `architecture-closed / admin-UI-WIP` → `SQL closed 2026-06-15 / UI WIP / data pending` с разбивкой по слоям. Entity rows `LivestockCategory` + `TspSkuCategoryMap` + `MinimumPrice` обновлены: owner → `Admin via A-CAT-* RPC`, ссылки на commit и спеку. |
+| `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md` §4a | RPC-M4-01 `rpc_create_pool` floor enforcement description обновлено: bridge resolve как primary path, explicit `livestock_category_id` как back-compat (было: «для строк без livestock_category_id floor не проверяется»). RPC-M4-06 `rpc_lower_batch_price` floor clamp: было «ОТКЛЮЧЁН до закрытия Q-TSP-CATEGORY-CLASSIFIER» → «✅ ВКЛЮЧЁН (D-TSP-CATEGORY-BRIDGE)» с полным описанием resolution path. |
+| `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md` **§4b (NEW)** | 11 A-CAT admin RPC (AC-1..7 + AR-1..4) с сигнатурами, return shapes, error codes; конвенции (fn_is_admin gate + admin-reference-data exception от P-AI-2); A-CAT integration note про автоматическую активацию floor-clamp после data fill. |
+| `Docs/AGOS-Dok4-EventBus-v1_1.md` **§3.3b (NEW)** | Архитектурное решение: A-CAT admin RPC в MVP не эмитят `platform_events` (rationale: low-frequency admin reference-data + audit via `approved_by`/`approved_at` columns). Phase 2 candidate events перечислены с триггерами для добавления (additive P7). |
+| `SPRINT_STATUS.md` | Current Phase: добавлены 3 строки (A-CAT Schema/RPC patches/Admin RPC), все ✅ deployed commit `0450823`. Q-TSP-CATEGORY-CLASSIFIER → ✅ architecture+SQL closed. Verification: 25 routines (14 M4/M6 + 11 A-CAT). Recommended next step → UI Agent only (DB больше не блокирует). Параллельные треки: M6-C-ADMIN-FLOW + AI Gateway tools. |
+| `DECISIONS_LOG.md` | Index row `DOC-SYNC-A-CAT-01` + index row `A-CAT-DB-DEPLOY-01` (DB Agent verification) + эта запись. |
+
+**Why architectural decisions inside DOC-SYNC:**
+
+1. **A-CAT admin events deferred to Phase 2** (Architect call) — A-CAT экраны low-frequency, нет consumer'а, audit columns достаточно для Art.171 traceability. Path additive: при появлении notification / AI-alert / dashboard-realtime use case — добавить эмиссию без слома callers (P7). Документировано в Dok 4 §3.3b с конкретным списком candidate event_types.
+2. **fn_is_admin() gate без `p_organization_id`** (P-AI-2 documented exception) — A-CAT таблицы (`livestock_categories`, `tsp_sku_category_map`, `minimum_prices`, `reference_prices`) хранят association-level стандарт TURAN, не per-org data. Whitelist'нуты в `cross_check.sh` CHECK-5 (см. cross_check.sh:167-173). Exception документирована в Dok 3 §4b и в DB Agent skill.
+3. **Floor-clamp graceful degradation сохранена** — bridge JOIN в RPC `rpc_lower_batch_price` / `rpc_create_pool` возвращает NULL при пустом mapping → clamp = no-op. Это значит: deploy SQL → admin наполняет данные постепенно через UI → SKU поэтапно покрываются floor-проверкой. Никакого «big bang» moment.
+
+**Verification:**
+
+- Содержимое файлов прошло review: stale упоминания «floor отключён» исправлены в Dok 3 §4a (RPC-M4-01 + RPC-M4-06).
+- `cross_check.sh` пересчитан после doc patches: 0/0/0 (документы не влияют на CHECK-1..8, только SQL/SQL-каталоги).
+- Кросс-ссылки между документами проверены: Dok 1 §8 ↔ Dok 3 §4b ↔ Dok 4 §3.3b — все три указывают на тот же commit `0450823` и спеку `Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md`.
+
+**Files touched:**
+
+- `Docs/AGOS-Dok1-v1_8.md` (+5 line edits, status + 2 entity rows)
+- `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md` (+2 line edits + new §4b ~100 строк)
+- `Docs/AGOS-Dok4-EventBus-v1_1.md` (new §3.3b ~30 строк)
+- `SPRINT_STATUS.md` (Current Phase tables + verification + open debts + recommended next step)
+- `DECISIONS_LOG.md` (3 index rows + эта запись)
+
+**Consequences:**
+
+- Easy: UI Agent теперь имеет canonical reference для всех 11 admin RPC (Dok 3 §4b) — не нужно читать SQL. Сигнатуры, return shapes, error codes — всё в одном месте.
+- Easy: новые observation/audit фичи на A-CAT — additive путь через Dok 4 §3.3b Phase 2 events.
+- Hard: пока admin не наполнил A-CAT-03 (SKU маппинги) и A-CAT-04 (цены), floor-enforcement не работает на реальных батчах. Это intended — не дефект.
+
+---
+
+### 2026-06-15 — A-CAT-DB-DEPLOY-01: DB Agent slice ✅ closed (commit 0450823)
+
+**What:** DB Agent slice по спецификации `Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md` §5 завершён и задеплоен на prod `mwtbozflyldcadypherr`. Это финальный SQL-шаг для Q-TSP-CATEGORY-CLASSIFIER closure (architecture → SQL → UI → data path).
+
+**Что задеплоено:**
+
+| Объект | Verified via information_schema |
+|--------|--------------------------------|
+| `tsp_sku_category_map` table | 7 cols, 4 indexes (pk + ux_active_sku partial + idx_sku + idx_cat), RLS=true, 2 policies |
+| `rpc_lower_batch_price` patched | source contains `tsp_sku_category_map` JOIN (bridge JOIN active) |
+| `rpc_create_pool` patched | source contains `tsp_sku_category_map` (bridge resolve active); signature unchanged (P7) |
+| 11 admin RPC (AC-1..7 + AR-1..4) | 11/11 SECURITY DEFINER, 11/11 в `rpc_name_registry` с `dok3_name = 'A-CAT *'` |
+| `cross_check.sh` CHECK-5 whitelist | 11 new entries для admin reference-data exception |
+
+**Deploy mechanism:** 4 последовательные миграции через Supabase MCP `apply_migration` (вместо full re-apply `deploy_sql.py` для минимизации риска legacy idempotency edge cases):
+1. `a_cat_bridge_schema` — table + indexes + RLS
+2. `a_cat_rpc_patches_create_pool_and_lower_price` — CREATE OR REPLACE обоих RPC
+3. `a_cat_admin_rpcs_ac1_to_ar4` — 11 functions
+4. `a_cat_registry_entries` — 11 INSERT в `rpc_name_registry`
+
+Post-deploy `information_schema` verification: 10/10 checks PASS.
+
+**Out of scope для DB Agent (передано в DOC-SYNC-A-CAT-01):**
+- Dok 1/3/4 updates → Architect
+- SPRINT_STATUS update → Architect
+- A-CAT UI экраны → UI Agent (UI track)
+- Data fill → CEO + зоолог через A-CAT экраны (после UI ship)
+
+**Files touched (DB Agent):**
+- `d02_tsp.sql` +700/-27 lines (§7.16 + §8 patches + §8a + registry extension)
+- `cross_check.sh` +7/-1 lines (CHECK-5 whitelist)
+
+**Verification:** `cross_check.sh` 0 Critical / 0 Significant / 0 Minor. 78 `$$` delimiters balanced. Все 11 имён RPC уникальны (нет дубликатов в d0*.sql — L-1/L-2 compliance).
+
+**Consequences:**
+- Easy: pilot unblock теперь зависит только от UI Agent + data fill (≤4 дня total).
+- Easy: future quarterly category/price updates — admin клики, не PR (P8 self-service path proven).
+- Hard: pre-pilot data fill зависит от двух людей (CEO + зоолог); если зоолог недоступен — pilot откладывается даже при готовом UI.
+
+---
+
+### 2026-06-15 — DOC-SYNC-M4M6-01: Dok 1 / Dok 3 / Dok 4 синхронизированы с реализацией M4+M6
+
+**What:** Канонические документы (Dok 1, 3, 4) обновлены аддитивными секциями, описывающими реализацию M4+M6 в `d02_tsp.sql` SECTION 7 + SECTION 8. До этой правки SQL опережал документы (нарушение P4 + правила «SQL и Dok должны быть синхронизированы» из CLAUDE.md).
+
+**Изменения:**
+
+| Документ | Что добавлено | Объём |
+|----------|---------------|-------|
+| `Docs/AGOS-Dok1-v1_8.md` | Новый блок `## 8. Patch Notes (v1.9) — M4 + M6 TSP Extension`: 12 новых сущностей (pool_lines, pool_regions, offers, livestock_categories, livestock_category_rules, reference_prices, minimum_prices, tsp_config, batch_events, review_dimensions, deal_reviews, deal_review_dimension_scores), расширения batches/pools, FSM (12 + 10 states), дополнение к Ownership Matrix, маппинг D-M6-1..14 → schema, открытые вопросы. Total entities: 93 → 105. | ~190 строк |
+| `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md` | Новая секция `## 4a. Market / TSP — M4 + M6 Extension (canonical, 2026-06-15)`: 14 RPC (RPC-M4-01..14) с сигнатурами, параметрами, семантикой, ссылками на M4/M6/D-M6-X решения, описанием defensive-фиксов из code review. | ~210 строк |
+| `Docs/AGOS-Dok4-EventBus-v1_1.md` | Расширение §3.3 → `#### 3.3a. Market / TSP — M4 + M6 Extension`: 15 новых canonical event_type (market.batch.scheduled/auto_published/offering/awaiting_price_decision/price_lowered/matched/confirmed/dispatched/delivered + market.offer.created/withdrawn + market.pool.cancelled/closed_partial/closed_unfilled + market.deal_review.submitted/revealed) с producer-RPC, consumers, payload-описанием. | ~30 строк |
+
+**Why:** Без синхронизации Backend и UI Agents не могут планировать работу — нет канонических сигнатур RPC, нет описания entities, нет каталога событий. Это блокировало dependency-chain pilot'а. SPRINT_STATUS уже маркировал DOC-DRIFT-M4M6-01..04 как Significant.
+
+**Consequences:**
+- Easy: Backend Agent теперь может строить AI Gateway tools по Dok 3 §4a (signature/return/idempotency задокументированы).
+- Easy: UI Agent после Dok 6 SCREEN contracts сможет работать — Dok 4 даёт payload-формат для Realtime subscriptions, Dok 3 даёт RPC catalog.
+- Easy: cross_check.sh пока не проверяет doc-sync, но 0/0/0 сохраняется.
+- Hard: §3.3 ERD-диаграмма в Dok 1 описывает legacy pool_requests модель. Не правил её — указал в v1.9 patch notes что **§3.3 ERD legacy, новые entities в v1.9**. Будущий v2.0 sweep заменит ERD целиком (вне скоупа этой сессии).
+- Hard: §5.7 FSM Catalog содержит старые FSM для Batch/Pool (3 + 6 states). Не правил его — v1.9 patch явно отменяет соответствующие блоки. Будущий v2.0 sweep — общий cleanup.
+
+**Файлы (трёх docs, аддитивно):** `Docs/AGOS-Dok1-v1_8.md`, `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md`, `Docs/AGOS-Dok4-EventBus-v1_1.md`, `SPRINT_STATUS.md`.
+
+**Verification:**
+- `cross_check.sh` — 0/0/0 (нет проверки cross-doc consistency — это процесс-долг).
+- Все ссылки на D-M6-1..14 решения проверены против Microstep6 v1.0.
+- 14 RPC сигнатур извлечены из `d02_tsp.sql` напрямую (`grep` по `create or replace function` + параметры).
+- 12 entities — описания взяты из `comment on table/column` в SECTION 7 (источник истины).
+
+**Не сделано (out of scope для этой сессии):**
+- Dok 6 SCREEN contracts для M6-A/M6-B/M6-C — требует M6-C closure (CEO + Architect дизайн-сессия).
+- Q-TSP-CATEGORY-CLASSIFIER — требует зоолога.
+- AI Gateway tools wiring (Dok 5) — Backend Agent.
+- §3.3 ERD rewrite + §5.7 FSM rewrite в Dok 1 — общий cleanup v2.0.
+
+**Closed defects (renamed from open):** DOC-DRIFT-M4M6-01, -02, -03 (Dok 1, 3, 4 sync). DOC-DRIFT-M4M6-04 (Dok 6 SCREEN contracts) **остаётся открытым** — зависит от M6-C closure.
+
+---
 
 ### 2026-06-15 — M4 + M6 addendum: DEF-TSP-M4-OWNERSHIP + Q-TSP-RETRY-MATCH closed, rpc_cancel_pool added
 
@@ -2695,3 +2823,76 @@ Direct P4 violation (one source of truth) and HS-5 violation (additive-only — 
 **Verification**: `bash cross_check.sh` → 0 Critical / 0 Significant / 0 Minor. **Migration not yet applied to remote Supabase project `mwtbozflyldcadypherr`** — pending Arshidin's «ок» before `mcp__plugin_supabase_supabase__apply_migration`.
 
 **Verification**: `bash cross_check.sh` → 8/8 OK, 0 Critical / 0 Significant / 0 Minor. No remaining `join public.pool_requests` in `d02_tsp.sql`. **Migration not yet applied to remote Supabase project `mwtbozflyldcadypherr`** — pending Arshidin's "ок" before `mcp__plugin_supabase_supabase__apply_migration`.
+
+---
+
+### 2026-06-15: D-TSP-CATEGORY-BRIDGE — A2 bridge-table chosen for Q-TSP-CATEGORY-CLASSIFIER
+
+**What**: Architectural closure of Q-TSP-CATEGORY-CLASSIFIER chooses **Option A2 (bridge table)**: a new table `tsp_sku_category_map (tsp_sku_id uuid PK FK → tsp_skus, category_id uuid FK → livestock_categories, version int, is_active boolean, created_at)` makes `tsp_skus : livestock_categories = many : one`. `livestock_categories` and `livestock_category_rules` remain as the M4 §1.1 design intended; `tsp_skus` (D90, 30 rows) remains the fine-grained product cell used by Batch/Pool matching. Floor enforcement resolves SKU → Category via the bridge, then reads `minimum_prices(category_id, region_id)`. The architectural question is now **closed**; remaining closure is **data-only** (zoologist + seed).
+
+**Why**: Alternatives considered:
+- **A1 (Merge)**: drop `livestock_categories`, key `minimum_prices` / `reference_prices` directly to `tsp_sku_id`. Rejected — Art.171 PK RK riterique works on «защитная цена ассоциации по категории», not on 30 SKUs; would also explode `minimum_prices` rows by ~6×.
+- **A3 (Derive parallel)**: no bridge; floor-check recalls `rpc_derive_category(breed_group, sex, age, weight, bcs)` on every Batch. Rejected — BCS becomes mandatory at Batch publish time (UI burden on farmer; not in `batches` columns today); rule-version migrations would need to recompute cached `category_id` on historical batches.
+- **A2 (Bridge)**: chosen. Preserves Microstep4 ADR §1.1 unchanged. Category count stays coarse (зоолог укрупнит — гипотеза 5–8 категорий). Bridge versioning lets зоолог пересматривать SKU→Category без слома Batch FSM. `pool_lines.tsp_sku_id` (D-M6-13 транзитный) корректно превращается в `JOIN tsp_sku_category_map → minimum_prices` для floor-check.
+
+**Files** (artefacts only — NO SQL change yet, awaiting zoologist seed):
+- `DECISIONS_LOG.md`: this entry.
+- `Docs/AGOS-Dok1-v1_8.md` §7.3 «Открытые архитектурные вопросы»: Q-TSP-CATEGORY-CLASSIFIER status updated from `open` to `architecture-closed / data-pending`.
+- `Docs/Q-TSP-CATEGORY-CLASSIFIER-Zoologist-Brief.md` (NEW): structured brief for зоолог — 5 questions + SKU→Category mapping template (30 SKUs listed).
+- `SPRINT_STATUS.md`: blocker row updated — architectural step done, only seed data outstanding.
+
+**Additive guarantees (P7)**:
+- No SQL touched in this decision. The bridge table, RPC changes (`rpc_derive_category`, floor-clamp re-enablement in `rpc_lower_batch_price`, floor-enforcement upgrade in `rpc_create_pool`) all land **after** zoologist returns seed data, in a single d02_tsp.sql ADD (canonical file, no patch files per CLAUDE.md SQL rules).
+- `pool_lines.tsp_sku_id` (D-M6-13 transitional) stays as-is; no FSM transition added.
+- `batches.tsp_sku_id` stays as-is; no new mandatory column. BCS is **NOT** required at Batch publish in A2.
+- Existing `minimum_prices` / `reference_prices` schema is unchanged.
+
+**Consequences**:
+- Easy (post-seed): floor-clamp in `rpc_lower_batch_price` re-enables via `tsp_sku_id → JOIN tsp_sku_category_map → minimum_prices(category_id, region_id)` (region match: exact rayon, then national fallback per Microstep6 §floor).
+- Easy (post-seed): `rpc_create_pool` floor-enforcement runs unconditionally — no more optional `livestock_category_id` field on `p_pool_lines` jsonb. The optional path stays accepted for back-compat but unused (P7 additive).
+- Easy: classifier updates = INSERT new rule version + new map version, no code deploy (P8 standards-as-data).
+- Hard: requires zoologist sign-off on TWO datasets, not one: `livestock_category_rules` (derive rules) AND `tsp_sku_category_map` (the 30-row bridge). Brief covers both.
+- Hard / watch: if zoologist returns >8 categories, `minimum_prices` rows × regions grow proportionally — manageable but worth flagging at seed-review time.
+- Hard / follow-up: `rpc_derive_category` is still useful (AI Gateway extraction from photo/text) even with bridge — keep it. Bridge is the authoritative path for **floor-check**; derive is the AI helper.
+
+**Verification**: N/A (no code/SQL change). `cross_check.sh` not required. **Closure path superseded by D-TSP-CATEGORY-ADMIN (same day) — see below.**
+
+---
+
+### 2026-06-15: D-TSP-CATEGORY-ADMIN — closure path pivot to admin UI (P8 self-service)
+
+**What**: The closure path for Q-TSP-CATEGORY-CLASSIFIER pivots from «brief → zoologist text answers → SQL seed PR» to «1 schema migration + 4 admin screens → admin (CEO + zoologist) fills data live». Architecture (A2 bridge) is unchanged. What changes:
+- Brief document `Docs/Q-TSP-CATEGORY-CLASSIFIER-Zoologist-Brief.md` is **deleted**.
+- Replacement: `Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md` — full spec for 4 admin screens (A-CAT-01..04: Категории, Правила derive, SKU маппинг, Цены) + bridge table DDL + 11 admin RPC signatures.
+- Hand-off: DB Agent (SQL §2 of spec) + UI Agent (screens §3 of spec), parallel.
+
+**Why**: The brief approach violated P8 (Standards as Data, Not Code) — every future taxonomy change would require a developer-led SQL seed PR. CEO (Arshidin) flagged this directly: «эти категории должны управляться из админки». Alternatives considered:
+- **Brief → seed PR (original D-TSP-CATEGORY-BRIDGE plan)**: rejected — bureaucratic, breaks P8, single-use artifact, no path for quarterly price updates / new regions / classifier evolution without dev involvement.
+- **Hardcoded seed in SQL with «edit the SQL to change»**: rejected — same P8 violation plus no audit trail of who changed what when.
+- **Admin UI self-service (chosen)**: aligns with P8 (data tables already exist with versioning fields); aligns with existing admin module pattern (`src/pages/admin/*`); admin already has analogous screens (livestock-prices, pools, pricing); зоолог can be granted admin role for direct edits if needed.
+
+**Files**:
+- `Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md` (NEW): single-source spec covering schema delta, RPC signatures, screen contracts, hand-offs.
+- `Docs/Q-TSP-CATEGORY-CLASSIFIER-Zoologist-Brief.md` (DELETED): content rolled into spec §1.2 (default category hypothesis) and §3.3 (30-SKU mapping is now A-CAT-03 main screen).
+- `Docs/AGOS-Dok1-v1_8.md` §7.3: pointer updated.
+- `SPRINT_STATUS.md`: owner/approach updated.
+- This entry.
+
+**Effort estimate (info, not commitment)**:
+- DB Agent: ~1 day (1 table + 11 RPCs + 2 RPC body edits + registry + cross_check).
+- UI Agent: ~2–3 days (4 screens + Sidebar/Router additive changes).
+- Admin self-fill (CEO + зоолог): ~1 hour after deploy.
+
+**Additive guarantees (P7)**:
+- No existing RPC signature changed (admin RPCs are new; `rpc_lower_batch_price` and `rpc_create_pool` get body-only edits).
+- Schema: only new table (`tsp_sku_category_map`); no existing column altered.
+- Sidebar/Router changes are additive (new entry + new routes; nothing removed).
+- **Graceful degradation**: if migration ships but admin data is empty, `rpc_lower_batch_price` floor=NULL = clamp no-op (identical to current behaviour). Safe to deploy schema before data exists.
+
+**Consequences**:
+- Easy: future classifier / price updates are admin-panel clicks, not PRs. Quarterly cycle: open A-CAT-04 → create new minimum_prices row with new valid_from → versioning handles history.
+- Easy: dual benefit — A-CAT-04 also unblocks regular price updates for Phase 2 (would need admin UI anyway). No wasted work.
+- Hard: 4 new admin screens are real UI work (~2–3 days). Trade-off vs. brief: faster to pilot-ready (no waiting for zoologist text responses) and pays off for life.
+- Hard / watch: parallel WIP `M6-C-ADMIN-FLOW` may eventually re-template A-CAT screens. Risk minimal — admin screen patterns already established in `src/pages/admin/*`; if M6-C lands later, A-CAT can adopt the template additively.
+
+**Verification**: N/A (still no SQL/code changes — this entry covers the planning pivot). Next checkpoint: DB Agent completes §2 → UI Agent completes §3 in parallel → CEO + зоолог fill data via UI → close Q-TSP-CATEGORY-CLASSIFIER.

@@ -1675,6 +1675,135 @@ The following text MUST be displayed wherever reference prices are shown (PriceG
 
 ---
 
+## 8. Patch Notes (v1.9) — M4 + M6 TSP Extension
+
+**Date:** 15 June 2026 | **Source:** `d02_tsp.sql` SECTION 7 + SECTION 8 (merged from `d09_tsp_m4m6_patch.sql` per CLAUDE.md "no patch files") | **Coverage:** Microstep 4 (Batch/Pool/Offer logic) + Microstep 6 (TSP UX flow)
+
+> Documents the SQL implementation of M4+M6 microsteps. **Entity model (§3.3) and Ownership Matrix (§4.3) below are now authoritative.** Existing §3.3 ERD diagram describes legacy pool_requests model — kept for historical compat (P7); new flow uses entities in this section.
+
+### Новые сущности Market/TSP domain (+12)
+
+| Сущность | SQL-таблица | Назначение | Owner (creates) | Источник истины |
+|----------|-------------|------------|-----------------|-----------------|
+| `PoolLine` | `pool_lines` | Категорийная строка внутри Pool-контейнера (D-M6-13): per-category цена МПК и объёмная цель. Pool = аггрегат + N строк. MAX-объём опц., MIN запрещён (создаёт unfillable). | МПК (через `rpc_create_pool`) | `pool_lines.current_volume_kg` обновляется атомарно при матче. |
+| `PoolRegion` | `pool_regions` | Район/область, по которой матчится Pool (D-M6-4). `region_type ∈ {oblast, rayon}`. «Вся область» = одна oblast-строка (а не разворачивание в районы). | МПК | Аддитивно расширяется/сужается. |
+| `Offer` | `offers` | Broadcast-предложение, рассылаемое МПК-ам при отсутствии auto-match (M4 §5). FCFS 24ч (`tsp_config.offer_window_hours`). `unique(batch_id, mpk_org_id)` гарантирует один активный Offer на пару. | Система (через `rpc_publish_pool`/`rpc_retry_match_pool`/`rpc_lower_batch_price`) | FSM: `pending→accepted|rejected|expired|withdrawn`. На `accepted` все sibling-`pending` атомарно → `withdrawn`. |
+| `LivestockCategory` | `livestock_categories` | TSP-таксономия продаж (отдельно от HerdGroup-классификации, D29). Выводится классификатором, фермер не выбирает руками. | Admin (CRUD через A-CAT-01, RPC AC-1/AC-2) | M4 §1.1; **D-TSP-CATEGORY-BRIDGE (A2)** + **D-TSP-CATEGORY-ADMIN** (2026-06-15): self-service наполнение через A-CAT-01 (нет seed-PR / брифа зоологу). |
+| `TspSkuCategoryMap` | `tsp_sku_category_map` | **D-TSP-CATEGORY-BRIDGE (A2):** мост `tsp_skus.id → livestock_categories.id` (many-to-one). Версионируется (`version`, `is_active`). Partial unique index `ux_skumap_active_sku` гарантирует ≤1 active mapping per SKU. Используется в floor-check RPC: `pool_lines.tsp_sku_id → category_id → minimum_prices`. ✅ Deployed commit `0450823` (2026-06-15). Спека: [`Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md`](AGOS-Dok6-A-CAT-AdminScreens-v1_0.md) §2.1. | Admin (CRUD через экран A-CAT-03, RPC AC-5) | `rpc_admin_map_sku_to_category` атомарно flip'ает active mapping (deactivate prior → INSERT с `version+1`). |
+| `LivestockCategoryRule` | `livestock_category_rules` | Правила derive-функции по комбинации (breed_group, sex, age, weight, BCS). Versioned. Priority-tiebreak. | Admin | P8: изменение классификатора = INSERT новых правил, не code deploy. |
+| `ReferencePrice` | `reference_prices` | Индикативная (рекомендованная) цена TURAN per `(category_id, region_id)`. `region_id=NULL` = national fallback. **Обязательный disclaimer** (Art.171 ПК РК). | Admin | §5.9 Tier 3 (рекомендация, не обязательство). AI Layer: только эта таблица для price-hints (никаких aggregated transactions — Dok5 §6). |
+| `MinimumPrice` | `minimum_prices` | Защитный floor per `(category_id, region_id)`. `rpc_publish_batch`: soft-warn; `rpc_create_pool`: hard-block per pool_line (через bridge); `rpc_lower_batch_price`: ✅ clamp активен (через bridge, 2026-06-15). Versioning через `approved_by`/`approved_at`; история сохраняется как `is_active=false` строки. | Admin (CRUD через A-CAT-04, RPC AC-6) | Art.171 ПК РК: standard ассоциации (защита фермера), не price-fixing. |
+| `TspConfig` | `tsp_config` | Операционные параметры TSP (offer_window 24ч / mpk_decision_window 24ч / publish_lead 7д / price_step_down 100 ₸/кг). Active row 1 (EXCLUDE constraint). | Admin | P8: D-M6-1/3/9. |
+| `BatchEvent` | `batch_events` | Append-only FSM-лог per Batch. Никогда не UPDATE. Драйвер behavioural reputation (D-TSP-14). Канонические event_type: `published, auto_matched, broadcast_sent, offer_accepted, offer_expired, matched, price_lowered, confirmed, dispatched, delivered, cancelled_after_match, cancelled_during_execution, scheduled, auto_published`. | Каждый RPC при FSM-переходе | M4 §1.1 + M6 §3.3. |
+| `ReviewDimension` | `review_dimensions` | Lookup измерений deal-review (D-M6-11). `applicable_role ∈ {farmer, mpk, both}`. `is_pilot_primary=true` — измерение по умолчанию для пилотного flow. | Admin (seed) | Пилот: 4 строки (`weight_accuracy`, `livestock_condition`, `communication`, `delivery_punctuality`). Полный список после пилота. |
+| `DealReview` | `deal_reviews` | Взаимный отзыв per `(batch_id, reviewer_org_id)`. `overall_score 1-5` + opt. comment. **Double-blind (D-M6-12):** `visible_at` устанавливается когда обе стороны submit-нули ИЛИ истёк review_window. | Фермер и МПК (после `delivered`) | RLS: до `visible_at` — каждый видит только своё; после — оба видят оба. |
+| `DealReviewDimensionScore` | `deal_review_dimension_scores` | Score 1-5 per dimension внутри `DealReview`. Наследует видимость от родителя. Cascade delete. | Через `rpc_submit_deal_review` | Pilot: 1 строка / review (is_pilot_primary для роли). Post-pilot: N строк. |
+
+**Счётчики:** Market/TSP domain `+13` сущностей (включая `TspSkuCategoryMap` от D-TSP-CATEGORY-BRIDGE 2026-06-15). Total `93 → 106`.
+
+### Расширения существующих сущностей
+
+#### Batch (`batches`) — `+8` колонок, FSM `5 → 12` состояний
+
+| Колонка | Тип | Назначение | Решение |
+|---------|-----|------------|---------|
+| `ready_from`, `ready_to` | date | Окно готовности фермера к отгрузке. Драйвер `scheduled_publish_at` и matching-предиката с `pool.delivery_window`. | D-M6-6, D-M6-8 |
+| `scheduled_publish_at` | timestamptz | `= ready_from − tsp_config.publish_lead_days`. `NULL/≤now` = спот; `>now` = `status=scheduled` до отработки системного job-а. | D-M6-7 |
+| `farmer_price_per_kg`, `deal_price_per_kg` | int | Цена фермера при публикации (может быть понижена в `awaiting_price_decision`) и locked deal-цена после матча (immutable). | M4 §2 |
+| `pool_line_id` | uuid FK | Заменяет концептуальный `batch.pool_id`. `NULL` = unmatched/returned. Locked при `matched`. | D-M6-13 |
+| `scheduled_at, offering_at, awaiting_price_decision_at, confirmed_at, dispatched_at, delivered_at` | timestamptz | FSM-таймстемпы. | M4 §3 + M6 §3 |
+
+**FSM Batch (канонический, M4 §3 + M6 §3):**
+```
+draft → scheduled | published | offering | matched → confirmed → dispatched → delivered
+                                 ↑     ↓
+                       awaiting_price_decision (M4 §2.6: все Offers expired, фермер решает цену)
+Terminal: cancelled, failed
+Legacy: expired (DEPRECATED, не использовать в новом коде)
+```
+
+#### Pool (`pools`) — `+6` колонок (вкл. **`organization_id`** denormalisation), FSM `3 → 10` состояний
+
+| Колонка | Тип | Назначение | Решение |
+|---------|-----|------------|---------|
+| `organization_id` | uuid NOT NULL | **Денормализованный MPK-owner.** До addendum'а ownership шёл через JOIN на deprecated `pool_requests`. После: прямой column-check во всех RPC и RLS. Backfill из `pool_requests`. | DEF-TSP-M4-OWNERSHIP (closed 2026-06-15) |
+| `pool_request_id` | uuid (NOT NULL → NULLABLE) | M4: PoolRequest absorbed in Pool. Старые записи сохранены, новые — `NULL`. | M4 §2.4 |
+| `total_target_volume_kg` | int | Аггрегированный объёмный target по всем pool_lines. Pool "filled" когда Σ(matched volumes) ≥ этого значения. Доп. к `target_heads` (kept for compat). | D-M6-13 |
+| `delivery_from`, `delivery_to` | date | Окно поставки Pool. Matching-предикат: `batch.[ready_from,ready_to] ∩ pool.[delivery_from,delivery_to] ≠ ∅`. | D-M6-8 |
+| `published_at, awaiting_decision_at, cancelled_at, completed_at` | timestamptz | FSM-таймстемпы. | M4 §4 |
+
+**FSM Pool (канонический, M4 §4.1):**
+```
+draft → filling → closed_filled       → executing → completed
+              ├─ awaiting_mpk_decision → closed_partial | closed_unfilled
+              └─ expired_empty (window expired, 0 batches)
+Terminal: cancelled, completed, closed_unfilled, expired_empty
+Legacy: filled, dispatched, delivered, executed, closed (все DEPRECATED — см. d02_tsp.sql:1164-1169)
+```
+
+**`PoolRequest` (`pool_requests`)** — **DEPRECATED** (`comment on table`). Старые строки сохранены; новые pool'ы создаются через `rpc_create_pool` без stub-row. См. M4 §2.4.
+
+### Owner-цепочки M4/M6 (дополнение к §4.3 Ownership Matrix)
+
+| Сущность | Создаёт | Обновляет | Authority при расхождении |
+|----------|---------|-----------|---------------------------|
+| `PoolLine.current_volume_kg` | `rpc_create_pool` (=0) | `rpc_accept_offer`, `rpc_pool_return_batches` атомарно (`FOR UPDATE`) | RPC; UI читает только. |
+| `Offer.status` | Система | `rpc_accept_offer`/`rpc_reject_offer` владельца МПК; broadcast-callers withdraw siblings | RPC. Прямые UPDATE запрещены RLS. |
+| `Batch.deal_price_per_kg` | `rpc_accept_offer` (= `offers.offered_price_per_kg`) | Immutable | Locked в момент `matched`. |
+| `Batch.pool_line_id` | `rpc_accept_offer` | `rpc_pool_return_batches` (=NULL при возврате) | RPC + FK constraint. |
+| `BatchEvent` | Каждый FSM-RPC | Никогда (append-only) | Append-only; нарушение = bug. |
+| `DealReview.visible_at` | Триггер: оба submitted ИЛИ window expired | Никогда после set | `rpc_submit_deal_review` единственная точка set. |
+| `LivestockCategory.is_active` | Admin | Admin (через TSP-config screen, A-серия pending) | Standards-as-data (P8). |
+| `ReferencePrice.is_active` / `MinimumPrice.is_active` | Admin при approve | Admin при retire | EXCLUDE-style temporal versioning через `valid_from/valid_to`. |
+| `TspConfig.is_active` | Admin (replace-only через INSERT нового active row) | EXCLUDE constraint = 1 active | P8. |
+
+### Дополнения к §5.7 FSM Catalog
+
+`Batch` и `Pool` FSM выше **отменяют** соответствующие блоки в §5.7 (см. таблицу «Status FSMs» в §5.7 Market/TSP). Старые `draft → published → matched | cancelled | expired` и `filling → filled → executing → dispatched → delivered → executed` сохранены как legacy CHECK-значения для backward compat (P7) — но не используются в новых M4/M6 потоках.
+
+**`Offer.status` FSM:**
+```
+pending → accepted | rejected | expired | withdrawn
+```
+- `pending → accepted` (MPK): атомарно переводит `batch.status → matched`, withdraws siblings.
+- `pending → rejected` (MPK): explicit отказ.
+- `pending → expired` (system): `expires_at` истёк.
+- `pending → withdrawn` (system): sibling accepted, batch cancelled, или pool filled.
+
+**`Pool.status` FSM:** см. полную диаграмму выше.
+
+### Связь с M4+M6 решениями (Microstep 4 + 6)
+
+Все 14 решений микростепа 6 имплементированы:
+
+| Решение | Где в схеме |
+|---------|-------------|
+| D-M6-1: offer/decision windows 24ч | `tsp_config.offer_window_hours, mpk_decision_window_hours` |
+| D-M6-3: фикс step 100 ₸/кг + clamp к floor | `tsp_config.price_step_down_amount` + `rpc_lower_batch_price` |
+| D-M6-4: rayon-matching | `pool_regions` |
+| D-M6-5: identity revealed на `confirmed` | `batches.status='confirmed'` + UI-логика |
+| D-M6-6: ready_from/to | `batches.ready_from/to` |
+| D-M6-7: deferred publication | `batches.scheduled_publish_at` + `status='scheduled'` |
+| D-M6-8: delivery_from/to + overlap | `pools.delivery_from/to` |
+| D-M6-9: publish_lead_days=7 | `tsp_config.publish_lead_days` |
+| D-M6-10: batch-level dispatch/delivery handshake | `batches.status='dispatched'/'delivered'` |
+| D-M6-11: mutual reviews | `review_dimensions, deal_reviews, deal_review_dimension_scores` |
+| D-M6-12: double-blind reveal | `deal_reviews.visible_at` + RLS-политика `deal_reviews_read` |
+| D-M6-13: container model | `pool_lines` + `pools.total_target_volume_kg` + `batches.pool_line_id` |
+
+### Открытые архитектурные вопросы
+
+- **Q-TSP-CATEGORY-CLASSIFIER (SQL closed 2026-06-15 / UI WIP / data pending):** Архитектура — **A2 (bridge table)** через **D-TSP-CATEGORY-BRIDGE**. Closure path — **админ-панель self-service** (P8) через **D-TSP-CATEGORY-ADMIN**. Полная спецификация: [`Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md`](AGOS-Dok6-A-CAT-AdminScreens-v1_0.md).
+  - ✅ **SQL layer (commit `0450823`, 2026-06-15 deployed на `mwtbozflyldcadypherr`):** таблица `tsp_sku_category_map` + 11 admin RPC (см. [Dok 3 §4b](AGOS-Dok3-RPC-Catalog-v1_4.md#4b-a-cat-admin-rpc-d-tsp-category-bridge-2026-06-15)) + правки `rpc_lower_batch_price` (floor-clamp ✅ enabled через bridge JOIN) + `rpc_create_pool` (floor-resolve безусловный через bridge; explicit `livestock_category_id` в jsonb остаётся для back-compat).
+  - ⏳ **UI layer (in progress):** UI Agent track — 4 экрана A-CAT-01..04 (`/admin/livestock-categories/*`) по [спека §3](AGOS-Dok6-A-CAT-AdminScreens-v1_0.md).
+  - ⏳ **Data layer (после UI):** CEO + зоолог наполняют ~5–8 категорий + 30 SKU маппингов + N minimum_prices / reference_prices через A-CAT экраны (≈1 час). После наполнения floor-enforcement автоматически активируется без redeploy.
+  - **Graceful degradation:** до наполнения данными — пустой bridge → `v_floor=NULL` → clamp = no-op. Схема безопасна и не меняет наблюдаемое поведение системы.
+- **Q-TSP-REVIEW-DIMENSIONS (open):** Полный список измерений deal-review post-pilot. Пилотный seed (4 dimensions) уже в БД.
+- **M5-ONBOARDING (deferred):** Microstep 5 (онбординг) не спроектирован.
+- **M6-C-ADMIN-FLOW (WIP):** UX-flow админа Турана (поверх M4) не закрыт в Microstep6. Требует продолжения дизайн-сессии.
+
+---
+
 ## 8. Patch Notes (v1.6)
 
 **Date:** 5 March 2026 | **Migrations:** `008_patch_cascade.sql`, `009_patch_ai.sql`, `010_fn_generate_production_plan.sql`

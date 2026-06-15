@@ -318,6 +318,66 @@ INSERT INTO public.user_notification_preferences (user_id, channel)
 | **market.price_grid.updated** | RPC-19 [ADMIN] | Realtime (все) ✅, Audit | version, effective_date, changes[{category_code, grade_code, old_price, new_price}] |
 | **market.price_index.published** | RPC-20 [ADMIN] | Realtime (Market screen) ✅ | index_id, period_date, value_per_kg, data_source |
 
+#### 3.3a. Market / TSP — M4 + M6 Extension (2026-06-15, +15 событий)
+
+> События, генерируемые 14 новыми RPC из [Dok 3 §4a](AGOS-Dok3-RPC-Catalog-v1_4.md#4a-market--tsp--m4--m6-extension-canonical-2026-06-15). Все эмитятся **дважды**: в `batch_events` (append-only audit log per batch, M4 §6.4) И в `platform_events` (для consumers / Realtime / notification).
+> **Legacy совместимость:** старые события `market.batch.matched/cancelled/expired`, `market.pool.batch_added/status_changed/contacts_revealed` сохраняются для backward compat (P7). Новые M4/M6 flow используют события ниже.
+
+| canonical_event_type | Producer (RPC) | Consumers | Описание |
+|----------------------|----------------|-----------|----------|
+| **market.batch.scheduled** | `rpc_publish_batch` (D-M6-7 path) | Farmer Realtime ✅ | batch_id, org_id, scheduled_publish_at, ready_from, ready_to |
+| **market.batch.auto_published** | System cron (scheduled→published) | MPK Feed ✅, Match Engine | batch_id, org_id, farmer_price_per_kg, ready_window |
+| **market.batch.offering** | `rpc_publish_pool` / `rpc_retry_match_pool` / `rpc_lower_batch_price` | MPK с активным Offer (Realtime ✅), AI GW | batch_id, mpk_org_ids[], offer_window_hours, expires_at |
+| **market.batch.awaiting_price_decision** | System cron (offers expired) | Farmer Notification ✅, AI GW | batch_id, org_id, expired_offers_count |
+| **market.batch.price_lowered** | `rpc_lower_batch_price` | MPK с новым Offer (Realtime ✅), Audit | batch_id, old_price, new_price, was_clamped, broadcast_mpk_count |
+| **market.batch.matched** *(M4 канон)* | `rpc_accept_offer` | Farmer+MPK Notification ✅, Audit | batch_id, pool_id, pool_line_id, mpk_org_id, deal_price_per_kg, volume_kg |
+| **market.batch.confirmed** | `rpc_accept_offer` (auto-close path) | Farmer+MPK Notification ✅ (D-M6-5: identity revealed), Audit | batch_id, pool_id, mpk_org_id, mpk_legal_name, farmer_org_id, farmer_legal_name |
+| **market.batch.dispatched** | `rpc_confirm_dispatch` | MPK Notification ✅, AI GW | batch_id, dispatched_at, by_user_id |
+| **market.batch.delivered** | `rpc_confirm_delivery` | Farmer Notification ✅, Review-prompt scheduler | batch_id, delivered_at, by_user_id |
+| **market.offer.created** | `rpc_publish_pool` / `rpc_retry_match_pool` / `rpc_lower_batch_price` | MPK Notification ✅ | offer_id, batch_id, mpk_org_id, offered_price_per_kg, expires_at |
+| **market.offer.withdrawn** | `rpc_accept_offer` (sibling withdraw) / cancel paths | MPK Realtime ✅ | offer_id, batch_id, mpk_org_id, reason: 'sibling_accepted'\|'batch_cancelled'\|'pool_cancelled'\|'pool_returned' |
+| **market.pool.cancelled** | `rpc_cancel_pool` | MPK + всех matched Farmer Notification ✅, Audit | pool_id, mpk_org_id, reason, affected_batches_count |
+| **market.pool.closed_partial** | `rpc_pool_accept_partial` | Farmer Notification ✅ (matched batches confirmed), Audit | pool_id, mpk_org_id, confirmed_batches_count, fill_ratio |
+| **market.pool.closed_unfilled** | `rpc_pool_return_batches` / cron (window expired, no decision) | Farmer Notification ✅ (batches → published), Audit | pool_id, mpk_org_id, returned_batches_count |
+| **market.deal_review.submitted** | `rpc_submit_deal_review` | Other party Notification (only "получен отзыв" — без content до reveal), Audit | deal_review_id, batch_id, reviewer_org_id, reviewer_role, overall_score (visible to reviewer only) |
+| **market.deal_review.revealed** | `rpc_submit_deal_review` (when both submitted) / cron (window expired) | Both parties Realtime ✅ | batch_id, reviews[{reviewer_role, overall_score, dimension_scores[], comment}] |
+
+**Notes on payload conventions:**
+- Все события M4/M6 содержат `org_id` источника (для P-AI-2 фильтрации).
+- `batch.confirmed` — единственное событие, раскрывающее `legal_name` контрагента (D-M6-5). До этого — только `org_id` без identity.
+- `deal_review.submitted` payload в notification-канале маскируется до `visible_at`: получатель видит "получен отзыв", не содержание.
+- `deal_review.revealed` эмитится один раз при reveal — оба отзыва приходят вместе.
+
+**Aggregate market events (для AI/analytics, через `is_audit=true`):** none пока. Pending Dok 5 §6 antitrust review для aggregated-market-data tooling.
+
+#### 3.3b. A-CAT Admin Events (D-TSP-CATEGORY-BRIDGE, 2026-06-15)
+
+> **Архитектурное решение (Architect, DOC-SYNC-A-CAT-01, 2026-06-15):** 11 admin RPC из [Dok 3 §4b](AGOS-Dok3-RPC-Catalog-v1_4.md#4b-a-cat-admin-rpc-d-tsp-category-bridge-2026-06-15) **в MVP не эмитят `platform_events`**.
+
+**Обоснование:**
+- A-CAT экраны (A-CAT-01..04) — admin-only, низкочастотные: разовый setup (~1 час CEO+зоолог) + редкие quarterly корректировки.
+- Real-time consumer'ов нет: UI перечитывает данные при открытии экрана; floor-clamp и pool-floor работают на `is_active=true` snapshot (eventually consistent — read-on-demand).
+- **Audit trail обеспечивается denormalised columns:**
+  - `minimum_prices.approved_by` + `approved_at` — кто и когда утвердил защитный floor (Art.171 ПК РК — стандарт ассоциации).
+  - `reference_prices.approved_by` + `approved_at` + `legal_disclaimer_shown` — индикативная цена.
+  - `tsp_sku_category_map.created_by` + `created_at` + `version` — кто и когда замапил SKU; полная история через `is_active=false` строки.
+- P7-additive путь к подключению events: при появлении consumer'а (AI Gateway tool «show floor history», proactive alert «protective floor changed», notification «новая категория добавлена») — добавить эмиссию в соответствующий RPC без слома существующих callers.
+
+**Phase 2 candidate events (NOT in MVP, для справки):**
+
+| candidate event_type | Producer (RPC) | Trigger для добавления |
+|----------------------|----------------|------------------------|
+| `platform.livestock_category.upserted` | AC-1 | Notification «новая SKU-категория доступна» для UI / consulting projects |
+| `platform.livestock_category.deactivated` | AC-2 | Если AI tool «category lookup» появится — invalidate cache |
+| `platform.livestock_category_rule.activated` | AC-4 | AI extraction tool для batch creation начнёт использовать derive — нужен ruleset change broadcast |
+| `platform.sku_category_map.updated` | AC-5 | Coverage metric (% SKU mapped) — Realtime для admin dashboard |
+| `platform.minimum_price.updated` | AC-6 | Notification farmers (Art.171 announcement) ИЛИ AI proactive alert «floor changed» |
+| `platform.reference_price.updated` | AC-7 | То же что minimum, но низший приоритет (indicative-only) |
+
+**Status:** все 6 строк выше — **deferred** до появления конкретного consumer'а. Не блокирует pilot.
+
+**Aggregate / audit считаем через прямой DB query на `tsp_sku_category_map` / `minimum_prices` / `reference_prices` истории (`is_active=false` строки сохраняются как archive).**
+
 ### 3.4. Feed Domain (4 события)
 
 | canonical_event_type | Producer | Consumers | Описание |
