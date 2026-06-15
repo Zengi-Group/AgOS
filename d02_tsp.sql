@@ -2084,3 +2084,1364 @@ insert into public.rpc_name_registry (sql_name, dok3_name, created_in, notes) va
     ('rpc_publish_price_index_value','rpc_publish_price_index_value','d02_tsp.sql (Slice 5b)','RPC-20')
 on conflict (sql_name) do update set notes = excluded.notes, created_in = excluded.created_in;
 
+
+-- ============================================================
+-- SECTION 8: M4 + M6 RPC IMPLEMENTATIONS (2026-06-15)
+-- ============================================================
+-- Sources: Docs/AGOS-TSP-Flow-Microsteps/AGOS-Microstep4-BatchPoolOffer-v1_0.md
+--          Docs/AGOS-TSP-Flow-Microsteps/AGOS-Microstep6-TSPFlow-v1_0.md
+-- Decisions implemented: D-M6-1..14, D-TSP-1..16
+--
+-- Known compromise (DEF-TSP-M4-OWNERSHIP):
+--   pools table has no organization_id column; MPK identity is traced via
+--   pool_request_id -> pool_requests.organization_id. rpc_create_pool creates
+--   a vestigial pool_request stub to preserve this ownership chain until a
+--   future schema migration adds pools.organization_id directly.
+--
+-- Known gap (Q-TSP-CATEGORY-CLASSIFIER):
+--   pool_lines stores tsp_sku_id (transitional D-M6-13). minimum_prices and
+--   reference_prices reference livestock_categories — no bridge yet between
+--   them. Floor enforcement runs only when livestock_category_id is provided
+--   explicitly by the caller as an optional jsonb field on a pool_line.
+--
+-- Known gap (Q-TSP-RETRY-MATCH):
+--   rpc_publish_pool does NOT auto-match existing published batches. Backend
+--   job handles retry-match cadence. Re-broadcast on price lowering is
+--   implemented inline in rpc_lower_batch_price (per CEO direction 2026-06-15).
+-- ============================================================
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-01: rpc_create_pool (M4 §2.4 + D-M6-13)
+-- Caller: MPK organization member.
+-- Replaces legacy rpc_create_pool_request + rpc_activate_pool_request.
+-- Inputs:
+--   p_pool_lines   jsonb array of:
+--                  { tsp_sku_id?: uuid,
+--                    category_label?: text,
+--                    mpk_price_per_kg: int (required, > 0),
+--                    max_volume_kg?: int,
+--                    livestock_category_id?: uuid  -- triggers floor check }
+--   p_pool_regions jsonb array of:
+--                  { region_type: 'rayon'|'oblast', region_id: uuid }
+-- Hard-block: line's mpk_price_per_kg >= minimum_price(livestock_category_id)
+--             when livestock_category_id provided.
+-- Atomic: all-or-nothing (single transaction).
+-- ------------------------------------------------------------
+create or replace function public.rpc_create_pool(
+    p_organization_id           uuid,
+    p_pool_lines                jsonb,
+    p_pool_regions              jsonb,
+    p_delivery_from             date,
+    p_delivery_to               date,
+    p_total_target_volume_kg    int
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_line              jsonb;
+    v_region            jsonb;
+    v_floor             int;
+    v_category_id       uuid;
+    v_pool_request_id   uuid;
+    v_pool_id           uuid;
+    v_target_heads      int;
+    v_pool_line_id      uuid;
+    v_pool_line_ids     uuid[] := array[]::uuid[];
+begin
+    -- Input validation
+    if p_pool_lines is null
+       or jsonb_typeof(p_pool_lines) != 'array'
+       or jsonb_array_length(p_pool_lines) = 0 then
+        raise exception 'INVALID_INPUT: p_pool_lines must be a non-empty jsonb array'
+            using errcode = 'P0001';
+    end if;
+    if p_pool_regions is null
+       or jsonb_typeof(p_pool_regions) != 'array'
+       or jsonb_array_length(p_pool_regions) = 0 then
+        raise exception 'INVALID_INPUT: p_pool_regions must be a non-empty jsonb array'
+            using errcode = 'P0001';
+    end if;
+    if p_delivery_from is null or p_delivery_to is null then
+        raise exception 'INVALID_INPUT: delivery_from and delivery_to required'
+            using errcode = 'P0001';
+    end if;
+    if p_delivery_to < p_delivery_from then
+        raise exception 'INVALID_INPUT: delivery_to < delivery_from'
+            using errcode = 'P0001';
+    end if;
+    if p_total_target_volume_kg is null or p_total_target_volume_kg <= 0 then
+        raise exception 'INVALID_INPUT: total_target_volume_kg must be > 0'
+            using errcode = 'P0001';
+    end if;
+
+    -- Ownership: caller must belong to p_organization_id
+    if not (p_organization_id = any(public.fn_my_org_ids())) then
+        raise exception 'FORBIDDEN: caller is not a member of organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    -- Per-line validation + floor enforcement (D-M6-13)
+    for v_line in select jsonb_array_elements(p_pool_lines) loop
+        if (v_line->>'mpk_price_per_kg') is null
+           or (v_line->>'mpk_price_per_kg')::int <= 0 then
+            raise exception 'INVALID_INPUT: each pool_line requires mpk_price_per_kg > 0'
+                using errcode = 'P0001';
+        end if;
+
+        v_category_id := nullif(v_line->>'livestock_category_id', '')::uuid;
+        if v_category_id is not null then
+            -- Strictest floor across all covered regions (D-M6-13: hard floor must
+            -- be satisfied for EVERY region in pool_regions). MAX wins, with national
+            -- floor (region_id IS NULL) eligible as a fallback for any covered region.
+            select max(mp.price_per_kg) into v_floor
+            from public.minimum_prices mp
+            where mp.category_id = v_category_id
+              and mp.is_active = true
+              and (
+                  mp.region_id is null
+                  or mp.region_id::text in (
+                      select x->>'region_id'
+                      from jsonb_array_elements(p_pool_regions) x
+                  )
+              );
+
+            if v_floor is not null
+               and (v_line->>'mpk_price_per_kg')::int < v_floor then
+                raise exception
+                    'PRICE_BELOW_FLOOR: line mpk_price % below strictest floor % for category %',
+                    (v_line->>'mpk_price_per_kg')::int, v_floor, v_category_id
+                    using errcode = 'P0001';
+            end if;
+        end if;
+    end loop;
+
+    -- Per-region validation
+    for v_region in select jsonb_array_elements(p_pool_regions) loop
+        if (v_region->>'region_type') not in ('rayon', 'oblast') then
+            raise exception 'INVALID_INPUT: region_type must be rayon or oblast'
+                using errcode = 'P0001';
+        end if;
+        if not exists (
+            select 1 from public.regions r
+            where r.id = (v_region->>'region_id')::uuid
+        ) then
+            raise exception 'INVALID_INPUT: unknown region_id %', v_region->>'region_id'
+                using errcode = 'P0001';
+        end if;
+    end loop;
+
+    -- Legacy column placeholder (pools.target_heads is NOT NULL > 0; 400kg assumed)
+    v_target_heads := greatest(1, ceil(p_total_target_volume_kg::numeric / 400)::int);
+
+    -- pool_request stub preserves MPK ownership (DEF-TSP-M4-OWNERSHIP)
+    insert into public.pool_requests (
+        organization_id, total_heads, target_month, region_id, status, notes, activated_at
+    ) values (
+        p_organization_id, v_target_heads, p_delivery_from, null, 'active',
+        'M4 stub — created by rpc_create_pool to carry MPK organization_id',
+        now()
+    )
+    returning id into v_pool_request_id;
+
+    -- pools row
+    -- filling_deadline = p_delivery_to: pool stops accepting new matches when
+    -- the delivery window closes. Backend offer-expiry job reads filling_deadline
+    -- and triggers awaiting_mpk_decision when reached without total reached.
+    insert into public.pools (
+        pool_request_id, target_heads, matched_heads, status,
+        total_target_volume_kg, delivery_from, delivery_to,
+        filling_deadline
+    ) values (
+        v_pool_request_id, v_target_heads, 0, 'draft',
+        p_total_target_volume_kg, p_delivery_from, p_delivery_to,
+        p_delivery_to
+    )
+    returning id into v_pool_id;
+
+    -- pool_lines
+    for v_line in select jsonb_array_elements(p_pool_lines) loop
+        insert into public.pool_lines (
+            pool_id, tsp_sku_id, category_label,
+            mpk_price_per_kg, max_volume_kg
+        ) values (
+            v_pool_id,
+            nullif(v_line->>'tsp_sku_id', '')::uuid,
+            v_line->>'category_label',
+            (v_line->>'mpk_price_per_kg')::int,
+            nullif(v_line->>'max_volume_kg', '')::int
+        )
+        returning id into v_pool_line_id;
+        v_pool_line_ids := v_pool_line_ids || v_pool_line_id;
+    end loop;
+
+    -- pool_regions
+    for v_region in select jsonb_array_elements(p_pool_regions) loop
+        insert into public.pool_regions (pool_id, region_type, region_id)
+        values (
+            v_pool_id,
+            v_region->>'region_type',
+            (v_region->>'region_id')::uuid
+        )
+        on conflict (pool_id, region_id) do nothing;
+    end loop;
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.pool.created', 'pools', v_pool_id, p_organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object(
+            'pool_id', v_pool_id,
+            'pool_request_id', v_pool_request_id,
+            'total_target_volume_kg', p_total_target_volume_kg,
+            'delivery_from', p_delivery_from,
+            'delivery_to', p_delivery_to,
+            'pool_line_count', jsonb_array_length(p_pool_lines),
+            'pool_region_count', jsonb_array_length(p_pool_regions)
+        ),
+        true
+    );
+
+    return jsonb_build_object(
+        'pool_id', v_pool_id,
+        'pool_line_ids', to_jsonb(v_pool_line_ids)
+    );
+end; $$;
+
+comment on function public.rpc_create_pool(uuid, jsonb, jsonb, date, date, int) is
+    'M4 §2.4 + D-M6-13 | Container Pool model | Caller: MPK org member.
+     Creates Pool (status=draft) + N pool_lines + M pool_regions atomically.
+     Floor enforcement runs only when livestock_category_id is provided per line.
+     Returns: {pool_id, pool_line_ids[]}.
+     Note: creates pool_request stub for MPK ownership (DEF-TSP-M4-OWNERSHIP).';
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-02: rpc_publish_pool (M4 §2.4)
+-- Caller: MPK organization member (owner of the pool).
+-- FSM: draft -> filling. Retry-match against published batches deferred
+--      to background job (Q-TSP-RETRY-MATCH).
+-- ------------------------------------------------------------
+create or replace function public.rpc_publish_pool(
+    p_organization_id   uuid,
+    p_pool_id           uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_pool          record;
+    v_mpk_org_id    uuid;
+begin
+    select p.*, pr.organization_id as mpk_org_id
+      into v_pool
+    from public.pools p
+    left join public.pool_requests pr on pr.id = p.pool_request_id
+    where p.id = p_pool_id
+    for update;
+    if not found then
+        raise exception 'POOL_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    v_mpk_org_id := v_pool.mpk_org_id;
+    if v_mpk_org_id is null or v_mpk_org_id != p_organization_id then
+        raise exception 'FORBIDDEN: caller does not own pool %', p_pool_id
+            using errcode = 'P0001';
+    end if;
+
+    if v_pool.status = 'filling' then
+        return true;  -- idempotent
+    end if;
+    if v_pool.status != 'draft' then
+        raise exception 'INVALID_STATUS: pool must be draft (current %)', v_pool.status
+            using errcode = 'P0001';
+    end if;
+
+    update public.pools
+    set status = 'filling',
+        published_at = now(),
+        updated_at = now()
+    where id = p_pool_id;
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.pool.published', 'pools', p_pool_id, p_organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object('pool_id', p_pool_id),
+        true
+    );
+
+    return true;
+end; $$;
+
+comment on function public.rpc_publish_pool(uuid, uuid) is
+    'M4 §2.4 | FSM pools: draft -> filling | Caller: MPK org member.
+     Idempotent. Retry-match against published batches handled by backend job (Q-TSP-RETRY-MATCH).';
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-03: rpc_accept_offer (M4 §2.3, §5)
+-- Caller: MPK organization member.
+-- FCFS: accept this offer, withdraw siblings (atomically), batch->matched
+--       in best-matching pool_line, deal_price = offered_price.
+-- Auto-close pool if sum(pool_lines.current_volume_kg) >= total_target_volume_kg.
+-- ------------------------------------------------------------
+create or replace function public.rpc_accept_offer(
+    p_organization_id   uuid,
+    p_offer_id          uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_offer         record;
+    v_batch         record;
+    v_volume_kg     int;
+    v_pool_line     record;
+    v_pool_id       uuid;
+    v_total_volume  int;
+    v_target_volume int;
+begin
+    select * into v_offer from public.offers where id = p_offer_id for update;
+    if not found then
+        raise exception 'OFFER_NOT_FOUND' using errcode = 'P0001';
+    end if;
+    if v_offer.mpk_org_id != p_organization_id then
+        raise exception 'FORBIDDEN: offer belongs to another MPK' using errcode = 'P0001';
+    end if;
+    if v_offer.status != 'pending' then
+        raise exception 'INVALID_STATUS: offer is % (must be pending)', v_offer.status
+            using errcode = 'P0001';
+    end if;
+    if v_offer.expires_at < now() then
+        update public.offers set status = 'expired' where id = p_offer_id;
+        raise exception 'OFFER_EXPIRED' using errcode = 'P0001';
+    end if;
+
+    select * into v_batch from public.batches where id = v_offer.batch_id for update;
+    if not found then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+    -- Offer acceptance is only valid from canonical 'offering' state (M4 §2.3 + §5).
+    -- Other transitional states ('published', 'awaiting_price_decision') would imply
+    -- offer lifecycle desync — reject defensively.
+    if v_batch.status != 'offering' then
+        raise exception 'INVALID_STATUS: batch is % (must be offering)', v_batch.status
+            using errcode = 'P0001';
+    end if;
+
+    v_volume_kg := coalesce(v_batch.heads * v_batch.avg_weight_kg, 0)::int;
+    if v_volume_kg <= 0 then
+        raise exception 'BATCH_NO_VOLUME: heads x avg_weight_kg = 0; cannot match'
+            using errcode = 'P0001';
+    end if;
+
+    -- Find MPK's best-matching pool_line for this batch.
+    -- LEFT JOIN on pool_requests + COALESCE: tolerates direct M4 pools (pool_request_id
+    -- = NULL) once DEF-TSP-M4-OWNERSHIP is resolved. Region filter mirrors D-M6-4
+    -- (rayon-exact OR oblast-via-parent_id) to enforce geographic match.
+    select pl.id as pl_id,
+           pl.pool_id as p_id,
+           pl.mpk_price_per_kg as pl_price,
+           pl.max_volume_kg as pl_max,
+           pl.current_volume_kg as pl_current,
+           p.total_target_volume_kg as p_total,
+           p.delivery_from as p_dfrom,
+           p.delivery_to as p_dto
+      into v_pool_line
+    from public.pool_lines pl
+    join public.pools p               on p.id = pl.pool_id
+    left join public.pool_requests pr on pr.id = p.pool_request_id
+    where p.status = 'filling'
+      and coalesce(pr.organization_id, null) = p_organization_id
+      and pl.is_active = true
+      and (pl.tsp_sku_id is null or pl.tsp_sku_id = v_batch.tsp_sku_id)
+      and pl.mpk_price_per_kg <= v_offer.offered_price_per_kg
+      and (pl.max_volume_kg is null
+           or pl.current_volume_kg + v_volume_kg <= pl.max_volume_kg)
+      and (p.delivery_from is null or v_batch.ready_to   is null
+           or p.delivery_from <= v_batch.ready_to)
+      and (p.delivery_to   is null or v_batch.ready_from is null
+           or p.delivery_to   >= v_batch.ready_from)
+      and exists (
+          select 1 from public.pool_regions pgr
+          where pgr.pool_id = p.id
+            and (
+                (pgr.region_type = 'rayon'
+                    and pgr.region_id = v_batch.region_id)
+                or (pgr.region_type = 'oblast' and (
+                    pgr.region_id = v_batch.region_id
+                    or pgr.region_id = (
+                        select parent_id from public.regions
+                        where id = v_batch.region_id
+                    )
+                ))
+            )
+      )
+    order by pl.mpk_price_per_kg desc
+    limit 1
+    for update;
+    if not found then
+        raise exception
+            'NO_MATCHING_POOL_LINE: MPK has no filling pool_line accepting batch % (region/window/sku/capacity/price mismatch)', v_batch.id
+            using errcode = 'P0001';
+    end if;
+
+    v_pool_id       := v_pool_line.p_id;
+    v_target_volume := v_pool_line.p_total;
+
+    -- 1) Accept this offer
+    update public.offers
+    set status       = 'accepted',
+        responded_at = now(),
+        responded_by = public.fn_current_user_id()
+    where id = p_offer_id;
+
+    -- 2) Withdraw siblings (FCFS)
+    update public.offers
+    set status       = 'withdrawn',
+        responded_at = now()
+    where batch_id = v_offer.batch_id
+      and id != p_offer_id
+      and status = 'pending';
+
+    -- 3) Batch -> matched
+    update public.batches
+    set status            = 'matched',
+        pool_line_id      = v_pool_line.pl_id,
+        deal_price_per_kg = v_offer.offered_price_per_kg,
+        matched_at        = now(),
+        updated_at        = now()
+    where id = v_batch.id;
+
+    -- 4) pool_line volume
+    update public.pool_lines
+    set current_volume_kg = current_volume_kg + v_volume_kg,
+        updated_at        = now()
+    where id = v_pool_line.pl_id;
+
+    -- 5) pool aggregate counter
+    update public.pools
+    set matched_heads = matched_heads + v_batch.heads,
+        updated_at    = now()
+    where id = v_pool_id;
+
+    -- 6) Auto-close if total volume target reached (D-TSP-9)
+    -- Sum is read AFTER the pool_line UPDATE above; pools row is locked by the
+    -- SELECT...JOIN FOR UPDATE earlier (locks pool_lines + pools + pool_requests),
+    -- so concurrent accepts on the same pool serialize. The "where status='filling'"
+    -- guard on the UPDATE + "if found" gate add defensive idempotency in case any
+    -- future call path reaches this branch with the pool already auto-closed.
+    select coalesce(sum(current_volume_kg), 0) into v_total_volume
+    from public.pool_lines where pool_id = v_pool_id;
+
+    if v_target_volume is not null and v_total_volume >= v_target_volume then
+        update public.pools
+        set status       = 'closed_filled',
+            completed_at = now(),
+            updated_at   = now()
+        where id = v_pool_id
+          and status = 'filling';
+
+        if found then
+            -- All matched batches in this pool -> confirmed
+            update public.batches b
+            set status       = 'confirmed',
+                confirmed_at = now(),
+                updated_at   = now()
+            from public.pool_lines pl
+            where pl.pool_id = v_pool_id
+              and b.pool_line_id = pl.id
+              and b.status = 'matched';
+
+            insert into public.batch_events (batch_id, event_type, metadata, created_by)
+            select b.id, 'confirmed',
+                   jsonb_build_object('pool_id', v_pool_id, 'auto_close', true),
+                   public.fn_current_user_id()
+            from public.batches b
+            join public.pool_lines pl on pl.id = b.pool_line_id
+            where pl.pool_id = v_pool_id and b.status = 'confirmed';
+
+            insert into public.platform_events (
+                event_type, entity_type, entity_id, organization_id,
+                actor_type, actor_id, payload, is_audit
+            ) values (
+                'market.pool.closed_filled', 'pools', v_pool_id, p_organization_id,
+                'system', public.fn_current_user_id(),
+                jsonb_build_object('pool_id', v_pool_id, 'total_volume_kg', v_total_volume),
+                true
+            );
+        end if;
+    end if;
+
+    -- batch_events: matched + offer_accepted (M4 §6.4 canonical audit log)
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (v_batch.id, 'matched',
+        jsonb_build_object(
+            'pool_id', v_pool_id,
+            'pool_line_id', v_pool_line.pl_id,
+            'via', 'offer_accept',
+            'deal_price_per_kg', v_offer.offered_price_per_kg
+        ),
+        public.fn_current_user_id());
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (v_batch.id, 'offer_accepted',
+        jsonb_build_object(
+            'offer_id', p_offer_id,
+            'mpk_org_id', p_organization_id,
+            'pool_id', v_pool_id,
+            'pool_line_id', v_pool_line.pl_id,
+            'deal_price_per_kg', v_offer.offered_price_per_kg,
+            'volume_kg', v_volume_kg
+        ),
+        public.fn_current_user_id());
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.offer.accepted', 'offers', p_offer_id, p_organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object(
+            'offer_id', p_offer_id,
+            'batch_id', v_batch.id,
+            'pool_line_id', v_pool_line.pl_id,
+            'deal_price_per_kg', v_offer.offered_price_per_kg
+        ),
+        true
+    );
+
+    return jsonb_build_object(
+        'batch_id', v_batch.id,
+        'pool_id', v_pool_id,
+        'pool_line_id', v_pool_line.pl_id,
+        'deal_price_per_kg', v_offer.offered_price_per_kg,
+        'volume_kg', v_volume_kg
+    );
+end; $$;
+
+comment on function public.rpc_accept_offer(uuid, uuid) is
+    'M4 §2.3 + §5 | FCFS broadcast accept | Caller: MPK org member.
+     Picks best-matching pool_line (highest mpk_price), withdraws siblings,
+     batch -> matched, auto-closes pool if total volume target reached
+     (matched batches in pool -> confirmed).';
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-04: rpc_reject_offer (M4 §2.3)
+-- Caller: MPK org member.
+-- ------------------------------------------------------------
+create or replace function public.rpc_reject_offer(
+    p_organization_id   uuid,
+    p_offer_id          uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_offer record;
+begin
+    select * into v_offer from public.offers where id = p_offer_id for update;
+    if not found then
+        raise exception 'OFFER_NOT_FOUND' using errcode = 'P0001';
+    end if;
+    if v_offer.mpk_org_id != p_organization_id then
+        raise exception 'FORBIDDEN: offer belongs to another MPK' using errcode = 'P0001';
+    end if;
+    if v_offer.status = 'rejected' then
+        return true;  -- idempotent
+    end if;
+    if v_offer.status != 'pending' then
+        raise exception 'INVALID_STATUS: offer is % (must be pending)', v_offer.status
+            using errcode = 'P0001';
+    end if;
+
+    update public.offers
+    set status       = 'rejected',
+        responded_at = now(),
+        responded_by = public.fn_current_user_id()
+    where id = p_offer_id;
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (v_offer.batch_id, 'offer_rejected',
+        jsonb_build_object('offer_id', p_offer_id, 'mpk_org_id', p_organization_id),
+        public.fn_current_user_id());
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.offer.rejected', 'offers', p_offer_id, p_organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object('offer_id', p_offer_id, 'batch_id', v_offer.batch_id),
+        false
+    );
+
+    return true;
+end; $$;
+
+comment on function public.rpc_reject_offer(uuid, uuid) is
+    'M4 §2.3 | Caller: MPK org member. Idempotent.';
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-05: rpc_lower_batch_price (M4 §2.6 + D-M6-3)
+-- Caller: farmer (batch owner).
+-- Stop-rule: clamped = GREATEST(requested, minimum_price). Lower than floor
+-- is allowed only by clamping back to floor (no silent acceptance).
+-- Re-broadcast: creates / refreshes Offer rows for MPK orgs whose active
+-- filling pools have at least one pool_line matching this batch at >= clamped.
+-- FSM: awaiting_price_decision -> offering.
+-- ------------------------------------------------------------
+create or replace function public.rpc_lower_batch_price(
+    p_organization_id   uuid,
+    p_batch_id          uuid,
+    p_new_price_per_kg  int
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_batch                 record;
+    v_floor                 int;
+    v_clamped               int;
+    v_was_clamped           boolean := false;
+    v_offer_window_hours    int;
+    v_mpk_count             int := 0;
+begin
+    if p_new_price_per_kg is null or p_new_price_per_kg <= 0 then
+        raise exception 'INVALID_INPUT: p_new_price_per_kg must be > 0'
+            using errcode = 'P0001';
+    end if;
+
+    select * into v_batch
+    from public.batches
+    where id = p_batch_id and organization_id = p_organization_id
+    for update;
+    if not found then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+    if v_batch.status != 'awaiting_price_decision' then
+        raise exception
+            'INVALID_STATUS: can lower price only from awaiting_price_decision (current %)',
+            v_batch.status using errcode = 'P0001';
+    end if;
+
+    -- D-M6-3 floor clamp: SKIPPED while Q-TSP-CATEGORY-CLASSIFIER is open.
+    -- pool_lines / batches carry tsp_sku_id, but minimum_prices is keyed by
+    -- livestock_categories.id with no bridge. Applying a wrong-category floor
+    -- would silently clamp to the wrong number and break Art.171 floor semantics
+    -- — strictly worse than no clamp. Once the classifier is finalised, resolve
+    -- v_batch.tsp_sku_id -> category_id and reinstate the lookup (with region
+    -- match: exact rayon first, national fallback).
+    v_floor := null;
+    v_clamped := p_new_price_per_kg;
+
+    -- Move batch -> offering with new price
+    update public.batches
+    set farmer_price_per_kg = v_clamped,
+        status              = 'offering',
+        offering_at         = now(),
+        updated_at          = now()
+    where id = p_batch_id;
+
+    -- Offer window from tsp_config
+    select offer_window_hours into v_offer_window_hours
+    from public.tsp_config where is_active = true limit 1;
+    v_offer_window_hours := coalesce(v_offer_window_hours, 24);
+
+    -- Re-broadcast: upsert offers for MPK with matching active filling pools.
+    -- Capacity predicate mirrors rpc_accept_offer (line + batch volume <= max);
+    -- a 1-kg gap on a line should NOT trigger an offer for a multi-tonne batch.
+    with matching_mpks as (
+        select distinct pr.organization_id as mpk_org_id
+        from public.pools p
+        join public.pool_requests pr on pr.id = p.pool_request_id
+        join public.pool_lines pl    on pl.pool_id = p.id and pl.is_active = true
+        where p.status = 'filling'
+          and pr.organization_id is not null
+          and pl.mpk_price_per_kg >= v_clamped
+          and (pl.tsp_sku_id is null or pl.tsp_sku_id = v_batch.tsp_sku_id)
+          and (pl.max_volume_kg is null
+               or pl.current_volume_kg
+                  + coalesce(v_batch.heads * v_batch.avg_weight_kg, 0)::int
+                  <= pl.max_volume_kg)
+          and (p.delivery_from is null or v_batch.ready_to   is null
+               or p.delivery_from <= v_batch.ready_to)
+          and (p.delivery_to   is null or v_batch.ready_from is null
+               or p.delivery_to   >= v_batch.ready_from)
+          and exists (
+              select 1 from public.pool_regions pgr
+              where pgr.pool_id = p.id
+                and (
+                    (pgr.region_type = 'rayon'
+                        and pgr.region_id = v_batch.region_id)
+                    or (pgr.region_type = 'oblast' and (
+                        pgr.region_id = v_batch.region_id
+                        or pgr.region_id = (
+                            select parent_id from public.regions
+                            where id = v_batch.region_id
+                        )
+                    ))
+                )
+          )
+    ),
+    upserted as (
+        insert into public.offers (
+            batch_id, mpk_org_id, offered_price_per_kg, status, expires_at, created_at
+        )
+        select p_batch_id, mm.mpk_org_id, v_clamped, 'pending',
+               now() + make_interval(hours => v_offer_window_hours), now()
+        from matching_mpks mm
+        on conflict (batch_id, mpk_org_id) do update
+            set offered_price_per_kg = excluded.offered_price_per_kg,
+                status               = 'pending',
+                expires_at           = excluded.expires_at,
+                responded_at         = null,
+                responded_by         = null
+        returning 1
+    )
+    select count(*) into v_mpk_count from upserted;
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (p_batch_id, 'price_lowered',
+        jsonb_build_object(
+            'requested_price_per_kg', p_new_price_per_kg,
+            'old_price_per_kg', v_batch.farmer_price_per_kg,
+            'new_price_per_kg', v_clamped,
+            'was_clamped', v_was_clamped,
+            'floor_price_per_kg', v_floor,
+            'broadcast_mpk_count', v_mpk_count
+        ),
+        public.fn_current_user_id());
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.batch.price_lowered', 'batches', p_batch_id, p_organization_id,
+        'farmer', public.fn_current_user_id(),
+        jsonb_build_object(
+            'batch_id', p_batch_id,
+            'new_price', v_clamped,
+            'was_clamped', v_was_clamped,
+            'broadcast_mpk_count', v_mpk_count
+        ),
+        true
+    );
+
+    return jsonb_build_object(
+        'new_price', v_clamped,
+        'was_clamped', v_was_clamped,
+        'broadcast_mpk_count', v_mpk_count
+    );
+end; $$;
+
+comment on function public.rpc_lower_batch_price(uuid, uuid, int) is
+    'M4 §2.6 + D-M6-3 | Stop-rule clamp + re-broadcast | Caller: farmer (batch owner).
+     FSM batches: awaiting_price_decision -> offering. Clamps requested price to
+     minimum_price floor. Refreshes offers for MPK orgs whose filling pools have
+     matching lines (region overlap D-M6-4 + ready/delivery overlap D-M6-8 +
+     tsp_sku + capacity).';
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-06: rpc_confirm_dispatch (D-M6-10)
+-- Caller: farmer (batch owner). FSM: confirmed -> dispatched.
+-- ------------------------------------------------------------
+create or replace function public.rpc_confirm_dispatch(
+    p_organization_id   uuid,
+    p_batch_id          uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_batch record;
+begin
+    select * into v_batch
+    from public.batches
+    where id = p_batch_id and organization_id = p_organization_id
+    for update;
+    if not found then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+    if v_batch.status = 'dispatched' then
+        return true;  -- idempotent
+    end if;
+    if v_batch.status != 'confirmed' then
+        raise exception 'INVALID_STATUS: must be confirmed (current %)', v_batch.status
+            using errcode = 'P0001';
+    end if;
+
+    update public.batches
+    set status        = 'dispatched',
+        dispatched_at = now(),
+        updated_at    = now()
+    where id = p_batch_id;
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (p_batch_id, 'dispatched',
+        jsonb_build_object('batch_id', p_batch_id),
+        public.fn_current_user_id());
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.batch.dispatched', 'batches', p_batch_id, p_organization_id,
+        'farmer', public.fn_current_user_id(),
+        jsonb_build_object('batch_id', p_batch_id),
+        true
+    );
+
+    return true;
+end; $$;
+
+comment on function public.rpc_confirm_dispatch(uuid, uuid) is
+    'D-M6-10 | FSM batches: confirmed -> dispatched | Caller: farmer (batch owner). Idempotent.';
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-07: rpc_confirm_delivery (D-M6-10)
+-- Caller: MPK (derived via batch.pool_line_id -> pools -> pool_requests).
+-- FSM: dispatched -> delivered.
+-- ------------------------------------------------------------
+create or replace function public.rpc_confirm_delivery(
+    p_organization_id   uuid,
+    p_batch_id          uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_batch         record;
+    v_mpk_org_id    uuid;
+begin
+    select b.*, pr.organization_id as mpk_org_id
+      into v_batch
+    from public.batches b
+    left join public.pool_lines pl    on pl.id = b.pool_line_id
+    left join public.pools p          on p.id = pl.pool_id
+    left join public.pool_requests pr on pr.id = p.pool_request_id
+    where b.id = p_batch_id
+    for update;
+    if not found then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    v_mpk_org_id := v_batch.mpk_org_id;
+    if v_mpk_org_id is null or v_mpk_org_id != p_organization_id then
+        raise exception 'FORBIDDEN: only the receiving MPK confirms delivery (D-M6-10)'
+            using errcode = 'P0001';
+    end if;
+    if v_batch.status = 'delivered' then
+        return true;  -- idempotent
+    end if;
+    if v_batch.status != 'dispatched' then
+        raise exception 'INVALID_STATUS: must be dispatched (current %)', v_batch.status
+            using errcode = 'P0001';
+    end if;
+
+    update public.batches
+    set status       = 'delivered',
+        delivered_at = now(),
+        updated_at   = now()
+    where id = p_batch_id;
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (p_batch_id, 'delivered',
+        jsonb_build_object('batch_id', p_batch_id, 'mpk_org_id', p_organization_id),
+        public.fn_current_user_id());
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.batch.delivered', 'batches', p_batch_id, p_organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object('batch_id', p_batch_id),
+        true
+    );
+
+    return true;
+end; $$;
+
+comment on function public.rpc_confirm_delivery(uuid, uuid) is
+    'D-M6-10 | FSM batches: dispatched -> delivered | Caller: MPK (deal counterparty). Idempotent.';
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-08: rpc_submit_deal_review (D-M6-11 + D-M6-12)
+-- Caller: farmer (batch owner) or MPK (counterparty).
+-- Inserts deal_reviews row + 1 dimension_score row.
+-- D-M6-12 double-blind: if the other side already submitted, set visible_at
+-- on BOTH reviews to now() in a single update.
+-- ------------------------------------------------------------
+create or replace function public.rpc_submit_deal_review(
+    p_organization_id   uuid,
+    p_batch_id          uuid,
+    p_overall_score     int,
+    p_dimension_id      uuid,
+    p_dimension_score   int,
+    p_comment           text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_batch         record;
+    v_mpk_org_id    uuid;
+    v_reviewer_role text;
+    v_review_id     uuid;
+    v_other_exists  boolean;
+begin
+    if not (p_overall_score between 1 and 5) then
+        raise exception 'INVALID_SCORE: overall_score must be between 1 and 5'
+            using errcode = 'P0001';
+    end if;
+    if not (p_dimension_score between 1 and 5) then
+        raise exception 'INVALID_SCORE: dimension_score must be between 1 and 5'
+            using errcode = 'P0001';
+    end if;
+    if p_dimension_id is null then
+        raise exception 'INVALID_INPUT: p_dimension_id required' using errcode = 'P0001';
+    end if;
+    if not exists (
+        select 1 from public.review_dimensions
+        where id = p_dimension_id and is_active = true
+    ) then
+        raise exception 'UNKNOWN_DIMENSION: %', p_dimension_id using errcode = 'P0001';
+    end if;
+
+    select b.*, pr.organization_id as mpk_org_id
+      into v_batch
+    from public.batches b
+    left join public.pool_lines pl    on pl.id = b.pool_line_id
+    left join public.pools p          on p.id = pl.pool_id
+    left join public.pool_requests pr on pr.id = p.pool_request_id
+    where b.id = p_batch_id;
+    if not found then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+    -- Microstep6 §4c + D-M6-11: review window opens only after `delivered`.
+    -- A farmer rating MPK weight accuracy before delivery is undefined;
+    -- an MPK rating livestock condition before receiving them is undefined.
+    if v_batch.status != 'delivered' then
+        raise exception 'INVALID_STATUS: reviews only from delivered (current %)',
+            v_batch.status using errcode = 'P0001';
+    end if;
+
+    v_mpk_org_id := v_batch.mpk_org_id;
+
+    -- Q3 / Resolution: derive reviewer_role from p_organization_id
+    if v_batch.organization_id = p_organization_id then
+        v_reviewer_role := 'farmer';
+    elsif v_mpk_org_id is not null and v_mpk_org_id = p_organization_id then
+        v_reviewer_role := 'mpk';
+    else
+        raise exception 'FORBIDDEN: organization is not a party to this batch'
+            using errcode = 'P0001';
+    end if;
+
+    -- Insert review (unique batch_id + reviewer_org_id prevents duplicate)
+    insert into public.deal_reviews (
+        batch_id, reviewer_org_id, reviewer_role, overall_score, comment
+    ) values (
+        p_batch_id, p_organization_id, v_reviewer_role, p_overall_score, p_comment
+    )
+    returning id into v_review_id;
+
+    insert into public.deal_review_dimension_scores (
+        deal_review_id, dimension_id, score
+    ) values (
+        v_review_id, p_dimension_id, p_dimension_score
+    );
+
+    -- D-M6-12 double-blind reveal: if other side already submitted, reveal both
+    select exists (
+        select 1 from public.deal_reviews
+        where batch_id = p_batch_id
+          and reviewer_org_id != p_organization_id
+    ) into v_other_exists;
+
+    if v_other_exists then
+        update public.deal_reviews
+        set visible_at = now()
+        where batch_id = p_batch_id and visible_at is null;
+    end if;
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.review.submitted', 'deal_reviews', v_review_id, p_organization_id,
+        case v_reviewer_role when 'farmer' then 'farmer' else 'admin' end,
+        public.fn_current_user_id(),
+        jsonb_build_object(
+            'batch_id', p_batch_id,
+            'reviewer_role', v_reviewer_role,
+            'overall_score', p_overall_score,
+            'mutual_revealed', v_other_exists
+        ),
+        true
+    );
+
+    return v_review_id;
+end; $$;
+
+comment on function public.rpc_submit_deal_review(uuid, uuid, int, uuid, int, text) is
+    'D-M6-11 + D-M6-12 | Mutual deal review with double-blind reveal.
+     Role derived from p_organization_id: farmer = batch.organization_id,
+     mpk = pool_line -> pools -> pool_requests.organization_id.
+     visible_at set on BOTH reviews when both sides submitted.';
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-09: rpc_pool_return_batches (D-TSP-10 / Microstep6 §4f шаг 6 A)
+-- Caller: MPK (pool owner). FSM pools: awaiting_mpk_decision -> closed_unfilled.
+-- All matched batches in pool -> published (pool_line_id=NULL, deal_price=NULL).
+-- ------------------------------------------------------------
+create or replace function public.rpc_pool_return_batches(
+    p_organization_id   uuid,
+    p_pool_id           uuid
+)
+returns int
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_pool          record;
+    v_mpk_org_id    uuid;
+    v_count         int := 0;
+    v_batch_id      uuid;
+begin
+    select p.*, pr.organization_id as mpk_org_id
+      into v_pool
+    from public.pools p
+    left join public.pool_requests pr on pr.id = p.pool_request_id
+    where p.id = p_pool_id
+    for update;
+    if not found then
+        raise exception 'POOL_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    v_mpk_org_id := v_pool.mpk_org_id;
+    if v_mpk_org_id is null or v_mpk_org_id != p_organization_id then
+        raise exception 'FORBIDDEN: caller does not own pool %', p_pool_id
+            using errcode = 'P0001';
+    end if;
+    if v_pool.status != 'awaiting_mpk_decision' then
+        raise exception 'INVALID_STATUS: pool must be awaiting_mpk_decision (current %)',
+            v_pool.status using errcode = 'P0001';
+    end if;
+
+    -- Withdraw any still-pending offers for matched batches in this pool BEFORE
+    -- resetting batch.pool_line_id (M4 §2.4 close_pool: pending offers to MPKs
+    -- for this category are withdrawn when the pool closes).
+    update public.offers o
+    set status = 'withdrawn', responded_at = now()
+    from public.batches b
+    join public.pool_lines pl on pl.id = b.pool_line_id
+    where pl.pool_id = p_pool_id
+      and b.id = o.batch_id
+      and o.status = 'pending';
+
+    -- Return each matched batch -> published
+    for v_batch_id in
+        select b.id
+        from public.batches b
+        join public.pool_lines pl on pl.id = b.pool_line_id
+        where pl.pool_id = p_pool_id
+          and b.status = 'matched'
+        for update
+    loop
+        update public.batches
+        set status            = 'published',
+            pool_line_id      = null,
+            deal_price_per_kg = null,
+            updated_at        = now()
+        where id = v_batch_id;
+
+        insert into public.batch_events (batch_id, event_type, metadata, created_by)
+        values (v_batch_id, 'returned_to_published',
+            jsonb_build_object('pool_id', p_pool_id),
+            public.fn_current_user_id());
+
+        v_count := v_count + 1;
+    end loop;
+
+    -- Reset pool_line volumes
+    update public.pool_lines
+    set current_volume_kg = 0,
+        updated_at        = now()
+    where pool_id = p_pool_id;
+
+    -- Pool -> closed_unfilled
+    update public.pools
+    set status        = 'closed_unfilled',
+        matched_heads = 0,
+        completed_at  = now(),
+        updated_at    = now()
+    where id = p_pool_id;
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.pool.closed_unfilled', 'pools', p_pool_id, p_organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object('pool_id', p_pool_id, 'returned_batches', v_count),
+        true
+    );
+
+    return v_count;
+end; $$;
+
+comment on function public.rpc_pool_return_batches(uuid, uuid) is
+    'D-TSP-10 / Microstep6 §4f step 6A | FSM pools: awaiting_mpk_decision -> closed_unfilled.
+     Returns: count of batches returned to published.';
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-10: rpc_pool_accept_partial (D-TSP-10 / Microstep6 §4f шаг 6 B)
+-- Caller: MPK (pool owner). FSM pools: awaiting_mpk_decision -> closed_partial.
+-- All matched batches in pool -> confirmed.
+-- ------------------------------------------------------------
+create or replace function public.rpc_pool_accept_partial(
+    p_organization_id   uuid,
+    p_pool_id           uuid
+)
+returns int
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_pool          record;
+    v_mpk_org_id    uuid;
+    v_count         int := 0;
+    v_batch_id      uuid;
+begin
+    select p.*, pr.organization_id as mpk_org_id
+      into v_pool
+    from public.pools p
+    left join public.pool_requests pr on pr.id = p.pool_request_id
+    where p.id = p_pool_id
+    for update;
+    if not found then
+        raise exception 'POOL_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    v_mpk_org_id := v_pool.mpk_org_id;
+    if v_mpk_org_id is null or v_mpk_org_id != p_organization_id then
+        raise exception 'FORBIDDEN: caller does not own pool %', p_pool_id
+            using errcode = 'P0001';
+    end if;
+    if v_pool.status != 'awaiting_mpk_decision' then
+        raise exception 'INVALID_STATUS: pool must be awaiting_mpk_decision (current %)',
+            v_pool.status using errcode = 'P0001';
+    end if;
+
+    for v_batch_id in
+        select b.id
+        from public.batches b
+        join public.pool_lines pl on pl.id = b.pool_line_id
+        where pl.pool_id = p_pool_id
+          and b.status = 'matched'
+        for update
+    loop
+        update public.batches
+        set status       = 'confirmed',
+            confirmed_at = now(),
+            updated_at   = now()
+        where id = v_batch_id;
+
+        insert into public.batch_events (batch_id, event_type, metadata, created_by)
+        values (v_batch_id, 'confirmed',
+            jsonb_build_object('pool_id', p_pool_id, 'partial_accept', true),
+            public.fn_current_user_id());
+
+        v_count := v_count + 1;
+    end loop;
+
+    update public.pools
+    set status       = 'closed_partial',
+        completed_at = now(),
+        updated_at   = now()
+    where id = p_pool_id;
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.pool.closed_partial', 'pools', p_pool_id, p_organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object('pool_id', p_pool_id, 'confirmed_batches', v_count),
+        true
+    );
+
+    return v_count;
+end; $$;
+
+comment on function public.rpc_pool_accept_partial(uuid, uuid) is
+    'D-TSP-10 / Microstep6 §4f step 6B | FSM pools: awaiting_mpk_decision -> closed_partial.
+     All matched batches -> confirmed. Returns: count of confirmed batches.';
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-11: rpc_get_reference_price (M4 §1.1 / D-M6-12 reference)
+-- Caller: any. STABLE read. MANDATORY disclaimer_text in response (Art.171).
+-- ------------------------------------------------------------
+create or replace function public.rpc_get_reference_price(
+    p_organization_id   uuid,
+    p_category_id       uuid,
+    p_region_id         uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public, pg_temp
+as $$
+declare
+    v_disclaimer text :=
+        'Справочные цены являются индикативными рыночными ориентирами и не являются обязательными для применения. Участие добровольное.';
+    v_result jsonb;
+begin
+    select jsonb_build_object(
+        'category_id',     rp.category_id,
+        'region_id',       rp.region_id,
+        'price_per_kg',    rp.price_per_kg,
+        'valid_from',      rp.valid_from,
+        'valid_to',        rp.valid_to,
+        'disclaimer_text', v_disclaimer
+    ) into v_result
+    from public.reference_prices rp
+    where rp.category_id = p_category_id
+      and rp.is_active = true
+      and (p_region_id is null or rp.region_id = p_region_id or rp.region_id is null)
+    order by
+        case when p_region_id is not null and rp.region_id = p_region_id then 0 else 1 end,
+        rp.valid_from desc
+    limit 1;
+
+    if v_result is null then
+        v_result := jsonb_build_object(
+            'category_id',     p_category_id,
+            'region_id',       p_region_id,
+            'price_per_kg',    null,
+            'disclaimer_text', v_disclaimer
+        );
+    end if;
+
+    return v_result;
+end; $$;
+
+comment on function public.rpc_get_reference_price(uuid, uuid, uuid) is
+    'M4 §1.1 | Reference price (indicative) per livestock category.
+     Region match: exact first, then national fallback (region_id IS NULL).
+     MANDATORY disclaimer_text in every response (Art.171 PK RK). STABLE.';
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-12: rpc_get_minimum_price (M4 §1.1 / D-M6-3 floor)
+-- Caller: any. STABLE read. MANDATORY disclaimer_text in response (Art.171).
+-- ------------------------------------------------------------
+create or replace function public.rpc_get_minimum_price(
+    p_organization_id   uuid,
+    p_category_id       uuid,
+    p_region_id         uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public, pg_temp
+as $$
+declare
+    v_disclaimer text :=
+        'Минимальная цена — защитный стандарт ассоциации TURAN для фермеров. Это индикативный ориентир, не обязательный к применению. Участие в TSP добровольное.';
+    v_result jsonb;
+begin
+    select jsonb_build_object(
+        'category_id',     mp.category_id,
+        'region_id',       mp.region_id,
+        'price_per_kg',    mp.price_per_kg,
+        'valid_from',      mp.valid_from,
+        'valid_to',        mp.valid_to,
+        'disclaimer_text', v_disclaimer
+    ) into v_result
+    from public.minimum_prices mp
+    where mp.category_id = p_category_id
+      and mp.is_active = true
+      and (p_region_id is null or mp.region_id = p_region_id or mp.region_id is null)
+    order by
+        case when p_region_id is not null and mp.region_id = p_region_id then 0 else 1 end,
+        mp.valid_from desc
+    limit 1;
+
+    if v_result is null then
+        v_result := jsonb_build_object(
+            'category_id',     p_category_id,
+            'region_id',       p_region_id,
+            'price_per_kg',    null,
+            'disclaimer_text', v_disclaimer
+        );
+    end if;
+
+    return v_result;
+end; $$;
+
+comment on function public.rpc_get_minimum_price(uuid, uuid, uuid) is
+    'M4 §1.1 + D-M6-3 | Protective floor price per livestock category.
+     Region match: exact first, then national fallback (region_id IS NULL).
+     MANDATORY disclaimer_text in every response (Art.171 PK RK). STABLE.';
+
+
+-- ============================================================
+-- SECTION 8 REGISTRY (M4 + M6 RPCs)
+-- ============================================================
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
+    ('rpc_create_pool',           'rpc_create_pool',           null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §2.4 + D-M6-13: create Pool + N pool_lines + M pool_regions'),
+    ('rpc_publish_pool',          'rpc_publish_pool',          null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §2.4: pools draft -> filling'),
+    ('rpc_accept_offer',          'rpc_accept_offer',          null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §2.3 + §5: FCFS accept; withdraw siblings; batch -> matched'),
+    ('rpc_reject_offer',          'rpc_reject_offer',          null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §2.3: offer -> rejected'),
+    ('rpc_lower_batch_price',     'rpc_lower_batch_price',     null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §2.6 + D-M6-3: clamp to floor, re-broadcast offers'),
+    ('rpc_confirm_dispatch',      'rpc_confirm_dispatch',      null, 'd02_tsp.sql (Section 8 / M4+M6)', 'D-M6-10: batch confirmed -> dispatched (farmer)'),
+    ('rpc_confirm_delivery',      'rpc_confirm_delivery',      null, 'd02_tsp.sql (Section 8 / M4+M6)', 'D-M6-10: batch dispatched -> delivered (MPK)'),
+    ('rpc_submit_deal_review',    'rpc_submit_deal_review',    null, 'd02_tsp.sql (Section 8 / M4+M6)', 'D-M6-11 + D-M6-12: mutual deal review with double-blind reveal'),
+    ('rpc_pool_return_batches',   'rpc_pool_return_batches',   null, 'd02_tsp.sql (Section 8 / M4+M6)', 'D-TSP-10: awaiting_mpk_decision -> closed_unfilled; matched -> published'),
+    ('rpc_pool_accept_partial',   'rpc_pool_accept_partial',   null, 'd02_tsp.sql (Section 8 / M4+M6)', 'D-TSP-10: awaiting_mpk_decision -> closed_partial; matched -> confirmed'),
+    ('rpc_get_reference_price',   'rpc_get_reference_price',   null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §1.1: indicative price + mandatory disclaimer (Art.171)'),
+    ('rpc_get_minimum_price',     'rpc_get_minimum_price',     null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §1.1 + D-M6-3: floor price + mandatory disclaimer (Art.171)')
+on conflict (sql_name) do update
+    set dok3_name = excluded.dok3_name,
+        notes     = excluded.notes,
+        created_in = excluded.created_in;
+
+-- ============================================================
+-- END SECTION 8 (M4 + M6 RPC IMPLEMENTATIONS)
+-- ============================================================
+

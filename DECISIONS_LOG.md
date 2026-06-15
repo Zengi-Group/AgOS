@@ -95,6 +95,78 @@
 
 ## Decisions
 
+### 2026-06-15 — M4 + M6 RPC backend pass (Section 8 in d02_tsp.sql)
+
+**What:** Реализованы 12 RPC под M4+M6 канон, аддитивно добавлены в `d02_tsp.sql` как `SECTION 8`. Существующие 7 RPC из Slice 5b (включая legacy `rpc_create_pool_request`) не тронуты — оставлены как backward-compat (P7).
+
+**Файлы:** `d02_tsp.sql` (+1310 строк, 2086 → 3396), `Docs/SPRINT_STATUS.md`.
+
+**Функции (12):**
+1. `rpc_create_pool(p_org_id, p_pool_lines jsonb, p_pool_regions jsonb, p_delivery_from, p_delivery_to, p_total_target_volume_kg)` → `{pool_id, pool_line_ids[]}`. M4 §2.4 + D-M6-13.
+2. `rpc_publish_pool(p_org_id, p_pool_id)` → bool. pools: draft → filling.
+3. `rpc_accept_offer(p_org_id, p_offer_id)` → `{batch_id, pool_id, pool_line_id, deal_price_per_kg, volume_kg}`. FCFS + auto-close при достижении total_target_volume_kg.
+4. `rpc_reject_offer(p_org_id, p_offer_id)` → bool.
+5. `rpc_lower_batch_price(p_org_id, p_batch_id, p_new_price_per_kg)` → `{new_price, was_clamped, broadcast_mpk_count}`. D-M6-3 clamp + ребродкаст MPK с активными filling pools (region D-M6-4 + window D-M6-8).
+6. `rpc_confirm_dispatch(p_org_id, p_batch_id)` → bool (фермер).
+7. `rpc_confirm_delivery(p_org_id, p_batch_id)` → bool (МПК).
+8. `rpc_submit_deal_review(p_org_id, p_batch_id, overall, dim_id, dim_score, comment)` → review_id. Роль выводится из p_org_id; D-M6-12 double-blind reveal.
+9. `rpc_pool_return_batches(p_org_id, p_pool_id)` → int. awaiting_mpk_decision → closed_unfilled.
+10. `rpc_pool_accept_partial(p_org_id, p_pool_id)` → int. awaiting_mpk_decision → closed_partial.
+11. `rpc_get_reference_price(p_org_id, p_category_id, p_region_id?)` → jsonb с disclaimer (Art.171). STABLE.
+12. `rpc_get_minimum_price(p_org_id, p_category_id, p_region_id?)` → jsonb с disclaimer (Art.171). STABLE.
+
+**Конвенции (все 12):** SECURITY DEFINER + search_path; p_organization_id первый параметр; ownership-валидация через `fn_my_org_ids()` либо inline-JOIN; idempotent state checks; `batch_events` (M4 §6.4) на каждом FSM-переходе батча + `platform_events`. 12 строк в `rpc_name_registry`.
+
+**Архитектурные решения сессии:**
+- **Q1 (re-broadcast)** = вариант B inline в `rpc_lower_batch_price`: пересоздаёт Offer'ы (UPSERT по `unique(batch_id, mpk_org_id)`) для всех MPK с активными filling pools, чьи pool_lines удовлетворяют (mpk_price ≥ clamped, sku-match, capacity, region overlap D-M6-4, window overlap D-M6-8). Retry-match для published-батчей (BT-05) при rpc_publish_pool — остаётся за бэкенд-джобом (Q-TSP-RETRY-MATCH).
+- **Q2 (signature)** = `p_pool_lines jsonb` + `p_pool_regions jsonb` (массивы объектов). Альтернатива через CREATE TYPE нарушает FINAL-schema.
+- **Q3 (reviewer_role)** = деривируется: org=batch.organization_id → 'farmer', else org=pool_request.organization_id → 'mpk', else FORBIDDEN.
+
+**Defects / open:**
+- **DEF-TSP-M4-OWNERSHIP (new):** `pools` не имеет `organization_id` — SECTION 7 patch не добавил колонку. MPK-владелец трейсится только через `pool_request_id → pool_requests.organization_id`. `rpc_create_pool` создаёт vestigial `pool_request` stub (status=active, total_heads=ceil(volume/400)) для сохранения owner-цепочки. До будущей миграции (добавление `pools.organization_id`) этот компромисс остаётся.
+- **Q-TSP-CATEGORY-CLASSIFIER (open):** `pool_lines.tsp_sku_id` vs `minimum_prices.category_id` (livestock_categories) — bridge отсутствует. Floor-enforcement в `rpc_create_pool` срабатывает только при явном `livestock_category_id` в jsonb-строке (опциональное поле). В `rpc_lower_batch_price` floor читается best-effort (без category match — берёт первую активную region- или national-строку).
+- **Q-TSP-RETRY-MATCH (open):** `rpc_publish_pool` не делает retry-match с висящими `published` Batch'ами — отложено бэкенд-джобу.
+
+**Consequences:**
+- Easy: M4+M6 backend canon реализован за один проход; cross_check.sh 0/0/0; ни одна существующая функция не модифицирована (P7).
+- Easy: повторные вызовы (idempotent state checks) безопасны — accept/reject/dispatch/delivery возвращают `true` при уже-достигнутом состоянии.
+- Hard: prod-deploy НЕ выполнен — требует CEO sign-off + python3 deploy_sql.py d02 + re-verify через information_schema. До этого функции остаются file-level (db-agent skill: «phase ≠ Done без prod-verify»).
+- Hard: DEF-TSP-M4-OWNERSHIP — будущая миграция должна добавить `pools.organization_id` и заменить join через `pool_request_id` на прямой column-check во всех 12 RPC.
+
+**Verification (file-level):**
+- `cross_check.sh`: 0 critical / 0 significant / 0 minor.
+- Duplicate scan по 10 SQL-файлам: каждая функция определена ровно 1 раз.
+- Registry coverage: 12/12; comment-on coverage: 12/12.
+
+**Verification (prod):** ⏸ pending — требуется отдельный пас deploy + information_schema re-check.
+
+**Code review (independent, adversarial) — 13 findings:**
+
+| ID | Sev | Finding | Fix applied |
+|----|-----|---------|-------------|
+| C2 | Critical | `rpc_accept_offer`: INNER JOIN на `pool_requests` исключает M4 pools с NULL `pool_request_id` | ✅ → LEFT JOIN |
+| C3 | Critical | `rpc_create_pool`: floor lookup брал первый region вместо MAX по всем regions pool'а (под-clamp) | ✅ → `MAX(price_per_kg)` |
+| C4 | Critical | `rpc_lower_batch_price`: floor без category_id может выбрать wrong-category floor (хуже, чем no clamp) | ✅ → пропустить floor пока Q-TSP-CATEGORY-CLASSIFIER не закрыт |
+| S1 | Sig | `rpc_accept_offer`: принимал batch.status in ('offering','published','awaiting_price_decision') — должен только 'offering' | ✅ → tighten to 'offering' |
+| S2 | Sig | `rpc_accept_offer`: отсутствовал region-фильтр на pool_line (нарушение D-M6-4 rayon-matching) | ✅ → добавлен `exists(pool_regions ...)` exists-clause (mirror lower_batch_price) |
+| S3 | Sig | `rpc_submit_deal_review`: принимал 'confirmed'/'dispatched' (D-M6-11 spec: только 'delivered') | ✅ → only 'delivered' |
+| S5 | Sig | `rpc_pool_return_batches`: pending offers оставались живыми после возврата batches | ✅ → withdraw pending offers перед сбросом `pool_line_id` |
+| S6 | Sig | `rpc_lower_batch_price` capacity check `current < max` вместо `current + volume <= max` (фантомные offer'ы) | ✅ → mirror accept_offer predicate |
+| C1 | Critical (по ревью) | `rpc_accept_offer` auto-close race: дубль `platform_events`/`batch_events` | ✅ defensive — `where status='filling'` + `if found` гейт. Реальной гонки нет (FOR UPDATE на JOIN сериализует через pools lock), но дефенсивный пояс безопасности дёшев |
+| M1 | Minor | `filling_deadline = p_delivery_to` без комментария | ✅ inline-comment добавлен |
+| M2 | Minor | Отсутствовал `batch_events('matched')` в accept_offer (M4 §6.4 канон-аудит) | ✅ добавлен |
+| S4 | Sig | Double-blind reveal: race на `now()` timestamp в двух одновременных submit'ах | ❌ rejected — UPDATE идемпотентен через `visible_at IS NULL`; разница в мс не нарушает D-M6-12 (RLS использует `visible_at <= now()`) |
+| M3 | Minor | `p_organization_id` не используется в read-only RPC → HS-4 violation | ❌ rejected — намеренная конвенция P-AI-2, зеркалит существующий `rpc_get_price_for_sku` (Slice 5a). HS-4 про unused vars, не про conventional params |
+
+**Не реализован в скоупе:** `rpc_cancel_pool` (filling → cancelled, M4 §2.4 / Microstep6 §4f шаг 8a) — не входил в задачу CEO. Открытая работа на следующий спринт.
+
+**После фиксов:**
+- `cross_check.sh`: 0 / 0 / 0 (повторно).
+- Dup-scan: каждая функция 1× в d02_tsp.sql.
+- Файл: 3396 → 3447 строк (+51 после правок).
+
+---
+
 ### 2026-06-15 — M4 + M6 schema merged into d02_tsp.sql
 
 **What:** Содержимое `d09_tsp_m4m6_patch.sql` (688 строк) перенесено в `d02_tsp.sql`

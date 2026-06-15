@@ -45,6 +45,25 @@ Slice 5b: RPC-14..20 + pool/pricing management (7 RPCs, DEF-021..026 resolved)
 Slice 6a: RPC-28,29,31,32,44,45 + rpc_activate_vaccination_plan
 In progress: rpc_list_vaccination_plans, rpc_list_vaccination_plan_items, rpc_list_vaccines (READ-RPCs, d04)
 
+## M4+M6 RPCs (Section 8, d02_tsp.sql — file-level, awaiting deploy)
+
+| Function | Caller | FSM |
+|----------|--------|-----|
+| rpc_create_pool | MPK | Pool draft + N lines + M regions (atomic) |
+| rpc_publish_pool | MPK | pools: draft → filling |
+| rpc_accept_offer | MPK | FCFS accept, withdraw siblings, batch → matched, auto-close |
+| rpc_reject_offer | MPK | offer → rejected |
+| rpc_lower_batch_price | Farmer | awaiting_price_decision → offering, re-broadcast |
+| rpc_confirm_dispatch | Farmer | batch: confirmed → dispatched (D-M6-10) |
+| rpc_confirm_delivery | MPK | batch: dispatched → delivered (D-M6-10) |
+| rpc_submit_deal_review | Farmer ∨ MPK | deal_reviews + dimension; double-blind reveal |
+| rpc_pool_return_batches | MPK | awaiting_mpk_decision → closed_unfilled; matched → published |
+| rpc_pool_accept_partial | MPK | awaiting_mpk_decision → closed_partial; matched → confirmed |
+| rpc_get_reference_price | any | STABLE read + mandatory disclaimer (Art.171) |
+| rpc_get_minimum_price | any | STABLE read + mandatory disclaimer (Art.171) |
+
+Status: ✅ file-level (cross_check.sh 0/0/0); 🟡 deploy + prod verify pending CEO approval.
+
 ## Blocked / Deferred
 
 | Slice | Status | Note |
