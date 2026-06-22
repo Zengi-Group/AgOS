@@ -1975,7 +1975,7 @@ create index idx_animal_cat_org on public.animal_categories (organization_id)
 | D87 последнее решение | D99 последнее решение |
 | Q12/Q17/Q18/Q19 открыты | Все 4 закрыты |
 
-## 9. Next Steps
+## 10. Next Steps
 
 ```
 This document (Док 1) → complete ✅
