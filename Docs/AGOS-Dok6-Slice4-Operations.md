@@ -381,7 +381,7 @@ F23 (KPI Dashboard)
 
 ### CTO Decisions
 
-**D-S4-1:** RPC-44 (`rpc_add_knowledge_chunk`) and RPC-45 (`rpc_restrict_organization`) deferred to Slice 6. These are admin-only operations with no farmer-facing screens in Slice 4. Farmer screens F19–F23 only need RPC-37 (new) + existing RPCs.
+**D-S4-1:** RPC-44 (`rpc_add_knowledge_chunk`) and RPC-45 (`rpc_restrict_organization`) deferred to Slice 6. These are admin-only operations with no farmer-facing screens in Slice 4. Farmer screens F19–F23 only need RPC-37 (new) + existing RPCs. *(Update 2026-06-22: RPC-44 has since been deployed in Slice 6a — decision superseded.)*
 
 **D-S4-2:** RPC-43 (`rpc_create_proactive_alert`) implemented by Backend Agent as part of proactive dispatch pipeline. No farmer UI — alerts appear as WhatsApp notifications.
 
