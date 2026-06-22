@@ -136,7 +136,7 @@ ALTER TABLE ration_versions
     ALTER COLUMN ration_id DROP NOT NULL,                    -- было NOT NULL
     ADD COLUMN consulting_project_id UUID                    -- NEW
         REFERENCES consulting_projects(id),
-    ADD COLUMN animal_category_id UUID                       -- NEW (для consulting ctx)
+    ADD COLUMN context_animal_category_id UUID               -- NEW (для consulting ctx)
         REFERENCES animal_categories(id),
     ADD CONSTRAINT ration_versions_context_check
         CHECK (ration_id IS NOT NULL OR consulting_project_id IS NOT NULL);
@@ -150,7 +150,7 @@ ration_versions
 │     farm → herd_group → ration → ration_versions
 │
 └── consulting_project_id IS NOT NULL  → контекст КОНСАЛТИНГА
-      consulting_project → ration_versions (+ animal_category_id)
+      consulting_project → ration_versions (+ context_animal_category_id)
 ```
 
 JSONB-формат `items` и `results` — **идентичен** в обоих контекстах.  
@@ -232,7 +232,8 @@ tech_card.phases[]                  →  ProductionPlan + phases
 ```
 
 **Новый RPC (Фаза 4):** `rpc_activate_consulting_project(p_project_id, p_organization_id)`  
-Создаёт Farm + HerdGroups + Rations из данных проекта. Атомарная транзакция.
+Создаёт Farm + HerdGroups + Rations из данных проекта. Атомарная транзакция.  
+> **NOT YET IMPLEMENTED (deferred, low priority).** See Фаза 4 plan below.
 
 ---
 
@@ -253,7 +254,7 @@ tech_card.phases[]                  →  ProductionPlan + phases
 
 - [ ] `ration_versions.ration_id` → NULLABLE
 - [ ] `ration_versions` + `consulting_project_id UUID` (nullable FK)
-- [ ] `ration_versions` + `animal_category_id UUID` (nullable FK, для consulting ctx)
+- [ ] `ration_versions` + `context_animal_category_id UUID` (nullable FK, для consulting ctx)
 - [ ] CHECK constraint: `(ration_id IS NOT NULL OR consulting_project_id IS NOT NULL)`
 - [ ] RLS: consulting context rations видны org members + admins
 - [ ] Edge Function `calculate-ration`: убрать `farm_id` из обязательных параметров
@@ -271,12 +272,13 @@ tech_card.phases[]                  →  ProductionPlan + phases
 - [ ] Dok 6: screen contract A-RationTab
 
 ### Фаза 4 — Перенос проекта на ферму (DB Agent + UI Agent)
-**Приоритет: Низкий · Срок: 2 дня · Зависит от: RPC-24 (rpc_get_current_ration)**
+**Приоритет: Низкий · Срок: 2 дня · Зависит от: RPC-24 (rpc_get_current_ration)**  
+> **NOT YET IMPLEMENTED (deferred, low priority).** `activated` ConsultingProject FSM state and `rpc_activate_consulting_project` RPC are planned but not built. Do not reference as available functionality.
 
-- [ ] `rpc_activate_consulting_project` — атомарный перенос в farm account
-- [ ] UI: кнопка «Активировать как ферму» в ProjectPage
-- [ ] Dok 1: новый FSM state `activated` для ConsultingProject
-- [ ] Dok 3: RPC-C09 `rpc_activate_consulting_project`
+- [ ] `rpc_activate_consulting_project` — атомарный перенос в farm account *(deferred)*
+- [ ] UI: кнопка «Активировать как ферму» в ProjectPage *(deferred)*
+- [ ] Dok 1: новый FSM state `activated` для ConsultingProject *(deferred)*
+- [ ] Dok 3: RPC-C09 `rpc_activate_consulting_project` *(deferred)*
 
 ---
 
@@ -429,6 +431,9 @@ monthly_cost = −(cpd × inflation(t) × heads[t] × days_in_month[t]) / 1000
   },
   "stall": { "...same shape as pasture..." },
   "source":             "simple_editor" | "nasem_import",
+  // NOTE (debt CONSULTING-07): when source="simple_editor", nutrients_met and solver_status
+  // fields are omitted (simple editor does not run the NASEM solver). Consumers must treat
+  // their absence as "not calculated" — do not assume false/infeasible.
   "calc_avg_weight_kg": 600,
   "calc_objective":     "maintenance"
 }

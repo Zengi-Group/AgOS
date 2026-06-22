@@ -1,6 +1,8 @@
 # ZENGI FARMS — Мастер-спецификация проекта
 ## Для архитектора / Claude Code · Версия 1.0 · Апрель 2026
 
+> ⚠️ HISTORICAL v1.0. Superseded by Dok7 (current Consulting canon, A2). §3 generic table names (projects/project_versions/reference_data) and §5.1 REST API do NOT reflect deployed reality (consulting_* tables + stateless POST /api/v1/calculate + GET /api/v1/references/{category}). Retained for history only.
+
 ---
 
 # ЧАСТЬ 1. СУТЬ ПРОДУКТА
