@@ -55,7 +55,7 @@ Sidebar entry (admin nav): «Справочники» → `/admin/directories/ca
 | Route | `/admin/directories/capex/materials` |
 | Auth | `fn_is_admin()` |
 | User story | Админ видит каталог из 4 базовых материалов с ценой за м². Кликает строку → редактирует name_ru + cost_per_m2. Код material readonly в режиме edit. |
-| Component | `CapexMaterialsTab` exported from [CapexReferenceAdmin.tsx](../src/pages/admin/directories/capex/CapexReferenceAdmin.tsx) |
+| Component | `CapexMaterialsTab` exported from [CapexReferenceAdmin.tsx](../src/pages/admin/capex/CapexReferenceAdmin.tsx) |
 | RPCs | Read: `rpc_list_construction_materials()` (RPC-CAPEX-1). Write: `rpc_upsert_construction_material(p_code, p_name_ru, p_cost_per_m2)` (RPC-CAPEX-3) |
 
 ### Data requirements
