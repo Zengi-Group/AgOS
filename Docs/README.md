@@ -10,7 +10,7 @@
 
 ### Documentation (315K) — Read in This Order
 
-1. **AGOS-Dok1-v1_8.md** (77K, 1772 lines)
+1. **AGOS-Dok1-v1_9.md** (77K+, 1772+ lines)
    - Domain Model with 91 entities
    - Consolidated ERD (Mermaid)
    - Ownership Matrix (who reads/writes what)

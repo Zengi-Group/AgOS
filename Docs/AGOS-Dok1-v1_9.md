@@ -1,8 +1,9 @@
 # AGOS Domain Model Specification (Док 1)
 
 **Project:** TURAN Agricultural Operating System
-**Version:** 1.8
-**Date:** 5 March 2026 (schema consolidation)
+**Version:** 1.9
+<!-- Version: 1.9 — updated 22 June 2026 -->
+**Date:** 5 March 2026 (schema consolidation); updated 22 June 2026 (M4+M6 TSP Extension)
 **Status:** Complete — ready for SQL (Док 2)
 **Authors:** Arshidin (CEO/Domain Expert), Claude (CTO/Architect)
 
@@ -161,6 +162,8 @@ Layer 0: KERNEL
 
 ### 3.1. Kernel: Identity
 
+> Identity is canon'd by Microstep 1 (Identity v0.2). This section is DERIVED; where it conflicts, Microstep 1 wins. Code gaps tracked in IMPL_DEBT (IDENTITY-01..11).
+
 ```mermaid
 erDiagram
     User ||--o{ UserOrganizationRole : "has roles in"
@@ -318,16 +321,18 @@ erDiagram
 
 ### 3.3. Module: Market/TSP
 
+> **DEPRECATED entities in this ERD:** `PoolRequest` and `PoolMatch` are **DEPRECATED (M4 §10)**. Legacy rows preserved for historical compatibility (P7). Authoritative M4/M6 model (Pool/pool_lines/Offer/LivestockCategoryRule/MinimumPrice) is in **§9 (v1.9 patch notes)**.
+
 ```mermaid
 erDiagram
     Organization ||--o{ Batch : "sells"
-    Organization ||--o{ PoolRequest : "buys"
+    Organization ||--o{ PoolRequest : "buys [DEPRECATED M4 §10 — see §9]"
     Farm |o--o{ Batch : "from farm"
     HerdGroup |o--o{ Batch : "from group"
 
-    PoolRequest ||--|| Pool : "creates"
-    Pool ||--o{ PoolMatch : "contains"
-    PoolMatch ||--|| Batch : "matches"
+    PoolRequest ||--|| Pool : "creates [DEPRECATED M4 §10 — see §9]"
+    Pool ||--o{ PoolMatch : "contains [DEPRECATED M4 §10 — see §9]"
+    PoolMatch ||--|| Batch : "matches [DEPRECATED M4 §10 — see §9]"
     PoolMatch ||--o| DeliveryRecord : "delivered"
     Pool ||--o{ PoolManifest : "generates"
 
@@ -358,7 +363,7 @@ erDiagram
         enum execution_result
     }
     PoolMatch {
-        uuid id PK
+        uuid id PK "DEPRECATED (M4 §10) — see §9"
         uuid pool_id FK
         uuid batch_id FK
         int reference_price_at_match
@@ -387,7 +392,7 @@ erDiagram
         boolean published
     }
     PoolRequest {
-        uuid id PK
+        uuid id PK "DEPRECATED (M4 §10) — see §9"
         uuid organization_id FK
         enum status
         int total_heads
@@ -445,7 +450,7 @@ erDiagram
         uuid id PK
         uuid ration_id FK "nullable — farm ctx"
         uuid consulting_project_id FK "nullable — consulting ctx"
-        uuid animal_category_id FK "consulting ctx only"
+        uuid context_animal_category_id FK "consulting ctx only (deployed schema name)"
         int version_number
         jsonb items
         jsonb results
@@ -835,12 +840,14 @@ erDiagram
 
 ### 4.3. Market/TSP Domain
 
+> **Note:** `PoolRequest` and `PoolMatch` rows below are **DEPRECATED (M4 §10)**. Authoritative ownership for M4/M6 entities (Pool/pool_lines/Offer/LivestockCategoryRule/MinimumPrice) is in **§9**.
+
 | Entity | Farmer | MPK | Admin | System | AI Gateway |
 |--------|--------|-----|-------|--------|------------|
 | Batch | C/U/A | — | U (match/cancel) | U (expire) | C (draft) |
-| PoolRequest | — | C/U/A | U (close) | U (expire) | R |
+| PoolRequest *(DEPRECATED M4 §10 — see §9)* | — | C/U/A | U (close) | U (expire) | R |
 | Pool | — | — | U/A | C (auto on PR activate) | R |
-| PoolMatch | — | — | C/A | — | R |
+| PoolMatch *(DEPRECATED M4 §10 — see §9)* | — | — | C/A | — | R |
 | DeliveryRecord | — | C/U (actuals) | U/A (confirm) | C (skeleton) | R |
 | PoolManifest | — | R | C | C/A (generate) | R |
 | PriceGrid | — | — | C/U/A | — | R |
@@ -1037,6 +1044,8 @@ Every entity with a `status` field follows explicit state transitions. **Unliste
 
 ### Identity
 
+> Identity is canon'd by Microstep 1 (Identity v0.2). This section is DERIVED; where it conflicts, Microstep 1 wins. Code gaps tracked in IMPL_DEBT (IDENTITY-01..11).
+
 **Membership (farmer):**
 ```
 registered → observer → declared_supplier → standard_supplier
@@ -1129,11 +1138,12 @@ open → in_progress → resolved | escalated
 
 **VaccinationPlan:**
 ```
-draft → active → completed
+pending_review → active → completed | expired
 ```
-- draft: system-generated from protocols + herd structure
+- pending_review: system-generated from protocols + herd structure (replaces legacy `draft` — D97 override; see d04_vet.sql:766-775)
 - active: reviewed by expert (reviewed_by, reviewed_at set)
 - completed: all items completed/skipped
+- expired: plan period elapsed without completion
 
 **VaccinationPlanItem:**
 ```
@@ -1169,7 +1179,9 @@ draft → approved → sent
 **FarmProductionPlan:**
 ```
 draft → active → completed
+draft | active → cancelled
 ```
+- cancelled: plan abandoned by expert or system (replaces; existing FarmPhase records preserved)
 
 **FarmPhase:**
 ```
@@ -1204,7 +1216,9 @@ pending → achieved | missed
 ```
 draft → published | coming_soon
 coming_soon → published
+published → archived
 ```
+- archived: course retired from active catalog; existing enrollments preserved
 
 **CourseEnrollment:**
 ```
@@ -1675,7 +1689,7 @@ The following text MUST be displayed wherever reference prices are shown (PriceG
 
 ---
 
-## 8. Patch Notes (v1.9) — M4 + M6 TSP Extension
+## 9. Patch Notes (v1.9) — M4+M6 TSP Extension
 
 **Date:** 15 June 2026 | **Source:** `d02_tsp.sql` SECTION 7 + SECTION 8 (merged from `d09_tsp_m4m6_patch.sql` per CLAUDE.md "no patch files") | **Coverage:** Microstep 4 (Batch/Pool/Offer logic) + Microstep 6 (TSP UX flow)
 
