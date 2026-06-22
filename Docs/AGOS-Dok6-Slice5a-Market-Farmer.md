@@ -126,9 +126,14 @@ F06-BatchDetail
 ├── PricePreview (base_price + DisclaimerText ⚠️)
 ├── ActionButtons (Publish | Cancel — status-dependent)
 ├── MatchInfo (if matched: "Покупатель подобран, ожидайте")
-│   └── After pool.executing: contact info revealed
-└── Timeline (created → published → matched → ...)
+│   └── After batch.confirmed / pool.closed_filled (A7, MARKET-UI-06): contact info revealed
+│       ~~Legacy D40: pool.executing~~ — superseded by A7
+└── Timeline (created → published → matched → confirmed → ...)
 ```
+
+> **Contact-reveal canon (A7, MARKET-UI-06):** Contacts are revealed when `batch.status = confirmed` (which aligns with pool reaching `closed_filled` after `rpc_accept_offer`). The F06 banner MUST trigger on `batch.confirmed`, not on legacy `pool.executing` (D40).
+>
+> **Code debt MARKET-UI-02/06:** BatchDetail.tsx currently triggers the contact-reveal banner on legacy `pool.executing`. Must be updated to `batch.status = confirmed`. Not yet built.
 
 ---
 
