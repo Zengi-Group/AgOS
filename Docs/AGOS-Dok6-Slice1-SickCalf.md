@@ -25,7 +25,7 @@ All Slice 1 screens use the **Farmer Cabinet** warm palette:
   --success: #2d7a3a;
   --error: #c53030;
   --warning: #b7791f;
-  --severity-minor: #38a169;
+  --severity-mild: #38a169;
   --severity-moderate: #d69e2e;
   --severity-severe: #e53e3e;
   --severity-critical: #9b2c2c;
@@ -579,7 +579,7 @@ must be created in d04_vet.sql with JWT-compatible auth (checks `fn_my_org_ids()
   "farm_name": "text",
   "herd_group": { "id": "uuid", "category_name": "text", "head_count": "int" },
   "status": "open | in_progress | resolved | escalated",
-  "severity": "minor | moderate | severe | critical",
+  "severity": "mild | moderate | severe | critical",
   "symptoms_text": "text",
   "symptoms_structured": [{ "symptom_code": "text", "confidence": "int" }],
   "affected_heads": "int?",
@@ -589,7 +589,7 @@ must be created in d04_vet.sql with JWT-compatible auth (checks `fn_my_org_ids()
     "id": "uuid",
     "disease_name": "text",
     "confidence_pct": "int",
-    "source": "ai_analysis | expert_manual",
+    "source": "expert_created | protocol_auto | ai_rag | expert_confirmed | expert_override",
     "created_at": "timestamptz"
   }],
   "recommendations": [{
@@ -601,7 +601,7 @@ must be created in d04_vet.sql with JWT-compatible auth (checks `fn_my_org_ids()
     "dosage_note": "Дозировку определяет ветеринарный врач",
     "withdrawal_days": "int?",
     "notes": "text?",
-    "source": "ai_generated | expert_manual | protocol",
+    "source": "expert_created | protocol_auto | ai_rag | expert_confirmed | expert_override",
     "created_at": "timestamptz"
   }],
   "health_restrictions": [{
@@ -633,7 +633,7 @@ F11-VetCaseDetail
 │   ├── BackLink → /cabinet/vet
 │   ├── CaseTitle "Ветеринарный случай #NNN"
 │   ├── StatusBadge (open | in_progress | resolved | escalated)
-│   └── SeverityBadge (minor=green | moderate=yellow | severe=red | critical=dark red)
+│   └── SeverityBadge (mild=green | moderate=yellow | severe=red | critical=dark red)
 ├── CaseInfoSection
 │   ├── CreatedDate + CreatedVia badge
 │   ├── FarmName + HerdGroupName (if set)
@@ -703,10 +703,10 @@ F11 (Vet Case Detail)
 | RPC-05b `rpc_set_farm_activity_types` | F02 | ❌ NOT IMPLEMENTED | d01_kernel.sql | DB Agent must create |
 | RPC-06 `rpc_upsert_herd_group` | F02 | ✅ Deployed | d07_ai_gateway.sql | Already works |
 | RPC-25 `rpc_create_vet_case` | F10 | ✅ Deployed | d07_ai_gateway.sql | Already works |
-| RPC-26 `rpc_add_vet_diagnosis` | (AI/Expert) | ❌ NOT IMPLEMENTED | d04_vet.sql | DB Agent — needed for AI tools |
-| RPC-27 `rpc_add_vet_recommendation` | (AI/Expert) | ❌ NOT IMPLEMENTED | d04_vet.sql | DB Agent — needed for AI tools |
+| RPC-26 `rpc_add_vet_diagnosis` | (AI/Expert) | ✅ Deployed | d04_vet.sql | Deployed |
+| RPC-27 `rpc_add_vet_recommendation` | (AI/Expert) | ✅ Deployed | d04_vet.sql | Deployed |
 | RPC-40 `rpc_start_ai_conversation` | (AI init) | ❌ NOT IMPLEMENTED | d01_kernel.sql | DB Agent — needed for Backend |
-| NEW `rpc_get_vet_case_detail` | F11 | ❌ NOT IMPLEMENTED | d04_vet.sql | CEO confirmed — JWT-compatible, NOT AI Gateway RPC |
+| NEW `rpc_get_vet_case_detail` | F11 | ✅ Deployed | d04_vet.sql | JWT-compatible, NOT AI Gateway RPC |
 | RLS policy on `platform_events` | F11 Realtime | ⚠️ VERIFY | d01_kernel.sql | Must filter by `organization_id = ANY(fn_my_org_ids())` for SELECT |
 
 ---
