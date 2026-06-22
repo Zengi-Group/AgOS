@@ -21,7 +21,7 @@ Before coding any screen, read the relevant specs. **Never code a screen without
 
 ### Architecture Docs (Docs/) — you READ these
 - `Docs/AGOS-Dok6-*.md` — YOUR PRIMARY SPEC. Screen contracts for the current slice. Each contract defines: screen ID, user role, data requirements, RPCs called, validation rules, empty state.
-- `Docs/AGOS-Dok1-v1_8.md` — §4 Ownership Matrix (who sees what data)
+- `Docs/AGOS-Dok1-v1_9.md` — §4 Ownership Matrix (who sees what data)
 - `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md` — RPC signatures you call via `supabase.rpc()`
 
 ### Project State

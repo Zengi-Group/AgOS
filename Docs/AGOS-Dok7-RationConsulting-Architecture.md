@@ -292,7 +292,7 @@ tech_card.phases[]                  →  ProductionPlan + phases
 | `src/pages/admin/consulting/ProjectPage.tsx` | + таб Рационы | 3 |
 | `src/pages/admin/consulting/tabs/RationTab.tsx` | Новый компонент | 3 |
 | `src/App.tsx` | + маршрут `/ration` | 3 |
-| `Docs/AGOS-Dok1-v1_8.md` | + `feed_consumption_norms` в ERD; FSM update | 1, 4 |
+| `Docs/AGOS-Dok1-v1_9.md` | + `feed_consumption_norms` в ERD; FSM update | 1, 4 |
 | `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md` | + RPC-C09; обновить RPC-22 | 2, 4 |
 
 ---

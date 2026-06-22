@@ -26,7 +26,7 @@ Before any SQL change, read the relevant files. **Never write SQL from memory �
 - `d08_epidemic.sql` — Epidemic extensions (depends on d04)
 
 ### Architecture Docs (Docs/) — you READ these, never modify
-- `Docs/AGOS-Dok1-v1_8.md` — Domain Model: entities, fields, FSM, Ownership Matrix
+- `Docs/AGOS-Dok1-v1_9.md` — Domain Model: entities, fields, FSM, Ownership Matrix
 - `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md` — RPC signatures, parameters, return types, error codes, callers
 - `Docs/AGOS-Dok4-EventBus-v1_1.md` — Events each RPC must produce via `publish_platform_event`
 
