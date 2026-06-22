@@ -343,7 +343,7 @@ Every INSERT can silently fail if values don't match. Always load reference data
 | Microstep 3 | — | Feature Governance — canon (unbuilt; see IMPL_DEBT) | `Docs/AGOS-TSP-Flow-Microsteps/` |
 | Microstep 4 | — | TSP Batch/Pool/Offer — canon for TSP domain | `Docs/AGOS-TSP-Flow-Microsteps/` |
 | Microstep 6 | — | TSP Flow & events — canon for TSP events | `Docs/AGOS-TSP-Flow-Microsteps/` |
-| d09_consulting.sql | — | Deployed schema: consulting module tables & RPCs | `supabase/migrations/` |
-| d10_public_site.sql | — | Deployed schema: public site tables & RPCs | `supabase/migrations/` |
-| d11_norms.sql | — | Deployed schema: norms/standards tables & RPCs | `supabase/migrations/` |
+| d09_consulting.sql | — | Deployed schema: consulting module tables & RPCs | `d09_consulting.sql` |
+| d10_public_site.sql | — | Deployed schema: public site tables & RPCs | `d10_public_site.sql` |
+| d11_norms.sql | — | Deployed schema: norms/standards tables & RPCs | `d11_norms.sql` |
 | IMPL_DEBT.md | — | Implementation debt backlog (code≠canon gaps, Phase-2) | `IMPL_DEBT.md` |
