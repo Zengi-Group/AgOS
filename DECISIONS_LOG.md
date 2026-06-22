@@ -54,7 +54,7 @@
 | D-LEGAL-1 | 2026-04-01 | Legal | Slice 5 Market: build without legal gate (CEO decision). Legal review before public launch. |
 | D-GATE-S5a | 2026-04-01 | Gate | Slice 5a QA pass. 3 RPCs + 9 tools + 4 screens. Disclaimer in all price responses. |
 | D-GATE-S5b | 2026-04-01 | Gate | Slice 5b QA pass + Architect sign-off. 7 RPCs. DEF-021..026 found and resolved. 0 critical at gate. |
-| D-DOC-1 | 2026-04-08 | Documentation | Doc audit: CLAUDE.md outdated state fixed, Dok 6 refs updated to slice files, Docs/CLAUDE.md deleted (P4), SPRINT_STATUS updated with Slice 5. |
+| D-DOC-1 | 2026-04-08 | Documentation | Doc audit: CLAUDE.md outdated state fixed, Dok 6 refs updated to slice files, Docs/CLAUDE.md retained as canonical; root CLAUDE.md symlinked to it (P4 satisfied via symlink, not deletion), SPRINT_STATUS updated with Slice 5. |
 | D-S6a-FIX-1 | 2026-04-08 | SQL/UI | Expert screens: прямые `.from()` на M03/M04/M05/M06 заменяются READ-RPCs (`rpc_list_vaccination_plans`, `rpc_list_vaccination_plan_items`, `rpc_list_vaccines`, read RPCs для epidemic/kpi). Реализуется в d04_vet.sql + экраны. Статус: в работе (unstaged). |
 | ADR-CONSULT-1 | 2026-04-08 | Architecture | Consulting module: Hybrid architecture — Python Engine standalone (Railway), DB + UI inside AGOS (Supabase + React). New d09_consulting.sql, 8 RPCs, 3 tables. |
 | D-S8-1 | 2026-04-09 | Architecture | Slice 8: Унификация рационов и консалтинга — 4 самодостаточных части (Feed Справочник, NASEM Calculator, Ration Builder, Financial Integration). |
@@ -96,6 +96,15 @@
 | D-GATE-CAPEX-01-PHASE1 | 2026-04-17 | Gate | Phase 1 (DB) sign-off: `cross_check.sh` 0/0/0. 58 seed rows. Математика Excel-парности проверена вручную (delta +1,614 ₸ от 282,465,145.54 = 0.00057%). Отклонение DB Agent от плана (10 overrides вместо 4) одобрено — реконциляция внутреннего противоречия плана §1.3 vs §2.5. Phase 2 (Backend) разблокирован после SQL deploy. |
 | D-GATE-CAPEX-01-PHASE2 | 2026-04-17 | Gate | Phase 2 (Backend) code sign-off: `capex.py` Priority chain (2→3→fallback), `ProjectInput`+3 fields, `calculate.py` project-row injection, `orchestrator.py` herd→capex. 14/14 tests pass (6 legacy Priority 3 + 8 new Priority 2). `grand_total` / `depreciation_*_monthly` invariants preserved for `loans.py`/`cashflow.py`/`pnl.py`. QA gate **PASS** (0 Critical, 1 Significant informational re depreciation delta, 0 Minor). Commit `259fe49` pushed; Railway autodeploy in progress; prod verification pending via Тест 7 recalc. |
 | D-GATE-CAPEX-01-PHASE2-QA | 2026-04-17 | QA | QA Agent independent gate verdict: 14/14 CAPEX tests pass (6 legacy + 8 new), cross_check.sh 0/0/0, all 5 RPCs SECURITY DEFINER + registered + unique. 1 Significant informational finding: Priority 2 uses per-item depreciation_years → existing projects on recalc see depr_buildings_monthly +6.4% / depr_equipment_monthly +2.2% (intended by plan §2.3 step 5, Architect accepts). 6 pre-existing TestStaff fails remain out of scope (D-FEED-2 drift). 6 Dok gaps (Dok1/3/4/6/7 CAPEX entries) are Phase 5 scope. |
+| D-DOC-RECON-01 | 2026-06-22 | Docs | Authority model reversed: microsteps = canon (Identity/Membership/Governance/TSP), Doks = canon elsewhere, code = reality, reference-model form. |
+| A1-MEMBERSHIP | 2026-06-22 | Membership | Canon = Microstep2 6-state FSM, tier binary; level-stack + membership_type retired |
+| A2-CONSULTING | 2026-06-22 | Consulting | Dok7 sole canon; CONSULTING_MASTER_SPEC → historical v1.0 |
+| A3-AI-NAMING | 2026-06-22 | AI Gateway | Tool-name layer (Dok5) ≠ RPC-name layer (SQL) + map; RPCs not renamed (P7) |
+| A4-EDU-EVENTS | 2026-06-22 | Education | Dok4 edu.* canon; edu.certificate.issued mandatory |
+| A5-OFFER-EVENTS | 2026-06-22 | TSP | Microstep6 offer.* family canon |
+| A6-TSP-LEGACY | 2026-06-22 | TSP | Migrate admin to M4 rpc_create_pool; legacy pool_requests/pool_matches deprecated |
+| A7-CONTACT-REVEAL | 2026-06-22 | TSP/Legal | Reveal at batch confirmed (M4/M6); legacy D40 pool 'executing' reveal removed |
+| A8-EXPERT | 2026-06-22 | Identity | expert_profiles retained (HS-2); canon ratified to it as expert_provider v2 |
 
 ---
 
@@ -2894,5 +2903,40 @@ Direct P4 violation (one source of truth) and HS-5 violation (additive-only — 
 - Easy: dual benefit — A-CAT-04 also unblocks regular price updates for Phase 2 (would need admin UI anyway). No wasted work.
 - Hard: 4 new admin screens are real UI work (~2–3 days). Trade-off vs. brief: faster to pilot-ready (no waiting for zoologist text responses) and pays off for life.
 - Hard / watch: parallel WIP `M6-C-ADMIN-FLOW` may eventually re-template A-CAT screens. Risk minimal — admin screen patterns already established in `src/pages/admin/*`; if M6-C lands later, A-CAT can adopt the template additively.
+
+---
+
+### 2026-06-22 — D-DOC-RECON-01 + A1–A8: Doc Reconciliation Phase 1 Decisions
+
+**What:** Doc-reconciliation Phase 1 audit produced 9 decisions that resolve conflicts between microstep specs, Dok files, and deployed code. Recorded here so future sessions do not contradict them.
+
+**D-DOC-RECON-01 — Authority model reversed**
+Canon hierarchy reversed from Dok-first to: microsteps = canon for Identity/Membership/Governance/TSP domains; Doks = canon everywhere else; deployed SQL = reality; all expressed in reference-model form.
+
+**A1-MEMBERSHIP — Membership FSM**
+Canon = Microstep2 6-state FSM, tier is binary (`is_active`). Deprecated fields `level_stack` and `membership_type` retired from canonical model.
+
+**A2-CONSULTING — Consulting canon**
+Dok7 is sole canon for the Consulting module. `CONSULTING_MASTER_SPEC.md` demoted to historical v1.0 artifact.
+
+**A3-AI-NAMING — AI tool names vs RPC names**
+Tool-name layer (Dok5) and RPC-name layer (SQL/rpc_name_registry) are distinct layers connected by a mapping table. Existing RPCs are NOT renamed (P7 / additive-only).
+
+**A4-EDU-EVENTS — Education events**
+Dok4 `edu.*` event family is canon. `edu.certificate.issued` is mandatory (not optional).
+
+**A5-OFFER-EVENTS — Offer events**
+Microstep6 `offer.*` event family is canon for the TSP offer lifecycle.
+
+**A6-TSP-LEGACY — TSP legacy tables**
+Admin flow migrates to M4 `rpc_create_pool`. Legacy tables `pool_requests` / `pool_matches` are deprecated (no new writes; read-only for history).
+
+**A7-CONTACT-REVEAL — Contact reveal timing**
+Contact reveal happens at batch-confirmed transition (M4/M6 flow). Legacy D40 rule (reveal at pool `executing` status) is removed and superseded.
+
+**A8-EXPERT — Expert profiles**
+`expert_profiles` table retained per HS-2 (no deletion of working functionality). Canon ratified to `expert_profiles` as the `expert_provider` v2 entity.
+
+**Files:** `DECISIONS_LOG.md` (this entry).
 
 **Verification**: N/A (still no SQL/code changes — this entry covers the planning pivot). Next checkpoint: DB Agent completes §2 → UI Agent completes §3 in parallel → CEO + зоолог fill data via UI → close Q-TSP-CATEGORY-CLASSIFIER.
