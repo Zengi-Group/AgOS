@@ -575,7 +575,7 @@ CapexTab (после toggle/qty_override/material_override изменений). 
 | platform_events WHERE event_type LIKE 'vet.%' | Farmer (own org) | Красный баннер в разделе Ветеринария | org_id фильтр ✅ |
 | notifications WHERE user_id = :own_user_id | Farmer / MPK | Красная точка, in-app toast | Точный user_id фильтр — RLS безопасен ✅ |
 
-### 5.1. React-пример подписки (для Lovable / Cursor)
+### 5.1. React-пример подписки (для Cursor / Claude Code)
 
 ```javascript
 // ИСПРАВЛЕНО: подписываемся на platform_events (не herd_groups напрямую)
@@ -748,7 +748,7 @@ async def should_send(org_id, alert_type, entity_id):
 
 ## 9. Паттерн публикации событий
 
-> *`publish_event()` — внутренний хелпер, вызывается ТОЛЬКО внутри RPC-функций PostgreSQL. Приложение (Lovable, AI Gateway) НЕ вызывает `publish_event()` напрямую. Единственная точка входа — соответствующий RPC из Dok 3 каталога.*
+> *`publish_event()` — внутренний хелпер, вызывается ТОЛЬКО внутри RPC-функций PostgreSQL. Приложение (Web-кабинет, AI Gateway) НЕ вызывает `publish_event()` напрямую. Единственная точка входа — соответствующий RPC из Dok 3 каталога.*
 
 ```sql
 -- Хелпер (001_kernel.sql или 009_patch)

@@ -13,7 +13,7 @@
 
 This is the **single source of truth** for AGOS data model. Every entity, relationship, and ownership rule is defined here. All other documents (SQL, RPCs, AI Gateway, Interface Contracts) derive from this.
 
-**For vibecoding team (Lovable/Cursor/Claude Code):**
+**For vibecoding team (Cursor/Claude Code):**
 - Entity names are **PascalCase English** (e.g., HerdGroup, FarmTask)
 - Field names are **snake_case** (e.g., organization_id, head_count)
 - ERDs are **Mermaid** — paste into any renderer
@@ -41,7 +41,7 @@ Layer 3: INTELLIGENCE
   └── KnowledgeChunk (pgvector RAG across all domains)
 
 Layer 2: INTERFACES
-  Web Cabinet (Lovable) | WhatsApp (AI) | Expert Console
+  Web Cabinet (React/Vite) | WhatsApp (AI) | Expert Console
   All call same RPCs. Action in one visible in others.
 
 Layer 1: MODULES

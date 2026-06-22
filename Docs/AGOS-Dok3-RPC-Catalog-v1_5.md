@@ -40,12 +40,12 @@
 
 ## 0. Назначение документа
 
-Этот документ — **единственный каталог всех PostgreSQL RPC-функций**, доступных через Supabase. Каждый интерфейс — Веб-кабинет (Lovable), AI Gateway (Python FastAPI), Административная консоль — вызывает только функции из этого каталога.
+Этот документ — **единственный каталог всех PostgreSQL RPC-функций**, доступных через Supabase. Каждый интерфейс — Веб-кабинет (React/Vite), AI Gateway (Python FastAPI), Административная консоль — вызывает только функции из этого каталога.
 
 **Vibecoding-команде:**
 - `✅ Implemented` — функция уже создана в SQL, можно вызывать прямо сейчас
 - `📋 Planned` — функция задокументирована, требует реализации в sprint
-- При написании промпта для Lovable — ссылайтесь на ID (RPC-09)
+- При написании промпта для кодогенерации (Cursor/Claude Code) — ссылайтесь на ID (RPC-09)
 - Canonical имя = колонка "SQL-функция" в Разделе 11
 - **Принцип D-NEW-A:** SQL-файл выигрывает при любом расхождении с документом
 
@@ -57,7 +57,7 @@
 
 | Метка | Кто вызывает | Примечания |
 |-------|-------------|------------|
-| `[WEB]` | React/Lovable (кабинет) | Аутентифицирован через Supabase Auth JWT. RLS применяется автоматически |
+| `[WEB]` | React/Vite (кабинет) | Аутентифицирован через Supabase Auth JWT. RLS применяется автоматически |
 | `[AI]` | Python AI Gateway | Использует service_role key + явную проверку org_id. Никогда не обходит RLS без явного reason |
 | `[ADMIN]` | Административная консоль | Только пользователи с активной записью в admin_roles. fn_is_admin() = true |
 
@@ -271,7 +271,7 @@
 | `p_decision_notes` | text | — | Комментарий |
 | `p_valid_from` | date | — | Дата начала (default: today) |
 
-**Публикует:** `identity.membership.activated` | `identity.membership_application.rejected`
+**Публикует:** `identity.membership.activated` | `identity.membership_application.decided`
 
 ### RPC-04 `rpc_get_my_context` [WEB] [AI] 📋 Planned
 
