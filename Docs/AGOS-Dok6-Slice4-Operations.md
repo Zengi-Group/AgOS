@@ -102,7 +102,7 @@ F19-ProductionPlan
 ├── PlanCard (name, status, expert, dates, progress bar)
 ├── PhaseList (accordion)
 │   └── PhaseItem[] (name, group, dates, status, task count)
-│       └── PhaseTaskPreview[] (top 3 upcoming tasks)
+│       └── PhaseTaskPreview[] (top 3 upcoming tasks)  ⚠️ PENDING DATA: per-phase task preview not yet returned by RPC-37 (OPERATIONS-03: extend RPC-37 to include task arrays per phase — Phase 2 debt)
 ├── QuickLinks (Tasks, Timeline, KPI)
 └── EmptyState "План будет создан зоотехником ТУРАН"
 ```
@@ -253,7 +253,7 @@ Timeline is a **read-only visualization** — no writes. Simple implementation w
    - Warning if any phase shifts past a sale deadline
 
 4. "Применить сдвиг" button:
-   - Calls fn_shift_phase_cascade({ p_phase_id, p_shift_days, p_actor_id })
+   - Calls fn_shift_phase_cascade({ p_phase_id, p_new_start_date, p_actor_id })
    - On success → redirect to F19 + toast "Даты обновлены"
 
 5. "Отмена" → back to F19
@@ -264,7 +264,7 @@ Timeline is a **read-only visualization** — no writes. Simple implementation w
 | RPC | When called | Input | Output |
 |-----|------------|-------|--------|
 | `fn_preview_cascade` (RPC-36) | Date change | `{ p_phase_id, p_new_start_date }` | table: `{ phase_id, name, old_start, new_start, shift_days }` |
-| `fn_shift_phase_cascade` (RPC-35) | Apply button | `{ p_phase_id, p_shift_days, p_actor_id }` | void |
+| `fn_shift_phase_cascade` (RPC-35) | Apply button | `{ p_phase_id, p_new_start_date date, p_actor_id }` | void |
 
 ### UI Components
 
@@ -332,7 +332,7 @@ F23-KpiDashboard
 │   ├── PhaseHeader (name + dates)
 │   └── KpiCard[] (per KPI)
 │       ├── KpiName + Unit
-│       ├── TargetValue
+│       ├── TargetValue        ⚠️ PENDING DATA: target/actual/tolerance not yet returned by RPC-37 (OPERATIONS-02: extend RPC-37 or add KPI-detail RPC — Phase 2 debt)
 │       ├── ActualValue (or "—" if not measured)
 │       ├── ProgressBar (actual/target)
 │       ├── StatusBadge (pending | achieved | missed)
@@ -370,13 +370,13 @@ F23 (KPI Dashboard)
 
 | RPC | Screen | Status | File | Notes |
 |-----|--------|--------|------|-------|
-| `rpc_get_active_plan` (RPC-37) | F19, F21, F23 | ❌ NOT IMPLEMENTED | d05 | DB Agent — main data source for plan screens |
+| `rpc_get_active_plan` (RPC-37) | F19, F21, F23 | ✅ Deployed | d05 | Deployed; KPI detail and per-phase task arrays pending (OPERATIONS-02/03) |
 | `rpc_get_farm_tasks` (d07) | F20 | ✅ Deployed | d07 | Existing |
 | `rpc_complete_farm_task` (RPC-34) | F20 | ✅ Deployed | d07 | Existing |
 | `fn_preview_cascade` (RPC-36) | F22 | ✅ Deployed | d05 | Existing |
 | `fn_shift_phase_cascade` (RPC-35) | F22 | ✅ Deployed | d05 | Existing |
 | `rpc_create_proactive_alert` (RPC-43) | — (backend only) | ❌ NOT IMPLEMENTED | d01 | Backend Agent — proactive dispatch |
-| `rpc_add_knowledge_chunk` (RPC-44) | — (admin only, Slice 6) | ❌ DEFERRED | d05 | Moved to Slice 6 (Admin screens) |
+| `rpc_add_knowledge_chunk` (RPC-44) | — (admin only, Slice 6) | ✅ Deployed | d05 | Deployed; admin-only, scoped to Slice 6 screens |
 | `rpc_restrict_organization` (RPC-45) | — (admin only, Slice 6) | ❌ DEFERRED | d01 | Moved to Slice 6 (Admin screens) |
 
 ### CTO Decisions
