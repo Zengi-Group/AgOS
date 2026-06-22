@@ -22,7 +22,7 @@
 | MEMBERSHIP-02 | membership | code↔canon | Code requires pre-existing membership row at submit + FK membership_id NOT NULL; canon: row created at T2 approve | d01_kernel.sql:3480-3483,339 | Make membership_applications org-anchored (drop NOT NULL FK); approve(T2) creates row in grace_period |
 | MEMBERSHIP-03 | membership | code lags | grace_period/expired/revoked + transitions T4-T10 + MembershipStateTransition log unimplemented | canon Microstep2 §3,§7 | Backlog billing-driven (T4/T7/T9) + cron-driven (T5/T6/T8) + admin revoke (T10) + audit table |
 
-## 🟠 Significant (subset — 30)
+## 🟠 Significant (32)
 
 | id | domain | conflict | what | action |
 |----|--------|----------|------|--------|
