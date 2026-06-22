@@ -320,7 +320,7 @@ INSERT INTO public.user_notification_preferences (user_id, channel)
 
 #### 3.3a. Market / TSP — M4 + M6 Extension (2026-06-15, +15 событий)
 
-> События, генерируемые 14 новыми RPC из [Dok 3 §4a](AGOS-Dok3-RPC-Catalog-v1_4.md#4a-market--tsp--m4--m6-extension-canonical-2026-06-15). Все эмитятся **дважды**: в `batch_events` (append-only audit log per batch, M4 §6.4) И в `platform_events` (для consumers / Realtime / notification).
+> События, генерируемые 14 новыми RPC из [Dok 3 §4a](AGOS-Dok3-RPC-Catalog-v1_5.md#4a-market--tsp--m4--m6-extension-canonical-2026-06-15). Все эмитятся **дважды**: в `batch_events` (append-only audit log per batch, M4 §6.4) И в `platform_events` (для consumers / Realtime / notification).
 > **Legacy совместимость:** старые события `market.batch.matched/cancelled/expired`, `market.pool.batch_added/status_changed/contacts_revealed` сохраняются для backward compat (P7). Новые M4/M6 flow используют события ниже.
 
 | canonical_event_type | Producer (RPC) | Consumers | Описание |
@@ -352,7 +352,7 @@ INSERT INTO public.user_notification_preferences (user_id, channel)
 
 #### 3.3b. A-CAT Admin Events (D-TSP-CATEGORY-BRIDGE, 2026-06-15)
 
-> **Архитектурное решение (Architect, DOC-SYNC-A-CAT-01, 2026-06-15):** 11 admin RPC из [Dok 3 §4b](AGOS-Dok3-RPC-Catalog-v1_4.md#4b-a-cat-admin-rpc-d-tsp-category-bridge-2026-06-15) **в MVP не эмитят `platform_events`**.
+> **Архитектурное решение (Architect, DOC-SYNC-A-CAT-01, 2026-06-15):** 11 admin RPC из [Dok 3 §4b](AGOS-Dok3-RPC-Catalog-v1_5.md#4b-a-cat-admin-rpc-d-tsp-category-bridge-2026-06-15) **в MVP не эмитят `platform_events`**.
 
 **Обоснование:**
 - A-CAT экраны (A-CAT-01..04) — admin-only, низкочастотные: разовый setup (~1 час CEO+зоолог) + редкие quarterly корректировки.
