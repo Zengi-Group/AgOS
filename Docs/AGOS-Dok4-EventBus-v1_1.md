@@ -334,19 +334,22 @@ INSERT INTO public.user_notification_preferences (user_id, channel)
 | **market.batch.confirmed** | `rpc_accept_offer` (auto-close path) | Farmer+MPK Notification ✅ (D-M6-5: identity revealed), Audit | batch_id, pool_id, mpk_org_id, mpk_legal_name, farmer_org_id, farmer_legal_name |
 | **market.batch.dispatched** | `rpc_confirm_dispatch` | MPK Notification ✅, AI GW | batch_id, dispatched_at, by_user_id |
 | **market.batch.delivered** | `rpc_confirm_delivery` | Farmer Notification ✅, Review-prompt scheduler | batch_id, delivered_at, by_user_id |
-| **market.offer.created** | `rpc_publish_pool` / `rpc_retry_match_pool` / `rpc_lower_batch_price` | MPK Notification ✅ | offer_id, batch_id, mpk_org_id, offered_price_per_kg, expires_at |
-| **market.offer.withdrawn** | `rpc_accept_offer` (sibling withdraw) / cancel paths | MPK Realtime ✅ | offer_id, batch_id, mpk_org_id, reason: 'sibling_accepted'\|'batch_cancelled'\|'pool_cancelled'\|'pool_returned' |
+| **market.offer.created** *(PENDING-CODE — declared in canon Microstep6; not yet emitted; debt TSP-FLOW-06)* | `rpc_publish_pool` / `rpc_retry_match_pool` / `rpc_lower_batch_price` — **NOT EMITTED YET** | MPK Notification ✅ (pending) | offer_id, batch_id, mpk_org_id, offered_price_per_kg, expires_at |
+| **market.offer.accepted** *(emitted in code today via `rpc_accept_offer`)* | `rpc_accept_offer` | Farmer + MPK Notification ✅, Audit | offer_id, batch_id, mpk_org_id, deal_price_per_kg, accepted_at |
+| **market.offer.rejected** *(emitted in code today via MPK rejection path)* | `rpc_accept_offer` (MPK reject) / manual reject path | Farmer Notification ✅ | offer_id, batch_id, mpk_org_id, rejected_at, reason |
+| **market.offer.expired** *(PENDING-CODE — canonical; not yet emitted by cron; debt TSP-FLOW-06)* | System cron (offer window elapsed) — **NOT EMITTED YET** | Farmer Notification ✅ (pending) | offer_id, batch_id, mpk_org_id, expired_at, offers_window_hours |
+| **market.offer.withdrawn** *(PENDING-CODE — declared in canon Microstep6; not yet emitted for all paths; debt TSP-FLOW-06)* | `rpc_accept_offer` (sibling withdraw) / cancel paths — **PARTIAL** | MPK Realtime ✅ (pending full coverage) | offer_id, batch_id, mpk_org_id, reason: 'sibling_accepted'\|'batch_cancelled'\|'pool_cancelled'\|'pool_returned' |
 | **market.pool.cancelled** | `rpc_cancel_pool` | MPK + всех matched Farmer Notification ✅, Audit | pool_id, mpk_org_id, reason, affected_batches_count |
 | **market.pool.closed_partial** | `rpc_pool_accept_partial` | Farmer Notification ✅ (matched batches confirmed), Audit | pool_id, mpk_org_id, confirmed_batches_count, fill_ratio |
 | **market.pool.closed_unfilled** | `rpc_pool_return_batches` / cron (window expired, no decision) | Farmer Notification ✅ (batches → published), Audit | pool_id, mpk_org_id, returned_batches_count |
-| **market.deal_review.submitted** | `rpc_submit_deal_review` | Other party Notification (only "получен отзыв" — без content до reveal), Audit | deal_review_id, batch_id, reviewer_org_id, reviewer_role, overall_score (visible to reviewer only) |
-| **market.deal_review.revealed** | `rpc_submit_deal_review` (when both submitted) / cron (window expired) | Both parties Realtime ✅ | batch_id, reviews[{reviewer_role, overall_score, dimension_scores[], comment}] |
+| **market.review.submitted** | `rpc_submit_deal_review` | Other party Notification (only "получен отзыв" — без content до reveal), Audit | review_id, batch_id, reviewer_org_id, reviewer_role, overall_score (visible to reviewer only) |
+| **market.review.revealed** *(DEFERRED — double-blind reveal not yet implemented; debt TSP-FLOW-07)* | `rpc_submit_deal_review` (when both submitted) / cron (window expired) — **NOT EMITTED YET** | Both parties Realtime ✅ (pending) | batch_id, reviews[{reviewer_role, overall_score, dimension_scores[], comment}] |
 
 **Notes on payload conventions:**
 - Все события M4/M6 содержат `org_id` источника (для P-AI-2 фильтрации).
 - `batch.confirmed` — единственное событие, раскрывающее `legal_name` контрагента (D-M6-5). До этого — только `org_id` без identity.
-- `deal_review.submitted` payload в notification-канале маскируется до `visible_at`: получатель видит "получен отзыв", не содержание.
-- `deal_review.revealed` эмитится один раз при reveal — оба отзыва приходят вместе.
+- `review.submitted` payload в notification-канале маскируется до `visible_at`: получатель видит "получен отзыв", не содержание.
+- `review.revealed` **DEFERRED** (TSP-FLOW-07): double-blind reveal mechanism not yet implemented. Canonical name `market.review.revealed` is reserved. Do not treat as emitted until implemented.
 
 **Aggregate market events (для AI/analytics, через `is_audit=true`):** none пока. Pending Dok 5 §6 antitrust review для aggregated-market-data tooling.
 
@@ -429,7 +432,9 @@ INSERT INTO public.user_notification_preferences (user_id, channel)
 | **edu.course.enrolled** | RPC-38 [WEB,AI] | Farmer Notification | enrollment_id, user_id, course_id, course_name, access_type |
 | **edu.lesson.completed** | RPC-39 [WEB,AI] | Progress tracker | enrollment_id, lesson_id, score, progress_pct_now |
 | **edu.course.completed** | RPC-39 [WEB,AI] | Certificate trigger, Farmer Notification | enrollment_id, course_id, completed_at, final_score |
-| **edu.certificate.issued** | System trigger | Farmer Notification, Audit | certificate_id, user_id, course_id, course_name, issued_at |
+| **edu.certificate.issued** ⚠️ **MANDATORY — must always fire when a certificate is created** | System trigger (auto-fires on `edu.course.completed`) | Farmer Notification ✅, Audit ✅ | certificate_id, user_id, course_id, course_name, issued_at |
+
+> **IMPL_DEBT EDUCATION-02/03:** Code currently emits `education.enrollment.completed` (non-canonical name). Canonical name is `edu.certificate.issued`. Rename required in code. Until renamed, `edu.certificate.issued` is **declared/pending-code** for certificate issuance. The `edu.course.enrolled` / `edu.lesson.completed` / `edu.course.completed` canonical set is correct and should be used in new code.
 
 ### 3.8. Platform Domain (5 событий)
 
@@ -485,6 +490,20 @@ CapexTab (после toggle/qty_override/material_override изменений). 
 **Почему отдельный event, а не `consulting.version.created`:** save override
 ≠ recalc. Expert может сохранить много мелких правок, затем один раз
 пересчитать. Event `version.created` emits только при /calculate success.
+
+---
+
+### 3.11. Governance Domain — DEFERRED (GOVERNANCE-04)
+
+> **DEFERRED until Microstep 3 (Feature Governance) is implemented.** These three events are registered here as canonical names to prevent name drift when M3 is built. None of them are emitted today. Cross-ref: IMPL_DEBT GOVERNANCE-01/02.
+
+| canonical_event_type | Status | Producer (future) | Consumers (future) | Описание |
+|----------------------|--------|-------------------|--------------------|----------|
+| **entitlements.invalidated** | **DEFERRED — M3 unbuilt** | M3 Governance engine (RPC, future) | AI Gateway (permission cache flush), UI (re-fetch feature flags) | Fired when an org's entitlement set changes (membership upgrade/downgrade, manual admin override). All downstream caches must flush. |
+| **feature_gate.updated** | **DEFERRED — M3 unbuilt** | M3 Governance engine (RPC, future) | UI (React Query invalidate feature-flags), AI Gateway | Fired when a feature flag definition changes (threshold, enabled/disabled, rollout %). Consumers re-fetch from `feature_gates` table. |
+| **feature_usage.recorded** | **DEFERRED — M3 unbuilt** | System (inline in feature-gated RPCs, future) | Analytics Worker, Quota enforcement | Fired per feature invocation for metering/quota. High-volume; will require its own polling tier (analytics / 5 min). |
+
+**Path to implementation:** when M3 is built, add emitters to Governance RPCs and add these three event_types to `event_audit_registry` seed. Do NOT add until M3 RPCs exist (P7 — additive architecture).
 
 ---
 
