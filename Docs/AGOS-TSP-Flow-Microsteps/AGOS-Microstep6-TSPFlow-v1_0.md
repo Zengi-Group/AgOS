@@ -184,7 +184,7 @@ stateDiagram-v2
 
 | Исход | Backend | Фермерская проекция | Видит / НЕ видит |
 |---|---|---|---|
-| **A. Auto-match** | `matched`, `pool_id` set, `deal_price = mpk_price` (≥ его цены), `filled_volume +=`, close_pool если добрал. `BatchEvent(matched_auto)` | «Нашёлся покупатель — ждём подбора партии» | Видит **цену сделки** (≥ запрошенной). **Не видит** покупателя (раскрытие при `confirmed`, D-M6-5), не видит Pool |
+| **A. Auto-match** | `matched`, `pool_line_id` set, `deal_price = offered_price (≥ farmer/mpk price)`, `filled_volume +=`, close_pool если добрал. `BatchEvent(matched_auto)` | «Нашёлся покупатель — ждём подбора партии» | Видит **цену сделки** (≥ запрошенной). **Не видит** покупателя (раскрытие при `confirmed`, D-M6-5), не видит Pool |
 | **B. Broadcast** | N `Offer(pending)`, окно 24ч, → `offering`. `BatchEvent(offering_started)` | «Отправлено покупателям — ждём согласия» | Одну строку. Не видит число Offer, кому, по какой цене |
 | **C. Нет Pool/МПК** | → `published`, ждёт retry-match. `BatchEvent(published)` | «Опубликовано — ждём покупателя» | — |
 

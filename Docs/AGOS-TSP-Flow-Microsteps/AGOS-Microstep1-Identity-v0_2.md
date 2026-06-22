@@ -139,6 +139,8 @@ effective_access(user, feature, current_org_context) =
 - Onboarding intent «помогать как эксперт» ведёт в personal context, не в создание Org.
 - Эксперт «работает с фермой» = фермер приглашает его в свою Organization через `UserOrganizationRole`.
 
+> **Reality (A8):** expert_profiles table exists and is RETAINED (HS-2). Treat expert_profiles as the v2 expert_provider concept; User.expertise_areas[] may be added additively. Canon ratified to deployed reality; do not delete expert_profiles.
+
 ### D-IDM-9 — PlatformSubscription = Free + Pro с MVP *(NEW v0.2)*
 
 **Что:** Два тира с первого дня. Trial-механика в схеме. SubscriptionEvent — append-only лог.

@@ -540,6 +540,8 @@ batch_event (
 
 Один Batch может быть в максимум одном Pool. Связь через `Batch.pool_id`. M:N таблица-связка не нужна.
 
+> **Superseded by M6 D-M6-13:** Batch links to pool_line (batch.pool_line_id), not Pool directly.
+
 ### D-TSP-3 — Цена фиксируется обеими сторонами при публикации
 
 Ни Batch, ни Pool без цены не существуют. Никаких «договоримся потом». Это снимает класс багов с переговорными раундами.
