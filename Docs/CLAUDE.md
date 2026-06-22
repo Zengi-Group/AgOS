@@ -332,7 +332,7 @@ Every INSERT can silently fail if values don't match. Always load reference data
 | Document | Version | Content | File |
 |----------|---------|---------|------|
 | Dok 1 | v1.9 | Domain Model: 93 entities, 8 domains, ERD, Ownership Matrix, FSM Catalog, Decisions D1–D138+ | `Docs/AGOS-Dok1-v1_9.md` |
-| Dok 3 | v1.5 | RPC Catalog: 67 functions (45 business + 22 AI Gateway), Canonical Name Registry | `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md` |
+| Dok 3 | v1.5 | RPC Catalog: ~92 functions (45 business + 14 M4/M6 + 11 A-CAT + 22 AI Gateway), Canonical Name Registry | `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md` |
 | Dok 4 | v1.1 | Event Bus: 59 canonical events, 28 notification templates, 10 proactive triggers, audit registry | `Docs/AGOS-Dok4-EventBus-v1_1.md` |
 | Dok 5 | v1.7 | AI Gateway: LangGraph architecture, two-run confirmation, SKIP LOCKED concurrency | `Docs/AGOS-Dok5-AIGateway-v1_7.md` |
 | Dok 6 | — | maintained as slice files (Slice1..6b, Slice-CAPEX, A-CAT); no consolidated master | `Docs/` (slice files) |
