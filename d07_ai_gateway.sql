@@ -1273,7 +1273,7 @@ begin
     set    status       = 'published',
            published_at = now(),
            -- expires at end of target month + 7 days buffer
-           expires_at   = (date_trunc('month', target_month) + interval '1 month - 1 day + 7 days')::timestamptz,
+           expires_at   = (date_trunc('month', target_month) + interval '1 month' - interval '1 day' + interval '7 days')::timestamptz,
            updated_at   = now()
     where  id = p_batch_id;
 
@@ -2402,6 +2402,7 @@ create index if not exists idx_eq_status
     on public.embedding_queue (status, updated_at);
 
 -- updated_at trigger
+drop trigger if exists trg_embedding_queue_upd on public.embedding_queue;
 create trigger trg_embedding_queue_upd
     before update on public.embedding_queue
     for each row execute function public.fn_set_updated_at();
@@ -2511,6 +2512,7 @@ comment on function public.fn_enqueue_knowledge_chunk_embedding() is
      priority: veterinary/legal=2, zootechnical/tsp=3, education=7, faq=8.
      NEVER BREAKS knowledge_chunks INSERT/UPDATE: exception handler, только raise warning.';
 
+drop trigger if exists trg_knowledge_chunk_enqueue_embedding on public.knowledge_chunks;
 create trigger trg_knowledge_chunk_enqueue_embedding
     after insert or update of is_published, title, content
     on public.knowledge_chunks

@@ -2981,6 +2981,6 @@ end if;
 
 **Files**: `d02_tsp.sql` (`rpc_retry_match_pool`, `rpc_accept_offer`, new `rpc_set_batch_terms` + registry), `tests/tsp_happy_path_test.sql` (new).
 
-**Verification**: `cross_check.sh` 0/0/0; two adversarial code reviews (opus) → SOUND. Runtime FSM happy-path test authored (rollback tx) — would PASS per review; pending a DB to execute green (no local Postgres). ⚠️ NOT YET DEPLOYED to `mwtbozflyldcadypherr`.
+**Verification**: `cross_check.sh` 0/0/0; two adversarial code reviews (opus) → SOUND. Runtime FSM happy-path test authored (rollback tx). DEPLOYED to `mwtbozflyldcadypherr` 2026-06-23 via `deploy_tsp_matchfix.py` (targeted CREATE OR REPLACE in ONE tx); all three functions verified via `pg_get_functiondef` markers. E2E rollback-test blocked: prod `rpc_create_batch` is old signature (d07_ai_gateway.sql not yet applied to prod).
 
 **Out of scope (next Phase-2 slices)**: downstream `confirmed → dispatched → delivered`; offer-expiry → `awaiting_price_decision`; legacy `rpc_match_batch_to_pool` fate; cancel from `offering`; supply-stats to include `offering`.
