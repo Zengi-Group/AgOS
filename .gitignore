@@ -1,7 +1,7 @@
-# Environment
+# Environment — все env-файлы игнорируются, кроме шаблона
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -41,3 +41,6 @@ tsconfig.tsbuildinfo
 
 *storybook.log
 storybook-static
+
+# local DB password for one-off prod deploys — NEVER commit
+.db_password
