@@ -33,6 +33,10 @@ interface RawMatch {
 // DB-статус пула → фронтовый PoolStatus (dispatched/delivered показываем как «Приёмка»).
 function mapStatus(s: string): PoolStatus {
   if (s === 'dispatched' || s === 'delivered') return 'executing'
+  // Канон-статусы close: авто-закрытый/частичный пул → «набран, готов к приёмке».
+  if (s === 'closed_filled' || s === 'closed_partial' || s === 'awaiting_mpk_decision') return 'filled'
+  if (s === 'completed') return 'executed'
+  if (s === 'expired_empty' || s === 'closed_unfilled' || s === 'cancelled') return 'closed'
   if (s === 'filling' || s === 'filled' || s === 'executing' || s === 'executed' || s === 'closed') {
     return s as PoolStatus
   }
@@ -96,7 +100,10 @@ function toSupplier(m: RawMatch): SupplierRow {
     rating: 4.5,
     heads: m.heads,
     price: m.price,
-    deliveryStatus: m.status === 'delivered' ? 'delivered' : 'awaiting_dispatch',
+    deliveryStatus:
+      m.status === 'delivered' ? 'delivered'
+      : m.status === 'dispatched' ? 'in_transit'
+      : 'awaiting_dispatch',
     farmName: m.farmName ?? undefined,
     district: m.region,
   }

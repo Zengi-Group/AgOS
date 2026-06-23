@@ -12,7 +12,7 @@ interface Props {
   pools: Pool[]   // активные пулы МПК (для привязки)
   onClose: () => void
   toast: (text: string) => void
-  onMatch?: (poolId: string, batchId: string, heads: number) => Promise<void>  // реальный оффер
+  onMatch?: (poolId: string, batchId: string, heads: number, price: number) => Promise<void>  // реальный оффер (price = бид МПК ≥ ask)
   onOffer?: (deal: PendingDeal) => void   // прямая покупка: фермер согласился → завершение сделки
 }
 
@@ -48,7 +48,7 @@ export function BatchDetailModal({ batch, pools, onClose, toast, onMatch, onOffe
       if (sending) return
       setSending(true)
       try {
-        await onMatch(poolId, batch.id, batch.heads)
+        await onMatch(poolId, batch.id, batch.heads, offerNum)
         toast('Оффер отправлен — партия привязана к закупке')
         onClose()
       } catch (e: unknown) {

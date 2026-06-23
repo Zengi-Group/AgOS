@@ -8,6 +8,7 @@ import { loadAccountProfile } from '@/lib/account'
 import { Toast } from '../components/Toast'
 import { MpkHomeScreen } from './screens/MpkHomeScreen'
 import { MpkTspScreen } from './screens/MpkTspScreen'
+import { MpkIncomingOffersScreen } from './screens/MpkIncomingOffersScreen'
 import { CreatePoolModal } from './modals/CreatePoolModal'
 import { PoolMonitorModal } from './modals/PoolMonitorModal'
 import { BatchDetailModal } from './modals/BatchDetailModal'
@@ -16,8 +17,9 @@ import { ContactTuranSheet } from './sheets/ContactTuranSheet'
 import { seedPools } from './data/pools'
 import { loadMarketBatches, seedMarketBatches, type MarketBatch } from './data/market'
 import { loadMyPools, loadPoolMatches, closeDuePools } from './data/pools-load'
+import { loadIncomingOffers } from './data/offers-load'
 import type {
-  MpkMembership, MpkModal, MpkRoute, MpkSheet, MpkState, MpkTypeStatus, Pool,
+  IncomingOffer, MpkMembership, MpkModal, MpkRoute, MpkSheet, MpkState, MpkTypeStatus, Pool,
 } from './types'
 
 interface MpkAppProps {
@@ -52,6 +54,8 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
   const [orgId, setOrgId] = useState<string | null>(null)  // org реального МПК — для self-serve RPC
   // Маркет-борд: реальные партии ферм через RPC; seed — демо-фолбэк (аноним/нет backend).
   const [marketBatches, setMarketBatches] = useState<MarketBatch[]>(seedMarketBatches())
+  // Входящие broadcast-офферы (Слайс C): партии без прямого матча, разосланные мне (FCFS).
+  const [offers, setOffers] = useState<IncomingOffer[]>([])
   useEffect(() => {
     let alive = true
     loadAccountProfile('mpk').then((p) => {
@@ -74,6 +78,9 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     closeDuePools().then(() => loadMyPools()).then((list) => {
       if (alive && list !== null) setPools(list)
     })
+    loadIncomingOffers().then((list) => {
+      if (alive && list !== null) setOffers(list)
+    })
     return () => { alive = false }
   }, [])
 
@@ -84,6 +91,7 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     const id = setInterval(() => {
       closeDuePools().then(() => loadMyPools()).then((list) => { if (list !== null) setPools(list) })
       loadMarketBatches().then((list) => { if (list !== null) setMarketBatches(list) })
+      loadIncomingOffers().then((list) => { if (list !== null) setOffers(list) })
     }, 20000)
     return () => clearInterval(id)
   }, [])
@@ -96,6 +104,31 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
   const refetchPools = () =>
     loadMyPools().then((list) => { if (list !== null) setPools(list) })
 
+  // Перечитать входящие офферы (после accept/reject/истечения).
+  const refetchOffers = () =>
+    loadIncomingOffers().then((list) => { if (list !== null) setOffers(list) })
+
+  // Принять broadcast-оффер (FCFS): партия → моя заявка, deal=мой бид ≥ ask. Бросает при ошибке.
+  const acceptOffer = async (offerId: string) => {
+    const { error } = await supabase.rpc('rpc_self_accept_offer', { p_offer_id: offerId })
+    if (error) throw new Error(error.message)
+    await Promise.all([refetchOffers(), refetchPools(), refetchMarket()])
+  }
+
+  // Отклонить broadcast-оффер. Бросает при ошибке.
+  const rejectOffer = async (offerId: string) => {
+    const { error } = await supabase.rpc('rpc_self_reject_offer', { p_offer_id: offerId })
+    if (error) throw new Error(error.message)
+    await refetchOffers()
+  }
+
+  // Подтвердить приёмку партии (BT-18): dispatched→delivered. Бросает при ошибке.
+  const confirmDelivery = async (batchId: string) => {
+    const { error } = await supabase.rpc('rpc_self_confirm_delivery', { p_batch_id: batchId })
+    if (error) throw new Error(error.message)
+    await refetchPools()
+  }
+
   // Реальный перевод статуса пула в БД. Бросает при ошибке (caller покажет тост).
   const advancePool = async (poolId: string, status: string) => {
     const { error } = await supabase.rpc('rpc_self_advance_pool_status', {
@@ -106,9 +139,9 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
   }
 
   // Реальный оффер МПК → партия фермера. Бросает при ошибке (caller покажет тост).
-  const offerBatch = async (poolId: string, batchId: string, heads: number) => {
+  const offerBatch = async (poolId: string, batchId: string, heads: number, price: number) => {
     const { error } = await supabase.rpc('rpc_self_match_batch_to_pool', {
-      p_pool_id: poolId, p_batch_id: batchId, p_matched_heads: heads,
+      p_pool_id: poolId, p_batch_id: batchId, p_matched_heads: heads, p_price_per_kg: price,
     })
     if (error) throw new Error(error.message)
     await refetchMarket()
@@ -146,6 +179,8 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
           region={region}
           bin={bin}
           onOpenTsp={() => setRoute({ name: 'tsp' })}
+          onOpenOffers={() => setRoute({ name: 'offers' })}
+          offersCount={offers.length}
           onOpenPool={(id) => setModal({ kind: 'pool_monitor', poolId: id })}
           onOpenContactTuran={(topic) => setSheet({ kind: 'contact_turan', topic })}
           realAccount={orgId !== null}
@@ -159,6 +194,19 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
               setMembership('grace'); showToast('Членство активировано (демо)')
             }
           }}
+        />
+      ) : route.name === 'offers' ? (
+        <MpkIncomingOffersScreen
+          offers={offers}
+          onBack={() => setRoute({ name: 'home' })}
+          onAccept={(id) =>
+            acceptOffer(id)
+              .then(() => showToast('Оффер принят — партия в вашей заявке'))
+              .catch((e) => { showToast('Не удалось принять: ' + (e instanceof Error ? e.message : '')); throw e })}
+          onReject={(id) =>
+            rejectOffer(id)
+              .then(() => showToast('Оффер отклонён'))
+              .catch((e) => { showToast('Не удалось: ' + (e instanceof Error ? e.message : '')); throw e })}
         />
       ) : (
         <MpkTspScreen
@@ -191,6 +239,7 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
             onContactTuran={() => { setModal(null); setSheet({ kind: 'contact_turan' }) }}
             onAdvance={advancePool}
             onLoadMatches={loadPoolMatches}
+            onConfirmDelivery={confirmDelivery}
           />
         )
       })()}

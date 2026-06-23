@@ -214,7 +214,7 @@ TSP is coordination infrastructure of the association, NOT a marketplace. It doe
 
 - Farmer A NEVER sees Farmer B's data (RLS mandatory on every operational table)
 - Aggregated anonymous data is permitted
-- Contacts revealed ONLY at Pool → `executing` status transition
+- Contacts revealed at Pool close (`closed_filled` → batches `confirmed`) — MS6 D-M6-5/12 (Slice C, 2026-06-23, moved reveal from `executing`; old D40 superseded)
 - AI Gateway queries ALWAYS filtered by `organization_id`
 
 ---

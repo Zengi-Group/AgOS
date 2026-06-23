@@ -70,6 +70,25 @@ export interface MpkState {
 export type MpkRoute =
   | { name: 'home' }
   | { name: 'tsp' }
+  | { name: 'offers' }   // входящие broadcast-офферы (Слайс C)
+
+// Входящий broadcast-оффер от фермера (rpc_get_incoming_offers). Личность фермера
+// НЕ раскрыта (D-M6-12) — только характеристики партии + цена + дедлайн ответа.
+export type OfferStatus = 'pending' | 'accepted' | 'rejected' | 'expired' | 'withdrawn'
+
+export interface IncomingOffer {
+  id: string             // offers.id
+  batchId: string        // batches.id
+  cat: string            // код категории партии (для лейбла)
+  breed: string
+  heads: number
+  avgWeight: number      // кг
+  region: string         // район фермы (без личности)
+  windowLabel: string    // окно готовности
+  offeredPrice: number   // ₸/кг (ask фермера = пол)
+  expiresAt: Date        // дедлайн ответа МПК (FCFS)
+  status: OfferStatus
+}
 
 // Сделка прямой покупки с маркет-борда (после согласия фермера).
 // Имя фермы раскрывается только при подтверждении сделки (D40 — анонимность до сделки).
