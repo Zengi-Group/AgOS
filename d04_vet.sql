@@ -1831,6 +1831,24 @@ declare
     v_herd_group    jsonb;
     v_farm_name     text;
 begin
+    -- 0. OWNERSHIP GUARD (data-isolation / Article 171 — DOC_DRIFT_AUDIT 2026-06-22)
+    --    SECURITY DEFINER bypasses RLS, so a client-supplied p_organization_id
+    --    cannot be trusted on its own. The caller MUST belong to that org, or be
+    --    an expert/admin. Without this, a farmer could pass another org's id and
+    --    read their vet case. fn_my_org_ids()/fn_is_expert()/fn_is_admin() resolve
+    --    to the JWT-aware d07 definitions at runtime (apply order d01→…→d07), which
+    --    fall back to a DB lookup via auth.uid() for stale/pre-hook tokens — so
+    --    legitimate owners, experts and admins still pass. Mirrors the d04 RLS
+    --    predicate (org = any(fn_my_org_ids()) or fn_is_expert() or fn_is_admin()).
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_expert()
+        or public.fn_is_admin()
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
     -- 1. Fetch VetCase with ownership check
     select vc.*, f.name as farm_name
     into v_case

@@ -2940,3 +2940,29 @@ Contact reveal happens at batch-confirmed transition (M4/M6 flow). Legacy D40 ru
 **Files:** `DECISIONS_LOG.md` (this entry).
 
 **Verification**: N/A (still no SQL/code changes — this entry covers the planning pivot). Next checkpoint: DB Agent completes §2 → UI Agent completes §3 in parallel → CEO + зоолог fill data via UI → close Q-TSP-CATEGORY-CLASSIFIER.
+
+---
+
+### 2026-06-22: DEF-VET-F11-ISOLATION — close cross-org leak in rpc_get_vet_case_detail
+
+**What**: Added an ownership guard at the top of `rpc_get_vet_case_detail` (d04_vet.sql, the D-F11-1 JWT-compatible RPC). The function is `SECURITY DEFINER` and previously trusted the client-supplied `p_organization_id` (the only scoping was `WHERE vc.organization_id = p_organization_id`). Because SECURITY DEFINER bypasses RLS, a farmer could pass another org's `organization_id` + a known/guessed vet_case_id and read another organization's vet case — a live cross-org data leak (DOC_DRIFT_AUDIT 2026-06-22).
+
+**Guard added** (additive, signature unchanged — P7):
+```sql
+if not (
+    p_organization_id = any(public.fn_my_org_ids())
+    or public.fn_is_expert()
+    or public.fn_is_admin()
+) then
+    raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+        using errcode = 'P0001';
+end if;
+```
+
+**Why**: Mandatory data-isolation (Farmer A NEVER sees Farmer B's data) + Article 171. Mirrors the d04 RLS predicate and the FORBIDDEN/P0001 convention used by other vet RPCs (e.g. line ~2596).
+
+**DEF-009 note**: `fn_my_org_ids`/`fn_is_expert`/`fn_is_admin` resolve to the JWT-aware d07 definitions at runtime (apply order d01→…→d07; cross_check.sh whitelists these as intentional upgrades). The d07 versions have a JWT fast path + DB fallback via `auth.uid()`, so legitimate web owners pass regardless of hook state. Both callers are JWT/web — `src/pages/cabinet/vet/VetCaseDetail.tsx` (owner → `fn_my_org_ids()`) and `src/pages/admin/expert/CaseConsultation.tsx` (expert/admin → `fn_is_expert()`/`fn_is_admin()`). No service_role caller exists, so the guard breaks nothing.
+
+**Files**: `d04_vet.sql` (function body only, ~line 1834). This entry.
+
+**Verification**: `cross_check.sh` → 0 critical / 0 significant / 0 minor. Grep confirms exactly ONE definition of `rpc_get_vet_case_detail` project-wide (d04_vet.sql:1815) and the guard is present in it. ⚠️ NOT YET DEPLOYED — must apply to Supabase project mwtbozflyldcadypherr via `python3 deploy_sql.py <DB_PASSWORD>` before production is fixed.
