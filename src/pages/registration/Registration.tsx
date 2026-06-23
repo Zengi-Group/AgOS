@@ -15,40 +15,34 @@ import { FeedProducerDetails } from './steps/FeedProducerDetails'
 import { ExpertDetails } from './steps/ExpertDetails'
 import { ExpertDocs } from './steps/ExpertDocs'
 import { Agreement } from './steps/Agreement'
-import { Success } from './steps/Success'
 import { INITIAL_FORM_DATA } from './constants'
 import type { RegistrationFormData, RoleType } from './constants'
 
 const STORAGE_KEY = 'agos_reg_form'
 
 type Step =
-  | 'role_select'
   | 'contact'
   | 'create_pin'
+  | 'role_select'
   | 'benefit_1'
   | 'role_details'
   | 'expert_docs'
-  | 'benefit_2'
   | 'agreement'
-  | 'success'
 
 const STEP_ORDER: Step[] = [
-  'role_select',
   'contact',
   'create_pin',
+  'role_select',
   'benefit_1',
   'role_details',
   'expert_docs',
-  'benefit_2',
   'agreement',
-  'success',
 ]
 
 export function Registration() {
   const { session } = useAuth()
-  // useNavigate available for future redirect logic
-  useNavigate()
-  const [step, setStep] = useState<Step>('role_select')
+  const navigate = useNavigate()
+  const [step, setStep] = useState<Step>('contact')
   const [direction, setDirection] = useState<'forward' | 'backward'>('forward')
   const [formData, setFormData] = useState<RegistrationFormData>(() => {
     try {
@@ -66,7 +60,7 @@ export function Registration() {
 
   // If already authenticated with context, redirect to cabinet
   useEffect(() => {
-    if (session && step === 'role_select') {
+    if (session && step === 'contact') {
       // User already logged in — they may be coming back.
       // Don't redirect automatically — they might want to re-register.
     }
@@ -84,7 +78,7 @@ export function Registration() {
   // Warn on leaving with unsaved changes
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
-      if (step !== 'role_select' && step !== 'success') {
+      if (step !== 'contact') {
         e.preventDefault()
       }
     }
@@ -134,6 +128,7 @@ export function Registration() {
           primary_breed: formData.primary_breed || null,
           ready_to_sell: formData.ready_to_sell || null,
           legal_form: formData.legal_form || null,
+          district_id: formData.district_id || null,
         }
       } else if (role === 'mpk') {
         name = formData.company_name
@@ -220,7 +215,9 @@ export function Registration() {
       // Clear saved form data
       sessionStorage.removeItem(STORAGE_KEY)
 
-      goTo('success')
+      // Registration complete — user already has a session (signed in after PIN).
+      // Go straight to the cabinet.
+      navigate('/cabinet')
     } catch (err) {
       toast.error('Ошибка регистрации')
       console.error(err)
@@ -231,15 +228,6 @@ export function Registration() {
 
   const renderStep = () => {
     switch (step) {
-      case 'role_select':
-        return (
-          <RoleSelect
-            onSelect={(role: RoleType) => {
-              updateForm({ role })
-              goTo('contact')
-            }}
-          />
-        )
       case 'contact':
         return (
           <Contact
@@ -253,7 +241,16 @@ export function Registration() {
           <CreatePin
             formData={formData}
             onChange={updateForm}
-            onNext={() => goTo('benefit_1')}
+            onNext={() => goTo('role_select')}
+          />
+        )
+      case 'role_select':
+        return (
+          <RoleSelect
+            onSelect={(role: RoleType) => {
+              updateForm({ role })
+              goTo('benefit_1')
+            }}
           />
         )
       case 'benefit_1':
@@ -271,7 +268,7 @@ export function Registration() {
               <FarmerDetails
                 formData={formData}
                 onChange={updateForm}
-                onNext={() => goTo('benefit_2')}
+                onNext={() => goTo('agreement')}
               />
             )
           case 'mpk':
@@ -279,7 +276,7 @@ export function Registration() {
               <MpkDetails
                 formData={formData}
                 onChange={updateForm}
-                onNext={() => goTo('benefit_2')}
+                onNext={() => goTo('agreement')}
               />
             )
           case 'services':
@@ -287,7 +284,7 @@ export function Registration() {
               <ServicesDetails
                 formData={formData}
                 onChange={updateForm}
-                onNext={() => goTo('benefit_2')}
+                onNext={() => goTo('agreement')}
               />
             )
           case 'feed_producer':
@@ -295,7 +292,7 @@ export function Registration() {
               <FeedProducerDetails
                 formData={formData}
                 onChange={updateForm}
-                onNext={() => goTo('benefit_2')}
+                onNext={() => goTo('agreement')}
               />
             )
           case 'expert':
@@ -314,14 +311,6 @@ export function Registration() {
           <ExpertDocs
             formData={formData}
             onChange={updateForm}
-            onNext={() => goTo('benefit_2')}
-          />
-        )
-      case 'benefit_2':
-        return (
-          <BenefitScreen
-            role={formData.role!}
-            step={2}
             onNext={() => goTo('agreement')}
           />
         )
@@ -334,20 +323,12 @@ export function Registration() {
             isSubmitting={isSubmitting}
           />
         )
-      case 'success':
-        return (
-          <Success
-            role={formData.role!}
-            phone={formData.phone}
-            companyName={formData.role === 'farmer' ? formData.farm_name : formData.company_name}
-          />
-        )
       default:
         return null
     }
   }
 
-  const showBackButton = step !== 'role_select' && step !== 'success'
+  const showBackButton = step !== 'contact'
   const stepIndex = STEP_ORDER.indexOf(step) + 1
 
   return (

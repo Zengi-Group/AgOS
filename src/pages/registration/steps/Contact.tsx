@@ -5,8 +5,6 @@ import { toast } from 'sonner'
 import { FloatingInput } from '../components/FloatingInput'
 import { PhoneInput } from '../components/PhoneInput'
 import { OtpInput } from '../components/OtpInput'
-import { BottomSheet } from '../components/BottomSheet'
-import { REGIONS } from '../constants'
 import type { RegistrationFormData } from '../constants'
 
 interface ContactProps {
@@ -17,13 +15,11 @@ interface ContactProps {
 
 export function Contact({ formData, onChange, onNext }: ContactProps) {
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [regionSheetOpen, setRegionSheetOpen] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
   const [otpValue, setOtpValue] = useState('')
   const [countdown, setCountdown] = useState(0)
 
-  const selectedRegion = REGIONS.find((r) => r.id === formData.region_id)
   const maskedPhone = formData.phone.length >= 7
     ? `+7 (${formData.phone.slice(0, 3)}) ${formData.phone.slice(3, 6)}-••-••`
     : `+7 ${formData.phone}`
@@ -194,19 +190,6 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
           }}
           error={errors.phone}
         />
-
-        <button
-          type="button"
-          onClick={() => setRegionSheetOpen(true)}
-          className="w-full h-14 px-4 bg-white border border-[#e8ddd0] rounded-xl text-left flex items-center justify-between hover:border-[#2B180A]/30 transition-colors"
-        >
-          <span className={selectedRegion ? 'text-[#2B180A]' : 'text-[#6b5744]/60'}>
-            {selectedRegion?.name || 'Регион (необязательно)'}
-          </span>
-          <svg className="h-4 w-4 text-[#6b5744]/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
       </div>
 
       <button
@@ -217,15 +200,6 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
         {isSending && <Loader2 className="h-4 w-4 animate-spin" />}
         {isSending ? 'Отправка…' : 'Получить код'}
       </button>
-
-      <BottomSheet
-        open={regionSheetOpen}
-        onClose={() => setRegionSheetOpen(false)}
-        title="Выберите регион"
-        options={REGIONS.map((r) => ({ value: r.id, label: r.name }))}
-        value={formData.region_id}
-        onChange={(v) => onChange({ region_id: v })}
-      />
     </div>
   )
 }
