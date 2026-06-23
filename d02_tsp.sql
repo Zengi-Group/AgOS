@@ -2488,9 +2488,10 @@ comment on function public.rpc_publish_pool(uuid, uuid) is
 --         invoke from a periodic sweep job — idempotent via offers
 --         unique(batch_id, mpk_org_id)).
 -- Scans batches.status='published' that fit at least one pool_line of the
--- given filling pool and upserts an Offer for the pool's MPK org. Does NOT
--- transition batch FSM — FCFS semantics preserved through rpc_accept_offer
--- (mirrors the re-broadcast pattern of rpc_lower_batch_price, 2026-06-15).
+-- given filling pool and upserts an Offer for the pool's MPK org, then
+-- transitions newly-broadcast batches published -> offering (TSP-FLOW-01,
+-- M4 §2.2 step 3) so rpc_accept_offer is reachable. FCFS semantics preserved
+-- via rpc_accept_offer (mirrors rpc_lower_batch_price re-broadcast pattern).
 -- Match predicate (mirrors rpc_lower_batch_price, inverted on direction):
 --   pool.status='filling'
 --   pool_line.is_active AND pool_line.mpk_price_per_kg >= batch.farmer_price_per_kg
@@ -2562,7 +2563,10 @@ begin
                  or pl.current_volume_kg
                     + coalesce(b.heads * b.avg_weight_kg, 0)::int
                     <= pl.max_volume_kg)
-        where b.status = 'published'
+        -- TSP-FLOW-01 (M4 §2.2 step 3): include 'offering' so additional MPK
+        -- pools can also broadcast to a batch already offering (multi-MPK FCFS);
+        -- 'published' batches are transitioned to 'offering' below on Offer upsert.
+        where b.status in ('published', 'offering')
           and b.farmer_price_per_kg is not null
           -- window overlap (D-M6-8)
           and (v_pool.delivery_from is null or b.ready_to   is null
@@ -2638,6 +2642,23 @@ begin
             ),
             true
         );
+
+        -- TSP-FLOW-01 / TSP-SCHEMA-02 fix (M4 §2.2 step 3): AFTER the broadcast_sent
+        -- log above (which filters status='published'), transition newly-broadcast
+        -- batches published -> offering so rpc_accept_offer's 'offering' guard is
+        -- satisfiable. Mirrors rpc_lower_batch_price. Batches already 'offering'
+        -- (multi-MPK) are left untouched.
+        update public.batches b
+        set status      = 'offering',
+            offering_at = now(),
+            updated_at  = now()
+        where b.status = 'published'
+          and exists (
+              select 1 from public.offers o
+              where o.batch_id = b.id
+                and o.mpk_org_id = v_mpk_org_id
+                and o.status     = 'pending'
+          );
     end if;
 
     return jsonb_build_object(
@@ -2651,7 +2672,8 @@ comment on function public.rpc_retry_match_pool(uuid, uuid) is
      or periodic sweep). p_organization_id MUST equal pools.organization_id
      (sanity-check, P-AI-2). Scans published batches that fit any pool_line of
      the given filling pool and upserts Offers for the pool MPK org. Idempotent
-     via offers unique(batch_id, mpk_org_id). Does NOT transition batch FSM —
+     via offers unique(batch_id, mpk_org_id). Transitions newly-broadcast
+     batches published -> offering (TSP-FLOW-01) so rpc_accept_offer is reachable;
      FCFS semantics preserved via rpc_accept_offer.';
 
 
@@ -2733,7 +2755,11 @@ begin
       and p.organization_id = p_organization_id
       and pl.is_active = true
       and (pl.tsp_sku_id is null or pl.tsp_sku_id = v_batch.tsp_sku_id)
-      and pl.mpk_price_per_kg <= v_offer.offered_price_per_kg
+      -- C1 fix (TSP-ACCEPT-PRICE): direction must mirror rpc_retry_match_pool /
+      -- rpc_lower_batch_price eligibility (pl.mpk_price >= offered ask). The prior
+      -- '<=' allowed a match only when mpk_price == offered_price exactly, rejecting
+      -- every above-ask bid (the normal case) with NO_MATCHING_POOL_LINE.
+      and pl.mpk_price_per_kg >= v_offer.offered_price_per_kg
       and (pl.max_volume_kg is null
            or pl.current_volume_kg + v_volume_kg <= pl.max_volume_kg)
       and (p.delivery_from is null or v_batch.ready_to   is null
@@ -2782,11 +2808,15 @@ begin
       and id != p_offer_id
       and status = 'pending';
 
-    -- 3) Batch -> matched
+    -- 3) Batch -> matched.
+    -- D-M6-DEALPRICE (CEO 2026-06-23): the farmer is paid the MATCHED pool line's
+    -- MPK bid (v_pool_line.pl_price, the highest eligible line picked by the
+    -- ORDER BY ... desc above), NOT merely their own ask (offered_price). The
+    -- ask is the floor; any higher MPK bid accrues to the farmer.
     update public.batches
     set status            = 'matched',
         pool_line_id      = v_pool_line.pl_id,
-        deal_price_per_kg = v_offer.offered_price_per_kg,
+        deal_price_per_kg = v_pool_line.pl_price,
         matched_at        = now(),
         updated_at        = now()
     where id = v_batch.id;
@@ -3135,6 +3165,98 @@ comment on function public.rpc_lower_batch_price(uuid, uuid, int) is
      minimum_price floor. Refreshes offers for MPK orgs whose filling pools have
      matching lines (region overlap D-M6-4 + ready/delivery overlap D-M6-8 +
      tsp_sku + capacity).';
+
+
+-- ------------------------------------------------------------
+-- RPC-M6-05b: rpc_set_batch_terms (TSP-FLOW-03)
+-- Caller: farmer (batch owner). Sets farmer_price_per_kg + ready window on a
+-- batch BEFORE matching. Additive (P7): does NOT change rpc_create_batch /
+-- rpc_publish_batch signatures. Without a non-null farmer_price_per_kg a batch
+-- is invisible to rpc_retry_match_pool eligibility. Allowed from draft|published
+-- (terms lock once offering/matched). D-M6-6 invariant ready_to >= ready_from.
+-- ------------------------------------------------------------
+create or replace function public.rpc_set_batch_terms(
+    p_organization_id     uuid,
+    p_batch_id            uuid,
+    p_farmer_price_per_kg int  default null,
+    p_ready_from          date default null,
+    p_ready_to            date default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_batch  record;
+    v_price  int;
+    v_from   date;
+    v_to     date;
+begin
+    select * into v_batch
+    from public.batches
+    where id = p_batch_id and organization_id = p_organization_id
+    for update;
+    if not found then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    if v_batch.status not in ('draft', 'published') then
+        raise exception
+            'INVALID_STATUS: batch terms can be set only from draft|published (current %)',
+            v_batch.status using errcode = 'P0001';
+    end if;
+
+    v_price := coalesce(p_farmer_price_per_kg, v_batch.farmer_price_per_kg);
+    v_from  := coalesce(p_ready_from, v_batch.ready_from);
+    v_to    := coalesce(p_ready_to,   v_batch.ready_to);
+
+    if v_price is not null and v_price <= 0 then
+        raise exception 'INVALID_INPUT: farmer_price_per_kg must be > 0'
+            using errcode = 'P0001';
+    end if;
+    if v_from is not null and v_to is not null and v_to < v_from then
+        raise exception 'INVALID_INPUT: ready_to (%) must be >= ready_from (%)', v_to, v_from
+            using errcode = 'P0001';
+    end if;
+
+    update public.batches
+    set farmer_price_per_kg = v_price,
+        ready_from          = v_from,
+        ready_to            = v_to,
+        updated_at          = now()
+    where id = p_batch_id;
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (p_batch_id, 'terms_set',
+        jsonb_build_object(
+            'farmer_price_per_kg', v_price,
+            'ready_from', v_from,
+            'ready_to', v_to
+        ),
+        public.fn_current_user_id());
+
+    return jsonb_build_object(
+        'batch_id', p_batch_id,
+        'farmer_price_per_kg', v_price,
+        'ready_from', v_from,
+        'ready_to', v_to,
+        'status', v_batch.status
+    );
+end; $$;
+
+comment on function public.rpc_set_batch_terms(uuid, uuid, int, date, date) is
+    'TSP-FLOW-03 | Caller: farmer (batch owner). Sets farmer_price_per_kg + ready
+     window on a draft|published batch so it becomes eligible for pool matching
+     (rpc_retry_match_pool requires non-null farmer_price_per_kg). Additive RPC
+     (P7): does not change rpc_create_batch/rpc_publish_batch signatures.
+     D-M6-6 invariant ready_to >= ready_from enforced.';
+
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
+    ('rpc_set_batch_terms', 'rpc_set_batch_terms', null, 'd02_tsp.sql (TSP-FLOW-03 / Phase 2)',
+     'Set farmer_price_per_kg + ready window on draft|published batch; unblocks matching eligibility')
+on conflict (sql_name) do update
+    set dok3_name = excluded.dok3_name, notes = excluded.notes, created_in = excluded.created_in;
 
 
 -- ------------------------------------------------------------
