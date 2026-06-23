@@ -2610,22 +2610,6 @@ begin
     from upserted;
 
     if v_offers_upserted > 0 then
-        -- TSP-FLOW-01 / TSP-SCHEMA-02 fix (M4 §2.2 step 3): transition newly
-        -- broadcast batches published -> offering so rpc_accept_offer's
-        -- 'offering' guard is satisfiable. Mirrors rpc_lower_batch_price.
-        -- Batches already in 'offering' (multi-MPK) are left untouched.
-        update public.batches b
-        set status      = 'offering',
-            offering_at = now(),
-            updated_at  = now()
-        where b.status = 'published'
-          and exists (
-              select 1 from public.offers o
-              where o.batch_id = b.id
-                and o.mpk_org_id = v_mpk_org_id
-                and o.status     = 'pending'
-          );
-
         insert into public.batch_events (batch_id, event_type, metadata, created_by)
         select u.batch_id,
                'broadcast_sent',
@@ -2658,6 +2642,23 @@ begin
             ),
             true
         );
+
+        -- TSP-FLOW-01 / TSP-SCHEMA-02 fix (M4 §2.2 step 3): AFTER the broadcast_sent
+        -- log above (which filters status='published'), transition newly-broadcast
+        -- batches published -> offering so rpc_accept_offer's 'offering' guard is
+        -- satisfiable. Mirrors rpc_lower_batch_price. Batches already 'offering'
+        -- (multi-MPK) are left untouched.
+        update public.batches b
+        set status      = 'offering',
+            offering_at = now(),
+            updated_at  = now()
+        where b.status = 'published'
+          and exists (
+              select 1 from public.offers o
+              where o.batch_id = b.id
+                and o.mpk_org_id = v_mpk_org_id
+                and o.status     = 'pending'
+          );
     end if;
 
     return jsonb_build_object(
@@ -2754,7 +2755,11 @@ begin
       and p.organization_id = p_organization_id
       and pl.is_active = true
       and (pl.tsp_sku_id is null or pl.tsp_sku_id = v_batch.tsp_sku_id)
-      and pl.mpk_price_per_kg <= v_offer.offered_price_per_kg
+      -- C1 fix (TSP-ACCEPT-PRICE): direction must mirror rpc_retry_match_pool /
+      -- rpc_lower_batch_price eligibility (pl.mpk_price >= offered ask). The prior
+      -- '<=' allowed a match only when mpk_price == offered_price exactly, rejecting
+      -- every above-ask bid (the normal case) with NO_MATCHING_POOL_LINE.
+      and pl.mpk_price_per_kg >= v_offer.offered_price_per_kg
       and (pl.max_volume_kg is null
            or pl.current_volume_kg + v_volume_kg <= pl.max_volume_kg)
       and (p.delivery_from is null or v_batch.ready_to   is null
