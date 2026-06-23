@@ -40,6 +40,12 @@ const CABINET_CONTENT: Record<
     cta: 'В кабинет →',
     route: '/cabinet',
   },
+  expert: {
+    kpi: [{ n: '0', t: 'заявок' }, { n: '0', t: 'клиентов' }, { n: '—', t: 'рейтинг' }],
+    tasks: ['Дождаться одобрения профиля', 'Настроить расписание', 'Принять первую заявку'],
+    cta: 'В кабинет →',
+    route: '/cabinet',
+  },
 }
 
 export function Success({ role, companyName = '' }: SuccessProps) {
