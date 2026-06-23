@@ -1,6 +1,6 @@
 /**
  * F17 — Просмотр рациона (Ration Viewer)
- * Dok 6 Slice 3: /cabinet/ration
+ * Dok 6 Slice 3: /cabinet-legacy/ration
  * RPC: rpc_get_current_ration (RPC-24)
  * UX: NASEM norms cards → feed rows with proportion bars → nutrient balance → monthly group totals
  */
@@ -619,7 +619,7 @@ export function RationViewer() {
             Сначала добавьте группы скота на ферме
           </p>
           <button
-            onClick={() => navigate('/cabinet/herd')}
+            onClick={() => navigate('/cabinet-legacy/herd')}
             style={{ fontSize: 13, fontWeight: 600, padding: '8px 18px', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--bg)', color: 'var(--fg2)', cursor: 'pointer' }}
           >
             Перейти к стаду
@@ -665,7 +665,7 @@ export function RationViewer() {
 
       {/* Бюджет кормления */}
       <button
-        onClick={() => navigate('/cabinet/ration/budget')}
+        onClick={() => navigate('/cabinet-legacy/ration/budget')}
         style={{
           width: '100%', padding: '11px 16px', borderRadius: 8,
           border: '1px solid var(--bd)', background: 'var(--bg-c)', color: 'var(--fg2)',

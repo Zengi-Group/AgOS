@@ -1,6 +1,6 @@
 /**
  * F23 — Показатели (KPI Dashboard)
- * Dok 6 Slice 4: /cabinet/plan/kpi
+ * Dok 6 Slice 4: /cabinet-legacy/plan/kpi
  * RPC: rpc_get_active_plan (RPC-37) → kpis from phases
  * Read-only for farmer.
  */
@@ -49,7 +49,7 @@ export function KpiDashboard() {
   if (!data) {
     return (
       <div className="page">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet/plan')}><ArrowLeft className="h-5 w-5" /></Button>
+        <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet-legacy/plan')}><ArrowLeft className="h-5 w-5" /></Button>
         <Card className="mt-4"><CardContent className="p-8 text-center text-muted-foreground">Нет показателей — план не создан</CardContent></Card>
       </div>
     )
@@ -59,7 +59,7 @@ export function KpiDashboard() {
 
   return (
     <div className="page space-y-6">
-      <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet/plan')}>
+      <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet-legacy/plan')}>
         <ArrowLeft className="h-5 w-5" />
       </Button>
 

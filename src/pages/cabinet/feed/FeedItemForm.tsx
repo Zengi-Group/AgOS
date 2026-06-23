@@ -1,6 +1,6 @@
 /**
  * F16 — Добавить / обновить запас корма
- * Dok 6 Slice 3: /cabinet/feed/add or /cabinet/feed/:inventoryId
+ * Dok 6 Slice 3: /cabinet-legacy/feed/add or /cabinet-legacy/feed/:inventoryId
  * RPC: rpc_upsert_feed_inventory (RPC-21) — D-S3-1 individual fields
  */
 import { useState, useEffect } from 'react'
@@ -80,14 +80,14 @@ export function FeedItemForm() {
   const upsertMutation = useRpcMutation('rpc_upsert_feed_inventory', {
     successMessage: 'Запас обновлён',
     invalidateKeys: [['rpc_get_farm_summary']],
-    onSuccess: () => navigate('/cabinet/feed'),
+    onSuccess: () => navigate('/cabinet-legacy/feed'),
   })
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!organization?.id || !farm?.id) {
       toast.error('Сначала создайте ферму')
-      navigate('/cabinet/farm')
+      navigate('/cabinet-legacy/farm')
       return
     }
     if (!feedItemId || !quantityKg) {
@@ -192,7 +192,7 @@ export function FeedItemForm() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => navigate('/cabinet/feed')}
+                onClick={() => navigate('/cabinet-legacy/feed')}
               >
                 Отмена
               </Button>

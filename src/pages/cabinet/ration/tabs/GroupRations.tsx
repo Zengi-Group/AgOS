@@ -1,5 +1,5 @@
 /**
- * /cabinet/ration/groups — Рационы фермы
+ * /cabinet-legacy/ration/groups — Рационы фермы
  * Shows every herd group with its current active ration (or CTA to calculate).
  * RPC: rpc_get_current_ration (returns all active rations for the farm)
  * Auth: useAuth() → herd_groups
@@ -104,7 +104,7 @@ function GroupCard({
         </div>
         {hasRation ? (
           <button
-            onClick={() => navigate(`/cabinet/ration/groups/${ration!.ration_id}`)}
+            onClick={() => navigate(`/cabinet-legacy/ration/groups/${ration!.ration_id}`)}
             style={{
               display: 'flex', alignItems: 'center', gap: 4,
               fontSize: 12, fontWeight: 600, color: 'var(--brand)',

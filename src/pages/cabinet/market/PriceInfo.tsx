@@ -1,6 +1,6 @@
 /**
  * F09 — Справочные цены
- * Dok 6 Slice 5a: /cabinet/market/prices
+ * Dok 6 Slice 5a: /cabinet-legacy/market/prices
  * D-S6-1 pattern: .from() for reference price_grids table
  */
 import { useState, useEffect } from 'react'
@@ -33,7 +33,7 @@ export function PriceInfo() {
 
   return (
     <div className="space-y-6 p-6">
-      <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet/market')}><ArrowLeft className="h-5 w-5" /></Button>
+      <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet-legacy/market')}><ArrowLeft className="h-5 w-5" /></Button>
 
       {/* Disclaimer — ALWAYS visible (Article 171) */}
       <Card className="border-amber-500/30 bg-amber-50/50">

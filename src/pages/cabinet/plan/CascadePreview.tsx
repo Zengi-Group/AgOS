@@ -1,6 +1,6 @@
 /**
  * F22 — Сдвиг фаз (Cascade Preview)
- * Dok 6 Slice 4: /cabinet/plan/cascade/:phaseId
+ * Dok 6 Slice 4: /cabinet-legacy/plan/cascade/:phaseId
  * RPCs: fn_preview_cascade (RPC-36), fn_shift_phase_cascade (RPC-35)
  */
 import { useState } from 'react'
@@ -63,7 +63,7 @@ export function CascadePreview() {
       })
       if (error) throw error
       toast.success('Даты обновлены')
-      navigate('/cabinet/plan')
+      navigate('/cabinet-legacy/plan')
     } catch (err: any) {
       toast.error(err.message || 'Ошибка сдвига')
     }
@@ -71,7 +71,7 @@ export function CascadePreview() {
 
   return (
     <div className="page space-y-6">
-      <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet/plan')}>
+      <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet-legacy/plan')}>
         <ArrowLeft className="h-5 w-5" />
       </Button>
 
@@ -133,7 +133,7 @@ export function CascadePreview() {
               <Button onClick={handleApply} className="flex-1">
                 Применить сдвиг
               </Button>
-              <Button variant="outline" onClick={() => navigate('/cabinet/plan')}>
+              <Button variant="outline" onClick={() => navigate('/cabinet-legacy/plan')}>
                 Отмена
               </Button>
             </div>

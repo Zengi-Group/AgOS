@@ -1,6 +1,6 @@
 /**
  * F04 — Добавить / редактировать группу скота
- * Dok 6 Slice 3: /cabinet/herd/add or /cabinet/herd/:groupId
+ * Dok 6 Slice 3: /cabinet-legacy/herd/add or /cabinet-legacy/herd/:groupId
  * RPCs: rpc_upsert_herd_group (RPC-06), rpc_log_herd_event (RPC-07)
  * NOTE: SQL uses p_animal_category_code (text), NOT _id (uuid) — F-1 fix
  */
@@ -66,7 +66,7 @@ export function HerdGroupForm() {
   const upsertMutation = useRpcMutation('rpc_upsert_herd_group', {
     successMessage: isEdit ? 'Группа обновлена' : 'Группа создана',
     invalidateKeys: [['rpc_get_farm_summary'], ['rpc_get_my_context']],
-    onSuccess: () => navigate('/cabinet/herd'),
+    onSuccess: () => navigate('/cabinet-legacy/herd'),
   })
 
   const logEventMutation = useRpcMutation('rpc_log_herd_event')
@@ -75,7 +75,7 @@ export function HerdGroupForm() {
     e.preventDefault()
     if (!organization?.id || !farm?.id) {
       toast.error('Сначала создайте ферму')
-      navigate('/cabinet/farm')
+      navigate('/cabinet-legacy/farm')
       return
     }
     if (!categoryCode || !headCount) {
@@ -185,7 +185,7 @@ export function HerdGroupForm() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => navigate('/cabinet/herd')}
+                onClick={() => navigate('/cabinet-legacy/herd')}
               >
                 Отмена
               </Button>

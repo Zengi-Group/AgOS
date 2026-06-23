@@ -1,11 +1,28 @@
 # SPRINT STATUS — AgOS
 
 > Maintained by: Architect (planning/sign-off), DB Agent (after SQL), Backend Agent (after code), UI Agent (after UI)
-> Last updated: 2026-06-15 (DOC-SYNC-A-CAT-01 — Dok 1/3/4 синхронизированы с A-CAT SQL deployed)
+> Last updated: 2026-06-23 (ADR-CABINET-SHELL-01 — новый мобильный кабинет интегрирован на ветке `feat/cabinet-shell-tsp`)
 
 ---
 
-## Current Phase: 🟡 M4 + M6 TSP — SQL CLOSED (incl. A-CAT bridge), DOCS SYNCED, UI/DATA PENDING (2026-06-15)
+## Current Phase: 🟢 Cabinet Shell Integration (фермер+МПК) — INTEGRATED on `feat/cabinet-shell-tsp`, pending CEO review/merge (2026-06-23)
+
+**ADR-CABINET-SHELL-01.** Новый мобильный кабинет из `feature/my-changes` интегрирован в `main` точечным cherry-pick'ом (ветки без общего предка → не `git merge`).
+
+| Слой | Что сделано | Статус |
+|------|-------------|--------|
+| UI shell | `src/pages/cabinet/shell/**` (82 файла) + `src/lib/account.ts` + `scripts/test_rpc_create_batch.mjs` — `git checkout` | ✅ `tsc` 0 / `build` ✓ 5.18s |
+| Routing | `App.tsx`: `/cabinet`→`CabinetApp`, `/mpk`→`MpkApp` (вне `AppLayout`); legacy→`/cabinet-legacy` (`Sidebar`/`Header`/22 стр. перепривязаны) | ✅ роуты wired (redirect→`/login`, 0 console errors) |
+| SQL adapter | rebind #10 + self_join #5 как 2 миграции в `supabase/migrations/` (Option B); УЖЕ задеплоено на проде инженером | ✅ live; `cross_check.sh` 0/0/0 |
+| Prod gate (Step 0) | канонический d02 цел: `batches`(tsp_sku_id/status) + `pools.organization_id` + 14 M4/M6 RPC + 11 A-CAT RPC; деструктив `DROP TABLE batches` не применялся | ✅ PASS (PostgREST read-only) |
+
+**Отвергнуто (защита main):** auth-rewrite ветки (OTP/PIN main цел), 8 деструктивных миграций (`DROP TABLE batches CASCADE`), даунгрейд доков (Dok1/3, Microsteps, A-CAT-spec), `feeding_model.py`/`d11_norms.sql`. **Отложено (Phase 2):** expert-роль регистрации (IMPL_DEBT REG-EXPERT-01), MPK auto-routing (CABINET-SHELL-01).
+
+**Pending:** (1) CEO ручная проверка аутентифицированного кабинета (OTP-логин → `/cabinet` фермер, `/mpk` МПК) — headless не проверить; (2) commit + PR (НЕ закоммичено, всё на ветке); (3) Phase-2 реконсиляция 2 слоёв TSP-RPC (IMPL_DEBT TSP-ADAPTER-01/02).
+
+---
+
+## Previous Phase: 🟡 M4 + M6 TSP — SQL CLOSED (incl. A-CAT bridge), DOCS SYNCED, UI/DATA PENDING (2026-06-15)
 
 **Что закрыто (SQL layer):**
 

@@ -9,11 +9,11 @@ import { useTopbarConfig, type TopbarTab } from './TopbarContext'
  * Extend as new screens are added.
  */
 const ROUTE_TITLES: Record<string, string> = {
-  '/cabinet': 'Dashboard',
-  '/cabinet/farm': 'Farm Profile',
-  '/cabinet/herd': 'Herd',
-  '/cabinet/vet/new': 'Report Sick Animal',
-  '/cabinet/feed': 'Feed',
+  '/cabinet-legacy': 'Dashboard',
+  '/cabinet-legacy/farm': 'Farm Profile',
+  '/cabinet-legacy/herd': 'Herd',
+  '/cabinet-legacy/vet/new': 'Report Sick Animal',
+  '/cabinet-legacy/feed': 'Feed',
   '/admin': 'Admin Dashboard',
   '/admin/applications': 'Заявки',
   '/admin/users': 'Users',
@@ -24,7 +24,7 @@ const ROUTE_TITLES: Record<string, string> = {
 function getPageTitle(pathname: string): string {
   if (ROUTE_TITLES[pathname]) return ROUTE_TITLES[pathname]
 
-  if (pathname.startsWith('/cabinet/vet/') && pathname !== '/cabinet/vet/new') {
+  if (pathname.startsWith('/cabinet-legacy/vet/') && pathname !== '/cabinet-legacy/vet/new') {
     return 'Vet Case'
   }
   if (pathname.startsWith('/admin/applications/level/')) {

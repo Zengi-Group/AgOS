@@ -1,0 +1,745 @@
+/* AgOS · Этап 1 · Стили оболочки фермера. Тёплая палитра. Скоуп — .agos-cabinet-stage. */
+
+.agos-cabinet-stage {
+  --bg: #f6efe4;
+  --card: #ffffff;
+  --ink: #2b180a;
+  --ink-2: #5a4631;
+  --ink-3: #6b5744;
+  --ink-4: #cdbfad;
+  --line: #e8ddd0;
+  --green: #2f9e63;
+  --green-d: #237a4c;
+  --amber: #e9a13b;
+  --ok: #2f9e63;
+  --red: #e26d5c;
+
+  /* алиасы и доп-токены для Главной/шторки цен (Этап 2, из прототипа) */
+  --warn: var(--amber);
+  --primary: var(--green);
+  --line-soft: var(--line);
+  --paper-2: #faf4ea;
+  --paper-3: #f0e7d8;
+  --gold-bg: #fbf3df;
+  --st-yellow: #e0a32a;
+  --st-green: #2f9e63;
+  --st-sky: #3b9ed8;
+  --st-violet: #8a6fd0;
+  --st-blue: #3f74c4;
+  --st-deepgreen: #237a4c;
+  --st-gray: #cdbfad;
+  --st-orange: #e07a3b;
+  --bad: var(--red);
+  --paper: var(--bg);
+
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.agos-cabinet-stage .mono {
+  font-family: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
+}
+
+/* ---------- каркас телефона ---------- */
+.agos-cabinet-stage .phone {
+  width: 100%;
+  max-width: 440px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.agos-cabinet-stage .phone-body {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.agos-cabinet-stage .phone-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px 90px;
+}
+
+/* ---------- таб-бар ×5 ---------- */
+.agos-cabinet-stage .bottom-nav {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: grid;
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+}
+.agos-cabinet-stage .bottom-nav.tab5 { grid-template-columns: repeat(5, 1fr); }
+.agos-cabinet-stage .bn-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 2px;
+  background: none;
+  border: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.agos-cabinet-stage .bn-item.on { color: var(--green-d); }
+.agos-cabinet-stage .bn-ic { position: relative; line-height: 0; }
+.agos-cabinet-stage .bn-t { font-size: 11px; }
+.agos-cabinet-stage .tb-dot {
+  position: absolute; top: -2px; right: -4px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--amber);
+}
+.agos-cabinet-stage .tb-badge {
+  position: absolute; top: -6px; right: -8px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 8px; background: var(--red); color: #fff;
+  font-size: 10px; line-height: 16px; text-align: center;
+}
+
+/* ---------- хедеры ---------- */
+.agos-cabinet-stage .sh-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 10px; margin-bottom: 12px;
+}
+.agos-cabinet-stage .sh-head.big .sh-title { font-size: 24px; }
+.agos-cabinet-stage .sh-title { font-size: 20px; font-weight: 700; }
+.agos-cabinet-stage .sh-sub { font-size: 13px; color: var(--ink-3); margin-top: 2px; }
+.agos-cabinet-stage .hbtn.spark {
+  display: grid; place-items: center;
+  width: 38px; height: 38px; border-radius: 12px;
+  background: #fff6e6; color: var(--amber);
+  border: 1px solid var(--line); cursor: pointer;
+}
+.agos-cabinet-stage .hbtn.spark.small { width: 32px; height: 32px; }
+
+/* ---------- хедер Главной ---------- */
+.agos-cabinet-stage .hh-row {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+}
+.agos-cabinet-stage .askbar {
+  flex: 1; display: flex; align-items: center; gap: 6px;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; padding: 4px 6px 4px 12px;
+}
+.agos-cabinet-stage .ask-go {
+  flex: 1; display: flex; align-items: center; gap: 8px;
+  background: none; border: none; cursor: pointer; padding: 8px 0;
+}
+.agos-cabinet-stage .ask-spark { color: var(--amber); line-height: 0; }
+.agos-cabinet-stage .ask-ph { color: var(--ink-3); font-size: 15px; }
+.agos-cabinet-stage .ask-mic2 {
+  display: grid; place-items: center;
+  width: 34px; height: 34px; border-radius: 10px;
+  background: none; border: none; color: var(--ink-3); cursor: pointer;
+}
+.agos-cabinet-stage .avatar-btn {
+  position: relative; width: 42px; height: 42px; border-radius: 50%;
+  background: var(--green); color: #fff; border: none; cursor: pointer;
+  font-weight: 700; font-size: 14px;
+}
+.agos-cabinet-stage .avatar-dot {
+  position: absolute; top: 0; right: 0;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--amber); border: 2px solid var(--bg);
+}
+
+/* ---------- офлайн / back ---------- */
+.agos-cabinet-stage .offline-bar {
+  background: #fdeccf; color: #8a5a12; font-size: 12.5px;
+  text-align: center; padding: 6px 10px;
+}
+.agos-cabinet-stage .back-strip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: none; color: var(--ink-3);
+  font-size: 14px; cursor: pointer; margin-bottom: 8px; padding: 4px 0;
+}
+.agos-cabinet-stage .arrow { font-size: 18px; }
+
+/* ---------- блоки кабинета ---------- */
+.agos-cabinet-stage .home-stack { display: flex; flex-direction: column; gap: 16px; }
+.agos-cabinet-stage .blk-h {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; letter-spacing: .04em; color: var(--ink-3);
+  margin-bottom: 6px;
+}
+.agos-cabinet-stage .blk-h-sub { font-weight: 400; }
+.agos-cabinet-stage .cab-card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; padding: 4px 14px;
+}
+.agos-cabinet-stage .cab-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line);
+}
+.agos-cabinet-stage .cab-card > .cab-row:last-child { border-bottom: none; }
+.agos-cabinet-stage .cab-k { font-size: 11px; color: var(--ink-3); }
+.agos-cabinet-stage .cab-v { font-size: 14px; text-align: right; }
+.agos-cabinet-stage .cab-row.amber .cab-v { color: var(--amber); }
+.agos-cabinet-stage .cab-warn {
+  font-size: 12.5px; color: #8a5a12; padding: 8px 0 11px; line-height: 1.4;
+}
+.agos-cabinet-stage .cab-memb { display: flex; align-items: center; gap: 8px; padding: 12px 0 6px; }
+.agos-cabinet-stage .cab-memb-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ink-4); }
+.agos-cabinet-stage .cab-memb-dot.ok { background: var(--green); }
+.agos-cabinet-stage .cab-memb-dot.warn { background: var(--amber); }
+.agos-cabinet-stage .cab-memb-dot.off { background: var(--ink-4); }
+.agos-cabinet-stage .cab-memb-t { font-size: 14px; font-weight: 600; }
+.agos-cabinet-stage .cab-memb-sub { font-size: 12.5px; color: var(--ink-3); padding-bottom: 10px; }
+.agos-cabinet-stage .mp-cta {
+  width: 100%; margin: 4px 0 12px; padding: 11px;
+  background: var(--green); color: #fff; border: none;
+  border-radius: 11px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.agos-cabinet-stage .cab-tgl {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 12px 0; border: none; border-bottom: 1px solid var(--line);
+  background: none; cursor: pointer; text-align: left;
+}
+.agos-cabinet-stage .cab-card > .cab-tgl:last-child { border-bottom: none; }
+.agos-cabinet-stage .cab-tgl.locked { cursor: default; opacity: .8; }
+.agos-cabinet-stage .cab-tgl-t { font-size: 14px; display: block; }
+.agos-cabinet-stage .cab-tgl-s { font-size: 12px; color: var(--ink-3); display: block; margin-top: 2px; }
+.agos-cabinet-stage .sw {
+  width: 40px; height: 24px; border-radius: 12px; background: var(--ink-4);
+  position: relative; flex-shrink: 0; transition: background .15s;
+}
+.agos-cabinet-stage .sw.on { background: var(--green); }
+.agos-cabinet-stage .sw i {
+  position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
+  border-radius: 50%; background: #fff; transition: left .15s;
+}
+.agos-cabinet-stage .sw.on i { left: 18px; }
+.agos-cabinet-stage .cab-link {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 13px 0; border: none; border-bottom: 1px solid var(--line);
+  background: none; cursor: pointer; font-size: 14px; color: var(--ink); text-align: left;
+}
+.agos-cabinet-stage .cab-link.quiet { color: var(--ink-3); }
+.agos-cabinet-stage .att-arr { color: var(--ink-3); line-height: 0; }
+.agos-cabinet-stage .cab-ver { font-size: 11px; color: var(--ink-4); padding: 12px 0 6px; }
+
+/* ---------- нижний лист ---------- */
+.agos-cabinet-stage .sheet-wrap {
+  position: absolute; inset: 0; z-index: 50;
+  background: rgba(20, 12, 4, .38);
+  display: flex; align-items: flex-end;
+}
+.agos-cabinet-stage .sheet {
+  width: 100%; max-height: 88%; overflow-y: auto;
+  background: var(--card); border-radius: 20px 20px 0 0;
+  padding: 10px 18px calc(18px + env(safe-area-inset-bottom));
+  animation: agos-sheet-up .22s ease;
+}
+@keyframes agos-sheet-up { from { transform: translateY(12%); opacity: .6; } to { transform: none; opacity: 1; } }
+.agos-cabinet-stage .sheet-grip {
+  width: 38px; height: 4px; border-radius: 2px; background: var(--line);
+  margin: 2px auto 12px;
+}
+.agos-cabinet-stage .sh-t { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+.agos-cabinet-stage .sh-b { font-size: 13.5px; color: var(--ink-3); line-height: 1.45; margin-bottom: 10px; }
+
+.agos-cabinet-stage .win-sum {
+  background: #f1f8f2; border: 1px solid #d5ead9; border-radius: 12px; padding: 12px 14px;
+}
+.agos-cabinet-stage .ws-hint { font-size: 11px; color: var(--ink-3); }
+.agos-cabinet-stage .ws-big { font-weight: 800; margin-top: 4px; }
+
+.agos-cabinet-stage .stack8 { display: flex; flex-direction: column; gap: 8px; }
+.agos-cabinet-stage .big-radio {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 12px 14px; text-align: left;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
+}
+.agos-cabinet-stage .big-radio.sel { border-color: var(--green); }
+.agos-cabinet-stage .br-dot {
+  width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--ink-4); flex-shrink: 0;
+}
+.agos-cabinet-stage .br-dot.on { border-color: var(--green); background: var(--green); }
+.agos-cabinet-stage .br-t { font-size: 14px; font-weight: 600; display: block; }
+.agos-cabinet-stage .br-s { font-size: 12px; color: var(--ink-3); display: block; margin-top: 1px; }
+.agos-cabinet-stage .br-body { display: block; }
+
+.agos-cabinet-stage .gate-list { display: flex; flex-direction: column; gap: 7px; }
+.agos-cabinet-stage .gate-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.agos-cabinet-stage .gate-ck { color: var(--green); font-weight: 700; }
+
+/* ---------- кнопка Cta ---------- */
+.agos-cabinet-stage .cta {
+  width: 100%; margin-top: 10px; padding: 13px;
+  background: var(--ink); color: #fff; border: none; border-radius: 12px;
+  font-size: 15px; font-weight: 600; cursor: pointer;
+}
+.agos-cabinet-stage .cta.green { background: var(--green); }
+.agos-cabinet-stage .cta.ghost { background: none; color: var(--ink-3); border: 1px solid var(--line); }
+.agos-cabinet-stage .cta.danger { background: var(--red); }
+.agos-cabinet-stage .cta.warnv { background: var(--amber); }
+.agos-cabinet-stage .cta.is-disabled { opacity: .45; cursor: default; }
+
+/* ---------- форма документов ---------- */
+.agos-cabinet-stage .field { margin-bottom: 10px; }
+.agos-cabinet-stage .lab { font-size: 12px; color: var(--ink-3); margin-bottom: 5px; }
+.agos-cabinet-stage .seg2 {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  background: #f0e9dc; border-radius: 10px; padding: 4px;
+}
+.agos-cabinet-stage .seg2-b {
+  padding: 9px; border: none; border-radius: 8px; background: none;
+  font-size: 14px; color: var(--ink-3); cursor: pointer;
+}
+.agos-cabinet-stage .seg2-b.on { background: #fff; color: var(--ink); font-weight: 600; }
+.agos-cabinet-stage .progress { display: flex; gap: 4px; }
+.agos-cabinet-stage .progress > div {
+  flex: 1; height: 4px; border-radius: 2px; background: var(--line);
+}
+.agos-cabinet-stage .progress > div.done { background: var(--green); }
+.agos-cabinet-stage .progress > div.cur { background: var(--amber); }
+.agos-cabinet-stage .cb-row {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 11px 2px; border: none; border-bottom: 1px solid var(--line);
+  background: none; text-align: left; cursor: pointer; color: var(--ink);
+}
+.agos-cabinet-stage .cb-box {
+  width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--ink-4);
+  display: grid; place-items: center; flex-shrink: 0; font-size: 12px; color: #fff;
+}
+.agos-cabinet-stage .cb-box.ch { background: var(--green); border-color: var(--green); }
+.agos-cabinet-stage .hint-inline { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+.agos-cabinet-stage .finput {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--ink);
+  background: #fff;
+}
+.agos-cabinet-stage .footnote { font-size: 11.5px; color: var(--ink-3); text-align: center; margin-top: 6px; }
+
+/* ---------- тост ---------- */
+.agos-cabinet-stage .toast {
+  position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%);
+  z-index: 60; max-width: 86%;
+  background: rgba(30, 18, 6, .94); color: #fff;
+  font-size: 13px; line-height: 1.4; padding: 11px 16px; border-radius: 12px;
+  text-align: center;
+  animation: agos-toast-in .2s ease;
+}
+@keyframes agos-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* ---------- Главная · стикер цены в хедере ---------- */
+.agos-cabinet-stage .sticker {
+  flex-shrink: 0; min-width: 66px; display: flex; flex-direction: column; align-items: center; gap: 0;
+  border: none; border-radius: 10px;
+  background: color-mix(in srgb, var(--ok) 13%, var(--card)); padding: 5px 10px 6px; cursor: pointer;
+}
+.agos-cabinet-stage .st-k { font-size: 8px; letter-spacing: .04em; color: var(--ink-2); white-space: nowrap; }
+.agos-cabinet-stage .st-v { display: flex; align-items: center; gap: 3px; font-size: 15px; font-weight: 700; color: var(--ink); line-height: 1.15; font-variant-numeric: tabular-nums; }
+.agos-cabinet-stage .st-arr { font-style: normal; font-size: 11px; }
+.agos-cabinet-stage .sticker.trend-up .st-arr { color: var(--ok); }
+.agos-cabinet-stage .sticker.trend-down .st-arr { color: var(--warn); }
+.agos-cabinet-stage .sticker.trend-flat .st-arr { color: var(--ink-3); }
+
+/* ---------- Главная · баннер «Актуальное» ---------- */
+.agos-cabinet-stage .ban { position: relative; height: 104px; flex-shrink: 0; border: 1px solid var(--line-soft); border-radius: 12px; overflow: hidden; background: var(--paper-2); }
+.agos-cabinet-stage .ban-track { display: flex; height: 100%; transition: transform .25s cubic-bezier(.16, 1, .3, 1); }
+.agos-cabinet-stage .ban-card { min-width: 100%; height: 100%; border: none; background: var(--paper-2); text-align: left; padding: 13px 14px 24px; display: flex; flex-direction: row; gap: 12px; align-items: center; overflow: hidden; cursor: pointer; }
+.agos-cabinet-stage .ban-ic { width: 40px; height: 40px; flex-shrink: 0; border-radius: 11px; display: grid; place-items: center; color: var(--ink-2); background: var(--paper-3); }
+.agos-cabinet-stage .ban-ic .ban-tenge { font-size: 21px; font-weight: 700; line-height: 1; }
+.agos-cabinet-stage .ban-tx { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.agos-cabinet-stage .ban-card.gold { background: var(--gold-bg); }
+.agos-cabinet-stage .ban-card.gold .ban-ic { background: color-mix(in srgb, var(--warn) 20%, var(--card)); color: var(--warn); }
+.agos-cabinet-stage .ban-card.green { background: color-mix(in srgb, var(--ok) 9%, var(--card)); }
+.agos-cabinet-stage .ban-card.green .ban-ic { background: color-mix(in srgb, var(--ok) 16%, var(--card)); color: var(--ok); }
+.agos-cabinet-stage .ban-k { font-size: 8.5px; letter-spacing: .07em; color: var(--ink-3); }
+.agos-cabinet-stage .ban-t { font-weight: 700; font-size: 13.5px; line-height: 1.25; }
+.agos-cabinet-stage .ban-s { font-size: 10.5px; color: var(--ink-2); }
+.agos-cabinet-stage .ban-dots { position: absolute; right: 14px; bottom: 8px; display: flex; gap: 4px; }
+.agos-cabinet-stage .ban-dot { width: 6px; height: 6px; padding: 0; border: none; border-radius: 99px; background: var(--ink-4); cursor: pointer; }
+.agos-cabinet-stage .ban-dot.on { background: var(--ink-2); width: 16px; }
+
+/* ---------- Главная · грид сервисов (якорь) ---------- */
+.agos-cabinet-stage .svc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.agos-cabinet-stage .svc { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; border: 1px solid var(--line-soft); border-radius: 11px; background: var(--card); padding: 12px 2px 9px; color: var(--ink-2); cursor: pointer; }
+.agos-cabinet-stage .svc-ic { display: grid; place-items: center; }
+.agos-cabinet-stage .svc-t { font-size: 9.6px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.agos-cabinet-stage .svc.green { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 7%, var(--card)); }
+.agos-cabinet-stage .svc.green .svc-ic { color: var(--ok); }
+.agos-cabinet-stage .svc.soon { opacity: .55; cursor: default; }
+.agos-cabinet-stage .svc-soon { position: absolute; top: -7px; right: -3px; font-size: 8px; border: 1px solid var(--line-soft); background: var(--paper-2); border-radius: 99px; padding: 1px 6px; color: var(--ink-3); }
+
+/* ---------- Главная · ярусы ---------- */
+.agos-cabinet-stage .tier-h { font-size: 9.5px; letter-spacing: .06em; color: var(--ink-3); padding: 0 2px 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.agos-cabinet-stage .tier-h-l { display: flex; align-items: center; gap: 6px; }
+.agos-cabinet-stage .tier-dot { width: 6px; height: 6px; border-radius: 99px; flex-shrink: 0; }
+.agos-cabinet-stage .tier-dot.amber { background: var(--warn); }
+.agos-cabinet-stage .tier-dot.gray { background: var(--ink-3); }
+.agos-cabinet-stage .tier-more { background: none; border: none; padding: 0; font-size: 9px; letter-spacing: 0; color: var(--ink-2); text-decoration: underline; cursor: pointer; }
+
+/* Ярус 1 · карточка решения */
+.agos-cabinet-stage .dec-card { border: 1px solid var(--line-soft); border-left: 4px solid var(--warn); border-radius: 11px; background: var(--card); padding: 10px 12px 11px; }
+.agos-cabinet-stage .dec-src { font-size: 8.5px; letter-spacing: .06em; color: var(--ink-3); }
+.agos-cabinet-stage .dec-t { font-weight: 700; font-size: 13.5px; line-height: 1.3; margin-top: 3px; }
+.agos-cabinet-stage .dec-m { font-size: 11.5px; color: var(--ink-2); margin-top: 2px; line-height: 1.35; }
+.agos-cabinet-stage .dec-btns { display: flex; gap: 6px; margin-top: 9px; }
+.agos-cabinet-stage .dec-btn { flex: 1; min-height: 38px; border-radius: 8px; padding: 8px 6px; font-weight: 700; font-size: 11.5px; line-height: 1.2; cursor: pointer; }
+.agos-cabinet-stage .dec-btn.primary { background: var(--primary); border: 1.5px solid var(--primary); color: #fff; }
+.agos-cabinet-stage .dec-btn.ghost { background: var(--card); border: 1.5px solid var(--line-soft); color: var(--ink); }
+
+/* Ярус 2 · карточка наблюдения */
+.agos-cabinet-stage .obs-card { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1px solid var(--line-soft); border-radius: 11px; background: var(--card); padding: 11px 12px; min-height: 50px; cursor: pointer; }
+.agos-cabinet-stage .obs-dot { width: 7px; height: 7px; border-radius: 99px; flex-shrink: 0; }
+.agos-cabinet-stage .obs-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.agos-cabinet-stage .obs-t { font-size: 13px; font-weight: 700; line-height: 1.25; }
+.agos-cabinet-stage .obs-s { font-size: 11px; color: var(--ink-2); line-height: 1.3; }
+.agos-cabinet-stage .obs-src { flex-shrink: 0; align-self: flex-start; padding-top: 1px; font-size: 9.5px; color: var(--ink-3); letter-spacing: .02em; }
+
+/* Ярус 3 · быстрый доступ */
+.agos-cabinet-stage .work-farm { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; border: 1px solid var(--line-soft); border-radius: 11px; background: var(--paper-2); padding: 10px 12px; cursor: pointer; }
+.agos-cabinet-stage .wf-ic { color: var(--ink-2); display: grid; place-items: center; flex-shrink: 0; }
+.agos-cabinet-stage .wf-t { flex: 1; font-size: 12.5px; font-weight: 700; }
+.agos-cabinet-stage .ahead { border: 1px dashed var(--line-soft); border-radius: 11px; background: var(--paper-2); padding: 9px 12px; }
+.agos-cabinet-stage .ahead-h { font-size: 9px; letter-spacing: .06em; color: var(--ink-3); margin-bottom: 5px; }
+.agos-cabinet-stage .ahead-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 4px 0; }
+.agos-cabinet-stage .ahead-row + .ahead-row { border-top: 1px dashed var(--ink-4); }
+.agos-cabinet-stage .ahead-n { font-size: 12.5px; font-weight: 600; }
+.agos-cabinet-stage .ahead-d { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; }
+
+/* скелетоны */
+.agos-cabinet-stage .skel-wrap { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; }
+.agos-cabinet-stage .skel-blk { border-radius: 11px; background: linear-gradient(100deg, var(--paper-2) 35%, var(--paper-3) 48%, var(--paper-2) 61%); background-size: 220% 100%; animation: agos-skel 1.1s linear infinite; }
+@keyframes agos-skel { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+/* ---------- шторка цен ---------- */
+.agos-cabinet-stage .ps-wrap { position: absolute; inset: 0; z-index: 50; background: color-mix(in srgb, var(--ink) 30%, transparent); display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+.agos-cabinet-stage .ps-sheet { background: var(--card); border-radius: 18px 18px 0 0; max-height: 90%; display: flex; flex-direction: column; padding: 8px 14px calc(12px + env(safe-area-inset-bottom)); animation: agos-sheet-up .25s cubic-bezier(.16, 1, .3, 1); }
+.agos-cabinet-stage .ps-handle { width: 42px; height: 5px; border-radius: 99px; background: var(--ink-4); margin: 2px auto 10px; flex-shrink: 0; }
+.agos-cabinet-stage .ps-head { flex-shrink: 0; padding-bottom: 8px; border-bottom: 1.5px dashed var(--line-soft); }
+.agos-cabinet-stage .ps-title { font-size: 17px; font-weight: 700; }
+.agos-cabinet-stage .ps-sub { font-size: 9.5px; color: var(--ink-3); margin-top: 2px; }
+.agos-cabinet-stage .ps-scroll { flex: 1; overflow-y: auto; min-height: 0; padding-top: 10px; }
+.agos-cabinet-stage .ps-main { border: 1.5px solid var(--ok); border-radius: 12px; background: color-mix(in srgb, var(--ok) 5%, var(--card)); padding: 12px; }
+.agos-cabinet-stage .psm-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.agos-cabinet-stage .psm-name { font-size: 14px; font-weight: 700; }
+.agos-cabinet-stage .psm-pricerow { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: 6px; }
+.agos-cabinet-stage .psm-price { font-size: 30px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.agos-cabinet-stage .psm-unit { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.agos-cabinet-stage .pbars { display: flex; align-items: flex-end; gap: 3px; height: 30px; }
+.agos-cabinet-stage .pbar { width: 7px; border-radius: 2px 2px 0 0; background: var(--ink-4); }
+.agos-cabinet-stage .pbar.prev { background: color-mix(in srgb, var(--ok) 45%, var(--ink-4)); }
+.agos-cabinet-stage .pbar.now { background: var(--ok); }
+.agos-cabinet-stage .psm-note { font-size: 11px; color: var(--ink-2); margin-top: 8px; }
+.agos-cabinet-stage .psm-prot { font-size: 12px; color: var(--ink); margin-top: 6px; }
+.agos-cabinet-stage .psm-herd { margin-top: 11px; padding: 10px; border-radius: 10px; background: color-mix(in srgb, var(--ok) 11%, var(--card)); border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent); }
+.agos-cabinet-stage .psm-herd.none { font-size: 11.5px; color: var(--ink-2); }
+.agos-cabinet-stage .ph-k { font-size: 8.5px; letter-spacing: .05em; color: var(--ink-2); }
+.agos-cabinet-stage .ph-v { font-size: 13px; margin-top: 2px; }
+.agos-cabinet-stage .ph-cta { margin-top: 9px; width: 100%; min-height: 46px; border: 1.5px solid var(--ok); background: var(--ok); color: #fff; border-radius: 9px; font-weight: 700; font-size: 13.5px; cursor: pointer; }
+.agos-cabinet-stage .pdelta { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 700; }
+.agos-cabinet-stage .pdelta .pd-arr { font-style: normal; }
+.agos-cabinet-stage .pdelta.up { color: var(--ok); }
+.agos-cabinet-stage .pdelta.down { color: var(--warn); }
+.agos-cabinet-stage .pdelta.flat { color: var(--ink-3); }
+.agos-cabinet-stage .pdelta.big { font-size: 12px; }
+.agos-cabinet-stage .pd-note { color: var(--ink-2); font-weight: 500; }
+.agos-cabinet-stage .ps-others-h { font-size: 8.5px; letter-spacing: .06em; color: var(--ink-3); margin: 14px 0 6px; }
+.agos-cabinet-stage .ps-others { display: flex; flex-direction: column; }
+.agos-cabinet-stage .ps-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: none; border: none; border-bottom: 1px dashed var(--ink-4); padding: 11px 2px; min-height: 46px; cursor: pointer; }
+.agos-cabinet-stage .ps-row:last-child { border-bottom: none; }
+.agos-cabinet-stage .psr-n { font-size: 13px; color: var(--ink); }
+.agos-cabinet-stage .psr-r { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.agos-cabinet-stage .ps-disc { font-size: 11px; color: var(--ink-3); margin-top: 12px; line-height: 1.4; }
+.agos-cabinet-stage .ps-close { flex-shrink: 0; margin-top: 10px; width: 100%; min-height: 46px; border: 1.5px solid var(--line-soft); background: var(--card); border-radius: 9px; font-weight: 700; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+
+/* ---------- заглушка экрана ---------- */
+.agos-cabinet-stage .ph-stub {
+  margin-top: 60px; text-align: center; color: var(--ink-3);
+}
+.agos-cabinet-stage .ph-stub-t { font-size: 17px; font-weight: 700; color: var(--ink); }
+.agos-cabinet-stage .ph-stub-s { font-size: 13px; margin-top: 6px; }
+
+/* ===================================================================== */
+/* TSP-1 · Визард «Новая партия» (SCR-02) + Результат публикации (SCR-03) */
+/* Источник истины — prototypes/Sell Flow Prototype.html. Только добавление. */
+/* ===================================================================== */
+
+/* контейнер визарда и скролл */
+.agos-cabinet-stage .wiz-container { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.agos-cabinet-stage .wiz-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+.agos-cabinet-stage .wiz-scroll::-webkit-scrollbar { width: 0; }
+
+/* шапка-навигация шага */
+.agos-cabinet-stage .h-back { display: flex; justify-content: space-between; align-items: center; padding: 0 2px 6px; font-size: 11px; color: var(--ink-3); min-height: 18px; flex-shrink: 0; }
+.agos-cabinet-stage .h-back .mono { white-space: nowrap; }
+.agos-cabinet-stage .linkbtn { background: none; border: none; padding: 0; font-size: 11px; color: var(--ink-2); white-space: nowrap; cursor: pointer; }
+.agos-cabinet-stage .h-back .arrow { font-family: ui-monospace, 'SF Mono', monospace; font-weight: 700; }
+
+/* заголовки шага */
+.agos-cabinet-stage .step-h1 { font-weight: 700; font-size: 21px; line-height: 1.15; letter-spacing: -.01em; margin: 6px 2px 6px; }
+.agos-cabinet-stage .step-h1.center { text-align: center; }
+.agos-cabinet-stage .step-sub { font-size: 12.5px; color: var(--ink-3); margin: 0 2px 10px; }
+.agos-cabinet-stage .sep { height: 8px; }
+
+/* поля визарда */
+.agos-cabinet-stage .field.nomb { margin-bottom: 0; }
+.agos-cabinet-stage .field .hint { font-size: 10px; color: var(--ink-3); margin-top: 4px; }
+.agos-cabinet-stage .field.err .finput, .agos-cabinet-stage .field.err .fselect { border-color: var(--bad); }
+.agos-cabinet-stage .field.miss .finput, .agos-cabinet-stage .field.miss .fselect { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 6%, var(--card)); }
+.agos-cabinet-stage .field.miss .fat-card { border-color: var(--warn); }
+.agos-cabinet-stage .selwrap { position: relative; display: block; }
+.agos-cabinet-stage .selwrap::after { content: "\25BE"; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--ink-3); pointer-events: none; }
+.agos-cabinet-stage .selwrap .fselect { padding-right: 28px; }
+.agos-cabinet-stage .fselect { width: 100%; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--card); font-family: inherit; font-size: 16px; font-weight: 600; color: var(--ink); padding: 8px 10px; outline: none; appearance: none; -webkit-appearance: none; cursor: pointer; }
+.agos-cabinet-stage .fselect:focus { border-color: var(--line); }
+.agos-cabinet-stage .finput.mono { font-family: ui-monospace, 'SF Mono', monospace; font-size: 14px; }
+.agos-cabinet-stage .finput.big { font-size: 24px; }
+.agos-cabinet-stage .finput.area { font-size: 14px; font-weight: 400; resize: none; }
+.agos-cabinet-stage .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.agos-cabinet-stage .field-err { font-size: 11px; color: var(--bad); margin: 2px 2px 8px; }
+.agos-cabinet-stage .field-err.amber { color: var(--warn); }
+.agos-cabinet-stage .kind-row { display: flex; align-items: baseline; gap: 8px; margin: 0 2px 12px; }
+.agos-cabinet-stage .kind-row .kr-k { font-family: ui-monospace, 'SF Mono', monospace; font-size: 9px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
+
+/* вторичная ссылка под CTA */
+.agos-cabinet-stage .link-skip { display: block; width: 100%; text-align: center; padding: 7px; font-size: 11px; color: var(--ink-3); text-decoration: underline; background: none; border: none; margin-top: 2px; cursor: pointer; }
+
+/* степпер числовых полей (Шаг 1) */
+.agos-cabinet-stage .fix-badge { display: inline-block; border: 1.5px solid var(--line); border-radius: 6px; padding: 2px 8px; font-weight: 700; font-size: 12px; background: var(--paper-2); }
+.agos-cabinet-stage .stp { display: grid; grid-template-columns: 52px minmax(0,1fr) 52px; gap: 6px; margin-top: 4px; }
+.agos-cabinet-stage .stp-b { height: 48px; border: 1px solid var(--line-soft); border-radius: 9px; background: var(--card); font-size: 22px; font-weight: 700; color: var(--ink); cursor: pointer; }
+.agos-cabinet-stage .stp-b:active { background: var(--paper-2); }
+.agos-cabinet-stage .stp-i { min-width: 0; border: 1px solid var(--line-soft); border-radius: 9px; text-align: center; font-size: 20px; font-weight: 700; background: var(--card); color: var(--ink); outline: none; }
+.agos-cabinet-stage .stp-i:focus { border-color: var(--line); }
+
+/* упитанность (Шаг 1) */
+.agos-cabinet-stage .fat-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin-top: 4px; }
+.agos-cabinet-stage .fat-card { border: 1px solid var(--line-soft); border-radius: 9px; background: var(--card); padding: 13px 2px; font-size: 11.5px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; cursor: pointer; }
+.agos-cabinet-stage .fat-card.sel { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 9%, var(--card)); box-shadow: inset 0 0 0 1px var(--ok); }
+
+/* окно отгрузки (Шаг 2) */
+.agos-cabinet-stage .miss-ring .big-radio { border-color: var(--warn); }
+.agos-cabinet-stage .win-sum .ws-big { font-weight: 700; font-size: 15px; }
+.agos-cabinet-stage .win-sum .ws-edit { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.agos-cabinet-stage .note { border: 1.5px solid var(--line-soft); border-radius: 10px; background: var(--paper); padding: 9px 11px; margin-top: 10px; font-size: 12px; color: var(--ink-2); line-height: 1.4; }
+.agos-cabinet-stage .note-t { font-size: 9.5px; font-weight: 700; color: var(--ink); letter-spacing: .05em; margin-bottom: 2px; }
+
+/* категория (Шаг 3) */
+.agos-cabinet-stage .cat-loader { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 60px 20px; font-size: 13px; color: var(--ink-2); text-align: center; }
+.agos-cabinet-stage .spin { width: 34px; height: 34px; border-radius: 99px; border: 3px solid var(--ok); border-top-color: transparent; animation: agos-spin 1.1s linear infinite; }
+@keyframes agos-spin { to { transform: rotate(360deg); } }
+.agos-cabinet-stage .cat-card { border-radius: 11px; padding: 12px 13px; }
+.agos-cabinet-stage .cat-card.ok { border: 1.5px solid var(--st-green); background: color-mix(in srgb, var(--st-green) 5%, var(--card)); }
+.agos-cabinet-stage .cat-card.unknown { border: 1px solid var(--line-soft); background: var(--paper-2); }
+.agos-cabinet-stage .cc-k { font-size: 9px; letter-spacing: .05em; color: var(--ink-3); }
+.agos-cabinet-stage .cc-name { font-weight: 700; font-size: 19px; line-height: 1.15; letter-spacing: -.01em; margin: 2px 0 6px; }
+.agos-cabinet-stage .cc-h { font-weight: 700; font-size: 16px; margin-bottom: 5px; }
+.agos-cabinet-stage .cc-b { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.agos-cabinet-stage .cc-what { font-size: 9.5px; letter-spacing: .05em; color: var(--ink-3); margin: 2px 2px 0; }
+
+/* цена (Шаг 4) */
+.agos-cabinet-stage .ref-block { border: 1.5px solid var(--line-soft); border-radius: 10px; padding: 9px 12px; background: var(--paper-2); margin-bottom: 10px; }
+.agos-cabinet-stage .rb-t { font-size: 13px; line-height: 1.4; }
+.agos-cabinet-stage .rb-disc { font-size: 10px; color: var(--ink-3); margin-top: 4px; line-height: 1.35; }
+.agos-cabinet-stage .price-field .finput { letter-spacing: .02em; }
+.agos-cabinet-stage .calc { font-size: 11.5px; color: var(--ink-2); margin: 0 2px 8px; line-height: 1.4; }
+.agos-cabinet-stage .calc b { font-size: 14px; }
+.agos-cabinet-stage .calc-note { color: var(--ink-3); font-size: 10px; }
+.agos-cabinet-stage .warn-panel { border: 1.5px solid var(--warn); border-radius: 10px; background: var(--gold-bg); padding: 9px 11px; margin: 4px 0 8px; }
+.agos-cabinet-stage .wp-t { font-weight: 700; font-size: 12.5px; }
+.agos-cabinet-stage .wp-b { font-size: 11.5px; color: var(--ink-2); margin-top: 3px; line-height: 1.4; }
+
+/* проверка (Шаг 5) */
+.agos-cabinet-stage .sum-card { border: 1.5px solid var(--line); border-radius: 11px; padding: 6px 12px; background: var(--card); }
+.agos-cabinet-stage .pub-when { font-size: 13px; margin: 10px 2px; }
+.agos-cabinet-stage .kv { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; }
+.agos-cabinet-stage .kv-k { width: 108px; flex-shrink: 0; font-size: 9px; color: var(--ink-3); letter-spacing: .04em; }
+.agos-cabinet-stage .kv-v { flex: 1; font-size: 13px; }
+.agos-cabinet-stage .kv-edit { background: none; border: none; color: var(--ink-2); font-size: 13px; padding: 0 2px; cursor: pointer; }
+.agos-cabinet-stage .kv-edit-inline { color: var(--ink-2); }
+
+/* результат публикации (SCR-03) */
+.agos-cabinet-stage .pub-res { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 0 8px; }
+.agos-cabinet-stage .pub-ic { width: 64px; height: 64px; border-radius: 99px; border: 2px solid var(--line); display: grid; place-items: center; font-size: 28px; background: var(--card); }
+.agos-cabinet-stage .pub-ic.ok { border-color: var(--st-green); color: var(--st-green); }
+.agos-cabinet-stage .pub-ic.send { border-color: var(--st-yellow); color: var(--st-yellow); }
+.agos-cabinet-stage .pub-ic.wait { border-color: var(--st-sky); color: var(--st-sky); }
+.agos-cabinet-stage .pub-ic.plan { border-color: var(--st-blue); color: var(--st-blue); }
+.agos-cabinet-stage .pub-body { font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+.agos-cabinet-stage .pub-body p { margin: 6px 0; }
+.agos-cabinet-stage .pr-price { font-size: 14px; }
+.agos-cabinet-stage .pr-price b { font-size: 19px; }
+.agos-cabinet-stage .pr-badge { display: inline-block; border: 1.5px solid var(--st-green); color: var(--st-green); border-radius: 999px; font-size: 11px; font-weight: 700; padding: 2px 10px; margin: 4px 0; }
+
+/* Рынок: гейт «Продаю», витрина */
+.agos-cabinet-stage .work-start { border: 1.5px dashed var(--line-soft); border-radius: 11px; padding: 15px 14px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.agos-cabinet-stage .ws-t { font-weight: 700; font-size: 14.5px; line-height: 1.25; }
+.agos-cabinet-stage .ws-s { font-size: 11.5px; color: var(--ink-3); line-height: 1.4; max-width: 250px; }
+.agos-cabinet-stage .ws-btn { border: 1.5px solid var(--primary); background: var(--primary); color: #fff; border-radius: 9px; padding: 11px 16px; font-weight: 700; font-size: 13px; margin-top: 4px; cursor: pointer; }
+.agos-cabinet-stage .mkt-sell-btn { width: 100%; border: 1.5px solid var(--primary); background: var(--primary); color: #fff; border-radius: 9px; padding: 12px 16px; font-weight: 700; font-size: 14px; box-shadow: 0 2px 6px color-mix(in srgb, var(--ink) 18%, transparent); cursor: pointer; }
+.agos-cabinet-stage .mkt-all-link { display: block; width: 100%; text-align: center; background: none; border: none; padding: 11px; font-size: 12.5px; font-weight: 700; color: var(--ink-2); text-decoration: underline; cursor: pointer; }
+.agos-cabinet-stage .sell-gate { border: 1.5px dashed var(--line-soft); border-radius: 11px; padding: 13px; display: flex; flex-direction: column; gap: 9px; align-items: flex-start; }
+.agos-cabinet-stage .sell-gate .ws-btn { align-self: stretch; }
+.agos-cabinet-stage .sg-t { font-weight: 700; font-size: 14.5px; line-height: 1.25; }
+.agos-cabinet-stage .sg-note { width: 100%; font-size: 12px; color: var(--ink-2); background: var(--paper-2); border-radius: 8px; padding: 8px 10px; line-height: 1.4; }
+.agos-cabinet-stage .obs-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.agos-cabinet-stage .obs-t { font-size: 13px; font-weight: 700; line-height: 1.25; }
+.agos-cabinet-stage .obs-s { font-size: 11px; color: var(--ink-2); line-height: 1.3; }
+
+/* ── TSP-2: ListScreen ─────────────────────────────────────── */
+.agos-cabinet-stage .lst-wrap { display: flex; flex-direction: column; min-height: 100%; }
+.agos-cabinet-stage .lst-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 4px; }
+.agos-cabinet-stage .lst-back { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--ink); padding: 4px 6px; }
+.agos-cabinet-stage .lst-title { flex: 1; font-weight: 800; font-size: 18px; }
+.agos-cabinet-stage .lst-new { background: var(--primary); border: none; border-radius: 8px; color: #fff; font-weight: 700; font-size: 12px; padding: 7px 12px; cursor: pointer; }
+.agos-cabinet-stage .lst-filters { display: flex; gap: 0; padding: 10px 14px 0; border-bottom: 1px solid var(--line-soft); }
+.agos-cabinet-stage .lst-tab { flex: 1; padding: 8px 4px; font-size: 13px; font-weight: 600; color: var(--ink-2); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; transition: color .15s, border-color .15s; }
+.agos-cabinet-stage .lst-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+.agos-cabinet-stage .lst-section-head { font-size: 10px; font-weight: 700; letter-spacing: .08em; color: var(--ink-3); padding: 12px 14px 4px; text-transform: uppercase; }
+.agos-cabinet-stage .lst-section-head.amber { color: var(--amber); }
+.agos-cabinet-stage .lst-card { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; border: 1px solid var(--line-soft); border-radius: 11px; background: var(--card); padding: 11px 13px; cursor: pointer; }
+.agos-cabinet-stage .lst-card.decision { border-left: 3px solid var(--amber); }
+.agos-cabinet-stage .lst-card-r1 { font-size: 13.5px; font-weight: 700; line-height: 1.25; }
+.agos-cabinet-stage .lst-card-r2 { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--ink-2); }
+.agos-cabinet-stage .lst-dot { width: 6px; height: 6px; border-radius: 99px; flex-shrink: 0; }
+.agos-cabinet-stage .lst-card-r3 { font-size: 12px; color: var(--ink-2); margin-top: 1px; }
+.agos-cabinet-stage .lst-card-r3 span { font-weight: 700; color: var(--ink); font-family: monospace; }
+.agos-cabinet-stage .lst-card-r4 { font-size: 12px; color: var(--amber); font-weight: 600; margin-top: 3px; }
+.agos-cabinet-stage .lst-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 24px; text-align: center; color: var(--ink-3); font-size: 14px; }
+.agos-cabinet-stage .lst-fab { position: sticky; bottom: 60px; margin: 12px 14px 0; width: calc(100% - 28px); background: var(--primary); border: none; border-radius: 11px; color: #fff; font-weight: 700; font-size: 14px; padding: 13px; cursor: pointer; box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 20%, transparent); }
+
+/* ── TSP-2: BatchScreen ─────────────────────────────────────── */
+.agos-cabinet-stage .bat-wrap { display: flex; flex-direction: column; min-height: 100%; }
+.agos-cabinet-stage .bat-back-row { display: flex; align-items: center; padding: 10px 10px 0; }
+.agos-cabinet-stage .bat-back { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--ink); padding: 4px 8px; }
+.agos-cabinet-stage .bpath { display: flex; align-items: center; gap: 4px; padding: 8px 14px; flex-wrap: wrap; }
+.agos-cabinet-stage .bpath-step { font-size: 11px; color: var(--ink-3); }
+.agos-cabinet-stage .bpath-step.active { color: var(--primary); font-weight: 700; }
+.agos-cabinet-stage .bpath-sep { font-size: 11px; color: var(--line); }
+.agos-cabinet-stage .bat-z1 { padding: 10px 14px 14px; }
+.agos-cabinet-stage .bat-phrase { font-size: 17px; font-weight: 800; line-height: 1.2; margin-top: 6px; }
+.agos-cabinet-stage .bat-next { font-size: 12px; color: var(--ink-2); margin-top: 4px; line-height: 1.4; }
+.agos-cabinet-stage .bat-z2 { padding: 12px 14px; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); background: var(--paper-2); }
+.agos-cabinet-stage .bat-price-label { font-size: 10px; font-weight: 700; letter-spacing: .07em; color: var(--ink-3); text-transform: uppercase; }
+.agos-cabinet-stage .bat-price-big { font-size: 28px; font-weight: 800; font-family: monospace; margin-top: 2px; }
+.agos-cabinet-stage .bat-price-sum { font-size: 11.5px; color: var(--ink-2); margin-top: 3px; }
+.agos-cabinet-stage .bat-z3 { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.agos-cabinet-stage .bat-warn-note { font-size: 11.5px; color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, transparent); border-radius: 8px; padding: 8px 10px; line-height: 1.4; }
+.agos-cabinet-stage .dec-actions { border: 1.5px solid var(--amber); border-radius: 11px; padding: 12px; display: flex; flex-direction: column; gap: 8px; background: color-mix(in srgb, var(--amber) 5%, transparent); }
+.agos-cabinet-stage .dec-actions-note { font-size: 12.5px; color: var(--ink-2); line-height: 1.4; }
+.agos-cabinet-stage .dec-price-input { width: 100%; border: 1.5px solid var(--line-soft); border-radius: 9px; padding: 10px 12px; font-size: 16px; background: var(--card); color: var(--ink); outline: none; font-family: monospace; }
+.agos-cabinet-stage .dec-price-input:focus { border-color: var(--primary); }
+.agos-cabinet-stage .bat-z4 { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.agos-cabinet-stage .bat-details-toggle { font-size: 12.5px; color: var(--primary); background: none; border: none; cursor: pointer; padding: 0; font-weight: 600; }
+.agos-cabinet-stage .bat-kv-row { display: flex; justify-content: space-between; font-size: 12.5px; padding: 4px 0; border-bottom: 1px solid var(--line-soft); }
+.agos-cabinet-stage .bat-kv-row:last-child { border-bottom: none; }
+.agos-cabinet-stage .bat-kv-k { color: var(--ink-3); }
+.agos-cabinet-stage .bat-kv-v { font-weight: 600; color: var(--ink); }
+.agos-cabinet-stage .bat-hist-item { font-size: 12px; color: var(--ink-2); padding: 4px 0; border-bottom: 1px dashed var(--line-soft); }
+.agos-cabinet-stage .bat-hist-item:last-child { border-bottom: none; }
+.agos-cabinet-stage .bat-hist-t { font-weight: 600; color: var(--ink); }
+.agos-cabinet-stage .bat-hist-d { color: var(--ink-3); margin-left: 6px; }
+.agos-cabinet-stage .bat-show-all { font-size: 12px; color: var(--primary); background: none; border: none; cursor: pointer; padding: 4px 0; font-weight: 600; }
+
+/* ── TSP-2: ReviewScreen ─────────────────────────────────────── */
+.agos-cabinet-stage .rev-wrap { padding: 14px; display: flex; flex-direction: column; gap: 18px; }
+.agos-cabinet-stage .rev-head { font-size: 18px; font-weight: 800; }
+.agos-cabinet-stage .rev-sub { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+.agos-cabinet-stage .rev-section-label { font-size: 12px; font-weight: 700; color: var(--ink-2); margin-bottom: 6px; }
+.agos-cabinet-stage .rev-textarea { width: 100%; border: 1.5px solid var(--line-soft); border-radius: 9px; padding: 10px 12px; font-size: 13px; background: var(--card); color: var(--ink); outline: none; resize: none; height: 80px; font-family: inherit; line-height: 1.4; }
+.agos-cabinet-stage .rev-textarea:focus { border-color: var(--primary); }
+
+/* ── TSP-3: MpkHomeScreen ───────────────────────────────────── */
+.agos-cabinet-stage .mpk-hero { margin: 14px; border-radius: 14px; background: #1a2e1a; color: #fff; padding: 16px; }
+.agos-cabinet-stage .mpk-hero-ic { font-size: 28px; line-height: 1; margin-bottom: 6px; }
+.agos-cabinet-stage .mpk-hero-name { font-size: 17px; font-weight: 800; line-height: 1.2; }
+.agos-cabinet-stage .mpk-hero-sub { font-size: 11.5px; opacity: .7; margin-top: 2px; }
+.agos-cabinet-stage .mpk-hero-stats { display: flex; gap: 0; margin-top: 14px; border-top: 1px solid rgba(255,255,255,.15); padding-top: 12px; }
+.agos-cabinet-stage .mpk-stat { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.agos-cabinet-stage .mpk-stat-v { font-size: 20px; font-weight: 800; font-family: monospace; }
+.agos-cabinet-stage .mpk-stat-l { font-size: 10px; opacity: .6; }
+
+.agos-cabinet-stage .mpk-banner { margin: 0 14px 10px; border: 1px solid var(--line-soft); border-radius: 11px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.agos-cabinet-stage .mpk-banner.ok { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 8%, transparent); }
+.agos-cabinet-stage .mpk-banner.bad { border-color: var(--red); background: color-mix(in srgb, var(--red) 8%, transparent); }
+.agos-cabinet-stage .mpk-banner.neutral { border-color: var(--line); }
+.agos-cabinet-stage .mpk-banner-t { font-size: 13.5px; font-weight: 700; }
+.agos-cabinet-stage .mpk-banner-s { font-size: 12px; color: var(--ink-2); line-height: 1.4; }
+
+.agos-cabinet-stage .mpk-lock { margin: 10px 14px; border: 1.5px dashed var(--line-soft); border-radius: 11px; padding: 16px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.agos-cabinet-stage .mpk-lock-ic { font-size: 28px; }
+.agos-cabinet-stage .mpk-lock-t { font-weight: 700; font-size: 14px; }
+.agos-cabinet-stage .mpk-lock-s { font-size: 12px; color: var(--ink-3); line-height: 1.4; max-width: 220px; }
+
+/* ── TSP-3: MpkTspScreen ───────────────────────────────────── */
+.agos-cabinet-stage .mpk-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 4px; }
+.agos-cabinet-stage .mpk-back { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--ink); padding: 4px 6px; }
+.agos-cabinet-stage .mpk-title { flex: 1; font-weight: 800; font-size: 18px; }
+.agos-cabinet-stage .mpk-new { background: var(--primary); border: none; border-radius: 8px; color: #fff; font-weight: 700; font-size: 12px; padding: 7px 12px; cursor: pointer; }
+
+.agos-cabinet-stage .mpk-stats-row { display: flex; gap: 8px; padding: 8px 14px; }
+.agos-cabinet-stage .mpk-stat-pill { flex: 1; background: var(--paper-2); border-radius: 9px; padding: 8px; text-align: center; }
+.agos-cabinet-stage .mpk-stat-pill .mpk-stat-v { font-size: 17px; color: var(--ink); }
+.agos-cabinet-stage .mpk-stat-pill .mpk-stat-l { font-size: 10px; color: var(--ink-3); }
+
+.agos-cabinet-stage .mpk-tabs { display: flex; gap: 0; padding: 10px 14px 0; border-bottom: 1px solid var(--line-soft); }
+.agos-cabinet-stage .mpk-tab { flex: 1; padding: 8px 4px; font-size: 13px; font-weight: 600; color: var(--ink-2); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; }
+.agos-cabinet-stage .mpk-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* Pool cards */
+.agos-cabinet-stage .pool-card { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line-soft); border-radius: 11px; background: var(--card); padding: 12px 13px; cursor: pointer; text-align: left; width: 100%; }
+.agos-cabinet-stage .pool-card-t { font-size: 14px; font-weight: 700; }
+.agos-cabinet-stage .pool-card-sub { font-size: 11.5px; color: var(--ink-2); }
+.agos-cabinet-stage .pool-progress { width: 100%; height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.agos-cabinet-stage .pool-progress-fill { height: 100%; border-radius: 99px; transition: width .3s; }
+.agos-cabinet-stage .pool-chip { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 6px; padding: 2px 7px; background: var(--paper-2); color: var(--ink-2); }
+.agos-cabinet-stage .pool-chip.filling { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); }
+.agos-cabinet-stage .pool-chip.executing { background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--green-d); }
+.agos-cabinet-stage .pool-chip.expired { background: color-mix(in srgb, var(--red) 10%, transparent); color: var(--red); }
+
+/* Maket-board batch cards */
+.agos-cabinet-stage .mb-card { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line-soft); border-radius: 11px; background: var(--card); padding: 11px 13px; cursor: pointer; text-align: left; width: 100%; }
+.agos-cabinet-stage .mb-card-t { font-size: 13.5px; font-weight: 700; }
+.agos-cabinet-stage .mb-card-sub { font-size: 11.5px; color: var(--ink-2); }
+.agos-cabinet-stage .mb-card-price { font-size: 13px; font-weight: 700; font-family: monospace; color: var(--ink); }
+.agos-cabinet-stage .mb-suitable { font-size: 11px; font-weight: 600; }
+.agos-cabinet-stage .mb-suitable.ok { color: var(--ok); }
+.agos-cabinet-stage .mb-suitable.no { color: var(--ink-3); }
+.agos-cabinet-stage .mb-live-dot { width: 7px; height: 7px; border-radius: 99px; background: var(--ok); display: inline-block; margin-right: 5px; animation: pulse-dot 1.5s infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+/* ── TSP-3: Modals (fullscreen) ───────────────────────────────── */
+.agos-cabinet-stage .mpk-modal { position: absolute; inset: 0; background: var(--bg); overflow-y: auto; z-index: 50; display: flex; flex-direction: column; }
+.agos-cabinet-stage .mpk-modal-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line-soft); flex-shrink: 0; }
+.agos-cabinet-stage .mpk-modal-title { flex: 1; font-size: 16px; font-weight: 800; }
+.agos-cabinet-stage .mpk-modal-body { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+.agos-cabinet-stage .mpk-modal-close { background: none; border: none; font-size: 20px; color: var(--ink-2); cursor: pointer; padding: 4px; }
+
+/* Form elements inside modals */
+.agos-cabinet-stage .mpk-field-label { font-size: 11px; font-weight: 700; color: var(--ink-3); letter-spacing: .05em; text-transform: uppercase; margin-bottom: 5px; }
+.agos-cabinet-stage .mpk-input { width: 100%; border: 1.5px solid var(--line-soft); border-radius: 9px; padding: 10px 12px; font-size: 15px; background: var(--card); color: var(--ink); outline: none; font-family: inherit; }
+.agos-cabinet-stage .mpk-input:focus { border-color: var(--primary); }
+.agos-cabinet-stage .mpk-input.error { border-color: var(--red); }
+.agos-cabinet-stage .mpk-select { width: 100%; border: 1.5px solid var(--line-soft); border-radius: 9px; padding: 10px 12px; font-size: 15px; background: var(--card); color: var(--ink); outline: none; cursor: pointer; }
+.agos-cabinet-stage .mpk-select:focus { border-color: var(--primary); }
+.agos-cabinet-stage .mpk-error-hint { font-size: 11.5px; color: var(--red); margin-top: 3px; }
+.agos-cabinet-stage .mpk-ok-hint { font-size: 11.5px; color: var(--ok); margin-top: 3px; }
+
+/* Pool line rows in CreatePool */
+.agos-cabinet-stage .pool-line-row { display: flex; gap: 6px; align-items: flex-start; }
+.agos-cabinet-stage .pool-line-row .mpk-select { flex: 2; }
+.agos-cabinet-stage .pool-line-row .mpk-input { flex: 1.5; }
+.agos-cabinet-stage .pool-line-del { background: none; border: none; font-size: 18px; color: var(--ink-3); cursor: pointer; padding: 10px 4px; flex-shrink: 0; }
+
+/* Progress bar large (PoolMonitor) */
+.agos-cabinet-stage .pool-progress-lg { width: 100%; height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.agos-cabinet-stage .pool-progress-lg-fill { height: 100%; border-radius: 99px; }
+
+/* Supplier rows */
+.agos-cabinet-stage .supplier-row { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--line-soft); border-radius: 9px; padding: 10px 12px; }
+.agos-cabinet-stage .supplier-row-t { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; }
+.agos-cabinet-stage .supplier-row-s { font-size: 11.5px; color: var(--ink-2); }
+.agos-cabinet-stage .supplier-status { font-size: 11px; font-weight: 600; }
+.agos-cabinet-stage .supplier-status.transit { color: var(--amber); }
+.agos-cabinet-stage .supplier-status.done { color: var(--ok); }

@@ -755,7 +755,7 @@ export function FarmProfile() {
 
           {/* Disease action card */}
           <div
-            onClick={() => navigate('/cabinet/vet/new')}
+            onClick={() => navigate('/cabinet-legacy/vet/new')}
             className="flex items-center gap-3 rounded-xl border px-4 py-3.5 cursor-pointer transition-colors"
             style={{ background: 'var(--bg-c)', borderColor: 'var(--bd)', boxShadow: 'var(--sh-sm)' }}
             onMouseEnter={e => {

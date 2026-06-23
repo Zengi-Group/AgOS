@@ -1,6 +1,6 @@
 /**
  * F08 — Мои батчи и рынок (Market Dashboard)
- * Dok 6 Slice 5a: /cabinet/market
+ * Dok 6 Slice 5a: /cabinet-legacy/market
  * RPCs: rpc_get_org_batches (AI-19, d07), rpc_get_market_summary (RPC-18, d02)
  */
 import { useNavigate } from 'react-router-dom'
@@ -44,10 +44,10 @@ export function MarketDashboard() {
     <div className="page space-y-6">
       <div className="flex items-center justify-end gap-2">
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate('/cabinet/market/prices')}>
+          <Button variant="outline" onClick={() => navigate('/cabinet-legacy/market/prices')}>
             <TrendingUp className="mr-2 h-4 w-4" />Цены
           </Button>
-          <Button onClick={() => navigate('/cabinet/market/new')}>
+          <Button onClick={() => navigate('/cabinet-legacy/market/new')}>
             <Plus className="mr-2 h-4 w-4" />Создать батч
           </Button>
         </div>
@@ -59,7 +59,7 @@ export function MarketDashboard() {
         {batchList.length === 0 ? (
           <Card><CardContent className="p-8 text-center">
             <p className="text-muted-foreground mb-4">Нет батчей — создайте первый</p>
-            <Button variant="outline" onClick={() => navigate('/cabinet/market/new')}>
+            <Button variant="outline" onClick={() => navigate('/cabinet-legacy/market/new')}>
               <Plus className="mr-2 h-4 w-4" />Создать батч
             </Button>
           </CardContent></Card>
@@ -68,7 +68,7 @@ export function MarketDashboard() {
             const st = STATUS_LABELS[b.status] ?? { label: b.status, variant: 'secondary' as const }
             return (
               <Card key={b.batch_id || b.id} className="cursor-pointer hover:border-primary/50 transition-colors"
-                onClick={() => navigate(`/cabinet/market/batch/${b.batch_id || b.id}`)}>
+                onClick={() => navigate(`/cabinet-legacy/market/batch/${b.batch_id || b.id}`)}>
                 <CardContent className="p-4 flex items-center justify-between">
                   <div>
                     <div className="font-medium">{b.sku_name || b.tsp_sku_id}</div>

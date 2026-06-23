@@ -1,6 +1,6 @@
 /**
  * F12 — Мои ветеринарные случаи (Farmer Vet Case List)
- * Route: /cabinet/vet
+ * Route: /cabinet-legacy/vet
  * Shows all vet cases for the farmer's organization.
  */
 import React from 'react'
@@ -72,7 +72,7 @@ export function VetCaseList() {
             {cases.length} активных обращений
           </p>
         )}
-        <Button onClick={() => navigate('/cabinet/vet/new')}>
+        <Button onClick={() => navigate('/cabinet-legacy/vet/new')}>
           <Plus className="mr-2 h-4 w-4" />
           Сообщить о болезни
         </Button>
@@ -84,7 +84,7 @@ export function VetCaseList() {
             <p className="text-muted-foreground mb-4">
               Нет активных ветеринарных обращений
             </p>
-            <Button variant="outline" onClick={() => navigate('/cabinet/vet/new')}>
+            <Button variant="outline" onClick={() => navigate('/cabinet-legacy/vet/new')}>
               <Plus className="mr-2 h-4 w-4" />
               Создать обращение
             </Button>
@@ -98,7 +98,7 @@ export function VetCaseList() {
               <Card
                 key={c.id}
                 className="cursor-pointer hover:border-primary/50 transition-colors"
-                onClick={() => navigate(`/cabinet/vet/${c.id}`)}
+                onClick={() => navigate(`/cabinet-legacy/vet/${c.id}`)}
               >
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">

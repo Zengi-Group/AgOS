@@ -22,7 +22,7 @@
 | MEMBERSHIP-02 | membership | code↔canon | Code requires pre-existing membership row at submit + FK membership_id NOT NULL; canon: row created at T2 approve | d01_kernel.sql:3480-3483,339 | Make membership_applications org-anchored (drop NOT NULL FK); approve(T2) creates row in grace_period |
 | MEMBERSHIP-03 | membership | code lags | grace_period/expired/revoked + transitions T4-T10 + MembershipStateTransition log unimplemented | canon Microstep2 §3,§7 | Backlog billing-driven (T4/T7/T9) + cron-driven (T5/T6/T8) + admin revoke (T10) + audit table |
 
-## 🟠 Significant (32)
+## 🟠 Significant (36)
 
 | id | domain | conflict | what | action |
 |----|--------|----------|------|--------|
@@ -58,8 +58,12 @@
 | MARKET-UI-02 | market-ui | code lags | farmer batch UI old 5-state FSM; deployed has 11 M4/M6 states | Extend UI (offering/awaiting_price_decision+lower_batch_price/confirmed/dispatched/delivered) |
 | MEMBERSHIP-04 | membership | code↔canon | rpc_submit_membership_application signature diverges (membership_type/notes vs documents[]) | Gated on A1: additive replacement RPC accepting documents[] |
 | MEMBERSHIP-06 | membership | code↔canon | frontend membership_status = 4th vocabulary | Consolidate to canon AssociationMembership state (A1) |
+| TSP-ADAPTER-01 | TSP-flow | code↔canon | 2 слоя TSP-RPC сосуществуют: canonical M4/M6 (uuid, admin-pipeline) + self-serve adapter (text-sig rebind, `rpc_self_*`/`fn_tsp_*`). Adapter в `supabase/migrations/` (Option B, ADR-CABINET-SHELL-01), вне cross_check.sh scope | Phase-2: реконсиляция/конвергенция слоёв; решить судьбу legacy admin-pipeline vs self-serve self-match |
+| TSP-ADAPTER-02 | TSP-schema | deploy-order | rebind дропает d07 `rpc_create_batch(uuid)`/`rpc_get_org_batches(uuid,text)` → text-sig/no-arg. На проде применён ПОСЛЕ d07 (text-sig wins, AI-19/AI-20 uuid-sig retired). Полный `deploy_sql.py` (d02<d07) БЕЗ re-apply adapter → возврат uuid-sig → PGRST203 overload | Deploy-порядок: d-файлы → затем `supabase/migrations/` adapter. Phase-2: при конвергенции убрать d07 uuid-sig defs |
+| CABINET-SHELL-01 | market-ui | code lags | MPK-юзеры не авто-роутятся на `/mpk`: `pickShellPath()` (account.ts) есть, но main `Login` хардкодит `/cabinet` (protected main-auth). `/mpk` reachable только прямым URL | Phase-2: role-based post-login redirect (не ломая main-auth) ИЛИ `CabinetApp` self-redirect для mpk-орг |
+| REG-EXPERT-01 | identity | code lags | expert-роль регистрации из `feature/my-changes` отложена: `'expert'` нет в d01 `org_type` CHECK + `rpc_register_organization`; UI `ExpertDetails`/`ExpertDocs`/`WelcomeStep` не взяты | Phase-2: extend org_type CHECK + `rpc_register_organization` под expert (+expert fields), затем порт UI; связано с IDENTITY-07 |
 
-## 🟡 Minor (11)
+## 🟡 Minor (12)
 
 | id | domain | what | action |
 |----|--------|------|--------|
@@ -74,5 +78,6 @@
 | OPERATIONS-05 | operations | RPC-44 rpc_add_knowledge_chunk deployed but marked DEFERRED | Doc status flip (Tasks 7 & 12) |
 | IDENTITY-13 | identity | DEF-009 fn_* dual defs (d01 naive + d07 JWT); last-applied wins | Add comments at d01 defs noting d07 override (low risk) |
 | TSP-SCHEMA-08-code | TSP-schema | (canon-internal, no code change) Batch links pool_line not Pool | Cross-ref note only — Task 14 |
+| CABINET-SHELL-02 | market-ui | Новый мобильный shell = primary `/cabinet` (+`/mpk`, вне AppLayout); legacy веб-кабинет → `/cabinet-legacy` (Sidebar/Header/22 страницы перепривязаны). Консалтинг `/admin` не затронут | Решить судьбу `/cabinet-legacy` после фидбэка (fallback vs убрать) — ADR-CABINET-SHELL-01 |
 
 > **Note on VET-02:** ✅ FIXED on branch `fix/vet-f11-isolation` (commit `4a961c9`) — ownership guard added, single definition confirmed, cross_check 0/0/0. **NOT YET DEPLOYED** — apply via `python3 deploy_sql.py <DB_PASSWORD>` to Supabase `mwtbozflyldcadypherr` before prod is safe.

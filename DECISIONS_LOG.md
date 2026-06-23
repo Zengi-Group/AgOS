@@ -10,6 +10,7 @@
 
 | ID | Date | Domain | Summary |
 |----|------|--------|---------|
+| ADR-CABINET-SHELL-01 | 2026-06-23 | UI/TSP | Интеграция нового мобильного кабинета (фермер+МПК) из `feature/my-changes`: cherry-pick 84 файлов `shell/` + `account.ts`; new=primary `/cabinet`, legacy→`/cabinet-legacy`; adapter SQL как 2 отдельные миграции (Option B); auth-rewrite + expert-роль отвергнуты (защита main-auth) |
 | ADR-AUTH-CONSOLIDATE-01 | 2026-05-13 | Auth/UI | Unify duplicate registration: `/register` canonical, `/join` flow removed, landing CTAs rewired |
 | DOC-SYNC-M4M6-01 | 2026-06-15 | Docs | Dok 1 v1.9 patch (12 entities + FSM extensions) + Dok 3 §4a (14 RPC catalog) + Dok 4 §3.3a (15 events) — синхронизированы с реализацией M4+M6 в d02_tsp.sql |
 | DEF-TSP-M4-OWNERSHIP | 2026-06-15 | TSP/Schema | `pools.organization_id` denormalised; 6 RPC owner-checks + 3 RLS policies switched off `pool_requests` LEFT JOIN; `rpc_create_pool` stops creating MPK stub-request |
@@ -109,6 +110,36 @@
 ---
 
 ## Decisions
+
+### 2026-06-23 — ADR-CABINET-SHELL-01: интеграция нового мобильного кабинета из feature/my-changes
+
+**What:** Второй product engineer параллельно построил ветку `feature/my-changes` (регистрация → онбординг → TSP) на **старой базе** (нет общего предка с `main` — `git merge` = `no merge base`). Из неё в `main` (ветка `feat/cabinet-shell-tsp`) точечным cherry-pick'ом перенесён **только новый мобильный кабинет** (фермерский shell + МПК shell, TSP-визард, рынок, пулы, review). Auth-rewrite, expert-роль и 8 деструктивных SQL-миграций **отвергнуты** (защита недавней auth-работы Arshidin + канонического d02 M4/M6).
+
+**Решения CEO (через AskUserQuestion, 2026-06-23):**
+1. **Регистрация/auth → «Защитить main-auth».** Ветка переписала регистрацию под без-SMS модель (phone→fake-email + Supabase signUp), конфликтующую с main OTP/Mobizon/PIN. Решение: main-auth не трогаем; auth-файлы ветки (`Registration.tsx`, `Contact.tsx`, `CreatePin.tsx`, `Login.tsx`, `ForgotPin.tsx`, `auth-phone.ts`, `bird-otp`) **не берём**.
+2. **Прод → «Проверь».** Step 0 read-only диагностика прод `mwtbozflyldcadypherr` (PostgREST OpenAPI, service-role): схема **каноническая и цела** — `batches`(`tsp_sku_id/status/target_month/region_id`+M4/M6 FSM), `pools.organization_id` (DEF-TSP-M4-OWNERSHIP live), 14 M4/M6 RPC + 11 A-CAT RPC на месте. Деструктивный `DROP TABLE batches` **никогда не применялся**. Инженер уже задеплоил **только** safe adapter (rebind #10) + `rpc_self_join_membership` (#5) поверх канона.
+3. **Кабинет → «Новый = основной».** Новый мобильный shell смонтирован как primary `/cabinet` (+`/mpk`), старый полный веб-кабинет → `/cabinet-legacy`. Консалтинг (`/admin/consulting`) не затронут.
+4. **Adapter SQL → «Отдельный adapter-файл» (Option B).** rebind + self_join хранятся как 2 трекаемые миграции в `supabase/migrations/`, применяемые ПОСЛЕ d-файлов; в canonical d02/d07 **не вшиваются** (apply-order ловушка: rebind дропает d07 `rpc_create_batch(uuid)`, а d02<d07 → пересоздание overload PGRST203). Tech-debt в IMPL_DEBT (TSP-ADAPTER-01/02).
+
+**Что ВЗЯТО (на ветке `feat/cabinet-shell-tsp`):**
+- `src/pages/cabinet/shell/**` (82 файла) + `src/lib/account.ts` + `scripts/test_rpc_create_batch.mjs` — `git checkout` (новые файлы).
+- `src/App.tsx` — ручной Edit: `/cabinet/*`→`CabinetApp`, `/mpk/*`→`MpkApp` (вне `AppLayout`), старый `/cabinet`→`/cabinet-legacy`.
+- `src/components/layout/Sidebar.tsx` + `Header.tsx` — фермерская нав-секция `/cabinet/*`→`/cabinet-legacy/*` (admin-секция не тронута).
+- 22 legacy-страницы `src/pages/cabinet/*` (excl. `shell/`) — scoped sweep внутренних ссылок `/cabinet`→`/cabinet-legacy`.
+- `supabase/migrations/20260622120000_tsp_canonical_rebind.sql` + `20260618100000_self_serve_membership.sql` — 2 safe adapter-миграции (уже на проде).
+
+**Что ОТВЕРГНУТО (защита main):** все правки ветки в `d02/d04/d07` (откат M4/M6, DEF-TSP-M4-OWNERSHIP, DEF-VET-F11-ISOLATION); 8 деструктивных миграций (`tsp1_batches` … `self_serve_batch_pricerec`, `DROP TABLE batches CASCADE`); auth-rewrite (см. реш. 1); даунгрейд доков (Dok1 v1.9→v1.8, Dok3 v1.5→v1.4, удаление Microsteps/A-CAT-spec/IMPL_DEBT/Design_System); `feeding_model.py`, `d11_norms.sql`, ветковые `cross_check.sh`/`.claude/skills`/`package-lock.json`/`_spec_dump.txt`.
+
+**Что ОТЛОЖЕНО (Phase 2):** expert-роль регистрации — требует backend-правок (`'expert'` отсутствует в d01 `org_type` CHECK + `rpc_register_organization`), задевает protected registration → не берём сейчас (IMPL_DEBT REG-EXPERT-01). MPK auto-routing — `pickShellPath()` есть, но main-Login хардкодит `/cabinet` (CABINET-SHELL-01).
+
+**Verification:** `npx tsc --noEmit` 0 ошибок · `npm run build` ✓ (5.18s) · dev-server boot 0 console errors · `/cabinet` + `/cabinet-legacy` + `/mpk` → редирект на `/login` (роуты wired, не 404, RequireAuth цел, main phone-auth рендерится) · 20/20 RPC нового shell подтверждены live на проде (PostgREST) · `cross_check.sh` 0/0/0 · ни один canonical d-файл не изменён.
+- **НЕ проверено headless:** рендер аутентифицированного кабинета (нужен OTP/PIN-логин CEO). Ручная проверка: войти → `/cabinet` (фермер shell) / `/mpk` (МПК shell).
+
+**Consequences:**
+- Easy: новый мобильный кабинет в `main`, работает против канонического прод-d02 через уже-задеплоенный adapter; auth Arshidin и canonical SQL не тронуты; полностью обратимо (отдельная ветка, без commit).
+- Hard: 2 слоя TSP-RPC (canonical M4/M6 + self-serve adapter) сосуществуют → Phase-2 реконсиляция. Adapter должен применяться ПОСЛЕ d-файлов (порядок задокументирован в IMPL_DEBT). MPK-юзеры пока не авто-роутятся на `/mpk`. expert-регистрация не работает (отложена).
+
+---
 
 ### 2026-06-15 — DOC-SYNC-A-CAT-01: Dok 1 / Dok 3 / Dok 4 + SPRINT_STATUS sync с A-CAT SQL deploy
 

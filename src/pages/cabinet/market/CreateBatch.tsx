@@ -1,6 +1,6 @@
 /**
  * F05 — Создать батч
- * Dok 6 Slice 5a: /cabinet/market/new
+ * Dok 6 Slice 5a: /cabinet-legacy/market/new
  * RPC: rpc_create_batch (RPC-09, d07, deployed)
  */
 import { useState, useEffect } from 'react'
@@ -43,8 +43,8 @@ export function CreateBatch() {
     invalidateKeys: [['rpc_get_org_batches']],
     onSuccess: (data: any) => {
       const id = data?.batch_id || data?.id
-      if (id) navigate(`/cabinet/market/batch/${id}`)
-      else navigate('/cabinet/market')
+      if (id) navigate(`/cabinet-legacy/market/batch/${id}`)
+      else navigate('/cabinet-legacy/market')
     },
   })
 
@@ -105,7 +105,7 @@ export function CreateBatch() {
               <Button type="submit" disabled={loading || hasRestrictions} className="flex-1">
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Создать батч
               </Button>
-              <Button type="button" variant="outline" onClick={() => navigate('/cabinet/market')}>Отмена</Button>
+              <Button type="button" variant="outline" onClick={() => navigate('/cabinet-legacy/market')}>Отмена</Button>
             </div>
           </form>
         </CardContent>

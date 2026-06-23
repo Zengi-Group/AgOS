@@ -74,12 +74,12 @@ export function ReportSick() {
 
       const result = data as { vet_case_id: string } | null
       if (!result?.vet_case_id) {
-        navigate('/cabinet')
+        navigate('/cabinet-legacy')
         return
       }
 
       toast.success('Обращение создано. AI анализирует...')
-      navigate(`/cabinet/vet/${result.vet_case_id}`)
+      navigate(`/cabinet-legacy/vet/${result.vet_case_id}`)
 
       // Async: create AI conversation and link it
       const gatewayUrl = import.meta.env.VITE_AI_GATEWAY_URL

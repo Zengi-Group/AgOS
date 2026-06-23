@@ -1,5 +1,5 @@
 /**
- * /cabinet/ration/summary — Сводный рацион фермы
+ * /cabinet-legacy/ration/summary — Сводный рацион фермы
  * Aggregates all active rations: total animals, feed cost, DM, per-group breakdown.
  * RPC: rpc_get_current_ration
  */

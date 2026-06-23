@@ -1,6 +1,6 @@
 /**
  * F06 — Детали батча (publish/cancel + price preview)
- * Dok 6 Slice 5a: /cabinet/market/batch/:batchId
+ * Dok 6 Slice 5a: /cabinet-legacy/market/batch/:batchId
  * RPCs: rpc_publish_batch (RPC-10), rpc_cancel_batch (RPC-11), rpc_get_price_for_sku (RPC-17)
  */
 import { useNavigate, useParams } from 'react-router-dom'
@@ -46,7 +46,7 @@ export function BatchDetail() {
   })
 
   if (isLoading) return <div className="page"><Skeleton className="h-8 w-48 mb-4" /><Skeleton className="h-48 w-full" /></div>
-  if (!batch) return <div className="page"><Button variant="ghost" onClick={() => navigate('/cabinet/market')}><ArrowLeft className="mr-2 h-4 w-4" />Назад</Button><p className="mt-4 text-muted-foreground">Батч не найден</p></div>
+  if (!batch) return <div className="page"><Button variant="ghost" onClick={() => navigate('/cabinet-legacy/market')}><ArrowLeft className="mr-2 h-4 w-4" />Назад</Button><p className="mt-4 text-muted-foreground">Батч не найден</p></div>
 
   const status = batch.status
   const isDraft = status === 'draft'
@@ -55,7 +55,7 @@ export function BatchDetail() {
   return (
     <div className="page space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet/market')}><ArrowLeft className="h-5 w-5" /></Button>
+        <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet-legacy/market')}><ArrowLeft className="h-5 w-5" /></Button>
         <Badge variant={status === 'matched' ? 'default' : status === 'cancelled' ? 'outline' : 'secondary'}>
           {STATUS_LABELS[status] || status}
         </Badge>
