@@ -28,6 +28,7 @@ do $$
 declare
     v_farmer_org  uuid;
     v_mpk_org     uuid;
+    v_mpk_auth_id uuid;   -- auth_id of a user in the MPK org (for JWT simulation)
     v_farm        uuid;
     v_region      uuid;
     v_sku         uuid;
@@ -44,13 +45,21 @@ begin
     select id into v_mpk_org   from public.organizations
         where id <> v_farmer_org order by created_at limit 1;
     select id into v_farm  from public.farms where organization_id = v_farmer_org limit 1;
-    select id into v_region from public.regions where level = 'rayon' limit 1;
+    select id into v_region from public.regions where level in ('rayon','oblast') order by level limit 1;
     select id into v_sku   from public.tsp_skus limit 1;
+    -- find an MPK-org member for JWT simulation (rpc_create_pool checks fn_my_org_ids)
+    select u.auth_id into v_mpk_auth_id
+    from public.users u
+    join public.user_organization_roles uor on u.id = uor.user_id
+    where uor.organization_id = v_mpk_org limit 1;
 
     if v_farmer_org is null or v_mpk_org is null or v_farm is null
        or v_region is null or v_sku is null then
-        raise exception 'TSP_TEST_SETUP: need >=2 orgs, a farm, a rayon region, a tsp_sku in the DB (got farmer=%, mpk=%, farm=%, region=%, sku=%)',
+        raise exception 'TSP_TEST_SETUP: need >=2 orgs, a farm, a rayon/oblast region, a tsp_sku in the DB (got farmer=%, mpk=%, farm=%, region=%, sku=%)',
             v_farmer_org, v_mpk_org, v_farm, v_region, v_sku;
+    end if;
+    if v_mpk_auth_id is null then
+        raise exception 'TSP_TEST_SETUP: no user found in MPK org % (needed for JWT simulation)', v_mpk_org;
     end if;
 
     -- ---- 1) farmer creates a draft batch ----
@@ -75,8 +84,11 @@ begin
     end if;
 
     -- ---- 4) MPK creates a pool whose line accepts this batch, then publishes ----
-    --        (rpc_create_pool handles pool_request/line/region wiring internally;
-    --         line mpk_price >= farmer price, region covers batch region, window overlaps)
+    --        rpc_create_pool checks fn_my_org_ids() → needs JWT context for direct-DB calls.
+    --        Simulate MPK user's auth by setting request.jwt.claims for this session.
+    perform set_config('request.jwt.claims',
+        json_build_object('sub', v_mpk_auth_id::text, 'role', 'authenticated')::text,
+        true);
     r := public.rpc_create_pool(
             p_organization_id => v_mpk_org,
             p_total_target_volume_kg => 4000,
@@ -85,7 +97,7 @@ begin
                             'tsp_sku_id', v_sku, 'mpk_price_per_kg', v_price + 100,
                             'max_volume_kg', 8000)),
             p_pool_regions => jsonb_build_array(jsonb_build_object(
-                            'region_type', 'rayon', 'region_id', v_region)));
+                            'region_type', 'oblast', 'region_id', v_region)));
     v_pool := (r->>'pool_id')::uuid;
     perform public.rpc_publish_pool(p_organization_id => v_mpk_org, p_pool_id => v_pool);
 
