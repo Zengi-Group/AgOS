@@ -15,6 +15,7 @@ interface Props {
   onContactTuran: () => void
   onAdvance?: (poolId: string, status: string) => Promise<void>     // реальный перевод статуса в БД
   onLoadMatches?: (poolId: string) => Promise<SupplierRow[] | null> // реальные поставщики пула
+  onConfirmDelivery?: (batchId: string) => Promise<void>            // МПК подтверждает приёмку партии (BT-18)
 }
 
 // Реальный пул — строка БД (UUID). Только для него дёргаем self-serve RPC.
@@ -76,7 +77,7 @@ function LinesList({ pool }: { pool: Pool }) {
   )
 }
 
-export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran, onAdvance, onLoadMatches }: Props) {
+export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran, onAdvance, onLoadMatches, onConfirmDelivery }: Props) {
   const realPool = UUID_RE.test(pool.id)
   // Реальные поставщики из БД перекрывают демо-список (контакты — только при executing, D40).
   const [liveSuppliers, setLiveSuppliers] = useState<SupplierRow[] | null>(null)
@@ -162,7 +163,10 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
       <div className="mpk-modal">
         <ModalHead title={pool.title} onClose={onClose} />
         <div className="mpk-modal-body">
-          <div className="mpk-banner ok"><div className="mpk-banner-t">✓ Заявка закрыта — готовим приёмку</div></div>
+          <div className="mpk-banner ok">
+            <div className="mpk-banner-t">✓ Заявка закрыта — готовим приёмку</div>
+            <div className="mpk-banner-s">Контакты поставщиков раскрыты (сделка подтверждена)</div>
+          </div>
           <LinesList pool={pool} />
           <div className="pool-card-sub">Средняя цена: {fmtMoney(avgPrice)}{NBSP}₸/кг</div>
           <div>
@@ -171,7 +175,7 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
               <div className="pool-card-sub" key={s.id}>{s.farmName ?? 'Хозяйство'} — {s.heads} гол</div>
             ))}
           </div>
-          <Cta onClick={() => { applyStatus({ status: 'executing' }); toast('Приёмка начата. Контакты поставщиков раскрыты.') }}>
+          <Cta onClick={() => { applyStatus({ status: 'executing' }); toast('Приёмка начата') }}>
             Перейти к приёмке
           </Cta>
         </div>
@@ -238,15 +242,26 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                 {s.deliveryStatus === 'awaiting_dispatch' && (
                   <>
                     <div className="supplier-status">Ожидает отгрузки</div>
-                    <Cta variant="ghost" onClick={() => patchSupplier(s.id, { deliveryStatus: 'in_transit' })}>
-                      Демо: фермер отгрузил
-                    </Cta>
+                    {/* Реальный пул: отгрузку отмечает фермер в своём кабинете. Демо-кнопка — только для seed. */}
+                    {!realPool && (
+                      <Cta variant="ghost" onClick={() => patchSupplier(s.id, { deliveryStatus: 'in_transit' })}>
+                        Демо: фермер отгрузил
+                      </Cta>
+                    )}
                   </>
                 )}
                 {s.deliveryStatus === 'in_transit' && (
                   <>
                     <div className="supplier-status transit">В пути</div>
-                    <Cta onClick={() => { patchSupplier(s.id, { deliveryStatus: 'delivered' }); toast('Приёмка подтверждена') }}>
+                    <Cta onClick={() => {
+                      if (realPool && onConfirmDelivery) {
+                        onConfirmDelivery(s.id)
+                          .then(() => toast('Приёмка подтверждена'))
+                          .catch((e) => toast('Не удалось: ' + (e instanceof Error ? e.message : '')))
+                      } else {
+                        patchSupplier(s.id, { deliveryStatus: 'delivered' }); toast('Приёмка подтверждена')
+                      }
+                    }}>
                       Подтвердить приёмку
                     </Cta>
                   </>

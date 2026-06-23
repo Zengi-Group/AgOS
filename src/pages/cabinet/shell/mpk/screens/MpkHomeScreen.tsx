@@ -13,6 +13,8 @@ interface Props {
   region: string
   bin: string
   onOpenTsp: () => void
+  onOpenOffers: () => void
+  offersCount: number
   onOpenPool: (id: string) => void
   onOpenContactTuran: (topic?: string) => void
   realAccount?: boolean   // реальный аккаунт МПК (orgId есть) → кнопка членства не «демо»
@@ -91,7 +93,7 @@ function MpkMemberBanner({ membership, realAccount, onSimulateMember }: {
 
 export function MpkHomeScreen({
   typeStatus, membership, pools, tspOpen, orgName, region, bin,
-  onOpenTsp, onOpenPool, onOpenContactTuran, realAccount, onSimulateApprove, onSimulateMember,
+  onOpenTsp, onOpenOffers, offersCount, onOpenPool, onOpenContactTuran, realAccount, onSimulateApprove, onSimulateMember,
 }: Props) {
   const activeCount = pools.filter((p) => p.status === 'filling' || p.status === 'executing').length
   const totalTonnes = Math.round(
@@ -143,6 +145,16 @@ export function MpkHomeScreen({
       ) : (
         <div style={{ margin: '10px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Cta onClick={onOpenTsp}>Открыть закупки</Cta>
+          <button className="pool-card" onClick={onOpenOffers}>
+            <div className="pool-card-t">
+              📨 Входящие офферы{offersCount > 0 ? ` · ${offersCount}` : ''}
+            </div>
+            <div className="pool-card-sub">
+              {offersCount > 0
+                ? 'Поставщики прислали предложения — ответьте'
+                : 'Пока нет новых предложений'}
+            </div>
+          </button>
           {recentPools.map((p) => (
             <button key={p.id} className="pool-card" onClick={() => onOpenPool(p.id)}>
               <div className="pool-card-t">{p.title}</div>

@@ -190,7 +190,8 @@ rpc_create_batch|rpc_get_org_batches|rpc_cancel_batch|rpc_dispatch_batch|\
 rpc_lower_price|rpc_update_price|rpc_submit_review|rpc_self_review_due_batches|\
 rpc_self_auto_match_batch|rpc_get_market_batches|rpc_self_activate_pool_request|\
 rpc_self_match_batch_to_pool|rpc_self_advance_pool_status|rpc_get_pool_matches|\
-rpc_get_my_pools|rpc_self_close_due_pools|rpc_self_accept_offer"
+rpc_get_my_pools|rpc_self_close_due_pools|rpc_self_accept_offer|\
+rpc_get_incoming_offers|rpc_self_reject_offer|rpc_self_confirm_delivery"
 # TSP self-serve adapter RPCs (D-TSP-CANON-01): web-JWT access class — org scoping is
 # enforced inside via fn_my_org_ids(), not via an organization_id parameter (P-AI-2 is
 # satisfied for the AI path by the canonical uuid-sig RPCs, which DO take org_id).
@@ -276,7 +277,7 @@ registered_rpcs=$(grep -h -oE "'rpc_[a-z0-9_]+'" "${SQL_FILES[@]}" 2>/dev/null \
 
 # TSP self-serve adapter RPCs (D-TSP-CANON-01): registry rows are added when the
 # adapter becomes the canonical trade layer in convergence Slice B; excepted until then.
-registry_exceptions="rpc_dispatch_batch|rpc_get_market_batches|rpc_get_my_pools|rpc_get_pool_matches|rpc_lower_price|rpc_self_accept_offer|rpc_self_activate_pool_request|rpc_self_advance_pool_status|rpc_self_auto_match_batch|rpc_self_close_due_pools|rpc_self_create_pool_request|rpc_self_match_batch_to_pool|rpc_self_review_due_batches|rpc_submit_review|rpc_update_price"
+registry_exceptions="rpc_dispatch_batch|rpc_get_market_batches|rpc_get_my_pools|rpc_get_pool_matches|rpc_lower_price|rpc_self_accept_offer|rpc_self_activate_pool_request|rpc_self_advance_pool_status|rpc_self_auto_match_batch|rpc_self_close_due_pools|rpc_self_create_pool_request|rpc_self_match_batch_to_pool|rpc_self_review_due_batches|rpc_submit_review|rpc_update_price|rpc_get_incoming_offers|rpc_self_reject_offer|rpc_self_confirm_delivery"
 
 while IFS= read -r func; do
   if echo "$func" | grep -qxE "$registry_exceptions"; then
