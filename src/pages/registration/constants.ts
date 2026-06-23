@@ -122,7 +122,21 @@ export const HOW_HEARD = [
   { value: 'other', label: 'Другое' },
 ]
 
-export type RoleType = 'farmer' | 'mpk' | 'services' | 'feed_producer'
+export const EXPERT_SPECIALIZATIONS = [
+  { value: 'vet', label: 'Ветеринар' },
+  { value: 'zootechnics', label: 'Зоотехник' },
+  { value: 'agronomist', label: 'Агроном' },
+  { value: 'lawyer', label: 'Юрист' },
+]
+
+export const EXPERT_EXPERIENCE = [
+  { value: 'under_3', label: 'до 3 лет' },
+  { value: '3_5', label: '3–5 лет' },
+  { value: '5_10', label: '5–10 лет' },
+  { value: 'over_10', label: '10+ лет' },
+]
+
+export type RoleType = 'farmer' | 'mpk' | 'services' | 'feed_producer' | 'expert'
 
 export interface RegistrationFormData {
   role: RoleType | null
@@ -156,6 +170,12 @@ export interface RegistrationFormData {
   feed_types: string[]
   production_volume: string
   delivery_regions: string[]
+  // Expert
+  expert_specializations: string[]
+  expert_experience: string
+  expert_visit_price: string
+  expert_about: string
+  expert_docs: Record<string, boolean>
   // Agreement
   consent_terms: boolean
   consent_data: boolean
@@ -191,6 +211,11 @@ export const INITIAL_FORM_DATA: RegistrationFormData = {
   feed_types: [],
   production_volume: '',
   delivery_regions: [],
+  expert_specializations: [],
+  expert_experience: '',
+  expert_visit_price: '',
+  expert_about: '',
+  expert_docs: {},
   consent_terms: false,
   consent_data: false,
   how_heard: '',

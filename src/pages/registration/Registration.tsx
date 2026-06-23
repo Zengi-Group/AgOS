@@ -12,6 +12,8 @@ import { FarmerDetails } from './steps/FarmerDetails'
 import { MpkDetails } from './steps/MpkDetails'
 import { ServicesDetails } from './steps/ServicesDetails'
 import { FeedProducerDetails } from './steps/FeedProducerDetails'
+import { ExpertDetails } from './steps/ExpertDetails'
+import { ExpertDocs } from './steps/ExpertDocs'
 import { Agreement } from './steps/Agreement'
 import { Success } from './steps/Success'
 import { INITIAL_FORM_DATA } from './constants'
@@ -25,6 +27,7 @@ type Step =
   | 'create_pin'
   | 'benefit_1'
   | 'role_details'
+  | 'expert_docs'
   | 'benefit_2'
   | 'agreement'
   | 'success'
@@ -35,6 +38,7 @@ const STEP_ORDER: Step[] = [
   'create_pin',
   'benefit_1',
   'role_details',
+  'expert_docs',
   'benefit_2',
   'agreement',
   'success',
@@ -156,6 +160,15 @@ export function Registration() {
           production_volume: formData.production_volume || null,
           delivery_regions: formData.delivery_regions.length > 0 ? formData.delivery_regions : null,
         }
+      } else if (role === 'expert') {
+        name = formData.full_name
+        bin = ''
+        roleData = {
+          expert_specializations: formData.expert_specializations,
+          expert_experience: formData.expert_experience || null,
+          expert_visit_price: formData.expert_visit_price || null,
+          expert_about: formData.expert_about || null,
+        }
       }
 
       // Create organization via RPC (user already authenticated via OTP)
@@ -165,9 +178,18 @@ export function Registration() {
         how_heard: formData.how_heard || null,
       }
 
+      // UI-роли → org_type схемы (CHECK: farmer, mpk, supplier, consultant, other) — IDENTITY-07 + expert→consultant
+      const orgTypeMap: Record<RoleType, string> = {
+        farmer: 'farmer',
+        mpk: 'mpk',
+        services: 'supplier',
+        feed_producer: 'supplier',
+        expert: 'consultant',
+      }
+
       const { data, error } = await supabase.rpc('rpc_register_organization', {
         p_organization_id: '00000000-0000-0000-0000-000000000000', // ignored, P-AI-2 signature consistency
-        p_org_type: role,
+        p_org_type: orgTypeMap[role] ?? 'other',
         p_name: name,
         p_bin: bin || null,
         p_region_id: formData.region_id || null,
@@ -276,9 +298,25 @@ export function Registration() {
                 onNext={() => goTo('benefit_2')}
               />
             )
+          case 'expert':
+            return (
+              <ExpertDetails
+                formData={formData}
+                onChange={updateForm}
+                onNext={() => goTo('expert_docs')}
+              />
+            )
           default:
             return null
         }
+      case 'expert_docs':
+        return (
+          <ExpertDocs
+            formData={formData}
+            onChange={updateForm}
+            onNext={() => goTo('benefit_2')}
+          />
+        )
       case 'benefit_2':
         return (
           <BenefitScreen

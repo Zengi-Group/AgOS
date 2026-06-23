@@ -7,6 +7,7 @@ const ROLES: { value: RoleType; title: string; desc: string; icon: string }[] = 
   { value: 'mpk', title: 'Мясокомбинат / Откормплощадка', desc: 'Я закупаю скот', icon: '/icons/factory.svg' },
   { value: 'services', title: 'Сервисная компания', desc: 'Я оказываю услуги фермерам', icon: '/icons/wrench.svg' },
   { value: 'feed_producer', title: 'Кормопроизводитель', desc: 'Я произвожу/продаю корма', icon: '/icons/wheat.svg' },
+  { value: 'expert', title: 'Эксперт / консультант', desc: 'Я консультирую фермеров', icon: '/icons/wrench.svg' },
 ]
 
 // Simple icon fallbacks using unicode
@@ -15,6 +16,7 @@ const ROLE_ICONS: Record<RoleType, string> = {
   mpk: '\uD83C\uDFED',
   services: '\uD83D\uDD27',
   feed_producer: '\uD83C\uDF3E',
+  expert: '\uD83D\uDC68\u200D\u2695\uFE0F',
 }
 
 interface RoleSelectProps {
