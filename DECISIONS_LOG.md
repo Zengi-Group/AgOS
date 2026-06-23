@@ -2966,3 +2966,21 @@ end if;
 **Files**: `d04_vet.sql` (function body only, ~line 1834). This entry.
 
 **Verification**: `cross_check.sh` → 0 critical / 0 significant / 0 minor. Grep confirms exactly ONE definition of `rpc_get_vet_case_detail` project-wide (d04_vet.sql:1815) and the guard is present in it. ⚠️ NOT YET DEPLOYED — must apply to Supabase project mwtbozflyldcadypherr via `python3 deploy_sql.py <DB_PASSWORD>` before production is fixed.
+
+---
+
+### 2026-06-23: TSP-MATCH-HAPPY-PATH — unblock M4/M6 sell flow (Phase 2, slice 1)
+
+**What**: The end-to-end sell flow was non-functional; made it reachable. Three root-cause gaps + one CEO policy:
+- **TSP-FLOW-03**: no RPC set `farmer_price_per_kg`/ready window → a published batch was invisible to matching (`rpc_retry_match_pool` requires non-null price). Added additive `rpc_set_batch_terms(org,batch,price,ready_from,ready_to)` — P7-safe (no signature change to `rpc_create_batch`/`rpc_publish_batch`), registered in `rpc_name_registry`, allowed from draft|published, enforces D-M6-6 (`ready_to >= ready_from`).
+- **TSP-FLOW-01 / TSP-SCHEMA-02**: `rpc_retry_match_pool` broadcast Offers but left the batch `published`; `rpc_accept_offer` requires `offering` → accept unreachable. Now transition `published → offering` on Offer upsert (AFTER the `broadcast_sent` log so the audit event still fires), and include `offering` in the eligible set (multi-MPK FCFS). Mirrors `rpc_lower_batch_price`.
+- **C1 (TSP-ACCEPT-PRICE)**: `rpc_accept_offer`'s pool-line lookup used `pl.mpk_price_per_kg <= offered_price`, contradicting eligibility (`mpk_price >= ask`) → a match was possible only at exact equality, rejecting every above-ask bid. Flipped to `>=`.
+- **D-M6-DEALPRICE (CEO 2026-06-23)**: the farmer is paid the matched pool line's MPK bid (`v_pool_line.pl_price`, highest eligible via ORDER BY desc), NOT merely their ask. The ask is the floor; a higher MPK bid accrues to the farmer.
+
+**Why**: the core revenue flow was 100% broken (audit `DOC_DRIFT_AUDIT-2026-06-22`, TSP-FLOW/SCHEMA cluster). Adversarial code review (opus) surfaced C1; the CEO set the deal-price policy.
+
+**Files**: `d02_tsp.sql` (`rpc_retry_match_pool`, `rpc_accept_offer`, new `rpc_set_batch_terms` + registry), `tests/tsp_happy_path_test.sql` (new).
+
+**Verification**: `cross_check.sh` 0/0/0; two adversarial code reviews (opus) → SOUND. Runtime FSM happy-path test authored (rollback tx) — would PASS per review; pending a DB to execute green (no local Postgres). ⚠️ NOT YET DEPLOYED to `mwtbozflyldcadypherr`.
+
+**Out of scope (next Phase-2 slices)**: downstream `confirmed → dispatched → delivered`; offer-expiry → `awaiting_price_decision`; legacy `rpc_match_batch_to_pool` fate; cancel from `offering`; supply-stats to include `offering`.
