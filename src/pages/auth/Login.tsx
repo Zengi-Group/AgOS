@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { Loader2, Phone } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { loadMyContext, pickShellPath } from '@/lib/account'
 import { toast } from 'sonner'
 import { PinInput } from '@/pages/registration/components/PinInput'
 
@@ -56,8 +57,14 @@ export function Login() {
         return
       }
       toast.success('Вход выполнен')
-      const from = (location.state as { from?: { pathname?: string } })?.from?.pathname ?? '/cabinet'
-      navigate(from, { replace: true })
+      // Deep-link (куда вёл RequireAuth) имеет приоритет; иначе шелл по роли орг-ии.
+      const from = (location.state as { from?: { pathname?: string } })?.from?.pathname
+      if (from) {
+        navigate(from, { replace: true })
+      } else {
+        const ctx = await loadMyContext()
+        navigate(pickShellPath(ctx), { replace: true })
+      }
     } catch {
       setError('Ошибка входа')
     } finally {
