@@ -29,17 +29,23 @@ Development uses a vibecoding approach: Claude Code (all agents), Cursor (option
 
 There is no single linear hierarchy. Each document is authoritative for its own domain:
 
-| What | Canonical Source | Notes |
-|------|-----------------|-------|
-| **Data model** (entities, relationships, ownership, FSM rules, decision rationale) | **Dok 1** | Dok 1 §0: "single source of truth for AGOS data model" |
-| **Deployed schema** (table structures, column types, constraints, indexes) | **SQL files** | What is actually in the database |
-| **RPC names** (function names as callable) | **SQL files** via `rpc_name_registry` | D-NEW-A: SQL names win when Dok 3 or Dok 5 have stale names |
-| **RPC behavior** (parameter semantics, caller permissions, return values) | **Dok 3** | SQL implements the spec; Dok 3 defines intent |
-| **Event Bus** (event types, producer→consumer mappings, notification templates) | **Dok 4** | |
-| **AI Gateway behavior** (graph design, tools, extraction, compliance) | **Dok 5** | |
-| **UI contracts** (screens, scenarios, data requirements per screen) | **Dok 6** | |
-| **Architectural decisions** (D1–D138+) | **Dok 1 §6** + `DECISIONS_LOG.md` | |
-| **Consulting module architecture** | **Dok 7** | `Docs/AGOS-Dok7-RationConsulting-Architecture.md` |
+| Domain | Canon (design intent) | Reality | Notes |
+|--------|----------------------|---------|-------|
+| Identity / Auth | **Microstep 1 (Identity v0.2)** | d01_kernel.sql, ai_gateway | Dok1/Dok3 identity sections DERIVED → point to MS1 |
+| Membership | **Microstep 2 (Membership FSM)** | d01_kernel.sql | Dok1 §5.5, Dok6-Slice2 DERIVED |
+| Feature Governance | **Microstep 3** | (M3 unbuilt — see IMPL_DEBT) | Dok1/Dok4 DERIVED |
+| TSP Batch/Pool/Offer | **Microstep 4** | d02_tsp.sql | Dok1 §3.3/§5.7, Dok3 §4a DERIVED |
+| TSP Flow & events | **Microstep 6** | d02_tsp.sql | Dok4 events DERIVED |
+| AI Gateway | **Dok 5** | d07_ai_gateway.sql, ai_gateway/ | tool-name↔RPC-name map: Dok5 §6 (A3) |
+| UI / Screens | **Dok 6 slices** | src/ | no consolidated master; slices canonical |
+| Consulting | **Dok 7** | d09_consulting.sql, consulting_engine/ | CONSULTING_MASTER_SPEC = historical v1.0 (A2) |
+| Feed / Vet / Operations / Education (data-model, RPC, events) | **Dok 1 / Dok 3 / Dok 4** | d03/d04/d05 | per-domain |
+| Deployed schema (tables, columns, constraints) | **SQL files** | — | reality wins for naming tokens |
+| RPC names | **rpc_name_registry (SQL)** | — | D-NEW-A |
+| Decisions | **DECISIONS_LOG.md + Dok1 §6** | — | |
+| Implementation debt (code≠canon) | **IMPL_DEBT.md** | — | Phase-2 backlog |
+
+**Reference model (P4, D-DOC-RECON-01):** where a microstep is canon, the corresponding Dok section MUST NOT duplicate it — it points (`§X → Microstep N, canonical`). Microsteps are edited directly.
 
 **Conflict resolution:** When SQL and a Dok disagree — flag it as a defect. Do NOT silently resolve. The document closer to implementation is likely more current, but design intent comes from the Dok. Both must be fixed to agree.
 
@@ -325,10 +331,19 @@ Every INSERT can silently fail if values don't match. Always load reference data
 
 | Document | Version | Content | File |
 |----------|---------|---------|------|
-| Dok 1 | v1.8 | Domain Model: 93 entities, 8 domains, ERD, Ownership Matrix, FSM Catalog, Decisions D1–D138+ | `Docs/AGOS-Dok1-v1_8.md` |
-| Dok 3 | v1.4 | RPC Catalog: 67 functions (45 business + 22 AI Gateway), Canonical Name Registry | `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md` |
+| Dok 1 | v1.9 | Domain Model: 93 entities, 8 domains, ERD, Ownership Matrix, FSM Catalog, Decisions D1–D138+ | `Docs/AGOS-Dok1-v1_9.md` |
+| Dok 3 | v1.5 | RPC Catalog: ~92 functions (45 business + 14 M4/M6 + 11 A-CAT + 22 AI Gateway), Canonical Name Registry | `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md` |
 | Dok 4 | v1.1 | Event Bus: 59 canonical events, 28 notification templates, 10 proactive triggers, audit registry | `Docs/AGOS-Dok4-EventBus-v1_1.md` |
 | Dok 5 | v1.7 | AI Gateway: LangGraph architecture, two-run confirmation, SKIP LOCKED concurrency | `Docs/AGOS-Dok5-AIGateway-v1_7.md` |
-| Dok 6 | v1.3 | Interface Contracts: 106 scenarios, 53 SCREEN contracts (F01–F28, A01–A19, M01–M06) | `Docs/AGOS-Dok6-InterfaceContracts-v1_3.md` |
+| Dok 6 | — | maintained as slice files (Slice1..6b, Slice-CAPEX, A-CAT); no consolidated master | `Docs/` (slice files) |
 | Dok 7 | — | Consulting Module Architecture: feeding model, NASEM, 3-priority chain | `Docs/AGOS-Dok7-RationConsulting-Architecture.md` |
-| Consulting Spec | — | Master specification for consulting module | `Docs/CONSULTING_MASTER_SPEC.md` |
+| Consulting Spec | — | Master specification for consulting module (historical v1.0) | `Docs/CONSULTING_MASTER_SPEC.md` |
+| Microstep 1 | Identity v0.2 | Identity & Auth FSM — canon for Identity/Auth domain | `Docs/AGOS-TSP-Flow-Microsteps/` |
+| Microstep 2 | — | Membership FSM — canon for Membership domain | `Docs/AGOS-TSP-Flow-Microsteps/` |
+| Microstep 3 | — | Feature Governance — canon (unbuilt; see IMPL_DEBT) | `Docs/AGOS-TSP-Flow-Microsteps/` |
+| Microstep 4 | — | TSP Batch/Pool/Offer — canon for TSP domain | `Docs/AGOS-TSP-Flow-Microsteps/` |
+| Microstep 6 | — | TSP Flow & events — canon for TSP events | `Docs/AGOS-TSP-Flow-Microsteps/` |
+| d09_consulting.sql | — | Deployed schema: consulting module tables & RPCs | `d09_consulting.sql` |
+| d10_public_site.sql | — | Deployed schema: public site tables & RPCs | `d10_public_site.sql` |
+| d11_norms.sql | — | Deployed schema: norms/standards tables & RPCs | `d11_norms.sql` |
+| IMPL_DEBT.md | — | Implementation debt backlog (code≠canon gaps, Phase-2) | `IMPL_DEBT.md` |

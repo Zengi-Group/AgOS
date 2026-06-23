@@ -61,9 +61,9 @@ M01-VetCaseQueue
 └── EmptyState "Нет открытых кейсов"
 ```
 
-### Data: Use existing `rpc_get_vet_case_detail` with null case_id for list mode, or direct query via admin RLS.
+### Data: Uses `rpc_list_vet_cases` (READ-RPC, see D-S6a-FIX-1) with expert RLS. `rpc_get_vet_case_detail` requires a valid `case_id` and raises `VET_CASE_NOT_FOUND` when called without one — it cannot be used as a list endpoint.
 
-### CTO Decision D-S6-1: Expert queue uses `.from('vet_cases')` with admin/expert RLS (SELECT policy exists). Creating a dedicated list RPC would add overhead for a read-only admin screen. Accepted pattern for M-series screens.
+### CTO Decision D-S6-1 (superseded for M01, M03, M05 by D-S6a-FIX-1): Expert/Admin list screens originally planned to use `.from()` with admin/expert RLS policies. Superseded for M-series vet screens — see D-S6a-FIX-1 below.
 
 ---
 
@@ -325,7 +325,9 @@ A05-AuditLog
 
 ### CTO Decisions
 
-**D-S6-1:** Expert/Admin list screens (M01, M03, M05, A03, A04, A05) use `.from()` with admin/expert RLS policies. These are data-dense tables where creating list RPCs adds boilerplate without security benefit — RLS already isolates data correctly.
+**D-S6-1:** Expert/Admin list screens originally planned to use `.from()` with admin/expert RLS policies for M01, M03, M05. **Superseded for M01/M03/M05 by D-S6a-FIX-1.** Remains valid for A03, A04, A05 (non-vet admin screens).
+
+**D-S6a-FIX-1 (2026-06-22):** M03/M04/M05 (and M01) use dedicated `rpc_list_*` READ-RPCs instead of direct `.from()` table queries. Rationale: `rpc_get_vet_case_detail` requires a non-null `case_id` — omitting it raises `VET_CASE_NOT_FOUND` and is not a viable list mode. Dedicated list RPCs (`rpc_list_vet_cases`, `rpc_list_vaccination_plans`, `rpc_list_epidemic_signals`) provide proper filtering, pagination, and consistent RLS enforcement. This supersedes D-S6-1 for M-series vet screens.
 
 **D-S6-2:** RPC-30 (`rpc_add_vaccination_plan_item`) deferred — RPC-29 generates items from protocol. Manual item addition is a later enhancement.
 

@@ -28,10 +28,10 @@ All CAPEX screens use the **Admin Panel** neutral palette (`.light`) for admin s
 ## Navigation Structure
 
 ```
-/admin/capex                     → redirect to /admin/capex/materials
-├── /admin/capex/materials       → CAPEX-ADMIN-01
-├── /admin/capex/norms           → CAPEX-ADMIN-02
-└── /admin/capex/surcharges      → CAPEX-ADMIN-03
+/admin/directories/capex                     → redirect to /admin/directories/capex/materials
+├── /admin/directories/capex/materials       → CAPEX-ADMIN-01
+├── /admin/directories/capex/norms           → CAPEX-ADMIN-02
+└── /admin/directories/capex/surcharges      → CAPEX-ADMIN-03
 
 /admin/consulting/:projectId
 ├── /edit                        → ProjectWizard (Edit mode) — hosts CONSULTING-WIZARD-MATERIAL-01
@@ -39,7 +39,9 @@ All CAPEX screens use the **Admin Panel** neutral palette (`.light`) for admin s
 └── /capex                       → CONSULTING-CAPEX-EDIT-01
 ```
 
-Sidebar entry (admin nav): «Инфраструктура» → `/admin/capex`, icon `Building2` (lucide-react).
+Sidebar entry (admin nav): «Справочники» → `/admin/directories/capex`, icon `Building2` (lucide-react).
+
+> **Route update (MARKET-UI-07):** Routes updated from `/admin/capex/*` to `/admin/directories/capex/*` to match deployed `src/App.tsx` (Справочники sidebar section).
 
 ---
 
@@ -50,7 +52,7 @@ Sidebar entry (admin nav): «Инфраструктура» → `/admin/capex`, 
 | Field | Value |
 |-------|-------|
 | Screen ID | CAPEX-ADMIN-01 |
-| Route | `/admin/capex/materials` |
+| Route | `/admin/directories/capex/materials` |
 | Auth | `fn_is_admin()` |
 | User story | Админ видит каталог из 4 базовых материалов с ценой за м². Кликает строку → редактирует name_ru + cost_per_m2. Код material readonly в режиме edit. |
 | Component | `CapexMaterialsTab` exported from [CapexReferenceAdmin.tsx](../src/pages/admin/capex/CapexReferenceAdmin.tsx) |
@@ -101,7 +103,7 @@ Returned by `rpc_list_construction_materials`:
 | Field | Value |
 |-------|-------|
 | Screen ID | CAPEX-ADMIN-02 |
-| Route | `/admin/capex/norms` |
+| Route | `/admin/directories/capex/norms` |
 | Auth | `fn_is_admin()` |
 | User story | Админ видит 53 норматива инфраструктуры grouped by блок, фильтрует по блоку, ищет по коду/названию. Кликает строку → Dialog с полным JSONB editor. |
 | Component | `CapexNormsTab` + `NormDialog` |
@@ -172,7 +174,7 @@ Per-item fields (from `data` JSONB — see Dok 7 §11.3-§11.5):
 | Field | Value |
 |-------|-------|
 | Screen ID | CAPEX-ADMIN-03 |
-| Route | `/admin/capex/surcharges` |
+| Route | `/admin/directories/capex/surcharges` |
 | Auth | `fn_is_admin()` |
 | User story | Админ видит единственную активную конфигурацию надбавок (works_rate, contingency_rate, applies_to_blocks, contingency_base_by_block). Редактирует и сохраняет. Следующий recalc проекта подхватит изменения. |
 | Component | `CapexSurchargesTab` |

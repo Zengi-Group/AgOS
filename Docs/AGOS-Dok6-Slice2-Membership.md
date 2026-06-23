@@ -7,6 +7,12 @@
 > **Scope:** 2 admin screens (A01, A02) — membership application review.
 > **User story:** Admin sees pending applications → reviews details → approves or rejects → farmer sees updated status.
 
+> ⚠️ **MEMBERSHIP LIFECYCLE CANON — Microstep 2 / Decision A1**
+> The membership lifecycle is canonically defined by **Microstep 2** (6-state FSM) and **Decision A1** (binary tier model: `registered` / `member`).
+> The level-stack model (`observer` / `associate` / `member`) and `membership_type` field referenced in earlier drafts of this slice are **retired** — they do not reflect deployed reality.
+> Code references to level-stack and `membership_type` are implementation debt tracked as **MEMBERSHIP-01..06**; migration is a Phase 2 task.
+> This slice's screen contracts remain valid for the application-review flow but UI labels and status values must align to the 6-state FSM: `draft` → `submitted` → `under_review` → `approved` / `rejected` / `withdrawn`.
+
 ---
 
 ## Design System
@@ -196,7 +202,7 @@ A01-MembershipQueue
   - Emits event: `identity.membership.activated`
 - If `p_decision = 'rejected'`:
   - Updates `membership_applications.status = 'rejected'`, sets `reviewed_at`, `reviewed_by`
-  - Emits event: `identity.membership_application.rejected`
+  - Emits event: `identity.membership_application.decided`
 - Error codes: `APPLICATION_NOT_FOUND`, `ALREADY_DECIDED`, `INVALID_DECISION`
 
 **Application detail data:** Can be loaded via the same `rpc_get_membership_queue` with an ID filter, or a dedicated `rpc_get_application_detail`. Since Slice 2 is lightweight, using the queue RPC with a single-item filter is acceptable. **CEO decision: dedicated RPC or reuse queue?**

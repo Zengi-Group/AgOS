@@ -1,11 +1,59 @@
 # SPRINT STATUS — AgOS
 
 > Maintained by: Architect (planning/sign-off), DB Agent (after SQL), Backend Agent (after code), UI Agent (after UI)
-> Last updated: 2026-05-13 (ADR-AUTH-CONSOLIDATE-01 — duplicate registration removed)
+> Last updated: 2026-06-15 (DOC-SYNC-A-CAT-01 — Dok 1/3/4 синхронизированы с A-CAT SQL deployed)
 
 ---
 
-## Current Phase: ✅ ADR-AUTH-CONSOLIDATE-01 — CLOSED (2026-05-13)
+## Current Phase: 🟡 M4 + M6 TSP — SQL CLOSED (incl. A-CAT bridge), DOCS SYNCED, UI/DATA PENDING (2026-06-15)
+
+**Что закрыто (SQL layer):**
+
+| Слой | Скоуп | Коммиты | Статус |
+|------|-------|---------|--------|
+| Schema (SECTION 7) | 12 новых таблиц, batches +8 cols / pools +6 cols (вкл. `organization_id` denormalisation), 14 индексов, RLS на 5 таблицах, seed `tsp_config` + 4 `review_dimensions`, deprecate `pool_requests` | `3415f64` + addendum `19dc1f1` | ✅ deployed на prod (`mwtbozflyldcadypherr`) |
+| RPC (SECTION 8) | 14 функций M4/M6 канон: `rpc_create_pool, rpc_publish_pool, rpc_retry_match_pool, rpc_accept_offer, rpc_reject_offer, rpc_lower_batch_price, rpc_confirm_dispatch, rpc_confirm_delivery, rpc_submit_deal_review, rpc_pool_return_batches, rpc_pool_accept_partial, rpc_cancel_pool, rpc_get_reference_price, rpc_get_minimum_price` | `f7ec5d3` + `80ba7b2` + `19dc1f1` | ✅ deployed (14/14 в `information_schema.routines` + `rpc_name_registry`) |
+| **A-CAT Schema (SECTION 7.16)** | `tsp_sku_category_map` (bridge) + partial unique index + 2 lookup indexes + RLS + 2 policies | `0450823` | ✅ deployed на prod |
+| **A-CAT RPC patches (SECTION 8)** | `rpc_lower_batch_price` floor-clamp ✅ enabled (bridge JOIN, exact-rayon→national fallback) + `rpc_create_pool` floor-resolve via bridge (back-compat preserved) | `0450823` | ✅ deployed |
+| **A-CAT Admin RPC (SECTION 8a)** | 11 functions: AC-1..7 write + AR-1..4 read; все `SECURITY DEFINER` + `fn_is_admin()` gate; whitelisted в `cross_check.sh` CHECK-5 (admin reference-data exception) | `0450823` | ✅ deployed (11/11 в `information_schema.routines` + `rpc_name_registry`) |
+| Code review | 13 adversarial findings — 11 fixed, 2 rejected с обоснованием | `19dc1f1` | ✅ closed |
+| Resolved defects | DEF-TSP-M4-OWNERSHIP, Q-TSP-RETRY-MATCH | — | ✅ closed |
+| Resolved questions | **Q-TSP-CATEGORY-CLASSIFIER** (SQL layer ✅; UI+data pending — см. ниже) | — | ✅ architecture closed, ✅ SQL closed |
+| Docs sync (DOC-SYNC-M4M6-01 + **DOC-SYNC-A-CAT-01**) | Dok 1 §8 v1.9 patch (12+1 entities, A-CAT statuses), Dok 3 §4a (14 RPC) + **§4b (11 A-CAT RPC)**, Dok 4 §3.3a (15 events) + **§3.3b (A-CAT events deferral decision)** | — | ✅ done 2026-06-15 |
+
+**Verification:**
+- `cross_check.sh` — 0/0/0 (после whitelist'а 11 A-CAT admin RPC в CHECK-5 — admin reference-data exception документирована inline)
+- `information_schema.routines` — 14/14 M4/M6 + 11/11 A-CAT admin = **25 routines** SECURITY DEFINER + search_path
+- `rpc_name_registry` — 14/14 M4/M6 + 11/11 A-CAT (всего 25 new entries from 2026-06-15)
+- `pools.organization_id` — NOT NULL, backfilled
+- `tsp_sku_category_map` — 7 cols, 4 indexes (pk + ux_active + idx_sku + idx_cat), RLS=true, 2 policies (read=auth / write=fn_is_admin)
+- 3 RLS policies переписаны на column-check
+- Smoke tests `rpc_get_minimum_price` / `rpc_get_reference_price` / `rpc_cancel_pool` — корректно
+- Bridge integration verified: `rpc_lower_batch_price` + `rpc_create_pool` source содержит `tsp_sku_category_map` JOIN
+
+**Что открыто (блокирует pilot):**
+
+| Долг | Severity | Owner | Зависимость |
+|------|----------|-------|-------------|
+| **A-CAT UI** (A-CAT-01..04 экраны) | Significant | UI Agent | §3 спеки `Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md`. Подключение к 11 RPC уже deployed (см. Dok 3 §4b). ~2–3 дня. |
+| **A-CAT data fill** (5–8 категорий + 30 SKU маппингов + N цен) | Critical (final pilot unblock) | CEO + зоолог | Зависит от A-CAT UI. После наполнения floor-enforcement автоматически активируется без redeploy (~1 час работы в админке). |
+| **M6-C-ADMIN-FLOW** | Significant | Architect (дизайн-сессия) | UX-flow админа Турана (WIP в Microstep6, не закрыт). Параллельно с A-CAT — не блокирует. |
+| **Dok 6 SCREEN contracts для M6-A/B/C** | Significant | Architect | Блокирует UI Agent для M6-A/B/C треков. После M6-C closure. |
+| **AI Gateway tools для M4/M6 RPC** | Significant | Backend Agent | Текущие tools умеют только legacy `rpc_create_pool_request`/`rpc_match_batch_to_pool`. Не блокирует web-pilot; нужен для WhatsApp-канала. |
+| **UI экраны для M6-A/B/C** | Significant | UI Agent | После Dok 6 contracts. |
+| **Q-TSP-REVIEW-DIMENSIONS** | Minor | CEO post-pilot | Полный список dimensions после пилота. Пилотный seed (4 строки) уже в БД. |
+| **LEGACY-RPC-CLEANUP** | Minor | Architect (ADR) | 7 legacy Slice 5b RPC дублируют функциональность. Deprecation ADR после миграции UI. |
+| **M5-ONBOARDING** | Minor (deferred) | CEO + Architect | Microstep 5 не спроектирован. |
+| **MIN-MEMBERSHIPS-CHECK-01** | Minor | DB Agent | `memberships_level_valid_for_type` CHECK без `IF NOT EXISTS`. |
+| **DEF-TSP-M4-HEADER-STALE-01** | Minor | DB Agent | §8 header в d02_tsp.sql строки ~2120-2124 описывают уже-закрытый DEF-TSP-M4-OWNERSHIP «compromise». Косметика. |
+
+**Recommended next step:** **UI Agent — §3 спеки** [`Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md`](Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md): 4 экрана `/admin/livestock-categories/*` (~2–3 дня). RPC уже live (commit `0450823`) — фронт делается «к готовому API». После UI sign-off CEO + зоолог наполняют данные в админке (~1 час) → Q-TSP-CATEGORY-CLASSIFIER полностью closed, TSP pilot разблокирован.
+
+**Параллельные треки:** **M6-C-ADMIN-FLOW** (Architect дизайн-сессия) + **AI Gateway tools** (Backend Agent) — оба не блокируют A-CAT pilot.
+
+---
+
+## Previous Phase: ✅ ADR-AUTH-CONSOLIDATE-01 — CLOSED (2026-05-13)
 
 **Decision:** `/register` (AGOS-native, 348 lines) declared canonical registration. Imported `/join` flow (1750 lines, from turan-industry-catalyst merge ADR-MIGRATION-01) and parallel admin queue removed from UI. Landing page and all marketing components preserved; CTAs rewired to `/register` directly.
 

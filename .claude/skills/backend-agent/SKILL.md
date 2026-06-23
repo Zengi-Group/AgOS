@@ -22,7 +22,7 @@ Before writing code, read the relevant specs. **Never implement from memory.**
 
 ### Architecture Docs (Docs/) — your primary specs
 - `Docs/AGOS-Dok5-AIGateway-v1_7.md` — YOUR MAIN SPEC. Read it fully before your first session. §3 graph, §6 tools, §7 extraction, §8 compliance, §11 errors, §12 proactive, §15 embedding.
-- `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md` — RPC signatures you call via supabase.rpc(). §1.8 + §10 for AI Gateway RPCs. Appendix A for Edge Functions.
+- `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md` — RPC signatures you call via supabase.rpc(). §1.8 + §10 for AI Gateway RPCs. Appendix A for Edge Functions.
 - `Docs/AGOS-Dok4-EventBus-v1_1.md` — Events your code publishes and consumes (proactive triggers)
 
 ### Schema (root) — you READ these, never modify

@@ -318,6 +318,69 @@ INSERT INTO public.user_notification_preferences (user_id, channel)
 | **market.price_grid.updated** | RPC-19 [ADMIN] | Realtime (все) ✅, Audit | version, effective_date, changes[{category_code, grade_code, old_price, new_price}] |
 | **market.price_index.published** | RPC-20 [ADMIN] | Realtime (Market screen) ✅ | index_id, period_date, value_per_kg, data_source |
 
+#### 3.3a. Market / TSP — M4 + M6 Extension (2026-06-15, +15 событий)
+
+> События, генерируемые 14 новыми RPC из [Dok 3 §4a](AGOS-Dok3-RPC-Catalog-v1_5.md#4a-market--tsp--m4--m6-extension-canonical-2026-06-15). Все эмитятся **дважды**: в `batch_events` (append-only audit log per batch, M4 §6.4) И в `platform_events` (для consumers / Realtime / notification).
+> **Legacy совместимость:** старые события `market.batch.matched/cancelled/expired`, `market.pool.batch_added/status_changed/contacts_revealed` сохраняются для backward compat (P7). Новые M4/M6 flow используют события ниже.
+
+| canonical_event_type | Producer (RPC) | Consumers | Описание |
+|----------------------|----------------|-----------|----------|
+| **market.batch.scheduled** | `rpc_publish_batch` (D-M6-7 path) | Farmer Realtime ✅ | batch_id, org_id, scheduled_publish_at, ready_from, ready_to |
+| **market.batch.auto_published** | System cron (scheduled→published) | MPK Feed ✅, Match Engine | batch_id, org_id, farmer_price_per_kg, ready_window |
+| **market.batch.offering** | `rpc_publish_pool` / `rpc_retry_match_pool` / `rpc_lower_batch_price` | MPK с активным Offer (Realtime ✅), AI GW | batch_id, mpk_org_ids[], offer_window_hours, expires_at |
+| **market.batch.awaiting_price_decision** | System cron (offers expired) | Farmer Notification ✅, AI GW | batch_id, org_id, expired_offers_count |
+| **market.batch.price_lowered** | `rpc_lower_batch_price` | MPK с новым Offer (Realtime ✅), Audit | batch_id, old_price, new_price, was_clamped, broadcast_mpk_count |
+| **market.batch.matched** *(M4 канон)* | `rpc_accept_offer` | Farmer+MPK Notification ✅, Audit | batch_id, pool_id, pool_line_id, mpk_org_id, deal_price_per_kg, volume_kg |
+| **market.batch.confirmed** | `rpc_accept_offer` (auto-close path) | Farmer+MPK Notification ✅ (D-M6-5: identity revealed), Audit | batch_id, pool_id, mpk_org_id, mpk_legal_name, farmer_org_id, farmer_legal_name |
+| **market.batch.dispatched** | `rpc_confirm_dispatch` | MPK Notification ✅, AI GW | batch_id, dispatched_at, by_user_id |
+| **market.batch.delivered** | `rpc_confirm_delivery` | Farmer Notification ✅, Review-prompt scheduler | batch_id, delivered_at, by_user_id |
+| **market.offer.created** *(PENDING-CODE — declared in canon Microstep6; not yet emitted; debt TSP-FLOW-06)* | `rpc_publish_pool` / `rpc_retry_match_pool` / `rpc_lower_batch_price` — **NOT EMITTED YET** | MPK Notification ✅ (pending) | offer_id, batch_id, mpk_org_id, offered_price_per_kg, expires_at |
+| **market.offer.accepted** *(emitted in code today via `rpc_accept_offer`)* | `rpc_accept_offer` | Farmer + MPK Notification ✅, Audit | offer_id, batch_id, mpk_org_id, deal_price_per_kg, accepted_at |
+| **market.offer.rejected** *(emitted in code today via MPK rejection path)* | `rpc_accept_offer` (MPK reject) / manual reject path | Farmer Notification ✅ | offer_id, batch_id, mpk_org_id, rejected_at, reason |
+| **market.offer.expired** *(PENDING-CODE — canonical; not yet emitted by cron; debt TSP-FLOW-06)* | System cron (offer window elapsed) — **NOT EMITTED YET** | Farmer Notification ✅ (pending) | offer_id, batch_id, mpk_org_id, expired_at, offers_window_hours |
+| **market.offer.withdrawn** *(PENDING-CODE — declared in canon Microstep6; not yet emitted for all paths; debt TSP-FLOW-06)* | `rpc_accept_offer` (sibling withdraw) / cancel paths — **PARTIAL** | MPK Realtime ✅ (pending full coverage) | offer_id, batch_id, mpk_org_id, reason: 'sibling_accepted'\|'batch_cancelled'\|'pool_cancelled'\|'pool_returned' |
+| **market.pool.cancelled** | `rpc_cancel_pool` | MPK + всех matched Farmer Notification ✅, Audit | pool_id, mpk_org_id, reason, affected_batches_count |
+| **market.pool.closed_partial** | `rpc_pool_accept_partial` | Farmer Notification ✅ (matched batches confirmed), Audit | pool_id, mpk_org_id, confirmed_batches_count, fill_ratio |
+| **market.pool.closed_unfilled** | `rpc_pool_return_batches` / cron (window expired, no decision) | Farmer Notification ✅ (batches → published), Audit | pool_id, mpk_org_id, returned_batches_count |
+| **market.review.submitted** | `rpc_submit_deal_review` | Other party Notification (only "получен отзыв" — без content до reveal), Audit | review_id, batch_id, reviewer_org_id, reviewer_role, overall_score (visible to reviewer only) |
+| **market.review.revealed** *(DEFERRED — double-blind reveal not yet implemented; debt TSP-FLOW-07)* | `rpc_submit_deal_review` (when both submitted) / cron (window expired) — **NOT EMITTED YET** | Both parties Realtime ✅ (pending) | batch_id, reviews[{reviewer_role, overall_score, dimension_scores[], comment}] |
+
+**Notes on payload conventions:**
+- Все события M4/M6 содержат `org_id` источника (для P-AI-2 фильтрации).
+- `batch.confirmed` — единственное событие, раскрывающее `legal_name` контрагента (D-M6-5). До этого — только `org_id` без identity.
+- `review.submitted` payload в notification-канале маскируется до `visible_at`: получатель видит "получен отзыв", не содержание.
+- `review.revealed` **DEFERRED** (TSP-FLOW-07): double-blind reveal mechanism not yet implemented. Canonical name `market.review.revealed` is reserved. Do not treat as emitted until implemented.
+
+**Aggregate market events (для AI/analytics, через `is_audit=true`):** none пока. Pending Dok 5 §6 antitrust review для aggregated-market-data tooling.
+
+#### 3.3b. A-CAT Admin Events (D-TSP-CATEGORY-BRIDGE, 2026-06-15)
+
+> **Архитектурное решение (Architect, DOC-SYNC-A-CAT-01, 2026-06-15):** 11 admin RPC из [Dok 3 §4b](AGOS-Dok3-RPC-Catalog-v1_5.md#4b-a-cat-admin-rpc-d-tsp-category-bridge-2026-06-15) **в MVP не эмитят `platform_events`**.
+
+**Обоснование:**
+- A-CAT экраны (A-CAT-01..04) — admin-only, низкочастотные: разовый setup (~1 час CEO+зоолог) + редкие quarterly корректировки.
+- Real-time consumer'ов нет: UI перечитывает данные при открытии экрана; floor-clamp и pool-floor работают на `is_active=true` snapshot (eventually consistent — read-on-demand).
+- **Audit trail обеспечивается denormalised columns:**
+  - `minimum_prices.approved_by` + `approved_at` — кто и когда утвердил защитный floor (Art.171 ПК РК — стандарт ассоциации).
+  - `reference_prices.approved_by` + `approved_at` + `legal_disclaimer_shown` — индикативная цена.
+  - `tsp_sku_category_map.created_by` + `created_at` + `version` — кто и когда замапил SKU; полная история через `is_active=false` строки.
+- P7-additive путь к подключению events: при появлении consumer'а (AI Gateway tool «show floor history», proactive alert «protective floor changed», notification «новая категория добавлена») — добавить эмиссию в соответствующий RPC без слома существующих callers.
+
+**Phase 2 candidate events (NOT in MVP, для справки):**
+
+| candidate event_type | Producer (RPC) | Trigger для добавления |
+|----------------------|----------------|------------------------|
+| `platform.livestock_category.upserted` | AC-1 | Notification «новая SKU-категория доступна» для UI / consulting projects |
+| `platform.livestock_category.deactivated` | AC-2 | Если AI tool «category lookup» появится — invalidate cache |
+| `platform.livestock_category_rule.activated` | AC-4 | AI extraction tool для batch creation начнёт использовать derive — нужен ruleset change broadcast |
+| `platform.sku_category_map.updated` | AC-5 | Coverage metric (% SKU mapped) — Realtime для admin dashboard |
+| `platform.minimum_price.updated` | AC-6 | Notification farmers (Art.171 announcement) ИЛИ AI proactive alert «floor changed» |
+| `platform.reference_price.updated` | AC-7 | То же что minimum, но низший приоритет (indicative-only) |
+
+**Status:** все 6 строк выше — **deferred** до появления конкретного consumer'а. Не блокирует pilot.
+
+**Aggregate / audit считаем через прямой DB query на `tsp_sku_category_map` / `minimum_prices` / `reference_prices` истории (`is_active=false` строки сохраняются как archive).**
+
 ### 3.4. Feed Domain (4 события)
 
 | canonical_event_type | Producer | Consumers | Описание |
@@ -369,7 +432,9 @@ INSERT INTO public.user_notification_preferences (user_id, channel)
 | **edu.course.enrolled** | RPC-38 [WEB,AI] | Farmer Notification | enrollment_id, user_id, course_id, course_name, access_type |
 | **edu.lesson.completed** | RPC-39 [WEB,AI] | Progress tracker | enrollment_id, lesson_id, score, progress_pct_now |
 | **edu.course.completed** | RPC-39 [WEB,AI] | Certificate trigger, Farmer Notification | enrollment_id, course_id, completed_at, final_score |
-| **edu.certificate.issued** | System trigger | Farmer Notification, Audit | certificate_id, user_id, course_id, course_name, issued_at |
+| **edu.certificate.issued** ⚠️ **MANDATORY — must always fire when a certificate is created** | System trigger (auto-fires on `edu.course.completed`) | Farmer Notification ✅, Audit ✅ | certificate_id, user_id, course_id, course_name, issued_at |
+
+> **IMPL_DEBT EDUCATION-02/03:** Code currently emits `education.enrollment.completed` (non-canonical name). Canonical name is `edu.certificate.issued`. Rename required in code. Until renamed, `edu.certificate.issued` is **declared/pending-code** for certificate issuance. The `edu.course.enrolled` / `edu.lesson.completed` / `edu.course.completed` canonical set is correct and should be used in new code.
 
 ### 3.8. Platform Domain (5 событий)
 
@@ -425,6 +490,20 @@ CapexTab (после toggle/qty_override/material_override изменений). 
 **Почему отдельный event, а не `consulting.version.created`:** save override
 ≠ recalc. Expert может сохранить много мелких правок, затем один раз
 пересчитать. Event `version.created` emits только при /calculate success.
+
+---
+
+### 3.11. Governance Domain — DEFERRED (GOVERNANCE-04)
+
+> **DEFERRED until Microstep 3 (Feature Governance) is implemented.** These three events are registered here as canonical names to prevent name drift when M3 is built. None of them are emitted today. Cross-ref: IMPL_DEBT GOVERNANCE-01/02.
+
+| canonical_event_type | Status | Producer (future) | Consumers (future) | Описание |
+|----------------------|--------|-------------------|--------------------|----------|
+| **entitlements.invalidated** | **DEFERRED — M3 unbuilt** | M3 Governance engine (RPC, future) | AI Gateway (permission cache flush), UI (re-fetch feature flags) | Fired when an org's entitlement set changes (membership upgrade/downgrade, manual admin override). All downstream caches must flush. |
+| **feature_gate.updated** | **DEFERRED — M3 unbuilt** | M3 Governance engine (RPC, future) | UI (React Query invalidate feature-flags), AI Gateway | Fired when a feature flag definition changes (threshold, enabled/disabled, rollout %). Consumers re-fetch from `feature_gates` table. |
+| **feature_usage.recorded** | **DEFERRED — M3 unbuilt** | System (inline in feature-gated RPCs, future) | Analytics Worker, Quota enforcement | Fired per feature invocation for metering/quota. High-volume; will require its own polling tier (analytics / 5 min). |
+
+**Path to implementation:** when M3 is built, add emitters to Governance RPCs and add these three event_types to `event_audit_registry` seed. Do NOT add until M3 RPCs exist (P7 — additive architecture).
 
 ---
 
@@ -496,7 +575,7 @@ CapexTab (после toggle/qty_override/material_override изменений). 
 | platform_events WHERE event_type LIKE 'vet.%' | Farmer (own org) | Красный баннер в разделе Ветеринария | org_id фильтр ✅ |
 | notifications WHERE user_id = :own_user_id | Farmer / MPK | Красная точка, in-app toast | Точный user_id фильтр — RLS безопасен ✅ |
 
-### 5.1. React-пример подписки (для Lovable / Cursor)
+### 5.1. React-пример подписки (для Cursor / Claude Code)
 
 ```javascript
 // ИСПРАВЛЕНО: подписываемся на platform_events (не herd_groups напрямую)
@@ -669,7 +748,7 @@ async def should_send(org_id, alert_type, entity_id):
 
 ## 9. Паттерн публикации событий
 
-> *`publish_event()` — внутренний хелпер, вызывается ТОЛЬКО внутри RPC-функций PostgreSQL. Приложение (Lovable, AI Gateway) НЕ вызывает `publish_event()` напрямую. Единственная точка входа — соответствующий RPC из Dok 3 каталога.*
+> *`publish_event()` — внутренний хелпер, вызывается ТОЛЬКО внутри RPC-функций PostgreSQL. Приложение (Web-кабинет, AI Gateway) НЕ вызывает `publish_event()` напрямую. Единственная точка входа — соответствующий RPC из Dok 3 каталога.*
 
 ```sql
 -- Хелпер (001_kernel.sql или 009_patch)

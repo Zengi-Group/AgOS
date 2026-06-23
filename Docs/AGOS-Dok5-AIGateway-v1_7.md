@@ -1194,6 +1194,25 @@ def prepare_vet_case_params(state: AgentState, symptoms: str) -> dict:
 
 **⚠️ Запрет (ст. 171 ПК РК):** `get_market_overview` возвращает только агрегированные анонимные данные. Детали конкретных ферм — никогда.
 
+### 6.5a. Deployed tools (AI-GATEWAY-07) — дополнительный каталог
+
+> Эти инструменты задеплоены в `ai_gateway/tools/*.py` но отсутствовали в §6.1–6.5.
+> Добавлены в рамках doc-reconciliation Phase 1. Полная верификация параметров — в коде.
+
+| Tool Name | Роль | Суть | → RPC | Confirmation? |
+|-----------|------|------|-------|:---:|
+| `cancel_batch` | `trading_agent` | Отменить черновик или активный батч | `rpc_cancel_batch` | **Да** |
+| `get_price_for_sku` | `trading_agent` | Справочная цена для конкретного SKU | `rpc_get_price_for_sku` | — |
+| `get_market_summary` | `trading_agent` | Агрегированный рыночный срез (спрос + предложение) по региону/месяцу | `rpc_get_market_summary` | — |
+| `close_vet_case` | `vet` | Закрыть ветеринарный кейс с исходом (outcome) | `rpc_close_vet_case` | **Да** |
+| `get_farm_summary` | `zootechnician` | Сводка по ферме: поголовье, кормление, задачи | `rpc_get_farm_summary` | — |
+| `get_current_ration` | `zootechnician` | Текущий рацион всех групп фермы | `rpc_get_current_ration` | — |
+| `update_feed_inventory` | `zootechnician` | Обновить остатки корма (один вид корма) | `rpc_upsert_feed_inventory` | **Да** |
+| `log_herd_event` | `zootechnician` | Записать событие стада (падёж, перевод, взвешивание) | `rpc_log_herd_event` | **Да** |
+| `get_active_plan` | `zootechnician` | Полный обзор активного производственного плана | `rpc_get_active_plan` | — |
+
+**Примечание по `get_market_summary` (ст. 171 ПК РК):** только агрегированные данные, без раскрытия конкретных ферм — аналогично `get_market_overview`.
+
 ### 6.6. Матрица tools × роли
 
 | Tool | zoоtech | vet | consultant | trading |
@@ -1221,6 +1240,38 @@ def prepare_vet_case_params(state: AgentState, symptoms: str) -> dict:
 | get_market_overview | — | — | — | ✅ |
 | get_active_batches | — | — | — | ✅ |
 | search_knowledge | ✅ | ✅ | ✅ | ✅ |
+| cancel_batch | — | — | — | ✅ |
+| get_price_for_sku | — | — | — | ✅ |
+| get_market_summary | — | — | — | ✅ |
+| close_vet_case | — | ✅ | — | — |
+| get_farm_summary | ✅ | — | — | — |
+| get_current_ration | ✅ | — | — | — |
+| update_feed_inventory | ✅ | — | — | — |
+| log_herd_event | ✅ | — | — | — |
+| get_active_plan | ✅ | — | — | — |
+
+### 6.7. Tool-name ↔ RPC-name mapping (A3)
+
+**Решение A3:** LLM-видимые имена tool (левый столбец) принадлежат Dok 5 — это абстракция Gateway-уровня. SQL RPC-имена (правый столбец) — реальность: они живут в `rpc_name_registry` и в `ai_gateway/tools/*.py`. Gateway сам выполняет маппинг при каждом вызове. **RPCs не переименовываются** (P7 — Additive Architecture): RPC-имя = вызываемый SQL identifier, изменение требует миграции.
+
+| Tool name (LLM-видимый, Dok 5) | SQL RPC name (canonical, rpc_name_registry) | Расхождение? | Файл |
+|-------------------------------|---------------------------------------------|:---:|------|
+| `get_farm_context` | `rpc_get_ai_farm_context` | ✅ расходится | `tools/` (nodes.py) |
+| `create_batch_draft` | `rpc_create_batch` | ✅ расходится | `tools/market.py` |
+| `get_market_overview` | `rpc_get_aggregated_supply` + `rpc_get_aggregated_demand` | ✅ расходится (1→2 RPC) | `tools/market.py` |
+| `get_active_batches` | `rpc_get_org_batches` | ✅ расходится | `tools/market.py` |
+| `update_herd_group` / `create_herd_group` | `rpc_upsert_herd_group` | ✅ расходится (2→1 RPC) | `tools/` |
+| `update_feed_inventory` | `rpc_upsert_feed_inventory` | ✅ расходится | `tools/feed.py` |
+| `cancel_batch` | `rpc_cancel_batch` | совпадает (prefix) | `tools/market.py` |
+| `get_price_for_sku` | `rpc_get_price_for_sku` | совпадает (prefix) | `tools/market.py` |
+| `get_market_summary` | `rpc_get_market_summary` | совпадает (prefix) | `tools/market.py` |
+| `close_vet_case` | `rpc_close_vet_case` | совпадает (prefix) | `tools/expert.py` |
+| `get_farm_summary` | `rpc_get_farm_summary` | совпадает (prefix) | `tools/feed.py` |
+| `get_current_ration` | `rpc_get_current_ration` | совпадает (prefix) | `tools/feed.py` |
+| `log_herd_event` | `rpc_log_herd_event` | совпадает (prefix) | `tools/feed.py` |
+| `get_active_plan` | `rpc_get_active_plan` | совпадает (prefix) | `tools/ops.py` |
+
+> **⚠️ Debt AI-GATEWAY-02/06:** полный список tool↔RPC маппингов должен быть верифицирован против `ai_gateway/tools/*.py`. Таблица выше содержит известные расхождения; остальные инструменты (где `rpc_` prefix match) подлежат финальной проверке в Phase 2. Унификация именования — отдельный backlog item (не в Phase 1).
 
 ---
 
@@ -1341,6 +1392,9 @@ COMPLIANCE_RULES = [
     },
     {
         "id": "CF-03",
+        # ⚠️ DEBT AI-GATEWAY-05: CF-03 определена в каноне (Dok 5), но НЕ реализована в коде.
+        # compliance.py не содержит логики approved_proactive_alerts check.
+        # Оставить в спецификации — убрать из реестра долга при реализации.
         "name": "Epidemic: unauthorized alert",
         "check": "mentions regional outbreak AND NOT in approved_proactive_alerts",
         "action": "REPLACE",
@@ -1349,6 +1403,10 @@ COMPLIANCE_RULES = [
     },
     {
         "id": "CF-04",
+        # ⚠️ DEBT AI-GATEWAY-05: CF-04 определена в каноне (Dok 5), но НЕ реализована в коде.
+        # Проверка "response contains specific farm data NOT from current org" требует
+        # сравнения entity ID-ов в ответе с разрешёнными для organization_id.
+        # CRITICAL severity остаётся в канон-спецификации; enforcement — Phase 2 backlog.
         "name": "Data isolation: cross-org reference",
         "check": "response contains specific farm data NOT from current organization",
         "action": "BLOCK",

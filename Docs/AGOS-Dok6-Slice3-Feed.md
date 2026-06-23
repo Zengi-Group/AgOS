@@ -405,10 +405,10 @@ F18 (Feed Budget)
 | `rpc_upsert_herd_group` (RPC-06) | F04 | ✅ Deployed | d07 | Existing |
 | `rpc_log_herd_event` (RPC-07) | F04 | ❌ NOT IMPLEMENTED | d01 | DB Agent — log head count / weight changes |
 | `rpc_get_farm_summary` (RPC-08) | F03, F15 | ❌ NOT IMPLEMENTED | d01 | DB Agent — full farm summary with feed inventory |
-| `rpc_upsert_feed_inventory` (RPC-21) | F16 | ❌ NOT IMPLEMENTED | d03 | DB Agent — create/update feed stock |
-| `rpc_save_ration` (RPC-22) | F17 | ❌ NOT IMPLEMENTED | d03 | DB Agent — save ration version |
-| `rpc_archive_ration` (RPC-23) | F17 | ❌ NOT IMPLEMENTED | d03 | DB Agent — archive old ration |
-| `rpc_get_current_ration` (RPC-24) | F17 | ❌ NOT IMPLEMENTED | d03 | DB Agent — active ration + version |
+| `rpc_upsert_feed_inventory` (RPC-21) | F16 | ✅ Deployed | d03 | Deployed in d03_feed.sql |
+| `rpc_save_ration` (RPC-22) | F17 | ✅ Deployed | d03 | Deployed in d03_feed.sql |
+| `rpc_archive_ration` (RPC-23) | F17 | ✅ Deployed | d03 | Deployed in d03_feed.sql |
+| `rpc_get_current_ration` (RPC-24) | F17 | ✅ Deployed | d03 | Deployed in d03_feed.sql |
 | `calculate_ration` Edge Function | F17 | ❌ NOT IMPLEMENTED | supabase/functions/ | Backend Agent — NASEM LP calculation |
 | `get_feed_budget` Edge Function | F18 | ❌ NOT IMPLEMENTED | supabase/functions/ | Backend Agent — budget computation |
 

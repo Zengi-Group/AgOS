@@ -1,3 +1,5 @@
+ARCHIVED — superseded by CLAUDE.md. Contains stale 'Lovable' stack reference; not authoritative.
+
 # AGOS — System Instructions
 
 > This file is loaded EVERY session. It defines who you are, how you work, and what you never do.

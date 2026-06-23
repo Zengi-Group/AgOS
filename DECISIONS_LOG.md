@@ -11,6 +11,12 @@
 | ID | Date | Domain | Summary |
 |----|------|--------|---------|
 | ADR-AUTH-CONSOLIDATE-01 | 2026-05-13 | Auth/UI | Unify duplicate registration: `/register` canonical, `/join` flow removed, landing CTAs rewired |
+| DOC-SYNC-M4M6-01 | 2026-06-15 | Docs | Dok 1 v1.9 patch (12 entities + FSM extensions) + Dok 3 §4a (14 RPC catalog) + Dok 4 §3.3a (15 events) — синхронизированы с реализацией M4+M6 в d02_tsp.sql |
+| DEF-TSP-M4-OWNERSHIP | 2026-06-15 | TSP/Schema | `pools.organization_id` denormalised; 6 RPC owner-checks + 3 RLS policies switched off `pool_requests` LEFT JOIN; `rpc_create_pool` stops creating MPK stub-request |
+| D-TSP-CATEGORY-BRIDGE | 2026-06-15 | TSP/Schema | Q-TSP-CATEGORY-CLASSIFIER architectural closure: **A2 (bridge table)** chosen. `tsp_sku_category_map` (many-SKU → one-Category). ✅ SQL deployed commit `0450823` (DB Agent, 2026-06-15). |
+| D-TSP-CATEGORY-ADMIN | 2026-06-15 | TSP/Admin UI | Closure path for Q-TSP-CATEGORY-CLASSIFIER pivoted from brief→seed-PR to **admin UI self-service** (P8). 1 bridge table + 11 admin RPC + 4 admin screens (A-CAT-01..04). Brief deleted; spec in `Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md`. |
+| **A-CAT-DB-DEPLOY-01** | 2026-06-15 | TSP/Schema+RPC | ✅ DB Agent slice closed: bridge table + 2 RPC patches (floor-clamp `rpc_lower_batch_price` ✅ enabled через bridge JOIN + `rpc_create_pool` floor-resolve через bridge) + 11 admin RPC (AC-1..7 + AR-1..4). Deployed commit `0450823`. Verified 10/10 information_schema checks. cross_check.sh 0/0/0. |
+| **DOC-SYNC-A-CAT-01** | 2026-06-15 | Docs | Dok 1 §8 (статус Q-TSP-CATEGORY-CLASSIFIER → SQL closed, A-CAT entity rows updated) + Dok 3 **§4b (11 A-CAT admin RPC)** + RPC-M4-01/RPC-M4-06 stale floor-clamp описания обновлены + Dok 4 **§3.3b (A-CAT events deferral decision)** + SPRINT_STATUS A-CAT slice ✅ + Recommended next step → UI Agent only. |
 | D-AGENT-1 | pre-2026-03 | Organization | 12 agents → 6 consolidated agents |
 | D-NEW-A | pre-2026-03 | RPC Naming | SQL `rpc_name_registry` is canonical for RPC names |
 | L-NEW-2 | pre-2026-03 | Concurrency | SKIP LOCKED, not advisory locks |
@@ -48,7 +54,7 @@
 | D-LEGAL-1 | 2026-04-01 | Legal | Slice 5 Market: build without legal gate (CEO decision). Legal review before public launch. |
 | D-GATE-S5a | 2026-04-01 | Gate | Slice 5a QA pass. 3 RPCs + 9 tools + 4 screens. Disclaimer in all price responses. |
 | D-GATE-S5b | 2026-04-01 | Gate | Slice 5b QA pass + Architect sign-off. 7 RPCs. DEF-021..026 found and resolved. 0 critical at gate. |
-| D-DOC-1 | 2026-04-08 | Documentation | Doc audit: CLAUDE.md outdated state fixed, Dok 6 refs updated to slice files, Docs/CLAUDE.md deleted (P4), SPRINT_STATUS updated with Slice 5. |
+| D-DOC-1 | 2026-04-08 | Documentation | Doc audit: CLAUDE.md outdated state fixed, Dok 6 refs updated to slice files, Docs/CLAUDE.md retained as canonical; root CLAUDE.md symlinked to it (P4 satisfied via symlink, not deletion), SPRINT_STATUS updated with Slice 5. |
 | D-S6a-FIX-1 | 2026-04-08 | SQL/UI | Expert screens: прямые `.from()` на M03/M04/M05/M06 заменяются READ-RPCs (`rpc_list_vaccination_plans`, `rpc_list_vaccination_plan_items`, `rpc_list_vaccines`, read RPCs для epidemic/kpi). Реализуется в d04_vet.sql + экраны. Статус: в работе (unstaged). |
 | ADR-CONSULT-1 | 2026-04-08 | Architecture | Consulting module: Hybrid architecture — Python Engine standalone (Railway), DB + UI inside AGOS (Supabase + React). New d09_consulting.sql, 8 RPCs, 3 tables. |
 | D-S8-1 | 2026-04-09 | Architecture | Slice 8: Унификация рационов и консалтинга — 4 самодостаточных части (Feed Справочник, NASEM Calculator, Ration Builder, Financial Integration). |
@@ -90,10 +96,313 @@
 | D-GATE-CAPEX-01-PHASE1 | 2026-04-17 | Gate | Phase 1 (DB) sign-off: `cross_check.sh` 0/0/0. 58 seed rows. Математика Excel-парности проверена вручную (delta +1,614 ₸ от 282,465,145.54 = 0.00057%). Отклонение DB Agent от плана (10 overrides вместо 4) одобрено — реконциляция внутреннего противоречия плана §1.3 vs §2.5. Phase 2 (Backend) разблокирован после SQL deploy. |
 | D-GATE-CAPEX-01-PHASE2 | 2026-04-17 | Gate | Phase 2 (Backend) code sign-off: `capex.py` Priority chain (2→3→fallback), `ProjectInput`+3 fields, `calculate.py` project-row injection, `orchestrator.py` herd→capex. 14/14 tests pass (6 legacy Priority 3 + 8 new Priority 2). `grand_total` / `depreciation_*_monthly` invariants preserved for `loans.py`/`cashflow.py`/`pnl.py`. QA gate **PASS** (0 Critical, 1 Significant informational re depreciation delta, 0 Minor). Commit `259fe49` pushed; Railway autodeploy in progress; prod verification pending via Тест 7 recalc. |
 | D-GATE-CAPEX-01-PHASE2-QA | 2026-04-17 | QA | QA Agent independent gate verdict: 14/14 CAPEX tests pass (6 legacy + 8 new), cross_check.sh 0/0/0, all 5 RPCs SECURITY DEFINER + registered + unique. 1 Significant informational finding: Priority 2 uses per-item depreciation_years → existing projects on recalc see depr_buildings_monthly +6.4% / depr_equipment_monthly +2.2% (intended by plan §2.3 step 5, Architect accepts). 6 pre-existing TestStaff fails remain out of scope (D-FEED-2 drift). 6 Dok gaps (Dok1/3/4/6/7 CAPEX entries) are Phase 5 scope. |
+| D-DOC-RECON-01 | 2026-06-22 | Docs | Authority model reversed: microsteps = canon (Identity/Membership/Governance/TSP), Doks = canon elsewhere, code = reality, reference-model form. |
+| A1-MEMBERSHIP | 2026-06-22 | Membership | Canon = Microstep2 6-state FSM, tier binary; level-stack + membership_type retired |
+| A2-CONSULTING | 2026-06-22 | Consulting | Dok7 sole canon; CONSULTING_MASTER_SPEC → historical v1.0 |
+| A3-AI-NAMING | 2026-06-22 | AI Gateway | Tool-name layer (Dok5) ≠ RPC-name layer (SQL) + map; RPCs not renamed (P7) |
+| A4-EDU-EVENTS | 2026-06-22 | Education | Dok4 edu.* canon; edu.certificate.issued mandatory |
+| A5-OFFER-EVENTS | 2026-06-22 | TSP | Microstep6 offer.* family canon |
+| A6-TSP-LEGACY | 2026-06-22 | TSP | Migrate admin to M4 rpc_create_pool; legacy pool_requests/pool_matches deprecated |
+| A7-CONTACT-REVEAL | 2026-06-22 | TSP/Legal | Reveal at batch confirmed (M4/M6); legacy D40 pool 'executing' reveal removed |
+| A8-EXPERT | 2026-06-22 | Identity | expert_profiles retained (HS-2); canon ratified to it as expert_provider v2 |
 
 ---
 
 ## Decisions
+
+### 2026-06-15 — DOC-SYNC-A-CAT-01: Dok 1 / Dok 3 / Dok 4 + SPRINT_STATUS sync с A-CAT SQL deploy
+
+**What:** Architect-side документация синхронизирована с реальным состоянием прод-схемы после DB Agent commit `0450823` (A-CAT bridge + 11 admin RPC + 2 floor-clamp patches). До этой правки Dok 3 §4a содержал stale упоминания «floor отключён до Q-TSP-CATEGORY-CLASSIFIER», Dok 1 описывал bridge как «будет создан», Dok 4 не имел секции про A-CAT events. Все три расхождения закрыты.
+
+**Изменения:**
+
+| Документ | Что добавлено / поправлено |
+|----------|----------------------------|
+| `Docs/AGOS-Dok1-v1_8.md` §8 | Q-TSP-CATEGORY-CLASSIFIER status: `architecture-closed / admin-UI-WIP` → `SQL closed 2026-06-15 / UI WIP / data pending` с разбивкой по слоям. Entity rows `LivestockCategory` + `TspSkuCategoryMap` + `MinimumPrice` обновлены: owner → `Admin via A-CAT-* RPC`, ссылки на commit и спеку. |
+| `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md` §4a | RPC-M4-01 `rpc_create_pool` floor enforcement description обновлено: bridge resolve как primary path, explicit `livestock_category_id` как back-compat (было: «для строк без livestock_category_id floor не проверяется»). RPC-M4-06 `rpc_lower_batch_price` floor clamp: было «ОТКЛЮЧЁН до закрытия Q-TSP-CATEGORY-CLASSIFIER» → «✅ ВКЛЮЧЁН (D-TSP-CATEGORY-BRIDGE)» с полным описанием resolution path. |
+| `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md` **§4b (NEW)** | 11 A-CAT admin RPC (AC-1..7 + AR-1..4) с сигнатурами, return shapes, error codes; конвенции (fn_is_admin gate + admin-reference-data exception от P-AI-2); A-CAT integration note про автоматическую активацию floor-clamp после data fill. |
+| `Docs/AGOS-Dok4-EventBus-v1_1.md` **§3.3b (NEW)** | Архитектурное решение: A-CAT admin RPC в MVP не эмитят `platform_events` (rationale: low-frequency admin reference-data + audit via `approved_by`/`approved_at` columns). Phase 2 candidate events перечислены с триггерами для добавления (additive P7). |
+| `SPRINT_STATUS.md` | Current Phase: добавлены 3 строки (A-CAT Schema/RPC patches/Admin RPC), все ✅ deployed commit `0450823`. Q-TSP-CATEGORY-CLASSIFIER → ✅ architecture+SQL closed. Verification: 25 routines (14 M4/M6 + 11 A-CAT). Recommended next step → UI Agent only (DB больше не блокирует). Параллельные треки: M6-C-ADMIN-FLOW + AI Gateway tools. |
+| `DECISIONS_LOG.md` | Index row `DOC-SYNC-A-CAT-01` + index row `A-CAT-DB-DEPLOY-01` (DB Agent verification) + эта запись. |
+
+**Why architectural decisions inside DOC-SYNC:**
+
+1. **A-CAT admin events deferred to Phase 2** (Architect call) — A-CAT экраны low-frequency, нет consumer'а, audit columns достаточно для Art.171 traceability. Path additive: при появлении notification / AI-alert / dashboard-realtime use case — добавить эмиссию без слома callers (P7). Документировано в Dok 4 §3.3b с конкретным списком candidate event_types.
+2. **fn_is_admin() gate без `p_organization_id`** (P-AI-2 documented exception) — A-CAT таблицы (`livestock_categories`, `tsp_sku_category_map`, `minimum_prices`, `reference_prices`) хранят association-level стандарт TURAN, не per-org data. Whitelist'нуты в `cross_check.sh` CHECK-5 (см. cross_check.sh:167-173). Exception документирована в Dok 3 §4b и в DB Agent skill.
+3. **Floor-clamp graceful degradation сохранена** — bridge JOIN в RPC `rpc_lower_batch_price` / `rpc_create_pool` возвращает NULL при пустом mapping → clamp = no-op. Это значит: deploy SQL → admin наполняет данные постепенно через UI → SKU поэтапно покрываются floor-проверкой. Никакого «big bang» moment.
+
+**Verification:**
+
+- Содержимое файлов прошло review: stale упоминания «floor отключён» исправлены в Dok 3 §4a (RPC-M4-01 + RPC-M4-06).
+- `cross_check.sh` пересчитан после doc patches: 0/0/0 (документы не влияют на CHECK-1..8, только SQL/SQL-каталоги).
+- Кросс-ссылки между документами проверены: Dok 1 §8 ↔ Dok 3 §4b ↔ Dok 4 §3.3b — все три указывают на тот же commit `0450823` и спеку `Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md`.
+
+**Files touched:**
+
+- `Docs/AGOS-Dok1-v1_8.md` (+5 line edits, status + 2 entity rows)
+- `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md` (+2 line edits + new §4b ~100 строк)
+- `Docs/AGOS-Dok4-EventBus-v1_1.md` (new §3.3b ~30 строк)
+- `SPRINT_STATUS.md` (Current Phase tables + verification + open debts + recommended next step)
+- `DECISIONS_LOG.md` (3 index rows + эта запись)
+
+**Consequences:**
+
+- Easy: UI Agent теперь имеет canonical reference для всех 11 admin RPC (Dok 3 §4b) — не нужно читать SQL. Сигнатуры, return shapes, error codes — всё в одном месте.
+- Easy: новые observation/audit фичи на A-CAT — additive путь через Dok 4 §3.3b Phase 2 events.
+- Hard: пока admin не наполнил A-CAT-03 (SKU маппинги) и A-CAT-04 (цены), floor-enforcement не работает на реальных батчах. Это intended — не дефект.
+
+---
+
+### 2026-06-15 — A-CAT-DB-DEPLOY-01: DB Agent slice ✅ closed (commit 0450823)
+
+**What:** DB Agent slice по спецификации `Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md` §5 завершён и задеплоен на prod `mwtbozflyldcadypherr`. Это финальный SQL-шаг для Q-TSP-CATEGORY-CLASSIFIER closure (architecture → SQL → UI → data path).
+
+**Что задеплоено:**
+
+| Объект | Verified via information_schema |
+|--------|--------------------------------|
+| `tsp_sku_category_map` table | 7 cols, 4 indexes (pk + ux_active_sku partial + idx_sku + idx_cat), RLS=true, 2 policies |
+| `rpc_lower_batch_price` patched | source contains `tsp_sku_category_map` JOIN (bridge JOIN active) |
+| `rpc_create_pool` patched | source contains `tsp_sku_category_map` (bridge resolve active); signature unchanged (P7) |
+| 11 admin RPC (AC-1..7 + AR-1..4) | 11/11 SECURITY DEFINER, 11/11 в `rpc_name_registry` с `dok3_name = 'A-CAT *'` |
+| `cross_check.sh` CHECK-5 whitelist | 11 new entries для admin reference-data exception |
+
+**Deploy mechanism:** 4 последовательные миграции через Supabase MCP `apply_migration` (вместо full re-apply `deploy_sql.py` для минимизации риска legacy idempotency edge cases):
+1. `a_cat_bridge_schema` — table + indexes + RLS
+2. `a_cat_rpc_patches_create_pool_and_lower_price` — CREATE OR REPLACE обоих RPC
+3. `a_cat_admin_rpcs_ac1_to_ar4` — 11 functions
+4. `a_cat_registry_entries` — 11 INSERT в `rpc_name_registry`
+
+Post-deploy `information_schema` verification: 10/10 checks PASS.
+
+**Out of scope для DB Agent (передано в DOC-SYNC-A-CAT-01):**
+- Dok 1/3/4 updates → Architect
+- SPRINT_STATUS update → Architect
+- A-CAT UI экраны → UI Agent (UI track)
+- Data fill → CEO + зоолог через A-CAT экраны (после UI ship)
+
+**Files touched (DB Agent):**
+- `d02_tsp.sql` +700/-27 lines (§7.16 + §8 patches + §8a + registry extension)
+- `cross_check.sh` +7/-1 lines (CHECK-5 whitelist)
+
+**Verification:** `cross_check.sh` 0 Critical / 0 Significant / 0 Minor. 78 `$$` delimiters balanced. Все 11 имён RPC уникальны (нет дубликатов в d0*.sql — L-1/L-2 compliance).
+
+**Consequences:**
+- Easy: pilot unblock теперь зависит только от UI Agent + data fill (≤4 дня total).
+- Easy: future quarterly category/price updates — admin клики, не PR (P8 self-service path proven).
+- Hard: pre-pilot data fill зависит от двух людей (CEO + зоолог); если зоолог недоступен — pilot откладывается даже при готовом UI.
+
+---
+
+### 2026-06-15 — DOC-SYNC-M4M6-01: Dok 1 / Dok 3 / Dok 4 синхронизированы с реализацией M4+M6
+
+**What:** Канонические документы (Dok 1, 3, 4) обновлены аддитивными секциями, описывающими реализацию M4+M6 в `d02_tsp.sql` SECTION 7 + SECTION 8. До этой правки SQL опережал документы (нарушение P4 + правила «SQL и Dok должны быть синхронизированы» из CLAUDE.md).
+
+**Изменения:**
+
+| Документ | Что добавлено | Объём |
+|----------|---------------|-------|
+| `Docs/AGOS-Dok1-v1_8.md` | Новый блок `## 8. Patch Notes (v1.9) — M4 + M6 TSP Extension`: 12 новых сущностей (pool_lines, pool_regions, offers, livestock_categories, livestock_category_rules, reference_prices, minimum_prices, tsp_config, batch_events, review_dimensions, deal_reviews, deal_review_dimension_scores), расширения batches/pools, FSM (12 + 10 states), дополнение к Ownership Matrix, маппинг D-M6-1..14 → schema, открытые вопросы. Total entities: 93 → 105. | ~190 строк |
+| `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md` | Новая секция `## 4a. Market / TSP — M4 + M6 Extension (canonical, 2026-06-15)`: 14 RPC (RPC-M4-01..14) с сигнатурами, параметрами, семантикой, ссылками на M4/M6/D-M6-X решения, описанием defensive-фиксов из code review. | ~210 строк |
+| `Docs/AGOS-Dok4-EventBus-v1_1.md` | Расширение §3.3 → `#### 3.3a. Market / TSP — M4 + M6 Extension`: 15 новых canonical event_type (market.batch.scheduled/auto_published/offering/awaiting_price_decision/price_lowered/matched/confirmed/dispatched/delivered + market.offer.created/withdrawn + market.pool.cancelled/closed_partial/closed_unfilled + market.deal_review.submitted/revealed) с producer-RPC, consumers, payload-описанием. | ~30 строк |
+
+**Why:** Без синхронизации Backend и UI Agents не могут планировать работу — нет канонических сигнатур RPC, нет описания entities, нет каталога событий. Это блокировало dependency-chain pilot'а. SPRINT_STATUS уже маркировал DOC-DRIFT-M4M6-01..04 как Significant.
+
+**Consequences:**
+- Easy: Backend Agent теперь может строить AI Gateway tools по Dok 3 §4a (signature/return/idempotency задокументированы).
+- Easy: UI Agent после Dok 6 SCREEN contracts сможет работать — Dok 4 даёт payload-формат для Realtime subscriptions, Dok 3 даёт RPC catalog.
+- Easy: cross_check.sh пока не проверяет doc-sync, но 0/0/0 сохраняется.
+- Hard: §3.3 ERD-диаграмма в Dok 1 описывает legacy pool_requests модель. Не правил её — указал в v1.9 patch notes что **§3.3 ERD legacy, новые entities в v1.9**. Будущий v2.0 sweep заменит ERD целиком (вне скоупа этой сессии).
+- Hard: §5.7 FSM Catalog содержит старые FSM для Batch/Pool (3 + 6 states). Не правил его — v1.9 patch явно отменяет соответствующие блоки. Будущий v2.0 sweep — общий cleanup.
+
+**Файлы (трёх docs, аддитивно):** `Docs/AGOS-Dok1-v1_8.md`, `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md`, `Docs/AGOS-Dok4-EventBus-v1_1.md`, `SPRINT_STATUS.md`.
+
+**Verification:**
+- `cross_check.sh` — 0/0/0 (нет проверки cross-doc consistency — это процесс-долг).
+- Все ссылки на D-M6-1..14 решения проверены против Microstep6 v1.0.
+- 14 RPC сигнатур извлечены из `d02_tsp.sql` напрямую (`grep` по `create or replace function` + параметры).
+- 12 entities — описания взяты из `comment on table/column` в SECTION 7 (источник истины).
+
+**Не сделано (out of scope для этой сессии):**
+- Dok 6 SCREEN contracts для M6-A/M6-B/M6-C — требует M6-C closure (CEO + Architect дизайн-сессия).
+- Q-TSP-CATEGORY-CLASSIFIER — требует зоолога.
+- AI Gateway tools wiring (Dok 5) — Backend Agent.
+- §3.3 ERD rewrite + §5.7 FSM rewrite в Dok 1 — общий cleanup v2.0.
+
+**Closed defects (renamed from open):** DOC-DRIFT-M4M6-01, -02, -03 (Dok 1, 3, 4 sync). DOC-DRIFT-M4M6-04 (Dok 6 SCREEN contracts) **остаётся открытым** — зависит от M6-C closure.
+
+---
+
+### 2026-06-15 — M4 + M6 addendum: DEF-TSP-M4-OWNERSHIP + Q-TSP-RETRY-MATCH closed, rpc_cancel_pool added
+
+**What:** Резолвлены два known-issue из предыдущей записи + добавлен `rpc_cancel_pool` (Microstep4 §4.1, был не в скоупе исходной задачи). Финальный state Section 8 = **14 RPC** (было 12).
+
+**Изменения:**
+1. **DEF-TSP-M4-OWNERSHIP (closed):** добавлена колонка `pools.organization_id uuid NOT NULL references organizations(id)` с backfill из pool_requests, индекс `idx_pools_org_status`. 3 RLS policies (`pools_read`, `pool_matches_read`, `manifests_read`) переписаны на прямой column-check вместо JOIN через pool_requests. 8 RPC из Section 8 рефакторнуты на новый паттерн.
+2. **Q-TSP-RETRY-MATCH (closed):** новая `rpc_retry_match_pool(p_org_id, p_pool_id)` — сканирует published-батчи, подходящие под pool_lines, и upsert'ит Offer'ы для MPK. Идемпотентна через `unique(batch_id, mpk_org_id)`. `rpc_publish_pool` вызывает её inline (одна транзакция) — гарантирует broadcast при публикации pool (BT-05). Безопасна для повторных вызовов из периодической job-задачи.
+3. **rpc_cancel_pool (new):** strict option A — `filling → cancelled` только. Атомарно withdraw pending offers + matched→published + reset volumes + pool→cancelled. Идемпотентна.
+
+**Файлы:** `d02_tsp.sql` (+~440/-65 строк vs предыдущий коммит).
+
+**Деплой:**
+- Pre-flight `select count(*) from pools` → 0 → backfill no-op, `SET NOT NULL` безопасен.
+- Migration `d02_tsp_addendum_a_pools_org_id_column`: schema + RLS. ✅
+- Migration `d02_tsp_addendum_b_rpc_refactor_and_new`: 9 CREATE OR REPLACE (8 рефакторнутых + новый rpc_retry_match_pool, rpc_cancel_pool) + registry. ✅
+
+**Verification (prod):**
+- 14/14 functions в information_schema.routines ✓
+- 14/14 entries в rpc_name_registry ✓
+- 14/14 SECURITY DEFINER ✓
+- `pools.organization_id` NOT NULL ✓
+- 3 RLS policies заменены ✓
+- Smoke-test `rpc_cancel_pool` с bogus UUID → корректное POOL_NOT_FOUND ✓
+
+**Cross_check.sh:** 0/0/0.
+
+**Закрытые known gaps:**
+- DEF-TSP-M4-OWNERSHIP ✅
+- Q-TSP-RETRY-MATCH ✅
+
+**Остаётся открытым:**
+- Q-TSP-CATEGORY-CLASSIFIER — нужен зоолог + bridge `tsp_sku_id ↔ livestock_categories.id`. После закрытия — восстановить floor-clamp в `rpc_lower_batch_price`.
+
+---
+
+### 2026-06-15 — M4 + M6 RPC backend pass (Section 8 in d02_tsp.sql)
+
+**What:** Реализованы 12 RPC под M4+M6 канон, аддитивно добавлены в `d02_tsp.sql` как `SECTION 8`. Существующие 7 RPC из Slice 5b (включая legacy `rpc_create_pool_request`) не тронуты — оставлены как backward-compat (P7).
+
+**Файлы:** `d02_tsp.sql` (+1310 строк, 2086 → 3396), `Docs/SPRINT_STATUS.md`.
+
+**Функции (12):**
+1. `rpc_create_pool(p_org_id, p_pool_lines jsonb, p_pool_regions jsonb, p_delivery_from, p_delivery_to, p_total_target_volume_kg)` → `{pool_id, pool_line_ids[]}`. M4 §2.4 + D-M6-13.
+2. `rpc_publish_pool(p_org_id, p_pool_id)` → bool. pools: draft → filling.
+3. `rpc_accept_offer(p_org_id, p_offer_id)` → `{batch_id, pool_id, pool_line_id, deal_price_per_kg, volume_kg}`. FCFS + auto-close при достижении total_target_volume_kg.
+4. `rpc_reject_offer(p_org_id, p_offer_id)` → bool.
+5. `rpc_lower_batch_price(p_org_id, p_batch_id, p_new_price_per_kg)` → `{new_price, was_clamped, broadcast_mpk_count}`. D-M6-3 clamp + ребродкаст MPK с активными filling pools (region D-M6-4 + window D-M6-8).
+6. `rpc_confirm_dispatch(p_org_id, p_batch_id)` → bool (фермер).
+7. `rpc_confirm_delivery(p_org_id, p_batch_id)` → bool (МПК).
+8. `rpc_submit_deal_review(p_org_id, p_batch_id, overall, dim_id, dim_score, comment)` → review_id. Роль выводится из p_org_id; D-M6-12 double-blind reveal.
+9. `rpc_pool_return_batches(p_org_id, p_pool_id)` → int. awaiting_mpk_decision → closed_unfilled.
+10. `rpc_pool_accept_partial(p_org_id, p_pool_id)` → int. awaiting_mpk_decision → closed_partial.
+11. `rpc_get_reference_price(p_org_id, p_category_id, p_region_id?)` → jsonb с disclaimer (Art.171). STABLE.
+12. `rpc_get_minimum_price(p_org_id, p_category_id, p_region_id?)` → jsonb с disclaimer (Art.171). STABLE.
+
+**Конвенции (все 12):** SECURITY DEFINER + search_path; p_organization_id первый параметр; ownership-валидация через `fn_my_org_ids()` либо inline-JOIN; idempotent state checks; `batch_events` (M4 §6.4) на каждом FSM-переходе батча + `platform_events`. 12 строк в `rpc_name_registry`.
+
+**Архитектурные решения сессии:**
+- **Q1 (re-broadcast)** = вариант B inline в `rpc_lower_batch_price`: пересоздаёт Offer'ы (UPSERT по `unique(batch_id, mpk_org_id)`) для всех MPK с активными filling pools, чьи pool_lines удовлетворяют (mpk_price ≥ clamped, sku-match, capacity, region overlap D-M6-4, window overlap D-M6-8). Retry-match для published-батчей (BT-05) при rpc_publish_pool — остаётся за бэкенд-джобом (Q-TSP-RETRY-MATCH).
+- **Q2 (signature)** = `p_pool_lines jsonb` + `p_pool_regions jsonb` (массивы объектов). Альтернатива через CREATE TYPE нарушает FINAL-schema.
+- **Q3 (reviewer_role)** = деривируется: org=batch.organization_id → 'farmer', else org=pool_request.organization_id → 'mpk', else FORBIDDEN.
+
+**Defects / open:**
+- **DEF-TSP-M4-OWNERSHIP (new):** `pools` не имеет `organization_id` — SECTION 7 patch не добавил колонку. MPK-владелец трейсится только через `pool_request_id → pool_requests.organization_id`. `rpc_create_pool` создаёт vestigial `pool_request` stub (status=active, total_heads=ceil(volume/400)) для сохранения owner-цепочки. До будущей миграции (добавление `pools.organization_id`) этот компромисс остаётся.
+- **Q-TSP-CATEGORY-CLASSIFIER (open):** `pool_lines.tsp_sku_id` vs `minimum_prices.category_id` (livestock_categories) — bridge отсутствует. Floor-enforcement в `rpc_create_pool` срабатывает только при явном `livestock_category_id` в jsonb-строке (опциональное поле). В `rpc_lower_batch_price` floor читается best-effort (без category match — берёт первую активную region- или national-строку).
+- **Q-TSP-RETRY-MATCH (open):** `rpc_publish_pool` не делает retry-match с висящими `published` Batch'ами — отложено бэкенд-джобу.
+
+**Consequences:**
+- Easy: M4+M6 backend canon реализован за один проход; cross_check.sh 0/0/0; ни одна существующая функция не модифицирована (P7).
+- Easy: повторные вызовы (idempotent state checks) безопасны — accept/reject/dispatch/delivery возвращают `true` при уже-достигнутом состоянии.
+- Hard: prod-deploy НЕ выполнен — требует CEO sign-off + python3 deploy_sql.py d02 + re-verify через information_schema. До этого функции остаются file-level (db-agent skill: «phase ≠ Done без prod-verify»).
+- Hard: DEF-TSP-M4-OWNERSHIP — будущая миграция должна добавить `pools.organization_id` и заменить join через `pool_request_id` на прямой column-check во всех 12 RPC.
+
+**Verification (file-level):**
+- `cross_check.sh`: 0 critical / 0 significant / 0 minor.
+- Duplicate scan по 10 SQL-файлам: каждая функция определена ровно 1 раз.
+- Registry coverage: 12/12; comment-on coverage: 12/12.
+
+**Verification (prod):** ✅ deployed 2026-06-15 via Supabase MCP `apply_migration` (name=`d02_tsp_section8_m4_m6_rpcs`). information_schema re-check: 12/12 functions, 12/12 registry, 12/12 SECURITY DEFINER, 12/12 search_path=public,pg_temp. Smoke-test `rpc_get_minimum_price` / `rpc_get_reference_price` executed cleanly, returned jsonb with Art.171 disclaimers.
+
+**Code review (independent, adversarial) — 13 findings:**
+
+| ID | Sev | Finding | Fix applied |
+|----|-----|---------|-------------|
+| C2 | Critical | `rpc_accept_offer`: INNER JOIN на `pool_requests` исключает M4 pools с NULL `pool_request_id` | ✅ → LEFT JOIN |
+| C3 | Critical | `rpc_create_pool`: floor lookup брал первый region вместо MAX по всем regions pool'а (под-clamp) | ✅ → `MAX(price_per_kg)` |
+| C4 | Critical | `rpc_lower_batch_price`: floor без category_id может выбрать wrong-category floor (хуже, чем no clamp) | ✅ → пропустить floor пока Q-TSP-CATEGORY-CLASSIFIER не закрыт |
+| S1 | Sig | `rpc_accept_offer`: принимал batch.status in ('offering','published','awaiting_price_decision') — должен только 'offering' | ✅ → tighten to 'offering' |
+| S2 | Sig | `rpc_accept_offer`: отсутствовал region-фильтр на pool_line (нарушение D-M6-4 rayon-matching) | ✅ → добавлен `exists(pool_regions ...)` exists-clause (mirror lower_batch_price) |
+| S3 | Sig | `rpc_submit_deal_review`: принимал 'confirmed'/'dispatched' (D-M6-11 spec: только 'delivered') | ✅ → only 'delivered' |
+| S5 | Sig | `rpc_pool_return_batches`: pending offers оставались живыми после возврата batches | ✅ → withdraw pending offers перед сбросом `pool_line_id` |
+| S6 | Sig | `rpc_lower_batch_price` capacity check `current < max` вместо `current + volume <= max` (фантомные offer'ы) | ✅ → mirror accept_offer predicate |
+| C1 | Critical (по ревью) | `rpc_accept_offer` auto-close race: дубль `platform_events`/`batch_events` | ✅ defensive — `where status='filling'` + `if found` гейт. Реальной гонки нет (FOR UPDATE на JOIN сериализует через pools lock), но дефенсивный пояс безопасности дёшев |
+| M1 | Minor | `filling_deadline = p_delivery_to` без комментария | ✅ inline-comment добавлен |
+| M2 | Minor | Отсутствовал `batch_events('matched')` в accept_offer (M4 §6.4 канон-аудит) | ✅ добавлен |
+| S4 | Sig | Double-blind reveal: race на `now()` timestamp в двух одновременных submit'ах | ❌ rejected — UPDATE идемпотентен через `visible_at IS NULL`; разница в мс не нарушает D-M6-12 (RLS использует `visible_at <= now()`) |
+| M3 | Minor | `p_organization_id` не используется в read-only RPC → HS-4 violation | ❌ rejected — намеренная конвенция P-AI-2, зеркалит существующий `rpc_get_price_for_sku` (Slice 5a). HS-4 про unused vars, не про conventional params |
+
+**Не реализован в скоупе:** `rpc_cancel_pool` (filling → cancelled, M4 §2.4 / Microstep6 §4f шаг 8a) — не входил в задачу CEO. Открытая работа на следующий спринт.
+
+**После фиксов:**
+- `cross_check.sh`: 0 / 0 / 0 (повторно).
+- Dup-scan: каждая функция 1× в d02_tsp.sql.
+- Файл: 3396 → 3447 строк (+51 после правок).
+
+---
+
+### 2026-06-15 — M4 + M6 schema merged into d02_tsp.sql
+
+**What:** Содержимое `d09_tsp_m4m6_patch.sql` (688 строк) перенесено в `d02_tsp.sql`
+как новая `SECTION 7: M4 + M6 EXTENSION (merged 2026-06-15)`. Patch-файл удалён.
+
+**Why:** CLAUDE.md прямо запрещает `_patch.sql` файлы ("separate patch files are
+FORBIDDEN"); имя `d09_*` дополнительно конфликтовало с уже существующим
+`d09_consulting.sql`. По правилу "all changes into canonical SQL files" сливаем
+M4/M6 в канонический d02 как append-only секцию.
+
+**Files:**
+- `d02_tsp.sql` — добавлена SECTION 7 (15 подсекций: 7.1–7.15), шапка
+  обновлена строкой `Extended: 2026-06-15`. Существующие секции 1–6
+  не изменены ни одной строкой.
+- `d09_tsp_m4m6_patch.sql` — удалён.
+
+**Содержание SECTION 7 (additive):**
+- batches: +8 колонок (ready_from/to, scheduled_publish_at, farmer_price_per_kg,
+  deal_price_per_kg, pool_line_id, +6 FSM-timestamps), CHECK status расширен
+  до 12 канонических состояний + 1 legacy (expired).
+- pools: +5 колонок (total_target_volume_kg, delivery_from/to, +4 FSM-timestamps),
+  pool_request_id → nullable, CHECK status расширен до 10 канонических + 5 legacy.
+- pool_requests: помечена DEPRECATED через COMMENT ON (rows сохранены).
+- 12 новых таблиц: pool_lines, pool_regions, offers, livestock_categories,
+  livestock_category_rules, reference_prices, minimum_prices, tsp_config,
+  batch_events, review_dimensions, deal_reviews, deal_review_dimension_scores.
+- 14 индексов, RLS включён на 5 новых таблицах (2 политики), seed: tsp_config (1 строка)
+  + review_dimensions (4 строки).
+
+**Consequences:**
+- Easy: канонический файл — один источник правды по TSP-схеме; cross_check.sh
+  и deploy_sql.py работают без правок (порядок apply d01→d02 не сменился).
+- Easy: legacy-значения CHECK сохранены — старые batches/pools со статусами
+  draft/published/matched/cancelled/expired и filling/.../closed остаются валидными.
+- Hard: реальную БД после применения нужно сверить — старая FSM `published →
+  matched` остаётся валидной, но новые M4-переходы (`published → offering`,
+  `awaiting_price_decision → offering`) пока без RPC. Все RPC (rpc_create_pool,
+  rpc_lower_batch_price, rpc_derive_category) — TODO для следующего спринта.
+- Hard: RLS-политики для pool_lines/pool_regions пока не созданы (только
+  enable row level security). До их написания pool_lines/pool_regions
+  доступны только service_role.
+
+**Verification:**
+- `cross_check.sh` — passed (0 critical / 0 significant / 0 minor).
+- Live dry-run на prod Supabase (`mwtbozflyldcadypherr`, PG 17.6) через Supabase
+  MCP с обёрткой `BEGIN; … ROLLBACK;` — passed после 2 фиксов (см. ниже).
+  Подтверждено: 12 таблиц создаются, 12 новых колонок в batches, 7 в pools,
+  seed tsp_config (1 строка) + review_dimensions (4 строки) применяются,
+  2 RLS policies создаются. ROLLBACK откатил всё — БД не тронута.
+
+**Defects найдены и исправлены в ходе dry-run:**
+1. `create policy if not exists` — невалидный синтаксис в Postgres (включая
+   PG 17). Заменено на идемпотентный `drop policy if exists … ; create policy …`
+   в двух местах: `batch_events_farmer_read`, `deal_reviews_read`.
+2. `INSERT INTO tsp_config … ON CONFLICT DO NOTHING` — падает с
+   `55000: ON CONFLICT does not support deferrable unique constraints/exclusion
+   constraints as arbiters`. Единственный uniqueness-constraint на tsp_config —
+   это `EXCLUDE … DEFERRABLE INITIALLY DEFERRED`, который запрещено использовать
+   как arbiter для ON CONFLICT. Заменено на `INSERT … SELECT … WHERE NOT EXISTS
+   (SELECT 1 FROM public.tsp_config WHERE is_active = true)` — идемпотентно
+   без зависимости от constraint'а.
+
+---
 
 ### D-S8-1 — Slice 8: Архитектура унификации рационов и консалтинга
 
@@ -2461,3 +2770,173 @@ Direct P4 violation (one source of truth) and HS-5 violation (additive-only — 
 - Hard: `registration_applications` table still in prod and schema — needs follow-up ADR to drop. Any historical data must first be migrated/exported.
 
 **Verification**: `npx tsc --noEmit` → 0 errors. `npm run build` → success (4.7s). Preview (port 5173): `/` lendinger renders, all 4 CTAs link to `/register`, `/registration` → `/register` redirect works, `/join` → `/register` redirect works, `/register` renders 4-role select screen. 0 console errors.
+
+---
+
+### 2026-06-15: DEF-TSP-M4-OWNERSHIP — Pool owns MPK organization_id directly
+
+**What**: `pools.organization_id uuid NOT NULL REFERENCES organizations(id)` added to `d02_tsp.sql` (§7.2.1.1). All ownership lookups in TSP M4/M6 RPCs and RLS policies switched from `LEFT JOIN pool_requests pr ON pr.id = p.pool_request_id` to the new column. `rpc_create_pool` no longer creates a stub `pool_requests` row to carry MPK ownership — it writes `organization_id` to `pools` directly and leaves `pool_request_id = NULL` on M4-native pools.
+
+**Why**:
+- The Section 8 (M4+M6) implementation was shipping a known workaround: `rpc_create_pool` inserted a sentinel `pool_requests` row marked `'M4 stub — created by rpc_create_pool to carry MPK organization_id'` and pointed every new pool at it, just so six downstream RPCs and three RLS policies could resolve `pool.org` via that join.
+- `pool_requests` is the **deprecated** half of the M4 model (Dok 1 / Section 7.3); making the new model depend on it for a core invariant (which org owns this pool) violated P4 (one source of truth) and P6 (relationships via FK, not stub-row convention).
+- The workaround was correctly flagged in code (`-- pool_request stub preserves MPK ownership (DEF-TSP-M4-OWNERSHIP)`) and in the `rpc_accept_offer` comment (`-- LEFT JOIN on pool_requests + COALESCE: tolerates direct M4 pools (pool_request_id = NULL) once DEF-TSP-M4-OWNERSHIP is resolved`).
+- Owner-check via column is also cheaper (1 lookup vs. join) and RLS-clean (no recursion through a deprecated table).
+
+**Files** (single canonical SQL file, no patch files — per CLAUDE.md SQL rules):
+- `d02_tsp.sql`:
+  - §7.2.1.1 NEW: `ADD COLUMN IF NOT EXISTS organization_id`, backfill `FROM pool_requests pr WHERE pr.id = p.pool_request_id`, `SET NOT NULL`, index `idx_pools_org_status`, column comment.
+  - §3 RLS: `pools_read`, `pool_matches_read`, `manifests_read` policies switched to `organization_id = any(fn_my_org_ids())`.
+  - §8 RPCs (6 functions): `rpc_publish_pool`, `rpc_accept_offer`, `rpc_lower_batch_price`, `rpc_confirm_delivery`, `rpc_submit_deal_review`, `rpc_pool_return_batches`, `rpc_pool_accept_partial` — all `LEFT JOIN pool_requests` removed; ownership read from `p.organization_id`.
+  - §7 `rpc_create_pool`: stub-request `INSERT INTO pool_requests` removed; `pools` INSERT now carries `organization_id = p_organization_id`, `pool_request_id = NULL`.
+
+**Additive guarantees (P7)**:
+- `pools.pool_request_id` left in place (nullable) — legacy rows keep their FK; `idx_pools_request` kept.
+- `pool_requests` table not dropped; existing stub rows remain (their `organization_id` was the backfill source, so they stay consistent).
+- No RPC signature changed — only function bodies.
+- Migration is idempotent: `ADD COLUMN IF NOT EXISTS`, backfill `WHERE organization_id IS NULL`, `SET NOT NULL` is a no-op if already NOT NULL.
+
+**Consequences**:
+- Easy: single-column owner-check; future TSP RPCs (and any new M4 code path) need only `p.organization_id = p_organization_id`. RLS gets cheaper and reads naturally.
+- Easy: `pool_requests` can now be cleanly deprecated without orphaning ownership.
+- Hard / follow-up: when `pool_requests` is eventually dropped, the FK `pools.pool_request_id` must be dropped first (separate ADR; out of scope here). Backend / AI Gateway code that reads `pools.pool_request_id` (none expected in current `src/` and `ai_gateway/` per `AS_BUILT_AUDIT.md` §3) will need a scan when that drop is scheduled.
+
+---
+
+### 2026-06-15: Q-TSP-RETRY-MATCH closed — inline retry-match in rpc_publish_pool
+
+**What**: New internal RPC `rpc_retry_match_pool(p_organization_id uuid, p_pool_id uuid) → jsonb`. Called inline by `rpc_publish_pool` after the `draft → filling` transition (same transaction). Scans `batches.status='published'` that fit any active `pool_line` of the published pool and upserts an `offer` row per eligible batch for the pool's MPK org. Match predicate mirrors `rpc_lower_batch_price` (price ≥ farmer_price, tsp_sku, capacity, region overlap D-M6-4, window overlap D-M6-8). FCFS semantics preserved — batch FSM is NOT transitioned here; MPK chooses via `rpc_accept_offer`. Idempotent via existing `unique(batch_id, mpk_org_id)` on `offers`.
+
+**Why**: Open question Q-TSP-RETRY-MATCH (Microstep4 §Open / Microstep6 §7) — a freshly published Pool must immediately reach batches that were already in `published` state (BT-05 path; D-M6-4 makes исход C frequent). Pre-fix, `rpc_publish_pool` only emitted `market.pool.published` and stopped; published batches sat invisible to the new MPK until they re-published or lowered price. Alternatives considered: (a) periodic cron-only sweep — rejected: window between pool publish and next sweep is dead time for the MPK; (b) auto-transition batch → `matched` directly — rejected: violates FCFS Offer/Accept (D-M6-1, M4 §5) and the existing pattern of `rpc_lower_batch_price`. Inline+Offer keeps semantics symmetric across the two retry triggers (new Pool / price lowered).
+
+**Files** (single canonical SQL file):
+- `d02_tsp.sql`:
+  - New RPC `rpc_retry_match_pool(uuid, uuid)` added between RPC-M6-02 and RPC-M6-03 (§8).
+  - `rpc_publish_pool` body: one new `perform public.rpc_retry_match_pool(p_organization_id, p_pool_id)` before `return true`.
+  - Header comments for `rpc_publish_pool` updated (gap-block at §M6 RPC zone + RPC-M6-02 banner + `comment on function`).
+  - `rpc_name_registry`: new row `rpc_retry_match_pool`; `rpc_publish_pool` note extended.
+
+**Additive guarantees (P7)**:
+- No existing RPC signature changed.
+- No existing FSM transition added or removed.
+- No new table; uses existing `offers`, `batches`, `pool_lines`, `pool_regions`, `tsp_config`.
+- `ON CONFLICT (batch_id, mpk_org_id) DO UPDATE` re-uses the established re-broadcast contract (`rpc_lower_batch_price`) — no new uniqueness rule introduced.
+- Sanity-check `p_organization_id = pools.organization_id` enforces P-AI-2 even though caller is system (covers the case where a periodic sweep job passes the wrong org).
+
+**Consequences**:
+- Easy: any future cron sweep just iterates `pools where status='filling'` and calls `rpc_retry_match_pool(p.organization_id, p.id)` — no new function needed.
+- Easy: behaviour is symmetric across the two retry triggers (new Pool / farmer lowered price) — both end up in Offer broadcast; MPK acceptance path is the single chokepoint.
+- Hard / watch: emits `batch_events('broadcast_sent')` per eligible batch — Dok 4 notifications layer must read this for «Новое предложение от поставщика» (Microstep6 §4e). No code change here; just confirming the existing notification template is the consumer.
+- Hard / follow-up: BT-05 in Microstep4 diagram still labels the transition `published → matched`; this is now superseded for the retry trigger (it goes via Offer, not direct). Update Microstep4 §Transitions to mark BT-05 as Offer-mediated when next touching that doc.
+
+**Verification**: `bash cross_check.sh` → 0 Critical / 0 Significant / 0 Minor. **Migration not yet applied to remote Supabase project `mwtbozflyldcadypherr`** — pending Arshidin's «ок» before `mcp__plugin_supabase_supabase__apply_migration`.
+
+**Verification**: `bash cross_check.sh` → 8/8 OK, 0 Critical / 0 Significant / 0 Minor. No remaining `join public.pool_requests` in `d02_tsp.sql`. **Migration not yet applied to remote Supabase project `mwtbozflyldcadypherr`** — pending Arshidin's "ок" before `mcp__plugin_supabase_supabase__apply_migration`.
+
+---
+
+### 2026-06-15: D-TSP-CATEGORY-BRIDGE — A2 bridge-table chosen for Q-TSP-CATEGORY-CLASSIFIER
+
+**What**: Architectural closure of Q-TSP-CATEGORY-CLASSIFIER chooses **Option A2 (bridge table)**: a new table `tsp_sku_category_map (tsp_sku_id uuid PK FK → tsp_skus, category_id uuid FK → livestock_categories, version int, is_active boolean, created_at)` makes `tsp_skus : livestock_categories = many : one`. `livestock_categories` and `livestock_category_rules` remain as the M4 §1.1 design intended; `tsp_skus` (D90, 30 rows) remains the fine-grained product cell used by Batch/Pool matching. Floor enforcement resolves SKU → Category via the bridge, then reads `minimum_prices(category_id, region_id)`. The architectural question is now **closed**; remaining closure is **data-only** (zoologist + seed).
+
+**Why**: Alternatives considered:
+- **A1 (Merge)**: drop `livestock_categories`, key `minimum_prices` / `reference_prices` directly to `tsp_sku_id`. Rejected — Art.171 PK RK riterique works on «защитная цена ассоциации по категории», not on 30 SKUs; would also explode `minimum_prices` rows by ~6×.
+- **A3 (Derive parallel)**: no bridge; floor-check recalls `rpc_derive_category(breed_group, sex, age, weight, bcs)` on every Batch. Rejected — BCS becomes mandatory at Batch publish time (UI burden on farmer; not in `batches` columns today); rule-version migrations would need to recompute cached `category_id` on historical batches.
+- **A2 (Bridge)**: chosen. Preserves Microstep4 ADR §1.1 unchanged. Category count stays coarse (зоолог укрупнит — гипотеза 5–8 категорий). Bridge versioning lets зоолог пересматривать SKU→Category без слома Batch FSM. `pool_lines.tsp_sku_id` (D-M6-13 транзитный) корректно превращается в `JOIN tsp_sku_category_map → minimum_prices` для floor-check.
+
+**Files** (artefacts only — NO SQL change yet, awaiting zoologist seed):
+- `DECISIONS_LOG.md`: this entry.
+- `Docs/AGOS-Dok1-v1_8.md` §7.3 «Открытые архитектурные вопросы»: Q-TSP-CATEGORY-CLASSIFIER status updated from `open` to `architecture-closed / data-pending`.
+- `Docs/Q-TSP-CATEGORY-CLASSIFIER-Zoologist-Brief.md` (NEW): structured brief for зоолог — 5 questions + SKU→Category mapping template (30 SKUs listed).
+- `SPRINT_STATUS.md`: blocker row updated — architectural step done, only seed data outstanding.
+
+**Additive guarantees (P7)**:
+- No SQL touched in this decision. The bridge table, RPC changes (`rpc_derive_category`, floor-clamp re-enablement in `rpc_lower_batch_price`, floor-enforcement upgrade in `rpc_create_pool`) all land **after** zoologist returns seed data, in a single d02_tsp.sql ADD (canonical file, no patch files per CLAUDE.md SQL rules).
+- `pool_lines.tsp_sku_id` (D-M6-13 transitional) stays as-is; no FSM transition added.
+- `batches.tsp_sku_id` stays as-is; no new mandatory column. BCS is **NOT** required at Batch publish in A2.
+- Existing `minimum_prices` / `reference_prices` schema is unchanged.
+
+**Consequences**:
+- Easy (post-seed): floor-clamp in `rpc_lower_batch_price` re-enables via `tsp_sku_id → JOIN tsp_sku_category_map → minimum_prices(category_id, region_id)` (region match: exact rayon, then national fallback per Microstep6 §floor).
+- Easy (post-seed): `rpc_create_pool` floor-enforcement runs unconditionally — no more optional `livestock_category_id` field on `p_pool_lines` jsonb. The optional path stays accepted for back-compat but unused (P7 additive).
+- Easy: classifier updates = INSERT new rule version + new map version, no code deploy (P8 standards-as-data).
+- Hard: requires zoologist sign-off on TWO datasets, not one: `livestock_category_rules` (derive rules) AND `tsp_sku_category_map` (the 30-row bridge). Brief covers both.
+- Hard / watch: if zoologist returns >8 categories, `minimum_prices` rows × regions grow proportionally — manageable but worth flagging at seed-review time.
+- Hard / follow-up: `rpc_derive_category` is still useful (AI Gateway extraction from photo/text) even with bridge — keep it. Bridge is the authoritative path for **floor-check**; derive is the AI helper.
+
+**Verification**: N/A (no code/SQL change). `cross_check.sh` not required. **Closure path superseded by D-TSP-CATEGORY-ADMIN (same day) — see below.**
+
+---
+
+### 2026-06-15: D-TSP-CATEGORY-ADMIN — closure path pivot to admin UI (P8 self-service)
+
+**What**: The closure path for Q-TSP-CATEGORY-CLASSIFIER pivots from «brief → zoologist text answers → SQL seed PR» to «1 schema migration + 4 admin screens → admin (CEO + zoologist) fills data live». Architecture (A2 bridge) is unchanged. What changes:
+- Brief document `Docs/Q-TSP-CATEGORY-CLASSIFIER-Zoologist-Brief.md` is **deleted**.
+- Replacement: `Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md` — full spec for 4 admin screens (A-CAT-01..04: Категории, Правила derive, SKU маппинг, Цены) + bridge table DDL + 11 admin RPC signatures.
+- Hand-off: DB Agent (SQL §2 of spec) + UI Agent (screens §3 of spec), parallel.
+
+**Why**: The brief approach violated P8 (Standards as Data, Not Code) — every future taxonomy change would require a developer-led SQL seed PR. CEO (Arshidin) flagged this directly: «эти категории должны управляться из админки». Alternatives considered:
+- **Brief → seed PR (original D-TSP-CATEGORY-BRIDGE plan)**: rejected — bureaucratic, breaks P8, single-use artifact, no path for quarterly price updates / new regions / classifier evolution without dev involvement.
+- **Hardcoded seed in SQL with «edit the SQL to change»**: rejected — same P8 violation plus no audit trail of who changed what when.
+- **Admin UI self-service (chosen)**: aligns with P8 (data tables already exist with versioning fields); aligns with existing admin module pattern (`src/pages/admin/*`); admin already has analogous screens (livestock-prices, pools, pricing); зоолог can be granted admin role for direct edits if needed.
+
+**Files**:
+- `Docs/AGOS-Dok6-A-CAT-AdminScreens-v1_0.md` (NEW): single-source spec covering schema delta, RPC signatures, screen contracts, hand-offs.
+- `Docs/Q-TSP-CATEGORY-CLASSIFIER-Zoologist-Brief.md` (DELETED): content rolled into spec §1.2 (default category hypothesis) and §3.3 (30-SKU mapping is now A-CAT-03 main screen).
+- `Docs/AGOS-Dok1-v1_8.md` §7.3: pointer updated.
+- `SPRINT_STATUS.md`: owner/approach updated.
+- This entry.
+
+**Effort estimate (info, not commitment)**:
+- DB Agent: ~1 day (1 table + 11 RPCs + 2 RPC body edits + registry + cross_check).
+- UI Agent: ~2–3 days (4 screens + Sidebar/Router additive changes).
+- Admin self-fill (CEO + зоолог): ~1 hour after deploy.
+
+**Additive guarantees (P7)**:
+- No existing RPC signature changed (admin RPCs are new; `rpc_lower_batch_price` and `rpc_create_pool` get body-only edits).
+- Schema: only new table (`tsp_sku_category_map`); no existing column altered.
+- Sidebar/Router changes are additive (new entry + new routes; nothing removed).
+- **Graceful degradation**: if migration ships but admin data is empty, `rpc_lower_batch_price` floor=NULL = clamp no-op (identical to current behaviour). Safe to deploy schema before data exists.
+
+**Consequences**:
+- Easy: future classifier / price updates are admin-panel clicks, not PRs. Quarterly cycle: open A-CAT-04 → create new minimum_prices row with new valid_from → versioning handles history.
+- Easy: dual benefit — A-CAT-04 also unblocks regular price updates for Phase 2 (would need admin UI anyway). No wasted work.
+- Hard: 4 new admin screens are real UI work (~2–3 days). Trade-off vs. brief: faster to pilot-ready (no waiting for zoologist text responses) and pays off for life.
+- Hard / watch: parallel WIP `M6-C-ADMIN-FLOW` may eventually re-template A-CAT screens. Risk minimal — admin screen patterns already established in `src/pages/admin/*`; if M6-C lands later, A-CAT can adopt the template additively.
+
+---
+
+### 2026-06-22 — D-DOC-RECON-01 + A1–A8: Doc Reconciliation Phase 1 Decisions
+
+**What:** Doc-reconciliation Phase 1 audit produced 9 decisions that resolve conflicts between microstep specs, Dok files, and deployed code. Recorded here so future sessions do not contradict them.
+
+**D-DOC-RECON-01 — Authority model reversed**
+Canon hierarchy reversed from Dok-first to: microsteps = canon for Identity/Membership/Governance/TSP domains; Doks = canon everywhere else; deployed SQL = reality; all expressed in reference-model form.
+
+**A1-MEMBERSHIP — Membership FSM**
+Canon = Microstep2 6-state FSM, tier is binary (`is_active`). Deprecated fields `level_stack` and `membership_type` retired from canonical model.
+
+**A2-CONSULTING — Consulting canon**
+Dok7 is sole canon for the Consulting module. `CONSULTING_MASTER_SPEC.md` demoted to historical v1.0 artifact.
+
+**A3-AI-NAMING — AI tool names vs RPC names**
+Tool-name layer (Dok5) and RPC-name layer (SQL/rpc_name_registry) are distinct layers connected by a mapping table. Existing RPCs are NOT renamed (P7 / additive-only).
+
+**A4-EDU-EVENTS — Education events**
+Dok4 `edu.*` event family is canon. `edu.certificate.issued` is mandatory (not optional).
+
+**A5-OFFER-EVENTS — Offer events**
+Microstep6 `offer.*` event family is canon for the TSP offer lifecycle.
+
+**A6-TSP-LEGACY — TSP legacy tables**
+Admin flow migrates to M4 `rpc_create_pool`. Legacy tables `pool_requests` / `pool_matches` are deprecated (no new writes; read-only for history).
+
+**A7-CONTACT-REVEAL — Contact reveal timing**
+Contact reveal happens at batch-confirmed transition (M4/M6 flow). Legacy D40 rule (reveal at pool `executing` status) is removed and superseded.
+
+**A8-EXPERT — Expert profiles**
+`expert_profiles` table retained per HS-2 (no deletion of working functionality). Canon ratified to `expert_profiles` as the `expert_provider` v2 entity.
+
+**Files:** `DECISIONS_LOG.md` (this entry).
+
+**Verification**: N/A (still no SQL/code changes — this entry covers the planning pivot). Next checkpoint: DB Agent completes §2 → UI Agent completes §3 in parallel → CEO + зоолог fill data via UI → close Q-TSP-CATEGORY-CLASSIFIER.

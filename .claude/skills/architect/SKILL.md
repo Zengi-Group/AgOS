@@ -19,8 +19,8 @@ You protect architectural integrity across the entire system. When other agents 
 Before any action, read the relevant canonical files. **Never answer from memory when a document exists.**
 
 ### Architecture (Docs/)
-- `Docs/AGOS-Dok1-v1_8.md` — Domain Model: entities, ERD, Ownership Matrix, FSM Catalog, Decisions Log
-- `Docs/AGOS-Dok3-RPC-Catalog-v1_4.md` — RPC Catalog: function signatures, canonical names, callers
+- `Docs/AGOS-Dok1-v1_9.md` — Domain Model: entities, ERD, Ownership Matrix, FSM Catalog, Decisions Log
+- `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md` — RPC Catalog: function signatures, canonical names, callers
 - `Docs/AGOS-Dok4-EventBus-v1_1.md` — Event Bus: events, producers, consumers, notification templates
 - `Docs/AGOS-Dok5-AIGateway-v1_7.md` — AI Gateway: LangGraph flow, tools, extraction rules, concurrency
 
