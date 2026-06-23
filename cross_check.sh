@@ -13,7 +13,14 @@ set -uo pipefail
 CRITICAL=0
 SIGNIFICANT=0
 MINOR=0
-SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql)
+SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql)
+# TSP canonical trade layer = self-serve adapter migration (D-TSP-CANON-01, 2026-06-23).
+# Brought into cross_check scope per convergence Slice A. The adapter intentionally
+# redefines rpc_create_batch / rpc_get_org_batches (text-sig) over the d07 uuid-sig —
+# whitelisted in CHECK 1, guarded against PGRST203 in CHECK 9, and its self-serve
+# rpc_self_*/read RPCs are excepted in CHECK 5/7 until registered in Slice B.
+# NOTE (flagged, not fixed here): d10_public_site.sql is in cross_check but NOT in
+# deploy_sql.py; d11_norms.sql is in deploy_sql.py but NOT here — reconcile separately.
 
 echo "========================================"
 echo "AgOS Cross-Check — $(date '+%Y-%m-%d %H:%M')"
@@ -33,7 +40,15 @@ echo "--- CHECK 1: Duplicate function definitions ---"
 # temporal overload (p_at_date, p_include_deprecated) + d03 legacy no-arg wrapper for
 # Calculator.tsx / RationTab.tsx. Different signatures, PostgreSQL overload-safe.
 # @deprecated removal of d03 wrapper: after TAXONOMY-M3c UI cut-over.
-DUP_WHITELIST="fn_my_org_ids|fn_is_admin|fn_is_expert|rpc_list_animal_categories"
+# rpc_create_batch, rpc_get_org_batches: the TSP adapter migration (D-TSP-CANON-01)
+# redefines these as the text-sig / no-arg canonical trade layer, dropping the d07
+# uuid-sig at deploy time. They coexist in source until the d07 uuid-sig is physically
+# retired in convergence Slice D. The PGRST203 overload risk is guarded by CHECK 9.
+# rpc_cancel_batch: adapter 1-arg (p_batch_id) overrides the d02 canonical 3-arg
+# (p_organization_id, p_batch_id, p_reason). UNLIKE create_batch the adapter does NOT
+# drop the d02 sig, so both coexist — a latent overload also tracked by CHECK 9 and
+# retired (d02 sig) in convergence Slice D.
+DUP_WHITELIST="fn_my_org_ids|fn_is_admin|fn_is_expert|rpc_list_animal_categories|rpc_create_batch|rpc_get_org_batches|rpc_cancel_batch"
 
 # Extract all function names from CREATE OR REPLACE FUNCTION lines
 # BSD-safe: use [[:space:]]+ instead of \s+; case-insensitive via tr
@@ -170,7 +185,15 @@ rpc_admin_set_category_rule|rpc_admin_activate_rule_version|\
 rpc_admin_map_sku_to_category|\
 rpc_admin_set_minimum_price|rpc_admin_set_reference_price|\
 rpc_admin_list_categories_with_stats|rpc_admin_list_category_rules|\
-rpc_admin_get_sku_coverage|rpc_admin_list_prices"
+rpc_admin_get_sku_coverage|rpc_admin_list_prices|\
+rpc_create_batch|rpc_get_org_batches|rpc_cancel_batch|rpc_dispatch_batch|\
+rpc_lower_price|rpc_update_price|rpc_submit_review|rpc_self_review_due_batches|\
+rpc_self_auto_match_batch|rpc_get_market_batches|rpc_self_activate_pool_request|\
+rpc_self_match_batch_to_pool|rpc_self_advance_pool_status|rpc_get_pool_matches|\
+rpc_get_my_pools|rpc_self_close_due_pools|rpc_self_accept_offer"
+# TSP self-serve adapter RPCs (D-TSP-CANON-01): web-JWT access class — org scoping is
+# enforced inside via fn_my_org_ids(), not via an organization_id parameter (P-AI-2 is
+# satisfied for the AI path by the canonical uuid-sig RPCs, which DO take org_id).
 sig_count_before=$SIGNIFICANT
 
 for f in "${SQL_FILES[@]}"; do
@@ -251,7 +274,14 @@ all_rpc_funcs=$(grep -h -i '^create or replace function.*rpc_' "${SQL_FILES[@]}"
 registered_rpcs=$(grep -h -oE "'rpc_[a-z0-9_]+'" "${SQL_FILES[@]}" 2>/dev/null \
   | sort -u | tr -d "'")
 
+# TSP self-serve adapter RPCs (D-TSP-CANON-01): registry rows are added when the
+# adapter becomes the canonical trade layer in convergence Slice B; excepted until then.
+registry_exceptions="rpc_dispatch_batch|rpc_get_market_batches|rpc_get_my_pools|rpc_get_pool_matches|rpc_lower_price|rpc_self_accept_offer|rpc_self_activate_pool_request|rpc_self_advance_pool_status|rpc_self_auto_match_batch|rpc_self_close_due_pools|rpc_self_create_pool_request|rpc_self_match_batch_to_pool|rpc_self_review_due_batches|rpc_submit_review|rpc_update_price"
+
 while IFS= read -r func; do
+  if echo "$func" | grep -qxE "$registry_exceptions"; then
+    continue
+  fi
   if ! echo "$registered_rpcs" | grep -qx "$func"; then
     echo "  SIGNIFICANT: ${func} — defined in SQL but NOT in rpc_name_registry"
     ((SIGNIFICANT++))
@@ -276,6 +306,41 @@ if grep -q "disclaimer_text" d03_feed.sql 2>/dev/null && \
 else
   echo "  CRITICAL: rpc_list_feed_prices in d03_feed.sql is missing disclaimer_text (Article 171 violation)"
   ((CRITICAL++))
+fi
+
+echo ""
+
+# ----------------------------------------------------------
+# CHECK 9: PGRST203 overload-collision guard (D-TSP-CANON-01 / TSP-ADAPTER-02)
+# Severity: SIGNIFICANT
+# Two same-name functions differing only by parameter TYPES (uuid-sig in d07 vs
+# text-sig in the adapter) cannot be resolved by PostgREST over REST → PGRST203.
+# The adapter DROPs the d07 uuid-sig at deploy time, but a full deploy_sql.py run
+# re-creates d07 → the mine re-arms unless the adapter is re-applied last (or the
+# d07 uuid-sig is physically removed in convergence Slice D). This guard fails while
+# both coexist in source, and stays green once the d07 uuid-sig is retired — making
+# the mine impossible to re-arm silently.
+# ----------------------------------------------------------
+echo "--- CHECK 9: PGRST203 overload collision (adapter override vs canonical d-files) ---"
+ADAPTER_MIG="supabase/migrations/20260622120000_tsp_canonical_rebind.sql"
+pgrst_mine_before=$SIGNIFICANT
+# Names the adapter redefines with a DIFFERENT signature than the canonical d-file def.
+# While both coexist in the deployed set, PostgREST may fail to resolve the call → PGRST203.
+# Each is retired (canonical sig dropped) in convergence Slice D; this guard then goes green.
+for fn in rpc_create_batch rpc_get_org_batches rpc_cancel_batch; do
+  in_canon=0; canon_file=""
+  for cf in d02_tsp.sql d07_ai_gateway.sql; do
+    c=$(grep -ciE "^create or replace function (public\.)?${fn}[[:space:]]*\(" "$cf" 2>/dev/null || true)
+    if [ "$c" -gt 0 ]; then in_canon=1; canon_file="$cf"; fi
+  done
+  in_adapter=$(grep -ciE "^create or replace function (public\.)?${fn}[[:space:]]*\(" "$ADAPTER_MIG" 2>/dev/null || true)
+  if [ "$in_canon" -gt 0 ] && [ "$in_adapter" -gt 0 ]; then
+    echo "  SIGNIFICANT: ${fn} defined in canonical ${canon_file} AND (different sig) in adapter — PGRST203 overload risk (retire canonical sig in convergence Slice D)"
+    ((SIGNIFICANT++))
+  fi
+done
+if [ "$SIGNIFICANT" -eq "$pgrst_mine_before" ]; then
+  echo "  OK: no adapter↔canonical overload collision"
 fi
 
 echo ""

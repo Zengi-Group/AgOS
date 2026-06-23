@@ -106,9 +106,9 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
   }
 
   // Реальный оффер МПК → партия фермера. Бросает при ошибке (caller покажет тост).
-  const offerBatch = async (poolId: string, batchId: string, heads: number) => {
+  const offerBatch = async (poolId: string, batchId: string, heads: number, price: number) => {
     const { error } = await supabase.rpc('rpc_self_match_batch_to_pool', {
-      p_pool_id: poolId, p_batch_id: batchId, p_matched_heads: heads,
+      p_pool_id: poolId, p_batch_id: batchId, p_matched_heads: heads, p_price_per_kg: price,
     })
     if (error) throw new Error(error.message)
     await refetchMarket()
