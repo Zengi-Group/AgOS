@@ -2808,11 +2808,15 @@ begin
       and id != p_offer_id
       and status = 'pending';
 
-    -- 3) Batch -> matched
+    -- 3) Batch -> matched.
+    -- D-M6-DEALPRICE (CEO 2026-06-23): the farmer is paid the MATCHED pool line's
+    -- MPK bid (v_pool_line.pl_price, the highest eligible line picked by the
+    -- ORDER BY ... desc above), NOT merely their own ask (offered_price). The
+    -- ask is the floor; any higher MPK bid accrues to the farmer.
     update public.batches
     set status            = 'matched',
         pool_line_id      = v_pool_line.pl_id,
-        deal_price_per_kg = v_offer.offered_price_per_kg,
+        deal_price_per_kg = v_pool_line.pl_price,
         matched_at        = now(),
         updated_at        = now()
     where id = v_batch.id;

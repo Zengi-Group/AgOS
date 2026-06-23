@@ -35,6 +35,7 @@ declare
     v_pool        uuid;
     v_offer       uuid;
     v_status      text;
+    v_deal        int;
     v_price       int := 1200;          -- farmer ask, KZT/kg
     r             jsonb;
 begin
@@ -103,12 +104,19 @@ begin
     perform public.rpc_accept_offer(p_organization_id => v_mpk_org, p_offer_id => v_offer);
 
     -- ---- 7) ASSERT: batch matched (or confirmed if pool auto-closed) ----
-    select status into v_status from public.batches where id = v_batch;
+    select status, deal_price_per_kg into v_status, v_deal
+    from public.batches where id = v_batch;
     if v_status not in ('matched', 'confirmed') then
         raise exception 'TSP_TEST_FAIL: after accept_offer batch status=% (expected matched|confirmed)', v_status;
     end if;
 
-    raise exception 'TSP_TEST_PASS: happy path reachable (batch % final status=%)', v_batch, v_status;
+    -- ---- 8) ASSERT D-M6-DEALPRICE: farmer is paid the MPK bid (1300), not the ask (1200) ----
+    if v_deal <> v_price + 100 then
+        raise exception 'TSP_TEST_FAIL (D-M6-DEALPRICE): deal_price=% (expected % = MPK bid, not the % ask)',
+            v_deal, v_price + 100, v_price;
+    end if;
+
+    raise exception 'TSP_TEST_PASS: happy path reachable (batch % status=% deal_price=% = MPK bid)', v_batch, v_status, v_deal;
 end $$;
 
 rollback;
