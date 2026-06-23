@@ -1,5 +1,5 @@
 /**
- * /cabinet/ration/budget — Бюджет кормов
+ * /cabinet-legacy/ration/budget — Бюджет кормов
  * Stock vs demand: how many days of each feed remains, deficit alerts, cost estimates.
  * Edge Function: get-feed-budget (POST /functions/v1/get-feed-budget)
  */

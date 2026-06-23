@@ -1,6 +1,6 @@
 /**
  * F18 — Бюджет кормления (Feed Budget)
- * Dok 6 Slice 3: /cabinet/ration/budget
+ * Dok 6 Slice 3: /cabinet-legacy/ration/budget
  * Edge Function: get-feed-budget (POST /functions/v1/get-feed-budget)
  */
 import { useState, useEffect } from 'react'
@@ -81,7 +81,7 @@ export function FeedBudget() {
   return (
     <div className="page space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet/ration')}>
+        <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet-legacy/ration')}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-2xl font-semibold">Бюджет кормления</h1>
@@ -116,7 +116,7 @@ export function FeedBudget() {
         <Card>
           <CardContent className="p-8 text-center">
             <p className="text-muted-foreground">Сначала рассчитайте рацион</p>
-            <Button variant="outline" className="mt-3" onClick={() => navigate('/cabinet/ration')}>
+            <Button variant="outline" className="mt-3" onClick={() => navigate('/cabinet-legacy/ration')}>
               К рационам
             </Button>
           </CardContent>

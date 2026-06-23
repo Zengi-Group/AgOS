@@ -33,7 +33,7 @@ export function CabinetDashboard() {
 
       <div className="space-y-2">
         <button
-          onClick={() => navigate('/cabinet/vet/new')}
+          onClick={() => navigate('/cabinet-legacy/vet/new')}
           className="group w-full flex items-center gap-4 p-4 rounded-[10px] border cursor-pointer transition-all duration-100 text-left"
           style={{
             background: 'var(--bg-c)',
@@ -64,7 +64,7 @@ export function CabinetDashboard() {
         </button>
 
         <button
-          onClick={() => navigate('/cabinet/farm')}
+          onClick={() => navigate('/cabinet-legacy/farm')}
           className="group w-full flex items-center gap-4 p-4 rounded-[10px] border cursor-pointer transition-all duration-100 text-left"
           style={{
             background: 'var(--bg-c)',

@@ -55,6 +55,10 @@ import { ReportSick } from '@/pages/cabinet/vet/ReportSick'
 import { VetCaseList } from '@/pages/cabinet/vet/VetCaseList'
 import { VetCaseDetail } from '@/pages/cabinet/vet/VetCaseDetail'
 import { CabinetDashboard } from '@/pages/cabinet/CabinetDashboard'
+// New mobile shells (farmer + MPK) — own full-screen chrome, mounted OUTSIDE AppLayout.
+// New = primary /cabinet; legacy web cabinet → /cabinet-legacy (CEO decision 2026-06-23).
+import { CabinetApp } from '@/pages/cabinet/shell/CabinetApp'
+import { MpkApp } from '@/pages/cabinet/shell/mpk/MpkApp'
 import { HerdOverview } from '@/pages/cabinet/herd/HerdOverview'
 import { HerdGroupForm } from '@/pages/cabinet/herd/HerdGroupForm'
 import { FeedInventory } from '@/pages/cabinet/feed/FeedInventory'
@@ -161,8 +165,12 @@ function App() {
             </Route>
 
             <Route element={<RequireAuth />}>
+              {/* New mobile shells — full-screen, own chrome, NOT wrapped in AppLayout.
+                  Primary /cabinet (farmer) + /mpk (МПК); legacy web cabinet → /cabinet-legacy. */}
+              <Route path="/cabinet/*" element={<CabinetApp />} />
+              <Route path="/mpk/*" element={<MpkApp />} />
               <Route element={<AppLayout />}>
-                <Route path="/cabinet">
+                <Route path="/cabinet-legacy">
                   <Route index element={<CabinetDashboard />} />
                   <Route path="farm" element={<FarmProfile />} />
                   <Route path="vet" element={<VetCaseList />} />

@@ -1,6 +1,6 @@
 /**
  * F20 — Задачи (Task List)
- * Dok 6 Slice 4: /cabinet/plan/tasks
+ * Dok 6 Slice 4: /cabinet-legacy/plan/tasks
  * RPCs: rpc_get_farm_tasks (d07), rpc_complete_farm_task (d07, RPC-34)
  */
 import { useState } from 'react'
@@ -82,7 +82,7 @@ export function TaskList() {
 
   return (
     <div className="page space-y-6">
-      <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet/plan')}>
+      <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet-legacy/plan')}>
         <ArrowLeft className="h-5 w-5" />
       </Button>
 

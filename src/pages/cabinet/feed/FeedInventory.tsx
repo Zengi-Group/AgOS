@@ -1,6 +1,6 @@
 /**
  * F15 — Складские запасы кормов (Feed Inventory)
- * Dok 6 Slice 3: /cabinet/feed
+ * Dok 6 Slice 3: /cabinet-legacy/feed
  * RPC: rpc_get_farm_summary (RPC-08) → feed_inventory[]
  */
 import { useNavigate } from 'react-router-dom'
@@ -63,7 +63,7 @@ export function FeedInventory() {
       <div className="page">
         <Card><CardContent className="p-8 text-center">
           <p className="text-muted-foreground mb-4">Сначала создайте ферму</p>
-          <Button variant="outline" onClick={() => navigate('/cabinet/farm')}>Создать ферму</Button>
+          <Button variant="outline" onClick={() => navigate('/cabinet-legacy/farm')}>Создать ферму</Button>
         </CardContent></Card>
       </div>
     )
@@ -87,7 +87,7 @@ export function FeedInventory() {
             {items.length} видов · {formatKg(totalKg)}
           </p>
         )}
-        <Button onClick={() => navigate('/cabinet/feed/add')}>
+        <Button onClick={() => navigate('/cabinet-legacy/feed/add')}>
           <Plus className="mr-2 h-4 w-4" />
           Добавить корм
         </Button>
@@ -99,7 +99,7 @@ export function FeedInventory() {
             <p className="text-muted-foreground mb-4">
               Добавьте корма для расчёта рациона
             </p>
-            <Button variant="outline" onClick={() => navigate('/cabinet/feed/add')}>
+            <Button variant="outline" onClick={() => navigate('/cabinet-legacy/feed/add')}>
               <Plus className="mr-2 h-4 w-4" />
               Добавить первый корм
             </Button>
@@ -113,7 +113,7 @@ export function FeedInventory() {
               <Card
                 key={item.id}
                 className="cursor-pointer hover:border-primary/50 transition-colors"
-                onClick={() => navigate(`/cabinet/feed/${item.id}`)}
+                onClick={() => navigate(`/cabinet-legacy/feed/${item.id}`)}
               >
                 <CardContent className="p-4 flex items-center justify-between">
                   <div className="space-y-1">

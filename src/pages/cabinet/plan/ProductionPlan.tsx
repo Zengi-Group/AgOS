@@ -1,6 +1,6 @@
 /**
  * F19 — Производственный план (Production Plan Overview)
- * Dok 6 Slice 4: /cabinet/plan
+ * Dok 6 Slice 4: /cabinet-legacy/plan
  * RPC: rpc_get_active_plan (RPC-37)
  */
 import { useNavigate } from 'react-router-dom'
@@ -116,16 +116,16 @@ export function ProductionPlan() {
 
       {/* Quick links */}
       <div className="grid grid-cols-3 gap-3">
-        <Button variant="outline" className="h-auto py-3 flex-col" onClick={() => navigate('/cabinet/plan/tasks')}>
+        <Button variant="outline" className="h-auto py-3 flex-col" onClick={() => navigate('/cabinet-legacy/plan/tasks')}>
           <ListChecks className="h-5 w-5 mb-1" />
           <span className="text-xs">Задачи</span>
           {ts.overdue > 0 && <Badge variant="destructive" className="text-xs mt-1">{ts.overdue}</Badge>}
         </Button>
-        <Button variant="outline" className="h-auto py-3 flex-col" onClick={() => navigate('/cabinet/plan/timeline')}>
+        <Button variant="outline" className="h-auto py-3 flex-col" onClick={() => navigate('/cabinet-legacy/plan/timeline')}>
           <Clock className="h-5 w-5 mb-1" />
           <span className="text-xs">Таймлайн</span>
         </Button>
-        <Button variant="outline" className="h-auto py-3 flex-col" onClick={() => navigate('/cabinet/plan/kpi')}>
+        <Button variant="outline" className="h-auto py-3 flex-col" onClick={() => navigate('/cabinet-legacy/plan/kpi')}>
           <BarChart3 className="h-5 w-5 mb-1" />
           <span className="text-xs">KPI</span>
           {ks.missed > 0 && <Badge variant="destructive" className="text-xs mt-1">{ks.missed}</Badge>}
@@ -139,7 +139,7 @@ export function ProductionPlan() {
           const phaseProgress = phase.tasks_total > 0 ? Math.round((phase.tasks_completed / phase.tasks_total) * 100) : 0
           return (
             <Card key={phase.id} className="cursor-pointer hover:border-primary/50 transition-colors"
-              onClick={() => navigate(`/cabinet/plan/cascade/${phase.id}`)}>
+              onClick={() => navigate(`/cabinet-legacy/plan/cascade/${phase.id}`)}>
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div>

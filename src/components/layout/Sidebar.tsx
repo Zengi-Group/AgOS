@@ -66,24 +66,24 @@ const FARMER_GROUPS: NavGroup[] = [
   {
     label: 'Основное',
     items: [
-      { id: 'dashboard', icon: LayoutDashboard, label: 'Главная', route: '/cabinet' },
-      { id: 'farm', icon: Leaf, label: 'Ферма', route: '/cabinet/farm' },
+      { id: 'dashboard', icon: LayoutDashboard, label: 'Главная', route: '/cabinet-legacy' },
+      { id: 'farm', icon: Leaf, label: 'Ферма', route: '/cabinet-legacy/farm' },
     ],
   },
   {
     label: 'Поголовье',
     items: [
-      { id: 'herd', icon: Fence, label: 'Стадо', route: '/cabinet/herd' },
-      { id: 'vet', icon: Stethoscope, label: 'Ветеринария', route: '/cabinet/vet' },
-      { id: 'feed', icon: Wheat, label: 'Корма', route: '/cabinet/feed' },
-      { id: 'ration', icon: Calculator, label: 'Рацион', route: '/cabinet/ration' },
+      { id: 'herd', icon: Fence, label: 'Стадо', route: '/cabinet-legacy/herd' },
+      { id: 'vet', icon: Stethoscope, label: 'Ветеринария', route: '/cabinet-legacy/vet' },
+      { id: 'feed', icon: Wheat, label: 'Корма', route: '/cabinet-legacy/feed' },
+      { id: 'ration', icon: Calculator, label: 'Рацион', route: '/cabinet-legacy/ration' },
     ],
   },
   {
     label: 'Бизнес',
     items: [
-      { id: 'plan', icon: ClipboardList, label: 'Планирование', route: '/cabinet/plan' },
-      { id: 'market', icon: ShoppingCart, label: 'Рынок', route: '/cabinet/market' },
+      { id: 'plan', icon: ClipboardList, label: 'Планирование', route: '/cabinet-legacy/plan' },
+      { id: 'market', icon: ShoppingCart, label: 'Рынок', route: '/cabinet-legacy/market' },
     ],
   },
 ]
@@ -214,7 +214,7 @@ export function Sidebar() {
     : FARMER_GROUPS
 
   const getIsActive = (item: NavItem) => {
-    if (item.route === '/cabinet' || item.route === '/admin') {
+    if (item.route === '/cabinet-legacy' || item.route === '/admin') {
       return location.pathname === item.route
     }
     return location.pathname.startsWith(item.route)
@@ -261,7 +261,7 @@ export function Sidebar() {
       icon: User,
       destructive: false,
       action: () => {
-        navigate(isAdminSection ? '/cabinet' : '/cabinet/farm')
+        navigate(isAdminSection ? '/cabinet' : '/cabinet-legacy/farm')
         setFooterOpen(false)
       },
     },

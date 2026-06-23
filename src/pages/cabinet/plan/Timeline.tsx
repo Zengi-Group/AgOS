@@ -1,6 +1,6 @@
 /**
  * F21 — Таймлайн (Timeline View)
- * Dok 6 Slice 4: /cabinet/plan/timeline
+ * Dok 6 Slice 4: /cabinet-legacy/plan/timeline
  * RPC: rpc_get_active_plan (RPC-37) → phases with dates
  * Read-only visualization — no writes.
  */
@@ -48,7 +48,7 @@ export function Timeline() {
   if (!data) {
     return (
       <div className="page">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet/plan')}><ArrowLeft className="h-5 w-5" /></Button>
+        <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet-legacy/plan')}><ArrowLeft className="h-5 w-5" /></Button>
         <Card className="mt-4"><CardContent className="p-8 text-center text-muted-foreground">План не создан</CardContent></Card>
       </div>
     )
@@ -76,7 +76,7 @@ export function Timeline() {
 
   return (
     <div className="page space-y-6">
-      <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet/plan')}>
+      <Button variant="ghost" size="icon" onClick={() => navigate('/cabinet-legacy/plan')}>
         <ArrowLeft className="h-5 w-5" />
       </Button>
 
@@ -109,7 +109,7 @@ export function Timeline() {
 
               return (
                 <div key={phase.id} className="relative h-10 cursor-pointer group"
-                  onClick={() => navigate(`/cabinet/plan/cascade/${phase.id}`)}>
+                  onClick={() => navigate(`/cabinet-legacy/plan/cascade/${phase.id}`)}>
                   <div
                     className="absolute h-8 rounded-md flex items-center px-2 text-xs text-white font-medium overflow-hidden whitespace-nowrap transition-opacity group-hover:opacity-90"
                     style={{

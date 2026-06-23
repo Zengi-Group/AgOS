@@ -1,5 +1,5 @@
 /**
- * /cabinet/ration/calculator
+ * /cabinet-legacy/ration/calculator
  * Quick NASEM ration calculator — result is NOT saved to farm rations.
  * Farmer inputs group params + available feeds → gets instant NASEM ration.
  * Optional: "Save as farm ration" saves via calculate-ration edge function.
@@ -191,7 +191,7 @@ export function Calculator() {
       })
       if (error) throw error
       toast.success('Рацион сохранён')
-      navigate('/cabinet/ration/groups')
+      navigate('/cabinet-legacy/ration/groups')
     } catch (err: any) {
       toast.error(err.message || 'Ошибка сохранения')
     } finally {
@@ -275,7 +275,7 @@ export function Calculator() {
           <p style={{ fontSize: 13, color: 'var(--fg3)', textAlign: 'center', padding: '12px 0' }}>
             Нет кормов на складе.{' '}
             <span
-              onClick={() => navigate('/cabinet/feed')}
+              onClick={() => navigate('/cabinet-legacy/feed')}
               style={{ color: 'var(--brand)', cursor: 'pointer', textDecoration: 'underline' }}
             >
               Добавить корма

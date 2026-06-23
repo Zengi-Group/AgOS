@@ -1,6 +1,6 @@
 /**
  * F03 — Обзор поголовья (Herd Overview)
- * Dok 6 Slice 3: /cabinet/herd
+ * Dok 6 Slice 3: /cabinet-legacy/herd
  * RPC: rpc_get_farm_summary (RPC-08)
  */
 import { useNavigate } from 'react-router-dom'
@@ -60,7 +60,7 @@ export function HerdOverview() {
       <div className="page">
         <Card><CardContent className="p-8 text-center">
           <p className="text-muted-foreground mb-4">Сначала создайте ферму</p>
-          <Button variant="outline" onClick={() => navigate('/cabinet/farm')}>Создать ферму</Button>
+          <Button variant="outline" onClick={() => navigate('/cabinet-legacy/farm')}>Создать ферму</Button>
         </CardContent></Card>
       </div>
     )
@@ -84,7 +84,7 @@ export function HerdOverview() {
             Всего: {totalHeads} голов в {groups.length} группах
           </p>
         )}
-        <Button onClick={() => navigate('/cabinet/herd/add')}>
+        <Button onClick={() => navigate('/cabinet-legacy/herd/add')}>
           <Plus className="mr-2 h-4 w-4" />
           Добавить группу
         </Button>
@@ -96,7 +96,7 @@ export function HerdOverview() {
             <p className="text-muted-foreground mb-4">
               Добавьте группы животных для учёта
             </p>
-            <Button variant="outline" onClick={() => navigate('/cabinet/herd/add')}>
+            <Button variant="outline" onClick={() => navigate('/cabinet-legacy/herd/add')}>
               <Plus className="mr-2 h-4 w-4" />
               Добавить первую группу
             </Button>
@@ -108,7 +108,7 @@ export function HerdOverview() {
             <Card
               key={group.id}
               className="cursor-pointer hover:border-primary/50 transition-colors"
-              onClick={() => navigate(`/cabinet/herd/${group.id}`)}
+              onClick={() => navigate(`/cabinet-legacy/herd/${group.id}`)}
             >
               <CardContent className="p-5">
                 <div className="flex items-start justify-between">
