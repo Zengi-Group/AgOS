@@ -3082,3 +3082,15 @@ end if;
 **Files**: `.claude/skills/feature/SKILL.md`, `Docs/_templates/eng-spec-slice.md` (канон процесса — `apex-brain/patterns/feature-flow.md`, `apex-brain/index.md`).
 
 **Follow-up (next slices)**: Linear create через MCP; авто-забор задачи на «ready for development»; ambient-хуки; тирование задач (mechanical→агент / semantic→человек) + ассистированный гейт (сжатый diff+флаги). Аддитивная консолидация Doks по касанию.
+
+---
+
+### 2026-06-24: Linear подстроен под feature-flow (6 колонок задач + tier-лейблы)
+
+**What**: Linear-MCP подключён (scope read+write). Команда `ARS` реструктурирована под `/feature`: 6 колонок задач `Backlog → Spec & Design → Ready for Dev → In Progress → In Review → Done` (`Todo` переименован в `Ready for Dev`, id сохранён → задачи целы; добавлен `Spec & Design`). Лейблы `tier:mechanical`/`tier:semantic` (маршрут якоря 6: агент/человек) + `needs-decision` (застрял на гейте). `/feature` anchor 2 привязан к воркспейсу (team ARS, роутинг по AgOS-проектам инициативы «AgOS — Цифровая платформа экосистемы», статус-флоу). Write-path проверен вживую: ARS-93 create → Ready for Dev → tier:mechanical → Canceled через API.
+
+**Why**: follow-up #1 из feature-flow — автоматизировать якорь 2 (завод задачи). Колонки = границы якорей/гейтов, видимые на доске.
+
+**Files**: `.claude/skills/feature/SKILL.md` (коммиты `b86e6f5`, `5bb0a15`).
+
+**Граница API**: статусы и команды Linear создаются ТОЛЬКО в UI (не через MCP). Ambient auto-pickup (Linear-статус → headless-прогон) требует внешнего триггера (cron-поллинг или webhook→CI) = follow-up #2.
