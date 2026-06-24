@@ -3070,3 +3070,45 @@ end if;
 **Verification**: `tsc -b` = 0; `npm run build` = 0. **DEPLOYED** to `mwtbozflyldcadypherr` 2026-06-23 — 11 functions via targeted `CREATE OR REPLACE` (MCP, same pattern as B). Verified: each touched name has exactly **1 overload** (no new PGRST203); d02/d07 canon sigs coexist under distinct names. `fn_tsp_batch_json` smoke on a live `published` batch → correct `state`, `buyer=null`, `deadlineLabel=null`. `cross_check.sh` = **0 critical / 3 significant** (unchanged from B = the 3 PGRST203 mine markers → Slice D). Census: 5 batches `published`, 0 pools/offers → no backfill. Write-path E2E (rollback tx with JWT-claim) deferred to the `tsp_happy_path_test.sql` harness to avoid mutating live data.
 
 **Deferred / Slice D unchanged**. **Slice C tails**: anonymous reputation (★) in inbox (needs aggregate view); register adapter `rpc_self_*` in `rpc_name_registry` (currently excepted in cross_check, not registered — applies to the whole adapter family, not just C); stale comment on `rpc_self_advance_pool_status` (still says "executing → reveal (D40)" — now a redundant idempotent fallback).
+
+---
+
+### 2026-06-24: Feature-flow orchestrator (/feature) + аддитивная миграция к двухвысотной модели замысла
+
+**What**: Засеян дирижёр `/feature` (`.claude/skills/feature/SKILL.md`) — 8 якорей / 3 гейта, режим C (механика на автопилоте, смысл — гейт). Дирижёр координирует, делегирует существующим агентам (architect/db/backend/ui/qa), не заменяет их. Формализован контракт инженерного спека (`Docs/_templates/eng-spec-slice.md`). Зафиксированы: две высоты замысла (Brain `specs/<feature>.md` = синтез+указатель; `Docs/` = детальный eng-spec, graphify-индексируемый) и сборка run-промта на старте из Brain+живой Graphify (вариант B, Linear хранит указатель+критерии, не копию).
+
+**Why**: Систематизировать и автоматизировать процесс разработки (цель ×100 без потери качества). Главный структурный долг — размазанный слой замысла (7 Dok + Microsteps + DECISIONS + IMPL_DEBT, ручная склейка) рвётся на скорости первым; мигрируем к двухвысотной модели **аддитивно** (новые фичи сразу по модели, старые Doks по касанию — не big-bang). Все прошлые регрессии (HS-1…6) случались, когда автомат проскакивал смысловой гейт → механику автоматизируем, смысл оставляем за человеком.
+
+**Files**: `.claude/skills/feature/SKILL.md`, `Docs/_templates/eng-spec-slice.md` (канон процесса — `apex-brain/patterns/feature-flow.md`, `apex-brain/index.md`).
+
+**Follow-up (next slices)**: Linear create через MCP; авто-забор задачи на «ready for development»; ambient-хуки; тирование задач (mechanical→агент / semantic→человек) + ассистированный гейт (сжатый diff+флаги). Аддитивная консолидация Doks по касанию.
+
+---
+
+### 2026-06-24: Linear подстроен под feature-flow (6 колонок задач + tier-лейблы)
+
+**What**: Linear-MCP подключён (scope read+write). Команда `ARS` реструктурирована под `/feature`: 6 колонок задач `Backlog → Spec & Design → Ready for Dev → In Progress → In Review → Done` (`Todo` переименован в `Ready for Dev`, id сохранён → задачи целы; добавлен `Spec & Design`). Лейблы `tier:mechanical`/`tier:semantic` (маршрут якоря 6: агент/человек) + `needs-decision` (застрял на гейте). `/feature` anchor 2 привязан к воркспейсу (team ARS, роутинг по AgOS-проектам инициативы «AgOS — Цифровая платформа экосистемы», статус-флоу). Write-path проверен вживую: ARS-93 create → Ready for Dev → tier:mechanical → Canceled через API.
+
+**Why**: follow-up #1 из feature-flow — автоматизировать якорь 2 (завод задачи). Колонки = границы якорей/гейтов, видимые на доске.
+
+**Files**: `.claude/skills/feature/SKILL.md` (коммиты `b86e6f5`, `5bb0a15`).
+
+**Граница API**: статусы и команды Linear создаются ТОЛЬКО в UI (не через MCP). Ambient auto-pickup (Linear-статус → headless-прогон) требует внешнего триггера (cron-поллинг или webhook→CI) = follow-up #2.
+
+---
+
+### 2026-06-24: TSP M6-A фермерский flow — E2E доказан (write-path), IMPL_DEBT реконсилирован, найден TSP-FLOW-07
+
+**What**: Первый боевой прогон `/feature` («реализовать flow продажи скота фермерам»). Аудит вскрыл: flow ~95% построен и задеплоен (Slice A/B/C, 2026-06-22..23) — IMPL_DEBT (аудит 2026-06-22) был устаревшим. Закрыт долгожданный **write-path E2E** (был отложен под `tsp_happy_path_test.sql`): прогон через SQL rollback-tx на проде `mwtbozflyldcadypherr` (ноль персистентных мутаций, JWT-симуляция через `set_config('request.jwt.claims',...)` — `fn_my_org_ids` читает `app_metadata.org_ids`).
+
+**Доказано E2E**: `rpc_create_batch(uuid)` → `rpc_set_batch_terms` → `rpc_publish_batch` → `published` → `rpc_create_pool`+`rpc_publish_pool` → broadcast → **`offering`** → `rpc_accept_offer` → **`confirmed`**, `deal_price=1300=бид` (D-M6-DEALPRICE, не ask=1200); reveal-render корректен (`fn_tsp_batch_json.buyer` = `<null>` пока `mpk_contact_revealed_at` null, → "Админ" после set; gate сходится D-M6-5/12); `rpc_dispatch_batch` → **`dispatched`**; `rpc_self_confirm_delivery` → **`delivered`**; adapter `rpc_create_batch(text-sig)` → **`published`**.
+
+**Найденный дефект — TSP-FLOW-07**: canon `rpc_accept_offer` при auto-close НЕ ставит `mpk_contact_revealed_at` (adapter `rpc_self_accept_offer`/`rpc_self_auto_match_batch` — ставят). Пул, закрытый по canon-пути, не раскрывает покупателя фермеру. Фермерский UI идёт adapter-путём (раскрытие работает), поэтому edge; фикс аддитивный (одна строка в auto-close блоке, P7-safe). Добавлен в IMPL_DEBT.
+
+**Adversarial reconcile**: два audit-субагента над-репортили «критические блокеры» (buyer reveal missing / publish-dispatch-delivery RPC missing / offer-expiry cron missing / farmer_price не хранится / 5-state UI). Все опровергнуты прямой интроспекцией прода + чтением деплойных тел: reveal gated в `fn_tsp_batch_json`; `rpc_publish_batch`/`rpc_dispatch_batch`/`rpc_self_confirm_delivery` есть; offer-expiry = poll-driven `rpc_self_review_due_batches`; `farmer_price_per_kg` колонка читается; `status.ts` уже на 11 состояниях. Урок: AST-аудит без живой интроспекции врёт — нужна сверка с реальностью.
+
+**IMPL_DEBT реконсилирован**: TSP-FLOW-01/05, TSP-SCHEMA-02, MARKET-UI-02 = verified-closed (Slice C); TSP-FLOW-03 = partial (окна есть, farmer_price хранится). См. блок реконсиляции в шапке IMPL_DEBT.md.
+
+**Остаток**: preview-UI прогон (фронтовая половина G2-метода); Art.171 явная цитата на шаге цены (формулировка за ARS-10 / D-LEGAL-1); TSP-FLOW-07 фикс; Slice D (3 overload-дубля + AI-repoint + deploy-order).
+
+**Files**: `apex-brain/projects/agos/specs/tsp-farmer-sell-flow.md` (синтез, status=building), `apex-brain/index.md` + `log.md`; `IMPL_DEBT.md` (реконсиляция + TSP-FLOW-07); Linear ARS-94 (epic) + sub-tasks. Кода в репо НЕ менял (только записи). E2E = read-only/rollback, прод не мутирован.

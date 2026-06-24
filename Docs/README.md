@@ -23,7 +23,7 @@
    - Return types
    - Implementation status (which ones are in SQL)
 
-3. **AGOS-Dok4-EventBus-v1_1.docx** (83K)
+3. **AGOS-Dok4-EventBus-v1_1.md** (canon — `.docx` ретайрнут 2026-06-24)
    - 59 canonical events
    - When each fires (triggers)
    - Notification templates
