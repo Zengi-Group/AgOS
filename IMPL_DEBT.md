@@ -14,7 +14,7 @@
 >
 > | id | domain | conflict | what | evidence | action |
 > |----|--------|----------|------|----------|--------|
-> | TSP-FLOW-07 | TSP-flow | code↔canon | canon `rpc_accept_offer` auto-close does NOT set `mpk_contact_revealed_at`; pools closed via canon path never reveal buyer to farmer (adapter accept/auto-match DO set it) | d02_tsp.sql `rpc_accept_offer` auto-close block; verified live 2026-06-24 (reveal=`<null>` after canon accept→confirmed) | **✅ FIXED 2026-06-24 (ARS-95)** — added `mpk_contact_revealed_at = coalesce(mpk_contact_revealed_at, now())` to canon auto-close UPDATE (`d02_tsp.sql:2849`, additive/P7-safe). Verified rollback-tx: `FIX_VERIFIED buyer=Админ`. cross_check 0 critical. **PENDING DEPLOY** (G3). |
+> | TSP-FLOW-07 | TSP-flow | code↔canon | canon `rpc_accept_offer` auto-close does NOT set `mpk_contact_revealed_at`; pools closed via canon path never reveal buyer to farmer (adapter accept/auto-match DO set it) | d02_tsp.sql `rpc_accept_offer` auto-close block; verified live 2026-06-24 (reveal=`<null>` after canon accept→confirmed) | **✅ FIXED 2026-06-24 (ARS-95)** — added `mpk_contact_revealed_at = coalesce(mpk_contact_revealed_at, now())` to canon auto-close UPDATE (`d02_tsp.sql:2849`, additive/P7-safe). Verified rollback-tx: `FIX_VERIFIED buyer=Админ`. cross_check 0 critical. **✅ DEPLOYED 2026-06-24** prod `mwtbozflyldcadypherr` (apply_migration `tsp_flow_07_canon_accept_offer_reveal`); post-deploy verified `POSTDEPLOY_PASS buyer=Админ`, 1 overload (no PGRST203). Repo commit `11613a1` pending merge to main. |
 
 ## 🔴 Breaking (12)
 
