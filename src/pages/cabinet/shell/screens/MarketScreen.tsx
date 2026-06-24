@@ -30,16 +30,30 @@ function SellGate({ membership, onApply }: { membership: MembershipStatus; onApp
   )
 }
 
+// Плашка оформления членства: заявка одобрена, но взнос не оплачен (TSP-вход в оплату).
+function ApprovedPlate({ onPay }: { onPay: () => void }) {
+  return (
+    <div className="sell-gate">
+      <div className="sg-t">Заявка одобрена — оформите членство</div>
+      <div className="sg-note" style={{ marginBottom: 8 }}>
+        Ассоциация одобрила вашу заявку. Оплатите членский взнос, чтобы оформить членство и открыть продажу партий.
+      </div>
+      <button className="ws-btn" onClick={onPay}>Оплатить взнос</button>
+    </div>
+  )
+}
+
 interface Props {
   membership: MembershipStatus
   batches: Batch[]
   loading: boolean
   onNew: () => void
   onApply: () => void
+  onPay: () => void
   go: (r: Route) => void
 }
 
-export function MarketScreen({ membership, batches, loading, onNew, onApply, go }: Props) {
+export function MarketScreen({ membership, batches, loading, onNew, onApply, onPay, go }: Props) {
   const isGate = gated(membership)
   const expired = membership === 'expired'
   const active = batches
@@ -55,6 +69,7 @@ export function MarketScreen({ membership, batches, loading, onNew, onApply, go 
             <SellGate membership={membership} onApply={onApply} />
           ) : (
             <div className="stack8">
+              {membership === 'approved' && <ApprovedPlate onPay={onPay} />}
               {!expired && <button className="mkt-sell-btn" onClick={onNew}>+ Продать партию</button>}
               {expired && (
                 <div className="sg-note">Членство истекло. Текущие сделки можно довести до конца, новые партии — после оплаты.</div>

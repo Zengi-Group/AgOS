@@ -182,30 +182,31 @@ export function CabinetApp() {
   const openPrices = (catKey: string) => setSheet({ kind: 'prices', catKey })
 
   // ---------- членство ----------
+  // Флоу: 'apply' → шторка документов (загрузка + подача заявки) → 'pending' (проверка админом)
+  // → 'approved' (одобрено, взнос не оплачен) → 'pay' → оплата взноса → 'active'.
   const memberAct = (act: string) => {
     if (offline) { offlineToast(); return }
     if (act === 'apply') setSheet({ kind: 'membdocs' })
-    else if (act === 'selfjoin') selfJoinMembership()
     else setSheet({ kind: 'payvznos' })
   }
-  // БЕТА: подтверждение членства без админа. На реальном аккаунте → rpc_self_join_membership
-  // (одобряет заявку + поднимает level до observer → деривация даёт 'active'); демо → локально.
-  const selfJoinMembership = async () => {
-    if (offline) { offlineToast(); return }
+  // Заявка с документами отправлена на проверку админу → ждём решения.
+  const onMembDocsSubmitted = () => {
+    setSheet(null)
+    setMembership('pending')
+    setTuranUnread(false)
+    showToast('Заявка отправлена на проверку')
+  }
+  // Оплата взноса (симуляция на пилоте). На реальном аккаунте → rpc_pay_membership_dues
+  // (требует одобренную заявку, поднимает level registered→observer → деривация даёт 'active').
+  const payVznosDone = async () => {
     setSheet(null)
     if (profile?.orgId) {
-      const { error } = await supabase.rpc('rpc_self_join_membership', {
+      const { error } = await supabase.rpc('rpc_pay_membership_dues', {
         p_organization_id: profile.orgId,
       })
-      if (error) { showToast('Не удалось подтвердить членство: ' + error.message); return }
+      if (error) { showToast('Не удалось оплатить взнос: ' + error.message); return }
     }
     setMembership('active'); setTuranUnread(false)
-    showToast('Членство подтверждено · доступ открыт')
-  }
-  // «Подать заявку» из шторки документов: на бете сразу подтверждаем (self-join).
-  const submitMembDocs = () => { selfJoinMembership() }
-  const payVznosDone = () => {
-    setMembership('active'); setSheet(null); setTuranUnread(false)
     showToast('Взнос оплачен · членство активно')
   }
   const payProDone = () => {
@@ -331,6 +332,7 @@ export function CabinetApp() {
           loading={loading}
           onNew={() => setWizActive(true)}
           onApply={() => memberAct('apply')}
+          onPay={() => memberAct('pay')}
           go={go}
         />
       )
@@ -428,7 +430,7 @@ export function CabinetApp() {
           <MembGateSheet membership={membership} onClose={() => setSheet(null)} onAct={memberAct} />
         )}
         {sheet?.kind === 'membdocs' && (
-          <MembDocsSheet onClose={() => setSheet(null)} onSubmit={submitMembDocs} />
+          <MembDocsSheet orgId={profile?.orgId ?? null} onClose={() => setSheet(null)} onSubmitted={onMembDocsSubmitted} />
         )}
         {sheet?.kind === 'prices' && (
           <PriceSheet catKey={sheet.catKey} onClose={() => setSheet(null)} onSell={sellByPrice} />

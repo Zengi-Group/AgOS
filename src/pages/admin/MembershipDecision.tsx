@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, XCircle, Loader2, Building2, MapPin, Hash, Calendar, Users, Users2, Leaf } from 'lucide-react'
+import { ArrowLeft, CheckCircle, XCircle, Loader2, Building2, MapPin, Hash, Calendar, Users, Users2, Leaf, FileText, Download } from 'lucide-react'
 import { useSetTopbar } from '@/components/layout/TopbarContext'
 import { useAuth } from '@/hooks/useAuth'
 import { useRpc, useRpcMutation } from '@/hooks/useRpc'
+import { useOrgDocuments } from '@/hooks/admin/useOrgDocuments'
+import { REQUIRED_DOCUMENTS } from '@/types/application-flow'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -87,6 +89,13 @@ const LEVEL_LABELS: Record<string, string> = {
   active_buyer: 'Активный покупатель',
 }
 
+// Подписи слотов документов (для просмотра админом).
+const DOC_LABELS: Record<string, string> = {
+  registration_certificate: 'Документ о гос. регистрации',
+  identity_document: 'Удостоверение личности руководителя',
+  bank_details: 'Банковские реквизиты',
+}
+
 export function MembershipDecision() {
   useSetTopbar({ title: 'Рассмотрение заявки', titleIcon: <Users size={15} /> })
   const { applicationId } = useParams<{ applicationId: string }>()
@@ -104,6 +113,8 @@ export function MembershipDecision() {
     },
     { enabled: !!applicationId }
   )
+
+  const { data: orgDocs, downloadFile } = useOrgDocuments(detail?.org_id)
 
   const processMutation = useRpcMutation<Record<string, unknown>, string>(
     'rpc_process_membership_application',
@@ -265,6 +276,43 @@ export function MembershipDecision() {
         </div>
       )}
 
+      {/* Documents (from Storage: membership-documents/{orgId}/docs) */}
+      <div className="bg-card rounded-[10px] border border-border p-5 space-y-3">
+        <h3 className="text-sm font-medium text-[var(--fg)] flex items-center gap-2">
+          <FileText className="h-4 w-4 text-[var(--fg2)]" />
+          Документы заявки
+        </h3>
+        <div className="space-y-2">
+          {REQUIRED_DOCUMENTS.map((slot) => {
+            const path = orgDocs?.documents[slot.key] ?? null
+            return (
+              <div key={slot.key} className="flex items-center justify-between text-sm p-2.5 bg-[var(--bg)] rounded-lg">
+                <div className="flex items-center gap-2 min-w-0">
+                  {path
+                    ? <CheckCircle className="h-4 w-4 shrink-0" style={{ color: 'var(--green)' }} />
+                    : <XCircle className="h-4 w-4 shrink-0" style={{ color: 'var(--fg3)' }} />}
+                  <span className={'truncate ' + (path ? 'text-[var(--fg)]' : 'text-[var(--fg3)]')}>
+                    {DOC_LABELS[slot.key] ?? slot.key}
+                  </span>
+                </div>
+                {path && (
+                  <button
+                    onClick={() => downloadFile(path)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border border-[var(--bd)] text-[var(--fg2)] hover:bg-[var(--bg-s)] transition-colors shrink-0"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Открыть
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        {!orgDocs?.allDocsUploaded && (
+          <p className="text-xs text-[var(--fg3)]">Не все обязательные документы загружены.</p>
+        )}
+      </div>
+
       {/* Application info */}
       <div className="bg-card rounded-[10px] border border-border p-5 space-y-3">
         <h3 className="text-sm font-medium text-[var(--fg)]">Заявка</h3>
@@ -386,7 +434,7 @@ export function MembershipDecision() {
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             {confirmAction === 'approved'
-              ? `${detail?.org_name} получит статус "${LEVEL_LABELS[detail?.to_level ?? ''] ?? detail?.to_level}". Фермер получит уведомление в WhatsApp.`
+              ? `Заявка ${detail?.org_name} будет одобрена. Членство (${LEVEL_LABELS[detail?.to_level ?? ''] ?? detail?.to_level}) активируется после оплаты взноса. Фермер получит уведомление в WhatsApp.`
               : `Заявка ${detail?.org_name} будет отклонена. Фермер получит уведомление в WhatsApp.`
             }
           </p>
