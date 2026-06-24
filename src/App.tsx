@@ -9,6 +9,7 @@ import { RequireAuth } from '@/components/guards/RequireAuth'
 import { RequireExpert } from '@/components/guards/RequireExpert'
 import { PublicLanding } from '@/components/guards/PublicLanding'
 import { Login } from '@/pages/auth/Login'
+import { AdminLogin } from '@/pages/auth/AdminLogin'
 import { ForgotPin } from '@/pages/auth/ForgotPin'
 import { Registration } from '@/pages/registration/Registration'
 
@@ -134,6 +135,7 @@ function App() {
           <Routes>
             <Route path="/" element={<PublicLanding />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/forgot-pin" element={<ForgotPin />} />
             <Route path="/register" element={<Registration />} />
             <Route path="/membership-policy" element={<Suspense fallback={null}><PublicMembershipPolicy /></Suspense>} />
