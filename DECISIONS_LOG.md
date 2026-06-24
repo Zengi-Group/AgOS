@@ -3070,3 +3070,15 @@ end if;
 **Verification**: `tsc -b` = 0; `npm run build` = 0. **DEPLOYED** to `mwtbozflyldcadypherr` 2026-06-23 — 11 functions via targeted `CREATE OR REPLACE` (MCP, same pattern as B). Verified: each touched name has exactly **1 overload** (no new PGRST203); d02/d07 canon sigs coexist under distinct names. `fn_tsp_batch_json` smoke on a live `published` batch → correct `state`, `buyer=null`, `deadlineLabel=null`. `cross_check.sh` = **0 critical / 3 significant** (unchanged from B = the 3 PGRST203 mine markers → Slice D). Census: 5 batches `published`, 0 pools/offers → no backfill. Write-path E2E (rollback tx with JWT-claim) deferred to the `tsp_happy_path_test.sql` harness to avoid mutating live data.
 
 **Deferred / Slice D unchanged**. **Slice C tails**: anonymous reputation (★) in inbox (needs aggregate view); register adapter `rpc_self_*` in `rpc_name_registry` (currently excepted in cross_check, not registered — applies to the whole adapter family, not just C); stale comment on `rpc_self_advance_pool_status` (still says "executing → reveal (D40)" — now a redundant idempotent fallback).
+
+---
+
+### 2026-06-24: Feature-flow orchestrator (/feature) + аддитивная миграция к двухвысотной модели замысла
+
+**What**: Засеян дирижёр `/feature` (`.claude/skills/feature/SKILL.md`) — 8 якорей / 3 гейта, режим C (механика на автопилоте, смысл — гейт). Дирижёр координирует, делегирует существующим агентам (architect/db/backend/ui/qa), не заменяет их. Формализован контракт инженерного спека (`Docs/_templates/eng-spec-slice.md`). Зафиксированы: две высоты замысла (Brain `specs/<feature>.md` = синтез+указатель; `Docs/` = детальный eng-spec, graphify-индексируемый) и сборка run-промта на старте из Brain+живой Graphify (вариант B, Linear хранит указатель+критерии, не копию).
+
+**Why**: Систематизировать и автоматизировать процесс разработки (цель ×100 без потери качества). Главный структурный долг — размазанный слой замысла (7 Dok + Microsteps + DECISIONS + IMPL_DEBT, ручная склейка) рвётся на скорости первым; мигрируем к двухвысотной модели **аддитивно** (новые фичи сразу по модели, старые Doks по касанию — не big-bang). Все прошлые регрессии (HS-1…6) случались, когда автомат проскакивал смысловой гейт → механику автоматизируем, смысл оставляем за человеком.
+
+**Files**: `.claude/skills/feature/SKILL.md`, `Docs/_templates/eng-spec-slice.md` (канон процесса — `apex-brain/patterns/feature-flow.md`, `apex-brain/index.md`).
+
+**Follow-up (next slices)**: Linear create через MCP; авто-забор задачи на «ready for development»; ambient-хуки; тирование задач (mechanical→агент / semantic→человек) + ассистированный гейт (сжатый diff+флаги). Аддитивная консолидация Doks по касанию.
