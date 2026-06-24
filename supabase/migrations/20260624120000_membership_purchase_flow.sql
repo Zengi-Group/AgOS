@@ -275,7 +275,7 @@ begin
         'memberships',
         v_membership_id,
         p_organization_id,
-        'user',
+        'farmer',  -- platform_events_actor_type_check: farmer|admin|expert|system|ai_gateway ('user' невалиден)
         v_uid,
         jsonb_build_object(
             'application_id', v_app_id,
