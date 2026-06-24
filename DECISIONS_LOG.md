@@ -3094,3 +3094,21 @@ end if;
 **Files**: `.claude/skills/feature/SKILL.md` (коммиты `b86e6f5`, `5bb0a15`).
 
 **Граница API**: статусы и команды Linear создаются ТОЛЬКО в UI (не через MCP). Ambient auto-pickup (Linear-статус → headless-прогон) требует внешнего триггера (cron-поллинг или webhook→CI) = follow-up #2.
+
+---
+
+### 2026-06-24: TSP M6-A фермерский flow — E2E доказан (write-path), IMPL_DEBT реконсилирован, найден TSP-FLOW-07
+
+**What**: Первый боевой прогон `/feature` («реализовать flow продажи скота фермерам»). Аудит вскрыл: flow ~95% построен и задеплоен (Slice A/B/C, 2026-06-22..23) — IMPL_DEBT (аудит 2026-06-22) был устаревшим. Закрыт долгожданный **write-path E2E** (был отложен под `tsp_happy_path_test.sql`): прогон через SQL rollback-tx на проде `mwtbozflyldcadypherr` (ноль персистентных мутаций, JWT-симуляция через `set_config('request.jwt.claims',...)` — `fn_my_org_ids` читает `app_metadata.org_ids`).
+
+**Доказано E2E**: `rpc_create_batch(uuid)` → `rpc_set_batch_terms` → `rpc_publish_batch` → `published` → `rpc_create_pool`+`rpc_publish_pool` → broadcast → **`offering`** → `rpc_accept_offer` → **`confirmed`**, `deal_price=1300=бид` (D-M6-DEALPRICE, не ask=1200); reveal-render корректен (`fn_tsp_batch_json.buyer` = `<null>` пока `mpk_contact_revealed_at` null, → "Админ" после set; gate сходится D-M6-5/12); `rpc_dispatch_batch` → **`dispatched`**; `rpc_self_confirm_delivery` → **`delivered`**; adapter `rpc_create_batch(text-sig)` → **`published`**.
+
+**Найденный дефект — TSP-FLOW-07**: canon `rpc_accept_offer` при auto-close НЕ ставит `mpk_contact_revealed_at` (adapter `rpc_self_accept_offer`/`rpc_self_auto_match_batch` — ставят). Пул, закрытый по canon-пути, не раскрывает покупателя фермеру. Фермерский UI идёт adapter-путём (раскрытие работает), поэтому edge; фикс аддитивный (одна строка в auto-close блоке, P7-safe). Добавлен в IMPL_DEBT.
+
+**Adversarial reconcile**: два audit-субагента над-репортили «критические блокеры» (buyer reveal missing / publish-dispatch-delivery RPC missing / offer-expiry cron missing / farmer_price не хранится / 5-state UI). Все опровергнуты прямой интроспекцией прода + чтением деплойных тел: reveal gated в `fn_tsp_batch_json`; `rpc_publish_batch`/`rpc_dispatch_batch`/`rpc_self_confirm_delivery` есть; offer-expiry = poll-driven `rpc_self_review_due_batches`; `farmer_price_per_kg` колонка читается; `status.ts` уже на 11 состояниях. Урок: AST-аудит без живой интроспекции врёт — нужна сверка с реальностью.
+
+**IMPL_DEBT реконсилирован**: TSP-FLOW-01/05, TSP-SCHEMA-02, MARKET-UI-02 = verified-closed (Slice C); TSP-FLOW-03 = partial (окна есть, farmer_price хранится). См. блок реконсиляции в шапке IMPL_DEBT.md.
+
+**Остаток**: preview-UI прогон (фронтовая половина G2-метода); Art.171 явная цитата на шаге цены (формулировка за ARS-10 / D-LEGAL-1); TSP-FLOW-07 фикс; Slice D (3 overload-дубля + AI-repoint + deploy-order).
+
+**Files**: `apex-brain/projects/agos/specs/tsp-farmer-sell-flow.md` (синтез, status=building), `apex-brain/index.md` + `log.md`; `IMPL_DEBT.md` (реконсиляция + TSP-FLOW-07); Linear ARS-94 (epic) + sub-tasks. Кода в репо НЕ менял (только записи). E2E = read-only/rollback, прод не мутирован.

@@ -5,6 +5,17 @@
 > Authority model: microsteps = canon (Identity/Membership/Governance/TSP); Doks = canon elsewhere; code = reality.
 > Article-171 / data-isolation leak VET-02 is being fixed out-of-band (spawned task task_bf722ce0) — see note below.
 
+> **🔄 RECONCILIATION 2026-06-24 (TSP M6-A, E2E write-path verified vs prod `mwtbozflyldcadypherr`, rollback-tx):**
+> The 2026-06-22 audit is STALE for several TSP rows — Slice C (2026-06-23) closed them. Verified-closed by live E2E:
+> **TSP-FLOW-01** (published→offering reachable ✅), **TSP-SCHEMA-02** (offer acceptable from offering ✅),
+> **TSP-FLOW-05** (reveal fires on adapter close: `mpk_contact_revealed_at` set by `rpc_self_accept_offer`/`rpc_self_auto_match_batch`, surfaced via `fn_tsp_batch_json` ✅),
+> **MARKET-UI-02** (`status.ts` already on 11-state FSM ✅). **TSP-FLOW-03** = PARTIAL (ready_from/ready_to + farmer_price_per_kg ARE stored/read; only forward-contract pieces remain).
+> NEW defect **TSP-FLOW-07** added below. Full proof: DECISIONS_LOG 2026-06-24 + `apex-brain/.../tsp-farmer-sell-flow.md`. Epic: Linear ARS-94.
+>
+> | id | domain | conflict | what | evidence | action |
+> |----|--------|----------|------|----------|--------|
+> | TSP-FLOW-07 | TSP-flow | code↔canon | canon `rpc_accept_offer` auto-close does NOT set `mpk_contact_revealed_at`; pools closed via canon path never reveal buyer to farmer (adapter accept/auto-match DO set it) | d02_tsp.sql `rpc_accept_offer` auto-close block; verified live 2026-06-24 (reveal=`<null>` after canon accept→confirmed) | **✅ FIXED 2026-06-24 (ARS-95)** — added `mpk_contact_revealed_at = coalesce(mpk_contact_revealed_at, now())` to canon auto-close UPDATE (`d02_tsp.sql:2849`, additive/P7-safe). Verified rollback-tx: `FIX_VERIFIED buyer=Админ`. cross_check 0 critical. **PENDING DEPLOY** (G3). |
+
 ## 🔴 Breaking (12)
 
 | id | domain | conflict | what | evidence | action |
