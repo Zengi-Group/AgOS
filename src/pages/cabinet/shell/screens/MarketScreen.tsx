@@ -67,9 +67,12 @@ export function MarketScreen({ membership, batches, loading, onNew, onApply, onP
         <div className="home-stack">
           {isGate ? (
             <SellGate membership={membership} onApply={onApply} />
+          ) : membership === 'approved' ? (
+            // Заявка одобрена, но взнос не оплачен → Рынок (TSP) заблокирован до оплаты:
+            // показываем только плашку оформления членства, без кнопки продажи и списка.
+            <ApprovedPlate onPay={onPay} />
           ) : (
             <div className="stack8">
-              {membership === 'approved' && <ApprovedPlate onPay={onPay} />}
               {!expired && <button className="mkt-sell-btn" onClick={onNew}>+ Продать партию</button>}
               {expired && (
                 <div className="sg-note">Членство истекло. Текущие сделки можно довести до конца, новые партии — после оплаты.</div>

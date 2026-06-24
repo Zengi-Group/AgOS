@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
 import './cabinet.css'
 import { useAuth } from '@/hooks/useAuth'
 import { ShellCtx } from './context'
@@ -89,11 +90,14 @@ export function CabinetApp() {
 
   // Профиль реального аккаунта (если вошёл). null = демо-режим (аноним / нет бэкенда).
   const [profile, setProfile] = useState<AccountProfile | null>(null)
+  // Пока профиль грузится — показываем лоадер вместо демо-экрана. /cabinet всегда за
+  // RequireAuth (сессия гарантирована), поэтому демо-фолбэк не должен даже мелькать.
+  const [profileLoading, setProfileLoading] = useState(true)
   useEffect(() => {
     let alive = true
     loadAccountProfile('farmer').then(async (p) => {
       if (!alive) return
-      if (p) { setProfile(p); return }
+      if (p) { setProfile(p); setProfileLoading(false); return }
       // Профиль пуст при наличии сессии: возможна «осиротевшая» сессия (пользователь удалён
       // из БД, но JWT остался в браузере). Проверяем на сервере через getUser() — он обращается
       // к Auth и возвращает 401/403, если пользователя больше нет. Тогда выходим и уводим на
@@ -107,6 +111,7 @@ export function CabinetApp() {
         return
       }
       setProfile(null)
+      setProfileLoading(false)
     })
     // Реальная сводка фермы (стадо + задачи) перекрывает демо-сид. null = аноним/нет
     // бэкенда/нет фермы → оставляем seedFarm() (демо). Лёгкий поллинг 30с — стадо/задачи
@@ -425,6 +430,15 @@ export function CabinetApp() {
         openService={openService}
         go={go}
       />
+    )
+  }
+
+  // Пока грузится реальный профиль — лоадер (а не демо-экран). См. profileLoading выше.
+  if (profileLoading) {
+    return (
+      <div className="agos-cabinet-stage" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 className="animate-spin" style={{ width: 28, height: 28, color: '#b0a18f' }} />
+      </div>
     )
   }
 

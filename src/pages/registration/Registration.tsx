@@ -204,12 +204,20 @@ export function Registration() {
       // ФИО и (для фермера) правовая форма не попадают в queryable-колонки при регистрации
       // (role_data уходит только в platform_events). Кабинет читает их из user_metadata
       // (см. loadAccountProfile), поэтому фиксируем их в метаданных аккаунта здесь.
-      await supabase.auth.updateUser({
+      const { data: updatedAuth } = await supabase.auth.updateUser({
         data: {
           full_name: formData.full_name,
           ...(role === 'farmer' ? { legal_form: formData.legal_form || null } : {}),
         },
       })
+
+      // Триггер handle_new_user создаёт public.users ещё на этапе OTP/PIN — ДО того как
+      // собрано ФИО, поэтому users.full_name остаётся null (в админке «Пользователи» — прочерк).
+      // Дописываем имя в public.users явно (RLS users_update_own: auth_id = auth.uid()).
+      const authId = updatedAuth?.user?.id ?? session?.user?.id
+      if (authId && formData.full_name) {
+        await supabase.from('users').update({ full_name: formData.full_name }).eq('auth_id', authId)
+      }
 
       // Членство НЕ подаётся автоматически: после регистрации организация в состоянии
       // «не член». Заявку с документами пользователь подаёт сам из кабинета/Рынка (TSP)

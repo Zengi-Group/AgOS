@@ -41,8 +41,8 @@ export const MEMBERSHIP_DICT: Record<MembershipStatus, MembershipEntry> = {
     plate: { tone: 'gray', t: 'Заявка отклонена: нужна выписка о регистрации хозяйства', cta: 'Подать заново', act: 'apply' },
   },
   approved: {
-    cab: 'Одобрено · взнос не оплачен',
-    plate: { tone: 'amber', t: 'Вы член TURAN! Оплатите взнос до ' + MEMB_DATES.payApproved + ' — продажа уже доступна', cta: 'Оплатить взнос', act: 'pay' },
+    cab: 'Заявка одобрена · взнос не оплачен',
+    plate: { tone: 'amber', t: 'Заявка одобрена! Оплатите взнос до ' + MEMB_DATES.payApproved + ', чтобы открыть продажу на Рынке', cta: 'Оплатить взнос', act: 'pay' },
   },
   active: {
     cab: 'Членство активно до ' + MEMB_DATES.activeTill,

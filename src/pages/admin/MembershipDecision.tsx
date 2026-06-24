@@ -104,6 +104,10 @@ export function MembershipDecision() {
 
   const [reviewerNotes, setReviewerNotes] = useState('')
   const [confirmAction, setConfirmAction] = useState<'approved' | 'rejected' | null>(null)
+  // Решение, по которому реально ушла мутация. confirmAction сбрасывается сразу после
+  // mutate(), поэтому successMessage, завязанный на него, инвертировался (одобрено →
+  // показывал «отклонено»). pendingDecision держит решение до резолва мутации.
+  const [pendingDecision, setPendingDecision] = useState<'approved' | 'rejected' | null>(null)
 
   const { data: detail, isLoading } = useRpc<ApplicationDetail>(
     'rpc_get_membership_queue',
@@ -119,16 +123,21 @@ export function MembershipDecision() {
   const processMutation = useRpcMutation<Record<string, unknown>, string>(
     'rpc_process_membership_application',
     {
-      successMessage: confirmAction === 'approved' ? 'Заявка одобрена' : 'Заявка отклонена',
+      successMessage: pendingDecision === 'approved' ? 'Заявка одобрена' : 'Заявка отклонена',
       invalidateKeys: [['rpc_get_membership_queue']],
       onSuccess: () => {
+        setPendingDecision(null)
         navigate('/admin/applications/level')
+      },
+      onError: () => {
+        setPendingDecision(null)
       },
     }
   )
 
   const handleDecision = () => {
     if (!confirmAction || !applicationId) return
+    setPendingDecision(confirmAction)
     processMutation.mutate({
       p_organization_id: organization?.id ?? '00000000-0000-0000-0000-000000000000',
       p_application_id: applicationId,
