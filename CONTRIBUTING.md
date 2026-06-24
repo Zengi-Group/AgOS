@@ -173,10 +173,12 @@ graphify update .     # быстрая пересборка по коду (AST, 
   высокой связностью). Это подсказка по риску регрессий, **не** замена ревью/тестам.
   Граф читается готовый из репо, ничего не пересобирается.
 - **`graphify weekly refresh`** (`.github/workflows/graphify-refresh.yml`) — раз в
-  неделю (пн 06:00 UTC) пересобирает AST-слой и коммитит свежий `graph.json`.
-  Запуск вручную: вкладка **Actions → graphify weekly refresh → Run workflow**.
-  ⚠️ Если `main` защищён от прямых пушей — дай боту bypass или переключи последний
-  шаг на режим Pull Request (см. комментарий в workflow).
+  неделю (пн 06:00 UTC) пересобирает AST-слой и открывает **PR** со свежим
+  `graph.json` (мерж в 1 клик, 0 апрувов). Запуск вручную: вкладка
+  **Actions → graphify weekly refresh → Run workflow**.
+  ⚠️ Одноразовая настройка репозитория: **Settings → Actions → General →
+  Workflow permissions** → «Read and write permissions» + галочка «Allow GitHub
+  Actions to create and approve pull requests». Без этого шаг создания PR падает.
 
 ### MCP-сервер (нативный инструмент для агентов)
 
