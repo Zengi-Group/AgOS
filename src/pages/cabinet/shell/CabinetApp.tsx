@@ -217,16 +217,11 @@ export function CabinetApp() {
     setTuranUnread(false)
     showToast('Заявка отправлена на проверку')
   }
-  // Оплата взноса (симуляция на пилоте). На реальном аккаунте → rpc_pay_membership_dues
-  // (требует одобренную заявку, поднимает level registered→observer → деривация даёт 'active').
-  const payVznosDone = async () => {
+  // Оплата взноса — МОК на пилоте (реальной платёжной системы пока нет): выбор способа →
+  // «Оплатить» → членство сразу активно, Рынок (TSP) открывается. Реальный RPC
+  // (rpc_pay_membership_dues) подключим, когда появится платёжная интеграция.
+  const payVznosDone = () => {
     setSheet(null)
-    if (profile?.orgId) {
-      const { error } = await supabase.rpc('rpc_pay_membership_dues', {
-        p_organization_id: profile.orgId,
-      })
-      if (error) { showToast('Не удалось оплатить взнос: ' + error.message); return }
-    }
     setMembership('active'); setTuranUnread(false)
     showToast('Взнос оплачен · членство активно')
   }
