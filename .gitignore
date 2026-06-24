@@ -44,3 +44,6 @@ storybook-static
 
 # local DB password for one-off prod deploys — NEVER commit
 .db_password
+
+# graphify knowledge graph — generated artifact, rebuilt locally via post-commit hook
+graphify-out/
