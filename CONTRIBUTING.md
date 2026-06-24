@@ -165,3 +165,21 @@ graphify update .     # быстрая пересборка по коду (AST, 
 пересборки на каждый commit намеренно **не ставим** — иначе карта (несколько MB)
 будет попадать в diff постоянно. Полная пересборка с семантикой по докам — через
 `/graphify .` в Claude Code (требует субагентов / Gemini-ключа).
+
+### Автоматизация (GitHub Actions)
+
+- **`graphify blast radius`** (`.github/workflows/graphify-pr.yml`) — на каждый PR
+  комментирует, с чем связаны изменённые файлы, и флагает задетые god-узлы (хабы с
+  высокой связностью). Это подсказка по риску регрессий, **не** замена ревью/тестам.
+  Граф читается готовый из репо, ничего не пересобирается.
+- **`graphify weekly refresh`** (`.github/workflows/graphify-refresh.yml`) — раз в
+  неделю (пн 06:00 UTC) пересобирает AST-слой и коммитит свежий `graph.json`.
+  Запуск вручную: вкладка **Actions → graphify weekly refresh → Run workflow**.
+  ⚠️ Если `main` защищён от прямых пушей — дай боту bypass или переключи последний
+  шаг на режим Pull Request (см. комментарий в workflow).
+
+### MCP-сервер (нативный инструмент для агентов)
+
+`.mcp.json` поднимает graphify как MCP-сервер для Claude Code — агенты запрашивают
+граф напрямую (`query_graph`, `get_neighbors`, `shortest_path`, `god_nodes`…), а не
+через bash. Требует `uv` на машине (`uvx` запускает сервер из пакета `graphifyy`).

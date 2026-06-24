@@ -3,6 +3,10 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=mwtbozflyldcadypherr"
+    },
+    "graphify": {
+      "command": "uvx",
+      "args": ["--from", "graphifyy", "python", "-m", "graphify.serve", "graphify-out/graph.json"]
     }
   }
 }

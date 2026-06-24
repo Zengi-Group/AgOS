@@ -1,0 +1,57 @@
+name: graphify weekly refresh
+
+# Once a week, rebuild the AST layer of the knowledge graph (code structure only,
+# no LLM / no API key) and commit the refreshed graph.json + GRAPH_REPORT.md.
+# Keeps the committed map current with one diff per week instead of per-commit.
+#
+# Semantic/doc layer is NOT refreshed here (that needs an LLM). Re-run the full
+# `/graphify .` in Claude Code when docs change significantly.
+#
+# PREREQUISITE for the push step: `main` must allow this Action to push. If main
+# is protected against direct pushes, either grant the github-actions bot a bypass,
+# or switch the final step to PR mode (peter-evans/create-pull-request).
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: graphify-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: AST refresh (safe, no shrink)
+        run: |
+          count() { python3 -c "import json,sys;print(len(json.load(open('graphify-out/graph.json'))['nodes']))" 2>/dev/null || echo 0; }
+          BEFORE=$(count)
+          uvx --from graphifyy graphify update . || echo "update returned non-zero (likely shrink-guard) — continuing"
+          AFTER=$(count)
+          echo "nodes: $BEFORE -> $AFTER"
+          # Sanity guard: if the graph collapsed by >50%, revert and let a human investigate.
+          if [ "$AFTER" -lt $((BEFORE / 2)) ]; then
+            echo "::warning::node count dropped >50% ($BEFORE -> $AFTER); reverting"
+            git checkout -- graphify-out/graph.json graphify-out/GRAPH_REPORT.md || true
+          fi
+
+      - name: Commit & push if changed
+        run: |
+          if git diff --quiet -- graphify-out/graph.json graphify-out/GRAPH_REPORT.md; then
+            echo "graph unchanged — nothing to commit"; exit 0
+          fi
+          git config user.name "graphify-bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add graphify-out/graph.json graphify-out/GRAPH_REPORT.md
+          git commit -m "chore(graphify): weekly AST refresh [skip ci]"
+          git push
