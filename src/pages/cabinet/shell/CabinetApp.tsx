@@ -236,14 +236,20 @@ export function CabinetApp() {
   // фолбэк, чтобы оплата не запрашивалась повторно даже если RPC недоступен (миграция не применена).
   const payVznosDone = async () => {
     setSheet(null)
-    setMembership('active'); setTuranUnread(false)
-    if (profile?.userId) localStorage.setItem(PAID_KEY(profile.userId), '1')
-    showToast('Взнос оплачен · членство активно')
-    // Серверная фиксация (если доступна) — чтобы статус «оплачено» был виден админу.
+    setTuranUnread(false)
+    // Источник истины — сервер: rpc_pay_membership_dues поднимает memberships.level
+    // registered→observer (переживает перезагрузку И виден админу). Локальный флаг ставим
+    // ТОЛЬКО если серверный вызов не прошёл — иначе клиент и БД расходятся (UI «оплачено»,
+    // а в БД нет), что и приводило к «у админа не оплачено».
+    let serverOk = false
     if (profile?.orgId) {
       const { error } = await supabase.rpc('rpc_pay_membership_dues', { p_organization_id: profile.orgId })
-      if (error) console.warn('rpc_pay_membership_dues недоступен, используем локальный мок:', error.message)
+      if (!error) serverOk = true
+      else console.warn('rpc_pay_membership_dues не прошёл, локальный фолбэк:', error.message)
     }
+    if (!serverOk && profile?.userId) localStorage.setItem(PAID_KEY(profile.userId), '1')
+    setMembership('active')
+    showToast('Взнос оплачен · членство активно')
   }
   const payProDone = () => {
     setIsPro(true); setSheet(null)
