@@ -203,6 +203,16 @@ export function Registration() {
 
       const result = data as { org_id: string; farm_id?: string } | null
 
+      // ФИО и (для фермера) правовая форма не попадают в queryable-колонки при регистрации
+      // (role_data уходит только в platform_events). Кабинет читает их из user_metadata
+      // (см. loadAccountProfile), поэтому фиксируем их в метаданных аккаунта здесь.
+      await supabase.auth.updateUser({
+        data: {
+          full_name: formData.full_name,
+          ...(role === 'farmer' ? { legal_form: formData.legal_form || null } : {}),
+        },
+      })
+
       // Registration = membership application — submit silently in background
       if (result?.org_id) {
         supabase.rpc('rpc_submit_membership_application', {

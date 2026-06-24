@@ -2,7 +2,9 @@
 // бейджи, AI-гейт, действия членства, платёжные шторки. Источник истины — прототип shell/app.jsx.
 
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import './cabinet.css'
+import { useAuth } from '@/hooks/useAuth'
 import { ShellCtx } from './context'
 import {
   INITIAL_STATE, STORAGE_KEY, tabOf, deriveMembership,
@@ -65,6 +67,8 @@ function loadState(): ShellState {
 }
 
 export function CabinetApp() {
+  const navigate = useNavigate()
+  const { signOut } = useAuth()
   const init = loadState()
   const [membership, setMembership] = useState<MembershipStatus>(init.membership)
   const [isPro, setIsPro] = useState(init.isPro)
@@ -154,6 +158,11 @@ export function CabinetApp() {
   const offlineToast = () => showToast('Нет связи. Попробуйте, когда появится сеть')
   const go = (r: Route) => setRoute(r)
   const tab = tabOf(route)
+
+  const handleLogout = async () => {
+    await signOut()
+    navigate('/login', { replace: true })
+  }
 
   // ---------- бейджи ----------
   const marketDot = batches.some((b) => b.state === 'decision')
@@ -286,6 +295,7 @@ export function CabinetApp() {
         memberAct={memberAct}
         onBack={() => go({ name: 'home' })}
         onTuran={() => go({ name: 'thread', tid: 'turan', back: { name: 'cabinet' } })}
+        onLogout={handleLogout}
         profile={profile}
       />
     )

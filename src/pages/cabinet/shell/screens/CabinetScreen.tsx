@@ -30,6 +30,14 @@ function CabToggle({ on, onChange, locked, t, sub }: { on: boolean; onChange?: (
   )
 }
 
+// Правовая форма из регистрации (user_metadata.legal_form) → подпись для кабинета.
+const LEGAL_FORM_LABELS: Record<string, string> = {
+  kh: 'Крестьянское хозяйство',
+  ip: 'ИП',
+  too: 'ТОО',
+  individual: 'Физлицо',
+}
+
 interface Props {
   membership: MembershipStatus
   profileIncomplete: boolean
@@ -38,10 +46,11 @@ interface Props {
   memberAct: (act: string) => void
   onBack: () => void
   onTuran: () => void
+  onLogout: () => void
   profile?: AccountProfile | null
 }
 
-export function CabinetScreen({ membership, profileIncomplete, newsOn, onNewsToggle, memberAct, onBack, onTuran, profile }: Props) {
+export function CabinetScreen({ membership, profileIncomplete, newsOn, onNewsToggle, memberAct, onBack, onTuran, onLogout, profile }: Props) {
   const m = MEMBERSHIP_DICT[membership]
   const plate = m.plate
 
@@ -52,6 +61,7 @@ export function CabinetScreen({ membership, profileIncomplete, newsOn, onNewsTog
   const binMissing = !binValue
   const ownerName = profile?.ownerName || 'Аскар Жумабеков'
   const phoneText = profile?.phone || '+7 705 4XX XX XX'
+  const legalFormText = (profile?.legalForm && LEGAL_FORM_LABELS[profile.legalForm]) || 'Крестьянское хозяйство'
 
   return (
     <ShellFrame label={'Кабинет · ' + membership}>
@@ -62,7 +72,7 @@ export function CabinetScreen({ membership, profileIncomplete, newsOn, onNewsTog
           <div className="blk-h mono">ХОЗЯЙСТВО</div>
           <div className="cab-card">
             <CabRow k="НАЗВАНИЕ" v={farmName} />
-            <CabRow k="ФОРМА" v="Крестьянское хозяйство" />
+            <CabRow k="ФОРМА" v={legalFormText} />
             <CabRow k="БИН" v={binMissing ? 'не указан' : binValue} amber={binMissing} />
             <CabRow k="РАЙОН" v={district} />
             {binMissing && (
@@ -101,7 +111,7 @@ export function CabinetScreen({ membership, profileIncomplete, newsOn, onNewsTog
           <div className="blk-h mono">О ПРИЛОЖЕНИИ</div>
           <div className="cab-card">
             <button className="cab-link" onClick={onTuran}>Обратиться в TURAN <span className="att-arr"><ShIc k="chev" size={13} /></span></button>
-            <button className="cab-link quiet" onClick={() => {}}>Выйти из аккаунта</button>
+            <button className="cab-link quiet" onClick={onLogout}>Выйти из аккаунта</button>
             <div className="cab-ver mono">AgOS · пилот · версия P1c</div>
           </div>
         </div>
