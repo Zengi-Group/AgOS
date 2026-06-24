@@ -54,6 +54,14 @@ function deriveInitials(name: string | null | undefined): string {
   return ((w0[0] ?? '') + (w1[0] ?? '')).toUpperCase()
 }
 
+// Локальный признак «взнос оплачен» (на демо/пилоте), ключ по userId. Нужен, чтобы оплата
+// переживала перезагрузку даже если серверный RPC недоступен (миграция не применена и т.п.).
+// Серверный сигнал (rpc_pay_membership_dues → memberships.level) — основной (виден админу);
+// этот флаг — фолбэк, чтобы фермер после оплаты не видел повторный запрос подтверждения.
+const PAID_KEY = (userId: string) => 'agos.memb.paid.' + userId
+const isPaidLocally = (userId: string | undefined | null) =>
+  !!userId && localStorage.getItem(PAID_KEY(userId)) === '1'
+
 function loadState(): ShellState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -145,7 +153,11 @@ export function CabinetApp() {
   // Аноним (profile === null) остаётся на демо/localStorage.
   useEffect(() => {
     if (!profile?.userId) return
-    setMembership(deriveMembership(profile.membershipLevel, profile.applicationStatus))
+    let derived = deriveMembership(profile.membershipLevel, profile.applicationStatus)
+    // Фолбэк: если взнос уже оплачен локально (демо), но БД ещё отдаёт 'approved'
+    // (RPC недоступен/не применён), не сбрасываем в запрос оплаты — держим 'active'.
+    if (derived === 'approved' && isPaidLocally(profile.userId)) derived = 'active'
+    setMembership(derived)
   }, [profile?.userId, profile?.membershipLevel, profile?.applicationStatus])
   const [sheet, setSheet] = useState<SheetState | null>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
@@ -217,13 +229,21 @@ export function CabinetApp() {
     setTuranUnread(false)
     showToast('Заявка отправлена на проверку')
   }
-  // Оплата взноса — МОК на пилоте (реальной платёжной системы пока нет): выбор способа →
-  // «Оплатить» → членство сразу активно, Рынок (TSP) открывается. Реальный RPC
-  // (rpc_pay_membership_dues) подключим, когда появится платёжная интеграция.
-  const payVznosDone = () => {
+  // Оплата взноса — симуляция на пилоте (реальной платёжной системы пока нет): выбор способа →
+  // «Оплатить» → членство сразу активно, Рынок (TSP) открывается.
+  // Персистентность: (1) серверный сигнал rpc_pay_membership_dues поднимает memberships.level
+  // registered→observer — переживает перезагрузку И виден админу; (2) локальный флаг PAID_KEY —
+  // фолбэк, чтобы оплата не запрашивалась повторно даже если RPC недоступен (миграция не применена).
+  const payVznosDone = async () => {
     setSheet(null)
     setMembership('active'); setTuranUnread(false)
+    if (profile?.userId) localStorage.setItem(PAID_KEY(profile.userId), '1')
     showToast('Взнос оплачен · членство активно')
+    // Серверная фиксация (если доступна) — чтобы статус «оплачено» был виден админу.
+    if (profile?.orgId) {
+      const { error } = await supabase.rpc('rpc_pay_membership_dues', { p_organization_id: profile.orgId })
+      if (error) console.warn('rpc_pay_membership_dues недоступен, используем локальный мок:', error.message)
+    }
   }
   const payProDone = () => {
     setIsPro(true); setSheet(null)
