@@ -107,12 +107,16 @@ brain `log.md` line.
   *«AgOS — Цифровая платформа экосистемы»* — `Ветеринария` · `Рынок TSP` · `Кормление и рационы` ·
   `Консалтинг` · `AI-ассистент` · `Образование`. Generic catch-all = project `AgOS`.
   **Never** route to the `ONDALA` or `MEDIA` initiatives — different products in the same workspace.
-- **Status flow** (no native "Ready for Dev" status → `Todo` carries that meaning):
-  - anchor 2 (raw intake, pre-G2) → **Backlog**
-  - anchor 5 (post-G2, decomposed sub-tasks) → **Todo** = ready-for-development / pickup trigger
-  - anchor 6 → **In Progress** · anchor 7–8 (PR open) → **In Review** · merged → **Done**
+- **Status flow** (6 columns, restructured 2026-06-24 — each column = an anchor/gate boundary):
+  - anchor 2 (raw intake) → **Backlog**
+  - anchor 4 (designing, **G2 pending**) → **Spec & Design**
+  - anchor 5 (G2 passed, decomposed) → **Ready for Dev** = pickup trigger
+  - anchor 6 → **In Progress** · anchor 7–8 (PR open, verify + **G3**) → **In Review** · merged → **Done**
+- **Labels** (team ARS): `tier:mechanical` (`0be52c9e…`, agent may code) / `tier:semantic`
+  (`90650f9a…`, human-led) set at anchor 5–6; `needs-decision` (`cbe6f46c…`) when stuck at a gate.
 - Each issue returns a Linear `gitBranchName` — use it as the feature branch (aligns Linear ↔ git).
-- Tooling: `save_issue` (create/update, append-only relations), `list_issues`, `get_issue`.
+- Tooling: `save_issue` (create/update, append-only relations), `list_issues`, `get_issue`,
+  `create_issue_label`. **Statuses & teams are UI-only — not creatable via MCP.**
 
 ## The 3 gates (what blocks)
 
