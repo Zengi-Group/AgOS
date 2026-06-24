@@ -65,6 +65,7 @@ canon lives) + `git log --oneline -10` + `git diff --stat`. Emit a 5-line **inta
 **2 · Linear task** 🤖
 Create a Linear task for X with the intake card as context, a content-hash for dedup, and a
 *draft* priority/assignee the human can flip. Store only a **pointer + acceptance**, not a spec copy.
+Use the verified **Linear binding** below for team / project / status.
 
 **3 · Conflict scan** 🤖 → 🚦 **G1 (conditional)**
 Two-level: (a) light — does X overlap existing prior art or contradict a Brain/`DECISIONS_LOG`
@@ -98,6 +99,20 @@ After merge: append `DECISIONS_LOG.md` (what/why/files), Brain status → `shipp
 brain `log.md` line.
 
 ---
+
+## Linear binding (workspace config — verified 2026-06-24, write-path tested via ARS-93)
+
+- **Team:** `Arshidin` (key `ARS`, id `9abe8f56-19b7-408f-9a9b-a76090da4880`). Single team in the workspace.
+- **Project routing:** route the feature to the matching module under initiative
+  *«AgOS — Цифровая платформа экосистемы»* — `Ветеринария` · `Рынок TSP` · `Кормление и рационы` ·
+  `Консалтинг` · `AI-ассистент` · `Образование`. Generic catch-all = project `AgOS`.
+  **Never** route to the `ONDALA` or `MEDIA` initiatives — different products in the same workspace.
+- **Status flow** (no native "Ready for Dev" status → `Todo` carries that meaning):
+  - anchor 2 (raw intake, pre-G2) → **Backlog**
+  - anchor 5 (post-G2, decomposed sub-tasks) → **Todo** = ready-for-development / pickup trigger
+  - anchor 6 → **In Progress** · anchor 7–8 (PR open) → **In Review** · merged → **Done**
+- Each issue returns a Linear `gitBranchName` — use it as the feature branch (aligns Linear ↔ git).
+- Tooling: `save_issue` (create/update, append-only relations), `list_issues`, `get_issue`.
 
 ## The 3 gates (what blocks)
 
