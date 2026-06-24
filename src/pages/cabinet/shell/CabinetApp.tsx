@@ -91,7 +91,23 @@ export function CabinetApp() {
   const [profile, setProfile] = useState<AccountProfile | null>(null)
   useEffect(() => {
     let alive = true
-    loadAccountProfile('farmer').then((p) => { if (alive) setProfile(p) })
+    loadAccountProfile('farmer').then(async (p) => {
+      if (!alive) return
+      if (p) { setProfile(p); return }
+      // Профиль пуст при наличии сессии: возможна «осиротевшая» сессия (пользователь удалён
+      // из БД, но JWT остался в браузере). Проверяем на сервере через getUser() — он обращается
+      // к Auth и возвращает 401/403, если пользователя больше нет. Тогда выходим и уводим на
+      // лендинг, чтобы не залипать в демо-кабинете. Сетевые сбои (без статуса) НЕ разлогиниваем.
+      const { data, error } = await supabase.auth.getUser()
+      if (!alive) return
+      const orphaned = (!!error && (error.status === 401 || error.status === 403)) || (!error && !data?.user)
+      if (orphaned) {
+        await signOut()
+        navigate('/', { replace: true })
+        return
+      }
+      setProfile(null)
+    })
     // Реальная сводка фермы (стадо + задачи) перекрывает демо-сид. null = аноним/нет
     // бэкенда/нет фермы → оставляем seedFarm() (демо). Лёгкий поллинг 30с — стадо/задачи
     // обновляются без перезагрузки после правок в профиле фермы (D-SYNC-01).

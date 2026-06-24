@@ -2,8 +2,10 @@
 // Аналог CabinetApp, но проще: 2 маршрута (home/tsp), модалы и одна шторка.
 
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import '../cabinet.css'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/useAuth'
 import { loadAccountProfile } from '@/lib/account'
 import { Toast } from '../components/Toast'
 import { MpkHomeScreen } from './screens/MpkHomeScreen'
@@ -37,6 +39,8 @@ function deriveMpkMembership(level: string | null): MpkMembership {
 }
 
 export function MpkApp({ initialState }: MpkAppProps = {}) {
+  const navigate = useNavigate()
+  const { signOut } = useAuth()
   const [typeStatus, setTypeStatus] = useState<MpkTypeStatus>(initialState?.typeStatus ?? 'under_review')
   const [membership, setMembership] = useState<MpkMembership>(initialState?.membership ?? 'submitted')
   const [pools, setPools] = useState<Pool[]>(initialState?.pools ?? seedPools())
@@ -54,8 +58,21 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
   const [marketBatches, setMarketBatches] = useState<MarketBatch[]>(seedMarketBatches())
   useEffect(() => {
     let alive = true
-    loadAccountProfile('mpk').then((p) => {
-      if (!alive || !p) return
+    loadAccountProfile('mpk').then(async (p) => {
+      if (!alive) return
+      if (!p) {
+        // Профиль пуст при сессии: возможна «осиротевшая» сессия (пользователь удалён из БД).
+        // getUser() обращается к Auth и возвращает 401/403, если пользователя нет → выходим
+        // и уводим на лендинг (не залипаем в демо). Сетевые сбои (без статуса) не разлогиниваем.
+        const { data, error } = await supabase.auth.getUser()
+        if (!alive) return
+        const orphaned = (!!error && (error.status === 401 || error.status === 403)) || (!error && !data?.user)
+        if (orphaned) {
+          await signOut()
+          navigate('/', { replace: true })
+        }
+        return
+      }
       if (p.name) setOrgName(p.name)
       if (p.district) setRegion(p.district)
       if (p.bin) setBin(p.bin)
