@@ -140,19 +140,31 @@ stable
 as $$
 declare
     v_id uuid;
+    v_in text;
 begin
     if p_district is null or trim(p_district) = '' then
+        return null;
+    end if;
+    -- Нормализация (DEFECT-A): срезаем типовые токены формата — «район», «город»,
+    -- «г.», «область», «обл.» — и схлопываем пробелы. Визард шлёт «Сайрамский район»
+    -- / «Туркестанская область»; приводим к ядру названия, чтобы матчить
+    -- regions.name_ru независимо от суффикса. Без активных rayon-строк район всё
+    -- равно не зарезолвится — вызывающий дофолбэчит на область org (rpc_create_batch).
+    v_in := lower(trim(p_district));
+    v_in := regexp_replace(v_in, '\m(район|города|город|г\.|область|обл\.)\M', '', 'g');
+    v_in := trim(regexp_replace(v_in, '\s+', ' ', 'g'));
+    if v_in = '' then
         return null;
     end if;
     select r.id into v_id
     from public.regions r
     where r.is_active = true
       and (
-            lower(r.name_ru) = lower(trim(p_district))
-         or lower(trim(p_district)) like '%' || lower(r.name_ru) || '%'
-         or lower(r.name_ru)        like '%' || lower(trim(p_district)) || '%'
+            lower(r.name_ru) = v_in
+         or v_in like '%' || lower(r.name_ru) || '%'
+         or lower(r.name_ru) like '%' || v_in || '%'
       )
-    order by r.level desc
+    order by r.level desc   -- rayon специфичнее oblast (когда строки засеяны)
     limit 1;
     return v_id;   -- null → национальная (region_id is null) цена в price_grids
 end;
@@ -297,6 +309,15 @@ begin
 
     v_sku_id    := public.fn_tsp_resolve_sku(p_cat, p_breed, p_age, p_avg_weight);
     v_region_id := public.fn_tsp_region_id(p_district);
+    -- DEFECT-A fix (2026-06-25): район (свободный текст визарда) не резолвится в
+    -- regions — в схеме нет активных rayon-строк, name-only резолв даёт null, и
+    -- ВСЕ партии получали region_id=null (ломая регион-таргетинг канон-пулов).
+    -- Фолбэк: область организации фермера (выбрана при регистрации). Гарантирует
+    -- region_id уровня области — та гранулярность, на которой таргетируют пулы МПК.
+    -- (Rayon-точность — будущее: засев rayon-строк в public.regions + parent_id.)
+    if v_region_id is null then
+        select region_id into v_region_id from public.organizations where id = v_org_id;
+    end if;
     select grade_id into v_grade_id from public.tsp_skus where id = v_sku_id;
 
     -- scheduled → draft (не на витрине; нет планировщика на бете); иначе published.
@@ -991,8 +1012,15 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-    v_req     public.pool_requests%rowtype;
-    v_pool_id uuid;
+    v_req       public.pool_requests%rowtype;
+    v_pool_id   uuid;
+    v_batch     public.batches%rowtype;
+    v_grade     text;
+    v_vol       int;
+    v_line      record;
+    v_win_hours int;
+    v_matched   int := 0;
+    v_offered   int := 0;
 begin
     select * into v_req from public.pool_requests where id = p_request_id;
     if not found then raise exception 'REQUEST_NOT_FOUND' using errcode = 'P0002'; end if;
@@ -1031,17 +1059,164 @@ begin
     where coalesce(ln->>'price', '') <> ''
       and (ln->>'price')::numeric > 0;
 
+    -- ── DEFECT-B fix (2026-06-25) ──────────────────────────────────────────
+    -- (a) Перенос региона заявки в pool_regions (D-M6-4): даёт пулу видимость
+    -- канон-путям (rpc_retry_match_pool / rpc_accept_offer EXISTS pool_regions).
+    -- pool_regions.region_id NOT NULL → "Все области" (v_req.region_id is null)
+    -- НЕ пишет строк: такой пул матчит только через мягкий предикат ниже
+    -- (канон-hard требует явные регионы — осознанное ограничение схемы).
+    if v_req.region_id is not null then
+        insert into public.pool_regions (pool_id, region_type, region_id)
+        values (v_pool_id, 'oblast', v_req.region_id)
+        on conflict (pool_id, region_id) do nothing;
+    end if;
+
+    -- (b) Свип уже ОПУБЛИКОВАННЫХ партий: до этого фикса self-serve пул матчил
+    -- только партии, созданные ПОСЛЕ него (батч-инициированный rpc_self_auto_match_
+    -- batch). Теперь свежий пул сам «подхватывает» висящие published-партии —
+    -- зеркало batch-матча, но pool-initiated: НЕ гейтит владельца партии (МПК
+    -- матчит чужие фермерские партии, как канон rpc_retry_match_pool). Сорт —
+    -- строгое равенство (=), регион — мягкий приоритет через v_req.region_id.
+    select offer_window_hours into v_win_hours from public.tsp_config where is_active = true limit 1;
+    v_win_hours := coalesce(v_win_hours, 24);
+
+    for v_batch in
+        select b.* from public.batches b
+        where b.status = 'published'
+          and b.farmer_price_per_kg is not null
+        order by b.created_at asc
+        for update
+    loop
+        v_grade := public.fn_tsp_batch_grade(v_batch.id);
+        if v_grade is null then continue; end if;
+        v_vol := coalesce(v_batch.heads * v_batch.avg_weight_kg, 0)::int;
+
+        -- 1) Прямой матч: стоящий бид этого пула >= ask, сорт=, окно, ёмкость, регион.
+        select pl.id              as pl_id,
+               pl.pool_id          as pool_id,
+               pl.mpk_price_per_kg as bid,
+               p.target_heads      as target_heads,
+               p.matched_heads     as matched_heads
+          into v_line
+        from public.pool_lines pl
+        join public.pools p on p.id = pl.pool_id
+        where pl.pool_id = v_pool_id
+          and p.status = 'filling'
+          and pl.is_active = true
+          and pl.mpk_price_per_kg >= v_batch.farmer_price_per_kg
+          and public.fn_tsp_grade_for_mpk_key(pl.category_label) = v_grade
+          and (pl.max_volume_kg is null or pl.current_volume_kg + v_vol <= pl.max_volume_kg)
+          and (p.delivery_from is null or v_batch.ready_to   is null or p.delivery_from <= v_batch.ready_to)
+          and (p.delivery_to   is null or v_batch.ready_from is null or p.delivery_to   >= v_batch.ready_from)
+          and (v_req.region_id is null
+               or v_req.region_id = v_batch.region_id
+               or v_req.region_id = (select parent_id from public.regions where id = v_batch.region_id))
+        order by pl.mpk_price_per_kg desc
+        limit 1
+        for update;
+
+        if found then
+            update public.batches
+            set status            = 'matched',
+                pool_line_id      = v_line.pl_id,
+                deal_price_per_kg = v_line.bid,
+                matched_at        = now(),
+                updated_at        = now()
+            where id = v_batch.id;
+
+            update public.pool_lines
+            set current_volume_kg = current_volume_kg + v_vol, updated_at = now()
+            where id = v_line.pl_id;
+
+            update public.pools
+            set matched_heads = matched_heads + v_batch.heads, updated_at = now()
+            where id = v_pool_id;
+
+            -- снять прочие висящие офферы на эту партию (FCFS-консистентность)
+            update public.offers set status = 'withdrawn', responded_at = now()
+            where batch_id = v_batch.id and status = 'pending';
+
+            insert into public.batch_events (batch_id, event_type, metadata, created_by)
+            values (v_batch.id, 'matched',
+                jsonb_build_object('pool_id', v_pool_id, 'pool_line_id', v_line.pl_id,
+                                   'via', 'pool_activate_sweep', 'deal_price_per_kg', v_line.bid),
+                public.fn_current_user_id());
+
+            v_matched := v_matched + 1;
+
+            -- auto-close по головам → closed_filled + matched-партии → confirmed; стоп свипа
+            if (v_line.matched_heads + v_batch.heads) >= v_line.target_heads then
+                update public.pools
+                set status = 'closed_filled', completed_at = now(),
+                    mpk_contact_revealed_at = coalesce(mpk_contact_revealed_at, now()), updated_at = now()
+                where id = v_pool_id and status = 'filling';
+                update public.batches b
+                set status = 'confirmed', confirmed_at = now(), updated_at = now()
+                from public.pool_lines pl
+                where pl.pool_id = v_pool_id and b.pool_line_id = pl.id and b.status = 'matched';
+                exit;  -- пул заполнен — дальнейшие партии не матчим
+            end if;
+            continue;
+        end if;
+
+        -- 2) Нет прямого матча → broadcast-оффер этому МПК (сорт+регион+окно+ёмкость,
+        -- цена игнорируется; offered_price = ask). Партия published → offering.
+        perform 1
+        from public.pool_lines pl
+        join public.pools p on p.id = pl.pool_id
+        where pl.pool_id = v_pool_id
+          and p.status = 'filling'
+          and pl.is_active = true
+          and public.fn_tsp_grade_for_mpk_key(pl.category_label) = v_grade
+          and (pl.max_volume_kg is null or pl.current_volume_kg + v_vol <= pl.max_volume_kg)
+          and (p.delivery_from is null or v_batch.ready_to   is null or p.delivery_from <= v_batch.ready_to)
+          and (p.delivery_to   is null or v_batch.ready_from is null or p.delivery_to   >= v_batch.ready_from)
+          and (v_req.region_id is null
+               or v_req.region_id = v_batch.region_id
+               or v_req.region_id = (select parent_id from public.regions where id = v_batch.region_id))
+        limit 1;
+
+        if found then
+            insert into public.offers (batch_id, mpk_org_id, offered_price_per_kg, status, expires_at, created_at)
+            values (v_batch.id, v_req.organization_id, v_batch.farmer_price_per_kg, 'pending',
+                    now() + make_interval(hours => v_win_hours), now())
+            on conflict (batch_id, mpk_org_id) do update
+                set offered_price_per_kg = excluded.offered_price_per_kg,
+                    status = 'pending', expires_at = excluded.expires_at,
+                    responded_at = null, responded_by = null;
+
+            update public.batches
+            set status = 'offering', offering_at = now(), updated_at = now()
+            where id = v_batch.id and status = 'published';
+
+            insert into public.batch_events (batch_id, event_type, metadata, created_by)
+            values (v_batch.id, 'broadcast_sent',
+                jsonb_build_object('trigger', 'pool_activate_sweep', 'pool_id', v_pool_id),
+                public.fn_current_user_id());
+
+            v_offered := v_offered + 1;
+        end if;
+    end loop;
+    -- ───────────────────────────────────────────────────────────────────────
+
     update public.pool_requests
     set status = 'active', activated_at = now(), updated_at = now()
     where id = p_request_id;
 
-    return jsonb_build_object('request_id', p_request_id, 'pool_id', v_pool_id);
+    return jsonb_build_object(
+        'request_id', p_request_id, 'pool_id', v_pool_id,
+        'sweptMatched', v_matched, 'sweptOffered', v_offered
+    );
 end;
 $$;
 comment on function public.rpc_self_activate_pool_request(uuid) is
-    'КАНОН d02 | Слайс 6 | Заявка(draft)→Pool(filling). pools.organization_id =
-     org заявки (колонка NOT NULL в задеплоенной схеме). filling_deadline = конец
-     target_month. Гейт fn_my_org_ids через pool_requests.';
+    'КАНОН d02 | Слайс 6 + DEFECT-B fix | Заявка(draft)→Pool(filling). pools.
+     organization_id = org заявки (NOT NULL). filling_deadline = конец target_month.
+     DEFECT-B: (a) переносит region_id заявки в pool_regions (видимость канон-путям);
+     (b) свипит уже published-партии — прямой матч (бид>=ask, сорт=, окно, регион,
+     ёмкость) → matched/confirmed, иначе broadcast-оффер → offering. Зеркало
+     rpc_self_auto_match_batch, но pool-initiated (не гейтит владельца партии).
+     Гейт fn_my_org_ids через pool_requests.';
 revoke execute on function public.rpc_self_activate_pool_request(uuid) from anon;
 grant  execute on function public.rpc_self_activate_pool_request(uuid) to authenticated;
 
