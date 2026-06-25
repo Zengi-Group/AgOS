@@ -2,7 +2,10 @@
 // бейджи, AI-гейт, действия членства, платёжные шторки. Источник истины — прототип shell/app.jsx.
 
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
 import './cabinet.css'
+import { useAuth } from '@/hooks/useAuth'
 import { ShellCtx } from './context'
 import {
   INITIAL_STATE, STORAGE_KEY, tabOf, deriveMembership,
@@ -51,6 +54,14 @@ function deriveInitials(name: string | null | undefined): string {
   return ((w0[0] ?? '') + (w1[0] ?? '')).toUpperCase()
 }
 
+// Локальный признак «взнос оплачен» (на демо/пилоте), ключ по userId. Нужен, чтобы оплата
+// переживала перезагрузку даже если серверный RPC недоступен (миграция не применена и т.п.).
+// Серверный сигнал (rpc_pay_membership_dues → memberships.level) — основной (виден админу);
+// этот флаг — фолбэк, чтобы фермер после оплаты не видел повторный запрос подтверждения.
+const PAID_KEY = (userId: string) => 'agos.memb.paid.' + userId
+const isPaidLocally = (userId: string | undefined | null) =>
+  !!userId && localStorage.getItem(PAID_KEY(userId)) === '1'
+
 function loadState(): ShellState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -65,6 +76,8 @@ function loadState(): ShellState {
 }
 
 export function CabinetApp() {
+  const navigate = useNavigate()
+  const { signOut } = useAuth()
   const init = loadState()
   const [membership, setMembership] = useState<MembershipStatus>(init.membership)
   const [isPro, setIsPro] = useState(init.isPro)
@@ -85,9 +98,29 @@ export function CabinetApp() {
 
   // Профиль реального аккаунта (если вошёл). null = демо-режим (аноним / нет бэкенда).
   const [profile, setProfile] = useState<AccountProfile | null>(null)
+  // Пока профиль грузится — показываем лоадер вместо демо-экрана. /cabinet всегда за
+  // RequireAuth (сессия гарантирована), поэтому демо-фолбэк не должен даже мелькать.
+  const [profileLoading, setProfileLoading] = useState(true)
   useEffect(() => {
     let alive = true
-    loadAccountProfile('farmer').then((p) => { if (alive) setProfile(p) })
+    loadAccountProfile('farmer').then(async (p) => {
+      if (!alive) return
+      if (p) { setProfile(p); setProfileLoading(false); return }
+      // Профиль пуст при наличии сессии: возможна «осиротевшая» сессия (пользователь удалён
+      // из БД, но JWT остался в браузере). Проверяем на сервере через getUser() — он обращается
+      // к Auth и возвращает 401/403, если пользователя больше нет. Тогда выходим и уводим на
+      // лендинг, чтобы не залипать в демо-кабинете. Сетевые сбои (без статуса) НЕ разлогиниваем.
+      const { data, error } = await supabase.auth.getUser()
+      if (!alive) return
+      const orphaned = (!!error && (error.status === 401 || error.status === 403)) || (!error && !data?.user)
+      if (orphaned) {
+        await signOut()
+        navigate('/', { replace: true })
+        return
+      }
+      setProfile(null)
+      setProfileLoading(false)
+    })
     // Реальная сводка фермы (стадо + задачи) перекрывает демо-сид. null = аноним/нет
     // бэкенда/нет фермы → оставляем seedFarm() (демо). Лёгкий поллинг 30с — стадо/задачи
     // обновляются без перезагрузки после правок в профиле фермы (D-SYNC-01).
@@ -120,7 +153,11 @@ export function CabinetApp() {
   // Аноним (profile === null) остаётся на демо/localStorage.
   useEffect(() => {
     if (!profile?.userId) return
-    setMembership(deriveMembership(profile.membershipLevel, profile.applicationStatus))
+    let derived = deriveMembership(profile.membershipLevel, profile.applicationStatus)
+    // Фолбэк: если взнос уже оплачен локально (демо), но БД ещё отдаёт 'approved'
+    // (RPC недоступен/не применён), не сбрасываем в запрос оплаты — держим 'active'.
+    if (derived === 'approved' && isPaidLocally(profile.userId)) derived = 'active'
+    setMembership(derived)
   }, [profile?.userId, profile?.membershipLevel, profile?.applicationStatus])
   const [sheet, setSheet] = useState<SheetState | null>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
@@ -155,6 +192,11 @@ export function CabinetApp() {
   const go = (r: Route) => setRoute(r)
   const tab = tabOf(route)
 
+  const handleLogout = async () => {
+    await signOut()
+    navigate('/login', { replace: true })
+  }
+
   // ---------- бейджи ----------
   const marketDot = batches.some((b) => b.state === 'decision')
   const unread = notifs.filter((n) => n.unread).length
@@ -173,30 +215,40 @@ export function CabinetApp() {
   const openPrices = (catKey: string) => setSheet({ kind: 'prices', catKey })
 
   // ---------- членство ----------
+  // Флоу: 'apply' → шторка документов (загрузка + подача заявки) → 'pending' (проверка админом)
+  // → 'approved' (одобрено, взнос не оплачен) → 'pay' → оплата взноса → 'active'.
   const memberAct = (act: string) => {
     if (offline) { offlineToast(); return }
     if (act === 'apply') setSheet({ kind: 'membdocs' })
-    else if (act === 'selfjoin') selfJoinMembership()
     else setSheet({ kind: 'payvznos' })
   }
-  // БЕТА: подтверждение членства без админа. На реальном аккаунте → rpc_self_join_membership
-  // (одобряет заявку + поднимает level до observer → деривация даёт 'active'); демо → локально.
-  const selfJoinMembership = async () => {
-    if (offline) { offlineToast(); return }
+  // Заявка с документами отправлена на проверку админу → ждём решения.
+  const onMembDocsSubmitted = () => {
     setSheet(null)
-    if (profile?.orgId) {
-      const { error } = await supabase.rpc('rpc_self_join_membership', {
-        p_organization_id: profile.orgId,
-      })
-      if (error) { showToast('Не удалось подтвердить членство: ' + error.message); return }
-    }
-    setMembership('active'); setTuranUnread(false)
-    showToast('Членство подтверждено · доступ открыт')
+    setMembership('pending')
+    setTuranUnread(false)
+    showToast('Заявка отправлена на проверку')
   }
-  // «Подать заявку» из шторки документов: на бете сразу подтверждаем (self-join).
-  const submitMembDocs = () => { selfJoinMembership() }
-  const payVznosDone = () => {
-    setMembership('active'); setSheet(null); setTuranUnread(false)
+  // Оплата взноса — симуляция на пилоте (реальной платёжной системы пока нет): выбор способа →
+  // «Оплатить» → членство сразу активно, Рынок (TSP) открывается.
+  // Персистентность: (1) серверный сигнал rpc_pay_membership_dues поднимает memberships.level
+  // registered→observer — переживает перезагрузку И виден админу; (2) локальный флаг PAID_KEY —
+  // фолбэк, чтобы оплата не запрашивалась повторно даже если RPC недоступен (миграция не применена).
+  const payVznosDone = async () => {
+    setSheet(null)
+    setTuranUnread(false)
+    // Источник истины — сервер: rpc_pay_membership_dues поднимает memberships.level
+    // registered→observer (переживает перезагрузку И виден админу). Локальный флаг ставим
+    // ТОЛЬКО если серверный вызов не прошёл — иначе клиент и БД расходятся (UI «оплачено»,
+    // а в БД нет), что и приводило к «у админа не оплачено».
+    let serverOk = false
+    if (profile?.orgId) {
+      const { error } = await supabase.rpc('rpc_pay_membership_dues', { p_organization_id: profile.orgId })
+      if (!error) serverOk = true
+      else console.warn('rpc_pay_membership_dues не прошёл, локальный фолбэк:', error.message)
+    }
+    if (!serverOk && profile?.userId) localStorage.setItem(PAID_KEY(profile.userId), '1')
+    setMembership('active')
     showToast('Взнос оплачен · членство активно')
   }
   const payProDone = () => {
@@ -286,6 +338,7 @@ export function CabinetApp() {
         memberAct={memberAct}
         onBack={() => go({ name: 'home' })}
         onTuran={() => go({ name: 'thread', tid: 'turan', back: { name: 'cabinet' } })}
+        onLogout={handleLogout}
         profile={profile}
       />
     )
@@ -321,6 +374,7 @@ export function CabinetApp() {
           loading={loading}
           onNew={() => setWizActive(true)}
           onApply={() => memberAct('apply')}
+          onPay={() => memberAct('pay')}
           go={go}
         />
       )
@@ -400,6 +454,15 @@ export function CabinetApp() {
     )
   }
 
+  // Пока грузится реальный профиль — лоадер (а не демо-экран). См. profileLoading выше.
+  if (profileLoading) {
+    return (
+      <div className="agos-cabinet-stage" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 className="animate-spin" style={{ width: 28, height: 28, color: '#b0a18f' }} />
+      </div>
+    )
+  }
+
   return (
     <ShellCtx.Provider value={ctxVal}>
       <div className="agos-cabinet-stage">
@@ -418,7 +481,7 @@ export function CabinetApp() {
           <MembGateSheet membership={membership} onClose={() => setSheet(null)} onAct={memberAct} />
         )}
         {sheet?.kind === 'membdocs' && (
-          <MembDocsSheet onClose={() => setSheet(null)} onSubmit={submitMembDocs} />
+          <MembDocsSheet orgId={profile?.orgId ?? null} onClose={() => setSheet(null)} onSubmitted={onMembDocsSubmitted} />
         )}
         {sheet?.kind === 'prices' && (
           <PriceSheet catKey={sheet.catKey} onClose={() => setSheet(null)} onSell={sellByPrice} />

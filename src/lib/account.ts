@@ -78,6 +78,7 @@ export interface AccountProfile {
   bin: string | null
   district: string | null      // regions.name_ru по region_id
   ownerName: string | null     // auth user_metadata.full_name
+  legalForm: string | null     // auth user_metadata.legal_form (kh/ip/too/individual) из деталей фермера
   phone: string | null
   orgTypes: string[]           // org_types выбранной организации (farmer/mpk/...)
   membershipLevel: string | null
@@ -104,7 +105,7 @@ export async function loadAccountProfile(
     null
 
   const { data: userData } = await supabase.auth.getUser()
-  const meta = userData?.user?.user_metadata as { full_name?: string; phone?: string } | undefined
+  const meta = userData?.user?.user_metadata as { full_name?: string; phone?: string; legal_form?: string } | undefined
 
   // Членство нужного типа (МПК-орг может иметь membership с org_type='mpk').
   const membership = org
@@ -132,6 +133,7 @@ export async function loadAccountProfile(
     bin: org?.bin_iin ?? null,
     district: await resolveRegionName(org?.region_id ?? null),
     ownerName: meta?.full_name ?? null,
+    legalForm: meta?.legal_form ?? null,
     // ВАЖНО: || а не ?? — userData.user.phone приходит пустой строкой "",
     // а ?? её не пропускает (falls through только на null/undefined). С ?? телефон
     // резолвился в "" и кабинет показывал демо-номер. С || пустые строки пропускаются.

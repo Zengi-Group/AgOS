@@ -32,8 +32,8 @@ export const MEMBERSHIP_DICT: Record<MembershipStatus, MembershipEntry> = {
   },
   pending: {
     cab: 'Заявка на рассмотрении',
-    // БЕТА: админов нет — организация подтверждает членство сама (act 'selfjoin').
-    plate: { tone: 'amber', t: 'Заявка отправлена. На бете членство можно подтвердить самостоятельно', cta: 'Подтвердить членство', act: 'selfjoin' },
+    // Документы на проверке у ассоциации — решение придёт уведомлением (admin-гейт).
+    plate: { tone: 'amber', t: 'Заявка на проверке у ассоциации. Сообщим о решении уведомлением', cta: null },
   },
   rejected: {
     cab: 'Заявка отклонена',
@@ -41,8 +41,8 @@ export const MEMBERSHIP_DICT: Record<MembershipStatus, MembershipEntry> = {
     plate: { tone: 'gray', t: 'Заявка отклонена: нужна выписка о регистрации хозяйства', cta: 'Подать заново', act: 'apply' },
   },
   approved: {
-    cab: 'Одобрено · взнос не оплачен',
-    plate: { tone: 'amber', t: 'Вы член TURAN! Оплатите взнос до ' + MEMB_DATES.payApproved + ' — продажа уже доступна', cta: 'Оплатить взнос', act: 'pay' },
+    cab: 'Заявка одобрена · взнос не оплачен',
+    plate: { tone: 'amber', t: 'Заявка одобрена! Оплатите взнос до ' + MEMB_DATES.payApproved + ', чтобы открыть продажу на Рынке', cta: 'Оплатить взнос', act: 'pay' },
   },
   active: {
     cab: 'Членство активно до ' + MEMB_DATES.activeTill,
@@ -71,6 +71,8 @@ export const MEMBERSHIP_DICT: Record<MembershipStatus, MembershipEntry> = {
 // level выше registered = реальный член → 'active'; иначе по последней заявке.
 export function deriveMembership(level: string | null, applicationStatus: string | null): MembershipStatus {
   if (level && level !== 'registered') return 'active'
+  // Заявка одобрена админом, но взнос ещё не оплачен → 'approved' (доступна оплата).
+  if (applicationStatus === 'approved') return 'approved'
   if (applicationStatus === 'submitted' || applicationStatus === 'under_review') return 'pending'
   if (applicationStatus === 'rejected') return 'rejected'
   return 'none'

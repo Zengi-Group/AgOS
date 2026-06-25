@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
@@ -200,6 +201,13 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
         {isSending && <Loader2 className="h-4 w-4 animate-spin" />}
         {isSending ? 'Отправка…' : 'Получить код'}
       </button>
+
+      <p className="text-center text-sm text-[#6b5744]">
+        Уже есть аккаунт?{' '}
+        <Link to="/login" className="text-[hsl(24,73%,54%)] font-medium hover:underline">
+          Войти
+        </Link>
+      </p>
     </div>
   )
 }

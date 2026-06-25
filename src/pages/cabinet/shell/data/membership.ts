@@ -44,7 +44,7 @@ export function buildDecisions({ batches, membership, h }: BuildArgs): DecisionC
   }))
   if (membership === 'approved') cards.push({
     id: 'm-pay', pri: 0, src: 'ЧЛЕНСТВО TURAN', due: 'до ' + MEMB_DATES.payApproved,
-    t: 'Оплатите взнос — продажа уже доступна',
+    t: 'Заявка одобрена — оплатите взнос, чтобы открыть продажу',
     actions: [{ t: 'Оплатить взнос', kind: 'primary', fn: h.pay }, { t: 'Кабинет', kind: 'ghost', fn: h.cabinet }],
   })
   if (membership === 'expiring') cards.push({

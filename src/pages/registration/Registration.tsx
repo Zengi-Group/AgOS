@@ -182,7 +182,7 @@ export function Registration() {
         expert: 'consultant',
       }
 
-      const { data, error } = await supabase.rpc('rpc_register_organization', {
+      const { error } = await supabase.rpc('rpc_register_organization', {
         p_organization_id: '00000000-0000-0000-0000-000000000000', // ignored, P-AI-2 signature consistency
         p_org_type: orgTypeMap[role] ?? 'other',
         p_name: name,
@@ -201,16 +201,27 @@ export function Registration() {
         return
       }
 
-      const result = data as { org_id: string; farm_id?: string } | null
+      // ФИО и (для фермера) правовая форма не попадают в queryable-колонки при регистрации
+      // (role_data уходит только в platform_events). Кабинет читает их из user_metadata
+      // (см. loadAccountProfile), поэтому фиксируем их в метаданных аккаунта здесь.
+      const { data: updatedAuth } = await supabase.auth.updateUser({
+        data: {
+          full_name: formData.full_name,
+          ...(role === 'farmer' ? { legal_form: formData.legal_form || null } : {}),
+        },
+      })
 
-      // Registration = membership application — submit silently in background
-      if (result?.org_id) {
-        supabase.rpc('rpc_submit_membership_application', {
-          p_organization_id: result.org_id,
-          p_membership_type: 'associate',
-          p_notes: null,
-        }).then(() => {/* intentionally fire-and-forget */})
+      // Триггер handle_new_user создаёт public.users ещё на этапе OTP/PIN — ДО того как
+      // собрано ФИО, поэтому users.full_name остаётся null (в админке «Пользователи» — прочерк).
+      // Дописываем имя в public.users явно (RLS users_update_own: auth_id = auth.uid()).
+      const authId = updatedAuth?.user?.id ?? session?.user?.id
+      if (authId && formData.full_name) {
+        await supabase.from('users').update({ full_name: formData.full_name }).eq('auth_id', authId)
       }
+
+      // Членство НЕ подаётся автоматически: после регистрации организация в состоянии
+      // «не член». Заявку с документами пользователь подаёт сам из кабинета/Рынка (TSP)
+      // — флоу покупки членства (документы → одобрение админом → оплата взноса).
 
       // Clear saved form data
       sessionStorage.removeItem(STORAGE_KEY)
