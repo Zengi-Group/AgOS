@@ -353,7 +353,8 @@ create table if not exists public.membership_applications (
 comment on table public.membership_applications is
     'FSM 5.7: submitted → under_review → approved | rejected.
      Farmer submits, Admin reviews. supporting_docs = array of Supabase Storage URLs.
-     On approval: Admin triggers RPC that updates memberships.level.';
+     On approval: статус заявки → approved (членство НЕ выдаётся). Уровень членства
+     выдаётся ОПЛАТОЙ взноса — rpc_pay_membership_dues (см. миграцию membership_purchase_flow).';
 
 -- -------------------------------------------------------
 -- verification_records
@@ -4281,7 +4282,9 @@ comment on function public.rpc_get_membership_queue(uuid, uuid, text, int, int) 
 -- RPC-03: rpc_process_membership_application
 -- Dok 3 §2 | Callers: [ADMIN]
 -- FSM: submitted/under_review → approved | rejected
--- Events: identity.membership.activated | identity.membership_application.decided
+-- ВАЖНО (membership_purchase_flow): одобрение НЕ выдаёт членство — лишь помечает заявку
+-- approved. Уровень членства выдаётся ОПЛАТОЙ (rpc_pay_membership_dues, ниже).
+-- Events: identity.membership_application.decided (на оба решения)
 -- D-S2-2: Inserts WhatsApp + in_app notifications
 -- ============================================================
 create or replace function public.rpc_process_membership_application(
@@ -4338,13 +4341,15 @@ begin
 
     v_membership_id := v_app.membership_id;
     v_farmer_org_id := v_app.organization_id;
+    v_new_level     := v_app.to_level;   -- целевой уровень (для уведомления; выдаётся ОПЛАТОЙ)
 
     -- Get org name for notification
     select o.legal_name into v_org_name
     from public.organizations o
     where o.id = v_farmer_org_id;
 
-    -- 5. Update application
+    -- 5. Update application status (FSM). НЕ трогаем memberships.level — выдача идёт оплатой
+    --    (rpc_pay_membership_dues). Одобрение лишь помечает заявку approved.
     update public.membership_applications
     set    status         = p_decision,
            reviewed_at    = now(),
@@ -4353,59 +4358,26 @@ begin
            updated_at     = now()
     where  id = p_application_id;
 
-    -- 6. If approved: update membership level
-    if p_decision = 'approved' then
-        v_new_level := v_app.to_level;
-
-        update public.memberships
-        set    previous_level    = level,
-               level             = v_new_level,
-               level_changed_at  = now(),
-               level_changed_by  = v_admin_user_id,
-               notes             = coalesce(p_decision_notes, notes),
-               updated_at        = now()
-        where  id = v_membership_id;
-
-        -- Event: identity.membership.activated
-        insert into public.platform_events (
-            event_type, entity_type, entity_id, organization_id,
-            actor_type, actor_id, payload, is_audit
-        ) values (
-            'identity.membership.activated',
-            'memberships',
-            v_membership_id,
-            v_farmer_org_id,
-            'admin',
-            v_admin_user_id,
-            jsonb_build_object(
-                'application_id', p_application_id,
-                'old_level', v_app.from_level,
-                'new_level', v_new_level,
-                'decision_notes', p_decision_notes
-            ),
-            true
-        )
-        returning id into v_event_id;
-    else
-        -- Event: identity.membership_application.decided (rejected)
-        insert into public.platform_events (
-            event_type, entity_type, entity_id, organization_id,
-            actor_type, actor_id, payload, is_audit
-        ) values (
-            'identity.membership_application.decided',
-            'membership_applications',
-            p_application_id,
-            v_farmer_org_id,
-            'admin',
-            v_admin_user_id,
-            jsonb_build_object(
-                'decision', 'rejected',
-                'decision_notes', p_decision_notes
-            ),
-            true
-        )
-        returning id into v_event_id;
-    end if;
+    -- 6. Event: фиксируем решение (без активации членства) — на оба решения.
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'identity.membership_application.decided',
+        'membership_applications',
+        p_application_id,
+        v_farmer_org_id,
+        'admin',
+        v_admin_user_id,
+        jsonb_build_object(
+            'decision', p_decision,
+            'from_level', v_app.from_level,
+            'to_level', v_new_level,
+            'decision_notes', p_decision_notes
+        ),
+        true
+    )
+    returning id into v_event_id;
 
     -- 7. D-S2-2: Insert notifications (WhatsApp + in_app)
     -- Find the farmer user (organization owner)
@@ -4481,13 +4453,131 @@ end;
 $$;
 
 comment on function public.rpc_process_membership_application(uuid, uuid, text, text) is
-    'RPC-03 | Dok 3 §2 | Slice 2
+    'RPC-03 | Dok 3 §2 | Slice 2+ (membership_purchase_flow)
      Admin approves or rejects membership application.
      FSM: submitted/under_review → approved/rejected.
-     On approve: memberships.level updated to to_level.
-     Events: identity.membership.activated (approve) | identity.membership_application.decided (reject).
+     ВАЖНО: одобрение НЕ выдаёт членство (memberships.level НЕ меняется) — уровень
+     выдаётся ОПЛАТОЙ взноса (rpc_pay_membership_dues).
+     Event: identity.membership_application.decided (на оба решения).
      D-S2-2: Inserts notifications (whatsapp + in_app) for farmer.
      Error codes: FORBIDDEN, INVALID_DECISION, APPLICATION_NOT_FOUND, ALREADY_DECIDED.';
+
+
+-- ============================================================
+-- rpc_pay_membership_dues — оплата взноса после одобрения (симуляция, пилот)
+-- membership_purchase_flow | Callers: [FARMER/OWNER]
+-- Требует одобренную заявку. Поднимает level registered → to_level (observer).
+-- Доступ только к своим org (fn_my_org_ids). Идемпотентно для уже-члена.
+-- ВАЖНО: actor_type='farmer' (не 'user' — нарушает platform_events_actor_type_check).
+-- ============================================================
+create or replace function public.rpc_pay_membership_dues(p_organization_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_uid           uuid;
+    v_membership_id uuid;
+    v_current_level text;
+    v_app_id        uuid;
+    v_to_level      text;
+    v_event_id      uuid;
+begin
+    v_uid := public.fn_current_user_id();
+    if v_uid is null then
+        raise exception 'AUTH_REQUIRED' using errcode = 'P0001';
+    end if;
+
+    -- Доступ только к своим организациям.
+    if not (p_organization_id = any (public.fn_my_org_ids())) then
+        raise exception 'FORBIDDEN: organization not owned by current user'
+            using errcode = 'P0001';
+    end if;
+
+    select id, level
+    into   v_membership_id, v_current_level
+    from   public.memberships
+    where  organization_id = p_organization_id
+    limit  1;
+
+    if v_membership_id is null then
+        raise exception 'NO_MEMBERSHIP: organization % has no membership record', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    -- Уже член (level выше registered) — идемпотентный ранний выход.
+    if v_current_level <> 'registered' then
+        return jsonb_build_object(
+            'membership_id', v_membership_id,
+            'level', v_current_level,
+            'already_member', true
+        );
+    end if;
+
+    -- Требуется ОДОБРЕННАЯ заявка (админ-гейт). Без неё оплата невозможна.
+    select id, to_level
+    into   v_app_id, v_to_level
+    from   public.membership_applications
+    where  organization_id = p_organization_id
+      and  status = 'approved'
+    order by reviewed_at desc nulls last, submitted_at desc
+    limit  1;
+
+    if v_app_id is null then
+        raise exception 'NO_APPROVED_APPLICATION: organization % has no approved application', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    v_to_level := coalesce(v_to_level, 'observer');
+
+    -- Поднимаем уровень членства registered → to_level (оплата = активация).
+    update public.memberships
+       set previous_level   = level,
+           level            = v_to_level,
+           level_changed_at = now(),
+           level_changed_by = v_uid,
+           updated_at       = now()
+     where id = v_membership_id;
+
+    -- Событие активации членства (оплата взноса, симуляция на пилоте).
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'identity.membership.activated',
+        'memberships',
+        v_membership_id,
+        p_organization_id,
+        'farmer',  -- platform_events_actor_type_check: farmer|admin|expert|system|ai_gateway
+        v_uid,
+        jsonb_build_object(
+            'application_id', v_app_id,
+            'old_level', 'registered',
+            'new_level', v_to_level,
+            'payment', 'simulated'
+        ),
+        true
+    )
+    returning id into v_event_id;
+
+    return jsonb_build_object(
+        'membership_id', v_membership_id,
+        'level', v_to_level,
+        'application_id', v_app_id,
+        'event_id', v_event_id,
+        'already_member', false
+    );
+end;
+$$;
+
+grant execute on function public.rpc_pay_membership_dues(uuid) to authenticated;
+
+comment on function public.rpc_pay_membership_dues(uuid) is
+    'membership_purchase_flow | Оплата членского взноса после одобрения (симуляция на пилоте).
+     Требует membership_application со статусом approved; поднимает memberships.level
+     registered→to_level (observer). Доступ только к своим org (fn_my_org_ids).
+     Идемпотентно для уже-члена. Error: AUTH_REQUIRED, FORBIDDEN, NO_MEMBERSHIP, NO_APPROVED_APPLICATION.';
 
 
 -- ============================================================
@@ -4497,7 +4587,8 @@ insert into public.rpc_name_registry (
     sql_name, dok3_name, dok5_tool_name, created_in, notes
 ) values
     ('rpc_get_membership_queue',            null,                                   null,   'd01_kernel.sql (Slice 2)',     'Admin dual-mode: queue list + application detail'),
-    ('rpc_process_membership_application',  'rpc_process_membership_application',   null,   'd01_kernel.sql (Slice 2)',     'RPC-03: Approve/reject membership + WA notification')
+    ('rpc_process_membership_application',  'rpc_process_membership_application',   null,   'd01_kernel.sql (Slice 2)',     'RPC-03: Approve/reject заявку (членство НЕ выдаёт — выдаёт оплата) + WA notification'),
+    ('rpc_pay_membership_dues',             null,                                   null,   'd01_kernel.sql (membership_purchase_flow)', 'Оплата взноса после одобрения (симуляция): registered→observer')
 on conflict (sql_name) do update
     set dok3_name      = excluded.dok3_name,
         dok5_tool_name = excluded.dok5_tool_name,
@@ -4509,12 +4600,13 @@ on conflict (sql_name) do update
 -- ============================================================
 -- Summary:
 --   NEW   rpc_get_membership_queue             ✅ Implemented
---   RPC-03  rpc_process_membership_application ✅ Implemented
+--   RPC-03  rpc_process_membership_application ✅ Implemented (одобрение НЕ выдаёт членство)
+--   NEW   rpc_pay_membership_dues              ✅ Implemented (оплата = выдача membership level)
 --
 -- All functions: SECURITY DEFINER + SET search_path = public, pg_temp
 -- All functions: p_organization_id as parameter (P-AI-2)
--- All functions: fn_is_admin() guard
--- rpc_process_membership_application: events + notifications (WA + in_app)
+-- rpc_process_membership_application: fn_is_admin() guard; events + notifications (WA + in_app)
+-- rpc_pay_membership_dues: fn_my_org_ids() guard (farmer/owner); event identity.membership.activated
 -- ============================================================
 
 -- ============================================================
