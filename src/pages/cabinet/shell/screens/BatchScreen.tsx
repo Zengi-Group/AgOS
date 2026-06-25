@@ -274,6 +274,17 @@ export function BatchScreen({ batch, onBack, onPatch, onNew, onReview, onTuran, 
           </div>
         )}
 
+        {/* Покупатель — раскрывается фермеру при confirmed (D-M6-5) */}
+        {strField(batch, 'buyer') && (
+          <div className="bat-kv-row" style={{ padding: '0 16px 8px' }}>
+            <span className="bat-kv-k">Покупатель</span>
+            <span className="bat-kv-v">
+              {strField(batch, 'buyer')}
+              {strField(batch, 'buyerPhone') ? ` · ${strField(batch, 'buyerPhone')}` : ''}
+            </span>
+          </div>
+        )}
+
         {/* Зона 3 — Действие */}
         <div className="bat-z3">
           <Actions

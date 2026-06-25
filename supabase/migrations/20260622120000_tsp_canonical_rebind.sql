@@ -215,6 +215,23 @@ begin
 end;
 $$;
 
+-- 1g. (Конвергенция B3) Сорт партии (VS/S/NS) для матчинга: из grade_standard_id,
+-- фолбэк через grade_id её SKU. Сравнивается с fn_tsp_grade_for_mpk_key(pool_line.category_label).
+create or replace function public.fn_tsp_batch_grade(p_batch_id uuid)
+returns text
+language sql
+stable
+as $$
+    select gs.code
+    from public.batches b
+    left join public.grade_standards gs
+        on gs.id = coalesce(
+            b.grade_standard_id,
+            (select s.grade_id from public.tsp_skus s where s.id = b.tsp_sku_id)
+        )
+    where b.id = p_batch_id;
+$$;
+
 
 -- ============================================================
 -- 2. SEED price_grids — плейсхолдер-ориентиры (заменить реальными данными ассоц.)
@@ -254,7 +271,7 @@ create or replace function public.rpc_create_batch(
     p_age         int,
     p_fatness     text,
     p_district    text,
-    p_price       numeric,          -- принимается для совместимости, НЕ хранится как цена сделки
+    p_price       numeric,          -- ask фермера (пол) → batches.farmer_price_per_kg (D-TSP-MATCH-01)
     p_window_from date,
     p_window_to   date,
     p_scheduled   boolean default false
@@ -285,6 +302,11 @@ begin
     -- scheduled → draft (не на витрине; нет планировщика на бете); иначе published.
     v_status := case when p_scheduled then 'draft' else 'published' end;
 
+    -- D-M6-6: окно готовности валидно (ready_to >= ready_from).
+    if p_window_from is not null and p_window_to is not null and p_window_to < p_window_from then
+        raise exception 'INVALID_WINDOW: ready_to before ready_from' using errcode = 'P0001';
+    end if;
+
     v_notes := jsonb_build_object(
         'cat',       p_cat,
         'breed',     p_breed,
@@ -299,10 +321,13 @@ begin
     insert into public.batches (
         organization_id, tsp_sku_id, grade_standard_id, breed_id,
         heads, avg_weight_kg, target_month, region_id,
+        farmer_price_per_kg, ready_from, ready_to,
         status, notes, published_at, created_by, created_at
     ) values (
         v_org_id, v_sku_id, v_grade_id, null,
         p_heads, p_avg_weight, date_trunc('month', p_window_from)::date, v_region_id,
+        case when p_price is not null and p_price > 0 then round(p_price)::int else null end,
+        p_window_from, p_window_to,
         v_status, v_notes,
         case when v_status = 'published' then now() else null end,
         public.fn_current_user_id(), now()
@@ -314,9 +339,10 @@ end;
 $$;
 
 comment on function public.rpc_create_batch(text, text, int, numeric, int, text, text, numeric, date, date, boolean) is
-    'КАНОН d02 | Слайс 6 | Адаптер визарда: резолвит tsp_sku_id/region_id/target_month,
-     поля визарда → notes(JSON), цена фермера НЕ хранится (ст.171). published|draft.
-     Возвращает Batch-форму (price = справочная цена price_grids).';
+    'КАНОН d02 | Конвергенция Слайс B | Адаптер визарда: резолвит tsp_sku_id/region_id/target_month;
+     p_price → farmer_price_per_kg (ask=пол, D-TSP-MATCH-01); окно → ready_from/ready_to (D-M6-6);
+     поля визарда дублируются в notes(JSON) для совместимости UI. published|draft.
+     deal = высший бид МПК ≥ ask; price_grids остаётся индикативным ориентиром.';
 
 revoke execute on function public.rpc_create_batch(text, text, int, numeric, int, text, text, numeric, date, date, boolean) from anon;
 grant  execute on function public.rpc_create_batch(text, text, int, numeric, int, text, text, numeric, date, date, boolean) to authenticated;
@@ -345,19 +371,23 @@ begin
         'age',        coalesce((meta->>'age')::int, 0),
         'fatness',    coalesce(meta->>'fatness', ''),
         'district',   coalesce(meta->>'district', coalesce(r.name_ru, '')),
-        'price',      public.fn_tsp_ref_price(b.tsp_sku_id, b.region_id),
-        'dealPrice',  pm.reference_price_at_match,
+        'price',      coalesce(b.farmer_price_per_kg, public.fn_tsp_ref_price(b.tsp_sku_id, b.region_id)),
+        'dealPrice',  b.deal_price_per_kg,
+        -- Раскрытие покупателя фермеру при confirmed (D-M6-5): личность МПК видна
+        -- только после mpk_contact_revealed_at пула партии.
+        'buyer',      case when po.mpk_contact_revealed_at is not null then bo.legal_name else null end,
+        'buyerPhone', case when po.mpk_contact_revealed_at is not null then bo.phone     else null end,
         'state',      case
                           when b.status = 'draft' and coalesce(meta->>'scheduled','false') = 'true' then 'scheduled'
-                          when b.status = 'draft'     then 'draft'
-                          when b.status = 'published' then 'published'
-                          when b.status = 'cancelled' then 'cancelled'
-                          when b.status = 'expired'   then 'cancelled'
-                          when b.status = 'matched' then case
-                              when px.pool_status = 'executed'  then 'delivered'
-                              when px.pool_status in ('executing','dispatched','delivered') then 'confirmed'
-                              else 'matched'
-                          end
+                          when b.status = 'draft'                  then 'draft'
+                          when b.status = 'published'              then 'published'
+                          when b.status = 'offering'               then 'offering'
+                          when b.status = 'awaiting_price_decision' then 'decision'
+                          when b.status = 'matched'                then 'matched'
+                          when b.status = 'confirmed'              then 'confirmed'
+                          when b.status = 'dispatched'             then 'dispatched'
+                          when b.status = 'delivered'              then 'delivered'
+                          when b.status in ('cancelled','failed','expired') then 'cancelled'
                           else b.status
                       end,
         'windowLabel',
@@ -365,12 +395,17 @@ begin
                  then to_char((meta->>'wf')::date, 'DD Mon') || ' — ' || to_char((meta->>'wt')::date, 'DD Mon')
                  else to_char(b.target_month, 'TMMonth YYYY') end,
         'publishAtLabel', null,
-        'deadlineLabel',  null,
+        -- Дедлайн ответа покупателей (offering): крайний срок живых pending-офферов.
+        'deadlineLabel', (
+            select to_char(max(o.expires_at), 'DD Mon')
+            from public.offers o
+            where o.batch_id = b.id and o.status = 'pending'
+        ),
         'history',    jsonb_build_array(
             jsonb_build_object('t', 'Создана', 'd', to_char(b.created_at, 'DD Mon')),
             jsonb_build_object('t',
                 case when b.status = 'draft' then 'Черновик'
-                     when b.status = 'matched' then 'Подобран покупатель'
+                     when b.status in ('matched','confirmed','dispatched','delivered') then 'Подобран покупатель'
                      when b.status = 'cancelled' then 'Снята'
                      else 'Выставлена на продажу' end,
                 'd', to_char(coalesce(b.published_at, b.created_at), 'DD Mon'))
@@ -378,20 +413,10 @@ begin
     )
     into v
     from public.batches b
-    left join public.regions r on r.id = b.region_id
-    left join lateral (
-        select pm2.reference_price_at_match
-        from public.pool_matches pm2
-        where pm2.batch_id = b.id
-        order by pm2.matched_at desc limit 1
-    ) pm on true
-    left join lateral (
-        select pl.status as pool_status
-        from public.pool_matches pm3
-        join public.pools pl on pl.id = pm3.pool_id
-        where pm3.batch_id = b.id
-        order by pm3.matched_at desc limit 1
-    ) px on true
+    left join public.regions r        on r.id = b.region_id
+    left join public.pool_lines pl    on pl.id = b.pool_line_id
+    left join public.pools po         on po.id = pl.pool_id
+    left join public.organizations bo on bo.id = po.organization_id
     cross join lateral (select public.fn_tsp_meta(b.notes) as meta) m
     where b.id = p_batch_id;
 
@@ -460,9 +485,9 @@ grant  execute on function public.rpc_cancel_batch(uuid) to authenticated;
 
 
 -- ============================================================
--- 6. rpc_dispatch_batch — confirmed→dispatched (нет в каноне; no-op success)
--- В d02 у партии нет состояний dispatched/delivered (это поля пула). Сохраняем
--- RPC, чтобы вызов фронта не падал; отметку об отгрузке кладём в notes.
+-- 6. rpc_dispatch_batch — Слайс C: фермер отмечает отгрузку (BT-16, D-M6-10).
+-- confirmed→dispatched + dispatched_at; dispatchedAt в notes для UI-лейбла.
+-- Двусторонний handshake: приёмку подтверждает МПК (rpc_self_confirm_delivery).
 -- ============================================================
 create or replace function public.rpc_dispatch_batch(p_batch_id uuid)
 returns boolean
@@ -473,34 +498,47 @@ as $$
 declare
     v_batch public.batches%rowtype;
 begin
-    select * into v_batch from public.batches where id = p_batch_id;
+    select * into v_batch from public.batches where id = p_batch_id for update;
     if not found then
         raise exception 'BATCH_NOT_FOUND' using errcode = 'P0002';
     end if;
     if not (v_batch.organization_id = any (public.fn_my_org_ids())) then
         raise exception 'FORBIDDEN: batch not owned by current user' using errcode = 'P0001';
     end if;
+    if v_batch.status <> 'confirmed' then
+        raise exception 'INVALID_STATUS: batch is % (must be confirmed)', v_batch.status using errcode = 'P0003';
+    end if;
 
     update public.batches
-    set notes = (public.fn_tsp_meta(notes) || jsonb_build_object('dispatchedAt', to_char(now(),'YYYY-MM-DD')))::text,
+    set status = 'dispatched', dispatched_at = now(),
+        notes = (public.fn_tsp_meta(notes) || jsonb_build_object('dispatchedAt', to_char(now(),'YYYY-MM-DD')))::text,
         updated_at = now()
     where id = p_batch_id;
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (p_batch_id, 'dispatched', jsonb_build_object('via', 'farmer'), public.fn_current_user_id());
+
     return true;
 end;
 $$;
 
 comment on function public.rpc_dispatch_batch(uuid) is
-    'КАНОН d02 | Слайс 6 | Отметка отгрузки в notes (в d02 у партии нет dispatched-состояния).
-     Сохранён для совместимости с фронтом. Гейт fn_my_org_ids().';
+    'КАНОН d02 | Слайс C | Фермер: confirmed→dispatched (BT-16, D-M6-10) + dispatched_at;
+     dispatchedAt в notes для UI. Гейт fn_my_org_ids().';
 
 revoke execute on function public.rpc_dispatch_batch(uuid) from anon;
 grant  execute on function public.rpc_dispatch_batch(uuid) to authenticated;
 
 
 -- ============================================================
--- 7. rpc_lower_price / rpc_update_price — цена фермера упразднена (ст.171).
--- Сохранены как no-op-success: цену сделки определяет реф.грид, не фермер.
--- Любой вызов лишь продлевает видимость (touch updated_at), не падает.
+-- 7. rpc_lower_price — B4 (Слайс C): фермер понижает ask → ре-broadcast.
+-- D-TSP-MATCH-01 развернул price-less позицию: фермер снова задаёт ask (пол).
+-- D-M6-3: шаг понижения = tsp_config.price_step_down_amount (фикс 100 ₸/кг).
+-- Бэкенд клампит НАПРАВЛЕНИЕ (только вниз, не выше current − шаг) и >0; floor-подсказку
+-- (minimum_price) держит фронт (soft-warn, D-M6-3 «фермер может вручную ниже»).
+-- После понижения партия → published; фронт затем зовёт rpc_self_auto_match_batch
+-- (ре-broadcast по новой цене, BT-11 awaiting_price_decision→offering).
+-- rpc_update_price — без понижения (touch), сохранён для совместимости.
 -- ============================================================
 create or replace function public.rpc_lower_price(p_batch_id uuid, p_new_price numeric)
 returns boolean
@@ -508,25 +546,58 @@ language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
-declare v_batch public.batches%rowtype;
+declare
+    v_batch   public.batches%rowtype;
+    v_step    int;
+    v_current int;
+    v_new     int;
 begin
-    select * into v_batch from public.batches where id = p_batch_id;
+    select * into v_batch from public.batches where id = p_batch_id for update;
     if not found then raise exception 'BATCH_NOT_FOUND' using errcode = 'P0002'; end if;
     if not (v_batch.organization_id = any (public.fn_my_org_ids())) then
         raise exception 'FORBIDDEN' using errcode = 'P0001';
     end if;
-    -- Канон: цена фермера не хранится. Возвращаем партию в published (на витрину).
+    if v_batch.status not in ('published', 'offering', 'awaiting_price_decision') then
+        raise exception 'INVALID_STATUS: batch is % (must be published/offering/awaiting_price_decision)', v_batch.status
+            using errcode = 'P0003';
+    end if;
+
+    select coalesce(price_step_down_amount, 100) into v_step
+    from public.tsp_config where is_active = true limit 1;
+    v_step := coalesce(v_step, 100);
+
+    -- текущий ask (фолбэк на реф.цену, если ask ещё не задан)
+    v_current := coalesce(v_batch.farmer_price_per_kg,
+                          public.fn_tsp_ref_price(v_batch.tsp_sku_id, v_batch.region_id));
+
+    -- clamp + step-down: только вниз и не выше (current − шаг); пол = 1 (CHECK >0).
+    v_new := round(p_new_price)::int;
+    if v_current is not null then
+        v_new := least(v_new, v_current - v_step);
+    end if;
+    v_new := greatest(v_new, 1);
+
     update public.batches
-    set status = case when status in ('draft') then 'published' else status end,
-        published_at = coalesce(published_at, now()),
-        updated_at = now()
+    set farmer_price_per_kg        = v_new,
+        status                     = 'published',
+        offering_at                = null,
+        awaiting_price_decision_at = null,
+        published_at               = coalesce(published_at, now()),
+        updated_at                 = now()
     where id = p_batch_id;
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (p_batch_id, 'price_lowered',
+        jsonb_build_object('old_ask', v_current, 'new_ask', v_new, 'step', v_step),
+        public.fn_current_user_id());
+
     return true;
 end;
 $$;
 comment on function public.rpc_lower_price(uuid, numeric) is
-    'КАНОН d02 | Слайс 6 | Цена фермера упразднена (ст.171). No-op-success: партия
-     остаётся/возвращается published. Сохранён для совместимости с фронтом.';
+    'КАНОН d02 | Слайс C B4 | Фермер понижает ask (D-TSP-MATCH-01): clamp вниз на
+     (current − price_step_down_amount, D-M6-3) и >0; партия → published для ре-broadcast
+     (фронт затем зовёт rpc_self_auto_match_batch). Гейт fn_my_org_ids().';
 revoke execute on function public.rpc_lower_price(uuid, numeric) from anon;
 grant  execute on function public.rpc_lower_price(uuid, numeric) to authenticated;
 
@@ -588,8 +659,11 @@ grant  execute on function public.rpc_submit_review(uuid, int, int, text) to aut
 
 
 -- ============================================================
--- 9. rpc_self_review_due_batches — 24ч-рекомендация цены. В каноне нет цены
--- фермера и состояния decision → no-op {moved:0}. Сохранён для совместимости.
+-- 9. rpc_self_review_due_batches — Слайс C: продюсер истечения 24ч-офферов (нет
+-- pg_cron). Свои offering-партии без живых pending-офферов (expires_at истёк) →
+-- офферы pending→expired, партия offering→awaiting_price_decision (BT-09). Фронт
+-- затем показывает экран снижения цены (B4). Self-serve sweep (фермер-шелл зовёт
+-- лениво + поллингом). Паттерн = rpc_self_close_due_pools. Гейт fn_my_org_ids().
 -- ============================================================
 create or replace function public.rpc_self_review_due_batches()
 returns jsonb
@@ -597,16 +671,50 @@ language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
+declare v_moved int := 0;
 begin
     if public.fn_current_user_id() is null then
         raise exception 'AUTH_REQUIRED' using errcode = 'P0001';
     end if;
-    return jsonb_build_object('moved', 0);
+
+    with my_due as (
+        select b.id as batch_id
+        from public.batches b
+        where b.organization_id = any (public.fn_my_org_ids())
+          and b.status = 'offering'
+          and not exists (
+              select 1 from public.offers o
+              where o.batch_id = b.id and o.status = 'pending' and o.expires_at > now()
+          )
+    ),
+    exp_offers as (
+        update public.offers o
+        set status = 'expired', responded_at = now()
+        where o.batch_id in (select batch_id from my_due) and o.status = 'pending'
+        returning 1
+    ),
+    moved as (
+        update public.batches b
+        set status = 'awaiting_price_decision', awaiting_price_decision_at = now(), updated_at = now()
+        where b.id in (select batch_id from my_due) and b.status = 'offering'
+        returning b.id
+    ),
+    ev as (
+        insert into public.batch_events (batch_id, event_type, metadata, created_by)
+        select m.id, 'offer_window_expired', jsonb_build_object('trigger', 'review_due'),
+               public.fn_current_user_id()
+        from moved m
+        returning 1
+    )
+    select count(*) into v_moved from moved;
+
+    return jsonb_build_object('moved', v_moved);
 end;
 $$;
 comment on function public.rpc_self_review_due_batches() is
-    'КАНОН d02 | Слайс 6 | No-op (цена фермера/состояние decision упразднены).
-     Сохранён для совместимости с фермер-шеллом.';
+    'КАНОН d02 | Слайс C | Продюсер истечения 24ч-офферов (нет pg_cron): свои
+     offering-партии без живых pending-офферов → офферы expired, партия →
+     awaiting_price_decision (BT-09). Self-serve sweep. Гейт fn_my_org_ids().';
 revoke execute on function public.rpc_self_review_due_batches() from anon;
 grant  execute on function public.rpc_self_review_due_batches() to authenticated;
 
@@ -627,17 +735,16 @@ as $$
 declare
     v_batch     public.batches%rowtype;
     v_grade     text;
-    v_skucode   text;
-    v_pool      record;
-    v_take      int;
-    v_match_id  uuid;
-    v_ref_price int;
+    v_vol       int;
+    v_line      record;
+    v_win_hours int;
+    v_offers    int := 0;
 begin
     if public.fn_current_user_id() is null then
         raise exception 'AUTH_REQUIRED' using errcode = 'P0001';
     end if;
 
-    select * into v_batch from public.batches where id = p_batch_id;
+    select * into v_batch from public.batches where id = p_batch_id for update;
     if not found then raise exception 'BATCH_NOT_FOUND' using errcode = 'P0002'; end if;
     if not (v_batch.organization_id = any (public.fn_my_org_ids())) then
         raise exception 'FORBIDDEN: batch not owned by current user' using errcode = 'P0001';
@@ -645,75 +752,139 @@ begin
     if v_batch.status <> 'published' then
         return jsonb_build_object('matched', false, 'reason', 'BATCH_NOT_AVAILABLE');
     end if;
-
-    select gs.code, s.sku_code into v_grade, v_skucode
-    from public.tsp_skus s join public.grade_standards gs on gs.id = s.grade_id
-    where s.id = v_batch.tsp_sku_id;
-
-    select
-        p.id            as pool_id,
-        p.target_heads  as target_heads,
-        p.matched_heads as matched_heads,
-        case
-            when pr.region_id is null then 0
-            when pr.region_id = v_batch.region_id then 0
-            else 1
-        end             as region_rank
-    into v_pool
-    from public.pools p
-    join public.pool_requests pr on pr.id = p.pool_request_id
-    where p.status = 'filling'
-      and p.matched_heads < p.target_heads
-      and exists (
-          select 1
-          from jsonb_array_elements(coalesce(pr.accepted_categories, '[]'::jsonb)) ln
-          where public.fn_tsp_grade_for_mpk_key(ln->>'code') = v_grade
-      )
-      and not exists (
-          select 1 from public.pool_matches pm
-          where pm.pool_id = p.id and pm.batch_id = v_batch.id
-      )
-    order by region_rank asc, p.created_at asc
-    limit 1;
-
-    if not found then
-        return jsonb_build_object('matched', false, 'reason', 'NO_POOL');
+    if v_batch.farmer_price_per_kg is null then
+        return jsonb_build_object('matched', false, 'reason', 'NO_ASK');
     end if;
 
-    v_take      := least(v_batch.heads, v_pool.target_heads - v_pool.matched_heads);
-    v_ref_price := public.fn_tsp_ref_price(v_batch.tsp_sku_id, v_batch.region_id);
+    v_grade := public.fn_tsp_batch_grade(p_batch_id);
+    v_vol   := coalesce(v_batch.heads * v_batch.avg_weight_kg, 0)::int;
 
-    insert into public.pool_matches (
-        pool_id, batch_id, matched_heads,
-        reference_price_at_match, premium_at_match, grade_at_match, tsp_sku_at_match,
-        matched_by, matched_at
-    ) values (
-        v_pool.pool_id, v_batch.id, v_take,
-        v_ref_price, 0, v_grade, v_skucode,
-        public.fn_current_user_id(), now()
-    ) returning id into v_match_id;
+    -- 1) Прямой авто-матч (BT-01/BT-05): высший стоящий бид >= ask среди filling-пулов,
+    -- сорт совпадает, окно overlap (D-M6-8), регион, ёмкость. deal = бид (D-M6-DEALPRICE).
+    select pl.id              as pl_id,
+           pl.pool_id          as pool_id,
+           pl.mpk_price_per_kg as bid,
+           p.target_heads      as target_heads,
+           p.matched_heads     as matched_heads
+      into v_line
+    from public.pool_lines pl
+    join public.pools p          on p.id = pl.pool_id
+    join public.pool_requests pr on pr.id = p.pool_request_id
+    where p.status = 'filling'
+      and pl.is_active = true
+      and pl.mpk_price_per_kg >= v_batch.farmer_price_per_kg
+      and public.fn_tsp_grade_for_mpk_key(pl.category_label) = v_grade
+      and (pl.max_volume_kg is null or pl.current_volume_kg + v_vol <= pl.max_volume_kg)
+      and (p.delivery_from is null or v_batch.ready_to   is null or p.delivery_from <= v_batch.ready_to)
+      and (p.delivery_to   is null or v_batch.ready_from is null or p.delivery_to   >= v_batch.ready_from)
+      and (pr.region_id is null
+           or pr.region_id = v_batch.region_id
+           or pr.region_id = (select parent_id from public.regions where id = v_batch.region_id))
+    order by pl.mpk_price_per_kg desc, p.created_at asc
+    limit 1
+    for update;
 
-    update public.pools
-    set matched_heads = matched_heads + v_take,
-        status        = case when matched_heads + v_take >= target_heads then 'filled' else status end,
-        filled_at     = case when matched_heads + v_take >= target_heads then now() else filled_at end,
-        updated_at    = now()
-    where id = v_pool.pool_id;
+    if found then
+        update public.batches
+        set status            = 'matched',
+            pool_line_id      = v_line.pl_id,
+            deal_price_per_kg = v_line.bid,
+            matched_at        = now(),
+            updated_at        = now()
+        where id = v_batch.id;
 
-    update public.batches
-    set status = 'matched', matched_at = now(), updated_at = now()
-    where id = v_batch.id;
+        update public.pool_lines
+        set current_volume_kg = current_volume_kg + v_vol, updated_at = now()
+        where id = v_line.pl_id;
 
-    return jsonb_build_object(
-        'matched', true, 'poolId', v_pool.pool_id, 'matchId', v_match_id,
-        'matchedHeads', v_take, 'dealPrice', v_ref_price
-    );
+        update public.pools
+        set matched_heads = matched_heads + v_batch.heads, updated_at = now()
+        where id = v_line.pool_id;
+
+        -- auto-close по головам → closed_filled + matched-партии этого пула → confirmed
+        if (v_line.matched_heads + v_batch.heads) >= v_line.target_heads then
+            update public.pools
+            set status = 'closed_filled', completed_at = now(),
+                mpk_contact_revealed_at = coalesce(mpk_contact_revealed_at, now()), updated_at = now()
+            where id = v_line.pool_id and status = 'filling';
+            if found then
+                update public.batches b
+                set status = 'confirmed', confirmed_at = now(), updated_at = now()
+                from public.pool_lines pl
+                where pl.pool_id = v_line.pool_id and b.pool_line_id = pl.id and b.status = 'matched';
+            end if;
+        end if;
+
+        -- снять прочие висящие офферы на эту партию (FCFS-консистентность)
+        update public.offers set status = 'withdrawn', responded_at = now()
+        where batch_id = v_batch.id and status = 'pending';
+
+        insert into public.batch_events (batch_id, event_type, metadata, created_by)
+        values (v_batch.id, 'matched',
+            jsonb_build_object('pool_id', v_line.pool_id, 'pool_line_id', v_line.pl_id,
+                               'via', 'auto_match', 'deal_price_per_kg', v_line.bid),
+            public.fn_current_user_id());
+
+        return jsonb_build_object(
+            'matched', true, 'poolId', v_line.pool_id, 'poolLineId', v_line.pl_id,
+            'matchedHeads', v_batch.heads, 'dealPrice', v_line.bid
+        );
+    end if;
+
+    -- 2) Нет прямого матча → broadcast офферов всем подходящим МПК (M4 §2.2 step3):
+    -- сорт+регион+окно+ёмкость, ЦЕНА игнорируется; offered_price = ask. Партия → offering.
+    select offer_window_hours into v_win_hours from public.tsp_config where is_active = true limit 1;
+    v_win_hours := coalesce(v_win_hours, 24);
+
+    with eligible_mpks as (
+        select distinct p.organization_id as mpk_org_id
+        from public.pool_lines pl
+        join public.pools p          on p.id = pl.pool_id
+        join public.pool_requests pr on pr.id = p.pool_request_id
+        where p.status = 'filling'
+          and pl.is_active = true
+          and public.fn_tsp_grade_for_mpk_key(pl.category_label) = v_grade
+          and (pl.max_volume_kg is null or pl.current_volume_kg + v_vol <= pl.max_volume_kg)
+          and (p.delivery_from is null or v_batch.ready_to   is null or p.delivery_from <= v_batch.ready_to)
+          and (p.delivery_to   is null or v_batch.ready_from is null or p.delivery_to   >= v_batch.ready_from)
+          and (pr.region_id is null
+               or pr.region_id = v_batch.region_id
+               or pr.region_id = (select parent_id from public.regions where id = v_batch.region_id))
+    ),
+    upserted as (
+        insert into public.offers (batch_id, mpk_org_id, offered_price_per_kg, status, expires_at, created_at)
+        select v_batch.id, em.mpk_org_id, v_batch.farmer_price_per_kg, 'pending',
+               now() + make_interval(hours => v_win_hours), now()
+        from eligible_mpks em
+        on conflict (batch_id, mpk_org_id) do update
+            set offered_price_per_kg = excluded.offered_price_per_kg,
+                status = 'pending', expires_at = excluded.expires_at,
+                responded_at = null, responded_by = null
+        returning batch_id
+    )
+    select count(*) into v_offers from upserted;
+
+    if v_offers > 0 then
+        update public.batches
+        set status = 'offering', offering_at = now(), updated_at = now()
+        where id = v_batch.id;
+
+        insert into public.batch_events (batch_id, event_type, metadata, created_by)
+        values (v_batch.id, 'broadcast_sent',
+            jsonb_build_object('trigger', 'auto_match', 'offers', v_offers),
+            public.fn_current_user_id());
+
+        return jsonb_build_object('matched', false, 'reason', 'BROADCAST', 'offers', v_offers);
+    end if;
+
+    return jsonb_build_object('matched', false, 'reason', 'NO_POOL');
 end;
 $$;
 comment on function public.rpc_self_auto_match_batch(uuid) is
-    'КАНОН d02 | Слайс 6 | Авто-матч партии в filling-пул, принимающий её СОРТ
-     (accepted_categories→grade). Регион — мягкий приоритет. Реф.цена снапшотится
-     в pool_matches. Партия → matched. Контакты НЕ раскрываются (D40).';
+    'КАНОН d02 | Конвергенция B3 | Авто-матч при публикации (BT-01/BT-05): высший стоящий
+     бид МПК >= ask → партия matched, deal=бид (D-M6-DEALPRICE), pool_line_id; auto-close
+     по головам → confirmed. Иначе broadcast офферов (offered_price=ask; сорт+регион+окно)
+     → offering. Иначе NO_POOL (остаётся published). Контакты НЕ раскрываются (D40).';
 revoke execute on function public.rpc_self_auto_match_batch(uuid) from anon;
 grant  execute on function public.rpc_self_auto_match_batch(uuid) to authenticated;
 
@@ -741,7 +912,7 @@ begin
                 'age',       coalesce((public.fn_tsp_meta(b.notes)->>'age')::int, 0),
                 'fatness',   coalesce(public.fn_tsp_meta(b.notes)->>'fatness', ''),
                 'region',    coalesce(public.fn_tsp_meta(b.notes)->>'district', coalesce(r.name_ru, '')),
-                'minPrice',  public.fn_tsp_ref_price(b.tsp_sku_id, b.region_id),
+                'minPrice',  coalesce(b.farmer_price_per_kg, public.fn_tsp_ref_price(b.tsp_sku_id, b.region_id)),
                 'state',     'published',
                 'windowLabel', to_char(b.target_month, 'TMMonth YYYY')
             )
@@ -750,7 +921,7 @@ begin
         from public.batches b
         join public.tsp_skus s on s.id = b.tsp_sku_id
         left join public.regions r on r.id = b.region_id
-        where b.status = 'published'
+        where b.status in ('published', 'offering')
           and (p_cat is null or public.fn_tsp_cat_display(b.notes, b.tsp_sku_id) = p_cat)
     );
 end;
@@ -828,15 +999,33 @@ begin
         raise exception 'REQUEST_NOT_DRAFT' using errcode = 'P0003';
     end if;
 
-    -- ПРАВКА (live-верификация 2026-06-23): задеплоенная pools имеет
-    -- organization_id NOT NULL (вопреки исходному допущению «pools без org»).
-    -- Берём org из заявки — это всегда МПК-владелец пула. Гейт уже выше.
+    -- pools.organization_id NOT NULL (прод-сверено 2026-06-23). Берём org из заявки.
+    -- Конвергенция B2: пишем delivery-окно (из target_month) и published_at — нужны
+    -- канон-матчеру (overlap D-M6-8). total_target_volume_kg=NULL: auto-close по головам.
     insert into public.pools (
-        organization_id, pool_request_id, status, target_heads, matched_heads, filling_deadline
+        organization_id, pool_request_id, status, target_heads, matched_heads,
+        filling_deadline, delivery_from, delivery_to, published_at
     ) values (
         v_req.organization_id, v_req.id, 'filling', v_req.total_heads, 0,
-        (date_trunc('month', v_req.target_month) + interval '1 month - 1 day')::date
+        (date_trunc('month', v_req.target_month) + interval '1 month - 1 day')::date,
+        date_trunc('month', v_req.target_month)::date,
+        (date_trunc('month', v_req.target_month) + interval '1 month - 1 day')::date,
+        now()
     ) returning id into v_pool_id;
+
+    -- Конвергенция B2: бид МПК → структурные pool_lines (D-TSP-MATCH-01). Категория-код
+    -- фронта (premium/vysshaya/...) → category_label; матч резолвит сорт через
+    -- fn_tsp_grade_for_mpk_key(category_label). tsp_sku_id=NULL (бид по категории, не SKU).
+    -- max_volume_kg=NULL (UI потолок не шлёт). Только строки с ценой > 0 (CHECK mpk_price>0).
+    insert into public.pool_lines (
+        pool_id, tsp_sku_id, category_label, mpk_price_per_kg,
+        max_volume_kg, current_volume_kg, is_active
+    )
+    select v_pool_id, null, ln->>'code',
+           round((ln->>'price')::numeric)::int, null, 0, true
+    from jsonb_array_elements(coalesce(v_req.accepted_categories, '[]'::jsonb)) ln
+    where coalesce(ln->>'price', '') <> ''
+      and (ln->>'price')::numeric > 0;
 
     update public.pool_requests
     set status = 'active', activated_at = now(), updated_at = now()
@@ -857,8 +1046,12 @@ grant  execute on function public.rpc_self_activate_pool_request(uuid) to authen
 -- 14. rpc_self_match_batch_to_pool — ручной оффер МПК на published-партию.
 -- Гейт: пул моей org (через pool_request). Снапшот реф.цены/сорта/SKU.
 -- ============================================================
+-- Конвергенция B3: сигнатура +p_price_per_kg. Дроп старой 3-арг версии, чтобы не
+-- осталось overload-двойника (PGRST203 при вызове с 3 аргами). Идемпотентно.
+drop function if exists public.rpc_self_match_batch_to_pool(uuid, uuid, int) cascade;
+
 create or replace function public.rpc_self_match_batch_to_pool(
-    p_pool_id uuid, p_batch_id uuid, p_matched_heads int
+    p_pool_id uuid, p_batch_id uuid, p_matched_heads int, p_price_per_kg int default null
 )
 returns uuid
 language plpgsql
@@ -866,66 +1059,101 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-    v_pool      public.pools%rowtype;
-    v_req       public.pool_requests%rowtype;
-    v_batch     public.batches%rowtype;
-    v_grade     text;
-    v_skucode   text;
-    v_ref_price int;
-    v_match_id  uuid;
+    v_pool   public.pools%rowtype;
+    v_batch  public.batches%rowtype;
+    v_grade  text;
+    v_line   record;
+    v_deal   int;
+    v_vol    int;
+    v_heads  int;
 begin
-    select * into v_pool from public.pools where id = p_pool_id;
+    select * into v_pool from public.pools where id = p_pool_id for update;
     if not found then raise exception 'POOL_NOT_FOUND' using errcode = 'P0002'; end if;
-    select * into v_req from public.pool_requests where id = v_pool.pool_request_id;
-    if not (v_req.organization_id = any (public.fn_my_org_ids())) then
+    -- DEF-TSP-M4-OWNERSHIP (resolved): owner через pools.organization_id напрямую.
+    if not (v_pool.organization_id = any (public.fn_my_org_ids())) then
         raise exception 'FORBIDDEN: pool not owned by current user' using errcode = 'P0001';
     end if;
     if v_pool.status <> 'filling' then
         raise exception 'POOL_NOT_FILLING' using errcode = 'P0003';
     end if;
 
-    select * into v_batch from public.batches where id = p_batch_id;
+    select * into v_batch from public.batches where id = p_batch_id for update;
     if not found then raise exception 'BATCH_NOT_FOUND' using errcode = 'P0004'; end if;
-    if v_batch.status <> 'published' then
+    if v_batch.status not in ('published', 'offering') then
         raise exception 'BATCH_NOT_AVAILABLE' using errcode = 'P0005';
     end if;
 
-    select gs.code, s.sku_code into v_grade, v_skucode
-    from public.tsp_skus s join public.grade_standards gs on gs.id = s.grade_id
-    where s.id = v_batch.tsp_sku_id;
+    v_grade := public.fn_tsp_batch_grade(p_batch_id);
+    v_vol   := coalesce(v_batch.heads * v_batch.avg_weight_kg, 0)::int;
+    v_heads := coalesce(p_matched_heads, v_batch.heads);
 
-    v_ref_price := public.fn_tsp_ref_price(v_batch.tsp_sku_id, v_batch.region_id);
+    -- строка пула под сорт партии (линковка + фолбэк-бид)
+    select pl.id as pl_id, pl.mpk_price_per_kg as bid
+      into v_line
+    from public.pool_lines pl
+    where pl.pool_id = p_pool_id
+      and pl.is_active = true
+      and public.fn_tsp_grade_for_mpk_key(pl.category_label) = v_grade
+    order by pl.mpk_price_per_kg desc
+    limit 1
+    for update;
+    if not found then
+        raise exception 'NO_MATCHING_LINE: pool has no active line for batch grade %', v_grade
+            using errcode = 'P0006';
+    end if;
 
-    insert into public.pool_matches (
-        pool_id, batch_id, matched_heads,
-        reference_price_at_match, premium_at_match, grade_at_match, tsp_sku_at_match,
-        matched_by, matched_at
-    ) values (
-        p_pool_id, p_batch_id, p_matched_heads,
-        v_ref_price, 0, v_grade, v_skucode,
-        public.fn_current_user_id(), now()
-    ) returning id into v_match_id;
-
-    update public.pools
-    set matched_heads = matched_heads + p_matched_heads,
-        status        = case when matched_heads + p_matched_heads >= target_heads then 'filled' else status end,
-        filled_at     = case when matched_heads + p_matched_heads >= target_heads then now() else filled_at end,
-        updated_at    = now()
-    where id = p_pool_id;
+    -- deal = явный бид МПК (p_price_per_kg), иначе бид строки; не ниже ask (пол).
+    v_deal := coalesce(p_price_per_kg, v_line.bid);
+    if v_batch.farmer_price_per_kg is not null and v_deal < v_batch.farmer_price_per_kg then
+        raise exception 'BID_BELOW_ASK: bid % < farmer ask %', v_deal, v_batch.farmer_price_per_kg
+            using errcode = 'P0007';
+    end if;
 
     update public.batches
-    set status = 'matched', matched_at = now(), updated_at = now()
+    set status = 'matched', pool_line_id = v_line.pl_id, deal_price_per_kg = v_deal,
+        matched_at = now(), updated_at = now()
     where id = p_batch_id;
 
-    return v_match_id;
+    update public.pool_lines
+    set current_volume_kg = current_volume_kg + v_vol, updated_at = now()
+    where id = v_line.pl_id;
+
+    update public.pools
+    set matched_heads = matched_heads + v_heads, updated_at = now()
+    where id = p_pool_id;
+
+    -- снять прочие висящие офферы на эту партию (FCFS)
+    update public.offers set status = 'withdrawn', responded_at = now()
+    where batch_id = p_batch_id and status = 'pending';
+
+    -- auto-close по головам → closed_filled + matched-партии пула → confirmed
+    if (v_pool.matched_heads + v_heads) >= v_pool.target_heads then
+        update public.pools set status = 'closed_filled', completed_at = now(),
+            mpk_contact_revealed_at = coalesce(mpk_contact_revealed_at, now()), updated_at = now()
+        where id = p_pool_id and status = 'filling';
+        if found then
+            update public.batches b
+            set status = 'confirmed', confirmed_at = now(), updated_at = now()
+            from public.pool_lines pl
+            where pl.pool_id = p_pool_id and b.pool_line_id = pl.id and b.status = 'matched';
+        end if;
+    end if;
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (p_batch_id, 'matched',
+        jsonb_build_object('pool_id', p_pool_id, 'pool_line_id', v_line.pl_id,
+                           'via', 'manual_match', 'deal_price_per_kg', v_deal),
+        public.fn_current_user_id());
+
+    return v_line.pl_id;
 end;
 $$;
-comment on function public.rpc_self_match_batch_to_pool(uuid, uuid, int) is
-    'КАНОН d02 | Слайс 6 | Ручной оффер МПК: матчит published-партию в свой пул.
-     Снапшот реф.цены/сорта/SKU в pool_matches (без status-колонки). Партия → matched.
-     Гейт «пул моей org» (через pool_request). Контакты НЕ раскрываются (D40).';
-revoke execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int) from anon;
-grant  execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int) to authenticated;
+comment on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) is
+    'КАНОН d02 | Конвергенция B3 | Ручной матч МПК: published|offering-партию → matched
+     в свой пул при p_price_per_kg (бид МПК, >= ask). deal=бид (D-M6-DEALPRICE), pool_line_id;
+     висящие офферы снимаются (FCFS); auto-close по головам → confirmed. Гейт pools.organization_id.';
+revoke execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) from anon;
+grant  execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) to authenticated;
 
 
 -- ============================================================
@@ -995,7 +1223,6 @@ declare
     v_pool     public.pools%rowtype;
     v_req      public.pool_requests%rowtype;
     v_revealed boolean;
-    v_delivered boolean;
 begin
     select * into v_pool from public.pools where id = p_pool_id;
     if not found then raise exception 'POOL_NOT_FOUND' using errcode = 'P0002'; end if;
@@ -1004,30 +1231,33 @@ begin
         raise exception 'FORBIDDEN: pool not owned by current user' using errcode = 'P0001';
     end if;
 
-    v_revealed  := v_pool.mpk_contact_revealed_at is not null;
-    v_delivered := v_pool.status in ('delivered','executed');
+    v_revealed := v_pool.mpk_contact_revealed_at is not null;
 
     return (
         select coalesce(jsonb_agg(
             jsonb_build_object(
-                'matchId',   pm.id,
-                'batchId',   pm.batch_id,
+                'matchId',   b.id,
+                'batchId',   b.id,
                 'cat',       public.fn_tsp_cat_display(b.notes, b.tsp_sku_id),
-                'heads',     pm.matched_heads,
+                'heads',     b.heads,
                 'avgWeight', b.avg_weight_kg,
-                'price',     pm.reference_price_at_match,
+                'price',     b.deal_price_per_kg,
                 'region',    coalesce(public.fn_tsp_meta(b.notes)->>'district', coalesce(r.name_ru, '')),
-                'status',    case when v_delivered then 'delivered' else 'active' end,
+                'status',    case when b.status = 'delivered'  then 'delivered'
+                                  when b.status = 'dispatched'  then 'dispatched'
+                                  when b.status = 'confirmed'   then 'confirmed'
+                                  else 'active' end,
                 'farmName',  case when v_revealed then o.legal_name else null end,
                 'farmPhone', case when v_revealed then o.phone     else null end
             )
-            order by pm.matched_at desc
+            order by b.matched_at desc
         ), '[]'::jsonb)
-        from public.pool_matches pm
-        join public.batches b       on b.id = pm.batch_id
+        from public.batches b
+        join public.pool_lines pl   on pl.id = b.pool_line_id
         join public.organizations o on o.id = b.organization_id
         left join public.regions r  on r.id = b.region_id
-        where pm.pool_id = p_pool_id
+        where pl.pool_id = p_pool_id
+          and b.status in ('matched','confirmed','dispatched','delivered')
     );
 end;
 $$;
@@ -1060,7 +1290,14 @@ begin
                 'region',          coalesce(r.name_ru, 'Все регионы'),
                 'targetMonthIso',  to_char(pr.target_month, 'YYYY-MM-DD'),
                 'createdAtIso',    to_char(p.created_at, 'YYYY-MM-DD'),
-                'lines',           coalesce(pr.accepted_categories, '[]'::jsonb),
+                'lines',           coalesce((
+                    select jsonb_agg(
+                        jsonb_build_object('code', pl.category_label, 'price', pl.mpk_price_per_kg)
+                        order by pl.mpk_price_per_kg desc
+                    )
+                    from public.pool_lines pl
+                    where pl.pool_id = p.id and pl.is_active = true
+                ), '[]'::jsonb),
                 'contactRevealed', (p.mpk_contact_revealed_at is not null)
             )
             order by p.created_at desc
@@ -1130,3 +1367,285 @@ comment on function public.rpc_self_close_due_pools() is
      pool_request). filling + месяц истёк → filled (>=30%) | closed (<30%). Без pg_cron.';
 revoke execute on function public.rpc_self_close_due_pools() from anon;
 grant  execute on function public.rpc_self_close_due_pools() to authenticated;
+
+
+-- ============================================================
+-- 19. rpc_self_accept_offer — МПК принимает broadcast-оффер (FCFS). Self-serve
+-- (org через fn_my_org_ids). deal = бид строки пула >= offered ask (D-M6-DEALPRICE),
+-- сиблинг-офферы → withdrawn. Партия offering → matched; auto-close по головам.
+-- ВАЖНО: consumer broadcast-пути из §10; UI «входящих офферов» появится в Слайсе C.
+-- ============================================================
+create or replace function public.rpc_self_accept_offer(p_offer_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_offer public.offers%rowtype;
+    v_batch public.batches%rowtype;
+    v_grade text;
+    v_vol   int;
+    v_line  record;
+begin
+    if public.fn_current_user_id() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = 'P0001';
+    end if;
+
+    select * into v_offer from public.offers where id = p_offer_id for update;
+    if not found then raise exception 'OFFER_NOT_FOUND' using errcode = 'P0002'; end if;
+    if not (v_offer.mpk_org_id = any (public.fn_my_org_ids())) then
+        raise exception 'FORBIDDEN: offer belongs to another MPK' using errcode = 'P0001';
+    end if;
+    if v_offer.status <> 'pending' then
+        raise exception 'INVALID_STATUS: offer is %', v_offer.status using errcode = 'P0003';
+    end if;
+    if v_offer.expires_at < now() then
+        update public.offers set status = 'expired' where id = p_offer_id;
+        raise exception 'OFFER_EXPIRED' using errcode = 'P0004';
+    end if;
+
+    select * into v_batch from public.batches where id = v_offer.batch_id for update;
+    if not found then raise exception 'BATCH_NOT_FOUND' using errcode = 'P0005'; end if;
+    if v_batch.status <> 'offering' then
+        raise exception 'INVALID_STATUS: batch is % (must be offering)', v_batch.status using errcode = 'P0006';
+    end if;
+
+    v_grade := public.fn_tsp_batch_grade(v_batch.id);
+    v_vol   := coalesce(v_batch.heads * v_batch.avg_weight_kg, 0)::int;
+
+    -- лучшая строка МПК: бид >= offered ask, сорт/окно/регион/ёмкость
+    select pl.id as pl_id, pl.pool_id as pool_id, pl.mpk_price_per_kg as bid,
+           p.target_heads as target_heads, p.matched_heads as matched_heads
+      into v_line
+    from public.pool_lines pl
+    join public.pools p          on p.id = pl.pool_id
+    join public.pool_requests pr on pr.id = p.pool_request_id
+    where p.status = 'filling'
+      and p.organization_id = v_offer.mpk_org_id
+      and pl.is_active = true
+      and pl.mpk_price_per_kg >= v_offer.offered_price_per_kg
+      and public.fn_tsp_grade_for_mpk_key(pl.category_label) = v_grade
+      and (pl.max_volume_kg is null or pl.current_volume_kg + v_vol <= pl.max_volume_kg)
+      and (p.delivery_from is null or v_batch.ready_to   is null or p.delivery_from <= v_batch.ready_to)
+      and (p.delivery_to   is null or v_batch.ready_from is null or p.delivery_to   >= v_batch.ready_from)
+      and (pr.region_id is null
+           or pr.region_id = v_batch.region_id
+           or pr.region_id = (select parent_id from public.regions where id = v_batch.region_id))
+    order by pl.mpk_price_per_kg desc
+    limit 1
+    for update;
+    if not found then
+        raise exception 'NO_MATCHING_POOL_LINE: raise a pool line bid >= ask % first', v_offer.offered_price_per_kg
+            using errcode = 'P0007';
+    end if;
+
+    update public.offers
+    set status = 'accepted', responded_at = now(), responded_by = public.fn_current_user_id()
+    where id = p_offer_id;
+    update public.offers
+    set status = 'withdrawn', responded_at = now()
+    where batch_id = v_offer.batch_id and id <> p_offer_id and status = 'pending';
+
+    update public.batches
+    set status = 'matched', pool_line_id = v_line.pl_id, deal_price_per_kg = v_line.bid,
+        matched_at = now(), updated_at = now()
+    where id = v_batch.id;
+
+    update public.pool_lines
+    set current_volume_kg = current_volume_kg + v_vol, updated_at = now()
+    where id = v_line.pl_id;
+
+    update public.pools
+    set matched_heads = matched_heads + v_batch.heads, updated_at = now()
+    where id = v_line.pool_id;
+
+    if (v_line.matched_heads + v_batch.heads) >= v_line.target_heads then
+        update public.pools set status = 'closed_filled', completed_at = now(),
+            mpk_contact_revealed_at = coalesce(mpk_contact_revealed_at, now()), updated_at = now()
+        where id = v_line.pool_id and status = 'filling';
+        if found then
+            update public.batches b
+            set status = 'confirmed', confirmed_at = now(), updated_at = now()
+            from public.pool_lines pl
+            where pl.pool_id = v_line.pool_id and b.pool_line_id = pl.id and b.status = 'matched';
+        end if;
+    end if;
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (v_batch.id, 'offer_accepted',
+        jsonb_build_object('offer_id', p_offer_id, 'pool_id', v_line.pool_id,
+                           'pool_line_id', v_line.pl_id, 'deal_price_per_kg', v_line.bid),
+        public.fn_current_user_id());
+
+    return jsonb_build_object('batchId', v_batch.id, 'poolId', v_line.pool_id,
+                              'poolLineId', v_line.pl_id, 'dealPrice', v_line.bid);
+end;
+$$;
+comment on function public.rpc_self_accept_offer(uuid) is
+    'КАНОН d02 | Конвергенция B3 | МПК принимает broadcast-оффер (FCFS): партия offering →
+     matched, deal=бид строки >= offered ask (D-M6-DEALPRICE); сиблинг-офферы withdrawn;
+     auto-close по головам → confirmed. Гейт offer.mpk_org_id ∈ fn_my_org_ids().';
+revoke execute on function public.rpc_self_accept_offer(uuid) from anon;
+grant  execute on function public.rpc_self_accept_offer(uuid) to authenticated;
+
+
+-- ============================================================
+-- 20. rpc_get_incoming_offers — Слайс C: входящие broadcast-офферы моего МПК.
+-- Только pending + не истёкшие. Характеристики партии БЕЗ личности фермера
+-- (D-M6-12: раскрытие при confirmed). Анонимная репутация (★) — TODO (нет агрегата).
+-- Гейт offer.mpk_org_id ∈ fn_my_org_ids().
+-- ============================================================
+create or replace function public.rpc_get_incoming_offers()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+    if public.fn_current_user_id() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = 'P0001';
+    end if;
+    return (
+        select coalesce(jsonb_agg(
+            jsonb_build_object(
+                'id',           o.id,
+                'batchId',      b.id,
+                'cat',          public.fn_tsp_cat_display(b.notes, b.tsp_sku_id),
+                'breed',        coalesce(public.fn_tsp_meta(b.notes)->>'breed', ''),
+                'heads',        b.heads,
+                'avgWeight',    b.avg_weight_kg,
+                'region',       coalesce(public.fn_tsp_meta(b.notes)->>'district', coalesce(r.name_ru, '')),
+                'windowLabel',
+                    case when b.ready_from is not null and b.ready_to is not null
+                         then to_char(b.ready_from, 'DD Mon') || ' — ' || to_char(b.ready_to, 'DD Mon')
+                         else to_char(b.target_month, 'TMMonth YYYY') end,
+                'offeredPrice', o.offered_price_per_kg,
+                'expiresAtIso', to_char(o.expires_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+                'status',       o.status
+            )
+            order by o.expires_at asc
+        ), '[]'::jsonb)
+        from public.offers o
+        join public.batches b      on b.id = o.batch_id
+        left join public.regions r on r.id = b.region_id
+        where o.mpk_org_id = any (public.fn_my_org_ids())
+          and o.status = 'pending'
+          and o.expires_at > now()
+    );
+end;
+$$;
+comment on function public.rpc_get_incoming_offers() is
+    'КАНОН d02 | Слайс C | Входящие broadcast-офферы моего МПК (pending, не истёкшие):
+     характеристики партии БЕЗ личности фермера (D-M6-12). Гейт fn_my_org_ids().';
+revoke execute on function public.rpc_get_incoming_offers() from anon;
+grant  execute on function public.rpc_get_incoming_offers() to authenticated;
+
+
+-- ============================================================
+-- 21. rpc_self_reject_offer — Слайс C: МПК отклоняет broadcast-оффер. pending→rejected.
+-- Имя rpc_self_* (не rpc_reject_offer из d02 (uuid,uuid)) — избегаем PGRST203-перегрузки.
+-- Гейт offer.mpk_org_id ∈ fn_my_org_ids().
+-- ============================================================
+create or replace function public.rpc_self_reject_offer(p_offer_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_offer public.offers%rowtype;
+begin
+    if public.fn_current_user_id() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = 'P0001';
+    end if;
+    select * into v_offer from public.offers where id = p_offer_id for update;
+    if not found then raise exception 'OFFER_NOT_FOUND' using errcode = 'P0002'; end if;
+    if not (v_offer.mpk_org_id = any (public.fn_my_org_ids())) then
+        raise exception 'FORBIDDEN: offer belongs to another MPK' using errcode = 'P0001';
+    end if;
+    if v_offer.status <> 'pending' then
+        raise exception 'INVALID_STATUS: offer is %', v_offer.status using errcode = 'P0003';
+    end if;
+    update public.offers
+    set status = 'rejected', responded_at = now(), responded_by = public.fn_current_user_id()
+    where id = p_offer_id;
+    return true;
+end;
+$$;
+comment on function public.rpc_self_reject_offer(uuid) is
+    'КАНОН d02 | Слайс C | МПК отклоняет broadcast-оффер: pending→rejected.
+     rpc_self_* избегает PGRST203-перегрузки с d02 rpc_reject_offer(uuid,uuid). Гейт fn_my_org_ids().';
+revoke execute on function public.rpc_self_reject_offer(uuid) from anon;
+grant  execute on function public.rpc_self_reject_offer(uuid) to authenticated;
+
+
+-- ============================================================
+-- 22. rpc_self_confirm_delivery — Слайс C: МПК подтверждает приёмку партии (BT-18,
+-- D-M6-10). dispatched→delivered + delivered_at (приёмка на уровне Batch, не Pool).
+-- Все партии пула delivered → пул completed (§7 M6-B). Имя rpc_self_* избегает
+-- PGRST203-перегрузки с d02 rpc_confirm_delivery(uuid,uuid). Гейт «пул моей org».
+-- ============================================================
+create or replace function public.rpc_self_confirm_delivery(p_batch_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_batch     public.batches%rowtype;
+    v_pool_id   uuid;
+    v_owner     uuid;
+    v_remaining int;
+begin
+    if public.fn_current_user_id() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = 'P0001';
+    end if;
+
+    select * into v_batch from public.batches where id = p_batch_id for update;
+    if not found then raise exception 'BATCH_NOT_FOUND' using errcode = 'P0002'; end if;
+
+    -- пул партии + его org (через pool_line → pool); гейт «пул моей org»
+    select po.id, po.organization_id
+      into v_pool_id, v_owner
+    from public.pool_lines pl
+    join public.pools po on po.id = pl.pool_id
+    where pl.id = v_batch.pool_line_id;
+    if v_pool_id is null then
+        raise exception 'BATCH_NOT_IN_POOL' using errcode = 'P0003';
+    end if;
+    if not (v_owner = any (public.fn_my_org_ids())) then
+        raise exception 'FORBIDDEN: pool not owned by current user' using errcode = 'P0001';
+    end if;
+    if v_batch.status <> 'dispatched' then
+        raise exception 'INVALID_STATUS: batch is % (must be dispatched)', v_batch.status using errcode = 'P0004';
+    end if;
+
+    update public.batches
+    set status = 'delivered', delivered_at = now(), updated_at = now()
+    where id = p_batch_id;
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (p_batch_id, 'delivered', jsonb_build_object('via', 'mpk', 'pool_id', v_pool_id),
+            public.fn_current_user_id());
+
+    -- все матч-партии пула доставлены → пул completed
+    select count(*) into v_remaining
+    from public.batches b
+    join public.pool_lines pl on pl.id = b.pool_line_id
+    where pl.pool_id = v_pool_id
+      and b.status in ('matched', 'confirmed', 'dispatched');
+    if v_remaining = 0 then
+        update public.pools set status = 'completed', completed_at = coalesce(completed_at, now()), updated_at = now()
+        where id = v_pool_id and status <> 'completed';
+    end if;
+
+    return true;
+end;
+$$;
+comment on function public.rpc_self_confirm_delivery(uuid) is
+    'КАНОН d02 | Слайс C | МПК подтверждает приёмку партии (BT-18, D-M6-10):
+     dispatched→delivered + delivered_at; все партии пула delivered → пул completed.
+     Гейт «пул моей org» (через pool_line→pool). rpc_self_* избегает PGRST203.';
+revoke execute on function public.rpc_self_confirm_delivery(uuid) from anon;
+grant  execute on function public.rpc_self_confirm_delivery(uuid) to authenticated;

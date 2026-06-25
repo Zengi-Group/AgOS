@@ -1,5 +1,7 @@
 # SPRINT STATUS — AgOS
 
+> ⚠️ **RETIRED 2026-06-24.** Текущий статус проекта теперь живёт в `apex-brain/projects/agos/_project.md` (раздел «Сейчас») — по закону мозга статус = компиляция из Linear+разговора в ОДНОМ доме (P4). Актуальная работа — в Linear (команда ARS). Этот файл сохранён для истории фаз и НЕ обновляется.
+
 > Maintained by: Architect (planning/sign-off), DB Agent (after SQL), Backend Agent (after code), UI Agent (after UI)
 > Last updated: 2026-06-23 (ADR-CABINET-SHELL-01 — новый мобильный кабинет интегрирован на ветке `feat/cabinet-shell-tsp`)
 

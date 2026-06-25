@@ -3019,3 +3019,96 @@ end if;
 **Verification**: `cross_check.sh` 0/0/0; two adversarial code reviews (opus) → SOUND. Runtime FSM happy-path test authored (rollback tx). DEPLOYED to `mwtbozflyldcadypherr` 2026-06-23 via `deploy_tsp_matchfix.py` (targeted CREATE OR REPLACE in ONE tx); all three functions verified via `pg_get_functiondef` markers. E2E rollback-test blocked: prod `rpc_create_batch` is old signature (d07_ai_gateway.sql not yet applied to prod).
 
 **Out of scope (next Phase-2 slices)**: downstream `confirmed → dispatched → delivered`; offer-expiry → `awaiting_price_decision`; legacy `rpc_match_batch_to_pool` fate; cancel from `offering`; supply-stats to include `offering`.
+
+---
+
+### 2026-06-23: TSP-CONVERGENCE Slice A + B (D-TSP-CANON-01 / D-TSP-MATCH-01)
+
+**What**: Began the TSP convergence — bringing code in line with D-TSP-CANON-01 (adapter = single canonical trade layer) + D-TSP-MATCH-01 (adapter matching → MS4/MS6). Sequenced A→B→C→D with QA gate per slice (CEO call); uuid retire only in D after a green test.
+
+- **Slice A — cross_check + deploy mine (shipped, code only)**: `cross_check.sh` now scans the adapter migration (`SQL_FILES`); intentional overrides `rpc_create_batch`/`rpc_get_org_batches`/`rpc_cancel_batch` whitelisted (CHECK 1); self-serve `rpc_self_*` excepted from CHECK 5 (web-JWT class, org via `fn_my_org_ids()`) and CHECK 7 (registry entries deferred to B). New **CHECK 9 = PGRST203 overload guard**: fails while a canonical-d-file sig AND the adapter sig of the same name coexist; goes green once the canonical sig is retired in D → mine cannot be re-armed silently. Discovery: the overload set is **three** functions, not two — `rpc_cancel_batch` (d02 3-arg `org,batch,reason` vs adapter 1-arg `batch`) joins `rpc_create_batch`/`rpc_get_org_batches`. cross_check = 0 critical / 3 significant (the 3 mine markers, resolved in D).
+- **Slice B — port MS4/MS6 matching into the adapter (DEPLOYED + verified)**: matcher = **auto-match-at-publish + broadcast fallback** (CEO: canon BT-05). Edits to `supabase/migrations/20260622120000_tsp_canonical_rebind.sql`:
+  - `rpc_create_batch`: persist `p_price → farmer_price_per_kg` (ask=floor) + structural `ready_from/ready_to` (D-M6-6); notes kept for UI.
+  - `rpc_self_activate_pool_request`: create structural `pool_lines` (`mpk_price_per_kg` = bid) + pool `delivery_from/to`; auto-close head-based (`total_target_volume_kg`=NULL).
+  - `rpc_self_auto_match_batch` (rewrite): bid≥ask eligibility, window overlap, region (via `pool_requests.region_id`, null=all/parent), capacity; **deal = highest bid (`ORDER BY mpk_price_per_kg DESC`), D-M6-DEALPRICE**; auto-close → `closed_filled` + batches → `confirmed`; no-match → broadcast `offers` (offered=ask) → batch `offering`.
+  - `rpc_self_match_batch_to_pool` (+`p_price_per_kg`, **dropped old 3-arg sig** to avoid a new PGRST203 overload): manual MPK direct match at bid≥ask from `published|offering`; withdraws pending offers (FCFS).
+  - new `rpc_self_accept_offer` (FCFS): batch `offering`→`matched`, deal=line bid, sibling offers `withdrawn`.
+  - new helper `fn_tsp_batch_grade`; reads repointed to canon: `fn_tsp_batch_json.dealPrice ← deal_price_per_kg` + state map for offering/confirmed/etc; `rpc_get_pool_matches` ← `batches.pool_line_id`; `rpc_get_my_pools.lines` ← `pool_lines`; market board `minPrice ← farmer ask`, includes `offering`. **topBid NOT shown to MPKs** (Art.171 §8 — MPKs must not see each other's bids).
+  - UI point-fix: `BatchDetailModal.tsx` + `MpkApp.tsx` thread `offerNum` → `p_price_per_kg`.
+  - **Matching model is a hybrid**: kept adapter's grade-based eligibility (`fn_tsp_grade_for_mpk_key(pool_line.category_label) = batch grade`) because MPK bids by category-code, not SKU; layered canon's bid/overlap/deal/FCFS on top.
+
+**Why**: D-TSP-CANON-01 + D-TSP-MATCH-01 (decisions on paper) needed execution. Prod schema verified (`pools.organization_id` NOT NULL **confirmed live** — closes the stale migration-header contradiction; all M4/M6 columns present). Census: 0 pools/offers/pool_lines/pool_matches, 0 matched batches → **no in-flight data, no backfill needed**.
+
+**Files**: `cross_check.sh`, `supabase/migrations/20260622120000_tsp_canonical_rebind.sql`, `src/pages/cabinet/shell/mpk/MpkApp.tsx`, `src/pages/cabinet/shell/mpk/modals/BatchDetailModal.tsx`.
+
+**Verification**: `cross_check.sh` 0 critical (3 significant = CHECK 9 mine markers). `tsc -b` = 0. Functional tests on prod `mwtbozflyldcadypherr` in **rollback transactions** (nothing persisted, confirmed): auto-match deal=highest-bid (1600 vs ask 1500); broadcast→offering+offer=ask; FCFS accept deal=line-bid (1700) + sibling withdrawn; ask/window persist; pool_lines from bids; read-path shapes. **DEPLOYED** via targeted `CREATE OR REPLACE` in one tx + `NOTIFY pgrst,'reload schema'`; post-deploy smoke against the live function = matched, deal=bid. Signatures verified (`rpc_self_match_batch_to_pool` now 4-arg only).
+
+**Deferred**: **B4** (`rpc_lower_price` real clamp + 100₸ step-down + re-broadcast) → **C** (pairs with the offer-expiry producer; `awaiting_price_decision` is unreachable until C). **Slice C**: offer-expiry/deadline producer (no pg_cron) + MPK "incoming offers" inbox UI (broadcast/`rpc_self_accept_offer` are backend-ready but UI-unwired); `confirmed→dispatched→delivered` FSM; contact-reveal moved to `confirmed` (canon M6 D-M6-5/12; adapter+CLAUDE.md currently `executing`). **Slice D**: retire uuid/canonical dups (3 overloads incl `rpc_cancel_batch`), repoint AI Gateway callers off d07 `rpc_create_batch(uuid)` first, make deploy order d→adapter executable, fix d02 `rpc_accept_offer` event/return deal-price (column=bid but events/return=ask — under-reports). Art.171 disclaimer on returned ask/bid surfaces consciously deferred by CEO.
+
+---
+
+### 2026-06-23: TSP-CONVERGENCE Slice C — downstream FSM, offer-expiry producer, MPK inbox, reveal→confirmed
+
+**What**: Closed the Slice C scope deferred from B. All SQL in the adapter migration (`supabase/migrations/20260622120000_tsp_canonical_rebind.sql`, CREATE OR REPLACE — **no DDL**, deployed schema already allows every status/column). New adapter RPCs deliberately named `rpc_self_*` / `rpc_get_incoming_offers` to **avoid new PGRST203 overloads** with the deployed d02/d07 canon sigs `rpc_confirm_delivery(uuid,uuid)` / `rpc_reject_offer(uuid,uuid)` / `rpc_lower_batch_price(uuid,uuid,int)` / `rpc_confirm_dispatch(uuid,uuid)` (all confirmed live, 1 overload each).
+
+- **B4 — `rpc_lower_price`** (was no-op "ст.171 цена упразднена"): real clamp+step-down (D-TSP-MATCH-01 reversal — farmer sets ask). Clamps direction only: `new = least(round(p_new_price), current − tsp_config.price_step_down_amount)`, floor `>0`; the `minimum_price` stop-rule stays a frontend soft-warn (D-M6-3 "farmer may go below manually", via `protPrice`); batch → `published` for re-broadcast (frontend then calls `rpc_self_auto_match_batch`).
+- **Offer-expiry producer — `rpc_self_review_due_batches`** (was no-op): self-serve sweep (no pg_cron, pattern = `rpc_self_close_due_pools`; farmer-shell already polls it). Own `offering` batches with no live pending offer (`expires_at` elapsed) → offers `pending→expired`, batch `offering→awaiting_price_decision` (BT-09), event `offer_window_expired`. **This is what makes `awaiting_price_decision` reachable** (dead since B).
+- **`fn_tsp_batch_json`** state-map fixed so the farmer sees the states: `offering→'offering'`, `awaiting_price_decision→'decision'`, `dispatched→'dispatched'` (were collapsed to published/confirmed); added real `deadlineLabel` (max pending-offer `expires_at`) and `buyer/buyerPhone` (gated on `mpk_contact_revealed_at`, D-M6-5 reveal to farmer).
+- **Contact reveal moved to `confirmed`** (D-M6-5/12): `mpk_contact_revealed_at = coalesce(…, now())` now set in all 3 pool→`closed_filled` blocks (`rpc_self_auto_match_batch`, `rpc_self_match_batch_to_pool`, `rpc_self_accept_offer`), not at `executing`. Supersedes old D40. `Docs/CLAUDE.md` Data Isolation bullet updated to agree (conflict resolved both-ways per project rule).
+- **`rpc_dispatch_batch`** (was notes-only no-op): real `confirmed→dispatched` + `dispatched_at` (BT-16, farmer authority).
+- new **`rpc_self_confirm_delivery`** (BT-18): MPK confirms receipt per batch `dispatched→delivered`; all pool batches delivered → pool `completed`. Gate "pool of batch owned by caller" (pool_line→pool→pool_request).
+- new **`rpc_get_incoming_offers`**: MPK's pending+unexpired broadcast offers with batch characteristics, **no farmer identity** (D-M6-12). Anonymous reputation (★) = TODO (no aggregate view yet).
+- new **`rpc_self_reject_offer`**: `pending→rejected`.
+- `rpc_get_pool_matches`: split status `dispatched` out of `confirmed` (приёмка UI shows "в пути").
+
+**Frontend**: new MPK "Входящие офферы" screen (`mpk/screens/MpkIncomingOffersScreen.tsx` + `mpk/data/offers-load.ts`) wired into `MpkApp.tsx` (route + accept/reject handlers + 20s polling) with entry+counter on `MpkHomeScreen.tsx`; приёмка in `PoolMonitorModal.tsx` wired to `rpc_self_confirm_delivery` (real pools), reveal copy moved to pool-close; `pools-load.ts` `mapStatus` handles canon statuses (`closed_filled`/`closed_partial`/`completed`) so auto-closed pools reach приёмка, `toSupplier` maps `dispatched→in_transit`; farmer `BatchScreen.tsx` renders buyer on reveal. Farmer lower-price/dispatch paths were already wired in `useBatches.ts` — backend just made real.
+
+**Why**: B left B4/expiry/inbox/downstream-FSM/reveal as the C slice. `awaiting_price_decision` + the farmer decision screen were dead until the producer existed; the MPK could receive broadcasts but had no UI to act on them.
+
+**Files**: `supabase/migrations/20260622120000_tsp_canonical_rebind.sql`; `cross_check.sh` (3 new RPCs added to CHECK 5/7 self-serve exception lists, same class as existing adapter `rpc_self_*`); `Docs/CLAUDE.md` (Data Isolation reveal bullet); `src/pages/cabinet/shell/mpk/{MpkApp.tsx, types.ts, screens/MpkIncomingOffersScreen.tsx, screens/MpkHomeScreen.tsx, data/offers-load.ts, data/pools-load.ts, modals/PoolMonitorModal.tsx}`; `src/pages/cabinet/shell/screens/BatchScreen.tsx`.
+
+**Verification**: `tsc -b` = 0; `npm run build` = 0. **DEPLOYED** to `mwtbozflyldcadypherr` 2026-06-23 — 11 functions via targeted `CREATE OR REPLACE` (MCP, same pattern as B). Verified: each touched name has exactly **1 overload** (no new PGRST203); d02/d07 canon sigs coexist under distinct names. `fn_tsp_batch_json` smoke on a live `published` batch → correct `state`, `buyer=null`, `deadlineLabel=null`. `cross_check.sh` = **0 critical / 3 significant** (unchanged from B = the 3 PGRST203 mine markers → Slice D). Census: 5 batches `published`, 0 pools/offers → no backfill. Write-path E2E (rollback tx with JWT-claim) deferred to the `tsp_happy_path_test.sql` harness to avoid mutating live data.
+
+**Deferred / Slice D unchanged**. **Slice C tails**: anonymous reputation (★) in inbox (needs aggregate view); register adapter `rpc_self_*` in `rpc_name_registry` (currently excepted in cross_check, not registered — applies to the whole adapter family, not just C); stale comment on `rpc_self_advance_pool_status` (still says "executing → reveal (D40)" — now a redundant idempotent fallback).
+
+---
+
+### 2026-06-24: Feature-flow orchestrator (/feature) + аддитивная миграция к двухвысотной модели замысла
+
+**What**: Засеян дирижёр `/feature` (`.claude/skills/feature/SKILL.md`) — 8 якорей / 3 гейта, режим C (механика на автопилоте, смысл — гейт). Дирижёр координирует, делегирует существующим агентам (architect/db/backend/ui/qa), не заменяет их. Формализован контракт инженерного спека (`Docs/_templates/eng-spec-slice.md`). Зафиксированы: две высоты замысла (Brain `specs/<feature>.md` = синтез+указатель; `Docs/` = детальный eng-spec, graphify-индексируемый) и сборка run-промта на старте из Brain+живой Graphify (вариант B, Linear хранит указатель+критерии, не копию).
+
+**Why**: Систематизировать и автоматизировать процесс разработки (цель ×100 без потери качества). Главный структурный долг — размазанный слой замысла (7 Dok + Microsteps + DECISIONS + IMPL_DEBT, ручная склейка) рвётся на скорости первым; мигрируем к двухвысотной модели **аддитивно** (новые фичи сразу по модели, старые Doks по касанию — не big-bang). Все прошлые регрессии (HS-1…6) случались, когда автомат проскакивал смысловой гейт → механику автоматизируем, смысл оставляем за человеком.
+
+**Files**: `.claude/skills/feature/SKILL.md`, `Docs/_templates/eng-spec-slice.md` (канон процесса — `apex-brain/patterns/feature-flow.md`, `apex-brain/index.md`).
+
+**Follow-up (next slices)**: Linear create через MCP; авто-забор задачи на «ready for development»; ambient-хуки; тирование задач (mechanical→агент / semantic→человек) + ассистированный гейт (сжатый diff+флаги). Аддитивная консолидация Doks по касанию.
+
+---
+
+### 2026-06-24: Linear подстроен под feature-flow (6 колонок задач + tier-лейблы)
+
+**What**: Linear-MCP подключён (scope read+write). Команда `ARS` реструктурирована под `/feature`: 6 колонок задач `Backlog → Spec & Design → Ready for Dev → In Progress → In Review → Done` (`Todo` переименован в `Ready for Dev`, id сохранён → задачи целы; добавлен `Spec & Design`). Лейблы `tier:mechanical`/`tier:semantic` (маршрут якоря 6: агент/человек) + `needs-decision` (застрял на гейте). `/feature` anchor 2 привязан к воркспейсу (team ARS, роутинг по AgOS-проектам инициативы «AgOS — Цифровая платформа экосистемы», статус-флоу). Write-path проверен вживую: ARS-93 create → Ready for Dev → tier:mechanical → Canceled через API.
+
+**Why**: follow-up #1 из feature-flow — автоматизировать якорь 2 (завод задачи). Колонки = границы якорей/гейтов, видимые на доске.
+
+**Files**: `.claude/skills/feature/SKILL.md` (коммиты `b86e6f5`, `5bb0a15`).
+
+**Граница API**: статусы и команды Linear создаются ТОЛЬКО в UI (не через MCP). Ambient auto-pickup (Linear-статус → headless-прогон) требует внешнего триггера (cron-поллинг или webhook→CI) = follow-up #2.
+
+---
+
+### 2026-06-24: TSP M6-A фермерский flow — E2E доказан (write-path), IMPL_DEBT реконсилирован, найден TSP-FLOW-07
+
+**What**: Первый боевой прогон `/feature` («реализовать flow продажи скота фермерам»). Аудит вскрыл: flow ~95% построен и задеплоен (Slice A/B/C, 2026-06-22..23) — IMPL_DEBT (аудит 2026-06-22) был устаревшим. Закрыт долгожданный **write-path E2E** (был отложен под `tsp_happy_path_test.sql`): прогон через SQL rollback-tx на проде `mwtbozflyldcadypherr` (ноль персистентных мутаций, JWT-симуляция через `set_config('request.jwt.claims',...)` — `fn_my_org_ids` читает `app_metadata.org_ids`).
+
+**Доказано E2E**: `rpc_create_batch(uuid)` → `rpc_set_batch_terms` → `rpc_publish_batch` → `published` → `rpc_create_pool`+`rpc_publish_pool` → broadcast → **`offering`** → `rpc_accept_offer` → **`confirmed`**, `deal_price=1300=бид` (D-M6-DEALPRICE, не ask=1200); reveal-render корректен (`fn_tsp_batch_json.buyer` = `<null>` пока `mpk_contact_revealed_at` null, → "Админ" после set; gate сходится D-M6-5/12); `rpc_dispatch_batch` → **`dispatched`**; `rpc_self_confirm_delivery` → **`delivered`**; adapter `rpc_create_batch(text-sig)` → **`published`**.
+
+**Найденный дефект — TSP-FLOW-07**: canon `rpc_accept_offer` при auto-close НЕ ставит `mpk_contact_revealed_at` (adapter `rpc_self_accept_offer`/`rpc_self_auto_match_batch` — ставят). Пул, закрытый по canon-пути, не раскрывает покупателя фермеру. Фермерский UI идёт adapter-путём (раскрытие работает), поэтому edge; фикс аддитивный (одна строка в auto-close блоке, P7-safe). Добавлен в IMPL_DEBT.
+
+**Adversarial reconcile**: два audit-субагента над-репортили «критические блокеры» (buyer reveal missing / publish-dispatch-delivery RPC missing / offer-expiry cron missing / farmer_price не хранится / 5-state UI). Все опровергнуты прямой интроспекцией прода + чтением деплойных тел: reveal gated в `fn_tsp_batch_json`; `rpc_publish_batch`/`rpc_dispatch_batch`/`rpc_self_confirm_delivery` есть; offer-expiry = poll-driven `rpc_self_review_due_batches`; `farmer_price_per_kg` колонка читается; `status.ts` уже на 11 состояниях. Урок: AST-аудит без живой интроспекции врёт — нужна сверка с реальностью.
+
+**IMPL_DEBT реконсилирован**: TSP-FLOW-01/05, TSP-SCHEMA-02, MARKET-UI-02 = verified-closed (Slice C); TSP-FLOW-03 = partial (окна есть, farmer_price хранится). См. блок реконсиляции в шапке IMPL_DEBT.md.
+
+**Остаток**: preview-UI прогон (фронтовая половина G2-метода); Art.171 явная цитата на шаге цены (формулировка за ARS-10 / D-LEGAL-1); TSP-FLOW-07 фикс; Slice D (3 overload-дубля + AI-repoint + deploy-order).
+
+**Files**: `apex-brain/projects/agos/specs/tsp-farmer-sell-flow.md` (синтез, status=building), `apex-brain/index.md` + `log.md`; `IMPL_DEBT.md` (реконсиляция + TSP-FLOW-07); Linear ARS-94 (epic) + sub-tasks. Кода в репо НЕ менял (только записи). E2E = read-only/rollback, прод не мутирован.

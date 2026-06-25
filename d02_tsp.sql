@@ -2846,6 +2846,7 @@ begin
         update public.pools
         set status       = 'closed_filled',
             completed_at = now(),
+            mpk_contact_revealed_at = coalesce(mpk_contact_revealed_at, now()),  -- TSP-FLOW-07: reveal MPK to farmer at confirmed (D-M6-5/12); mirrors rpc_self_accept_offer
             updated_at   = now()
         where id = v_pool_id
           and status = 'filling';
