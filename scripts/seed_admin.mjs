@@ -10,8 +10,8 @@
 //   node scripts/seed_admin.mjs
 //
 // Требуется СЕРВЕРНЫЙ service-role ключ (НЕ VITE_*). Берётся из .env / .env.production
-// или из process.env. Значения логина/пароля можно переопределить через окружение:
-//   ADMIN_EMAIL=admin@agos.local  ADMIN_PASSWORD=adminagos123
+// или из process.env. Логин/пароль задаются через окружение (НЕ хардкодить в репо):
+//   ADMIN_EMAIL=admin@agos.local  ADMIN_PASSWORD=<надёжный-пароль>
 //
 // ВАЖНО: пароль НЕ попадает в браузерный бандл. Его вводит человек на форме /admin/login.
 // Этот скрипт использует service-role ключ, который живёт только на сервере/локально.
@@ -42,7 +42,9 @@ const env = { ...loadEnv('.env.production'), ...loadEnv('.env'), ...process.env 
 const url = env.SUPABASE_URL || env.VITE_SUPABASE_URL
 const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY
 const adminEmail = (env.ADMIN_EMAIL || 'admin@agos.local').toLowerCase()
-const adminPassword = env.ADMIN_PASSWORD || 'adminagos123'
+// Без дефолтного пароля: захардкоженный пароль в репо = известный креденшл супер-админа.
+// Пароль задаётся только локально через ADMIN_PASSWORD (.env, gitignored) или окружение.
+const adminPassword = env.ADMIN_PASSWORD || ''
 
 if (!url) {
   console.error('Нет SUPABASE_URL / VITE_SUPABASE_URL в .env')
@@ -50,6 +52,10 @@ if (!url) {
 }
 if (!serviceKey) {
   console.error('Нет SUPABASE_SERVICE_ROLE_KEY в .env (серверный ключ, без префикса VITE_).')
+  process.exit(1)
+}
+if (adminPassword.length < 8) {
+  console.error('Нет ADMIN_PASSWORD в .env (мин. 8 символов). Задайте надёжный пароль перед запуском сида.')
   process.exit(1)
 }
 
