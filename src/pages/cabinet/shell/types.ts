@@ -57,6 +57,7 @@ export interface Batch {
   id: string
   state: string
   cat?: string
+  grade?: string | null   // сорт VS/S/NS из fn_tsp_batch_grade — для паритета с закупкой МПК
   breed?: string
   heads?: number
   avgWeight?: number

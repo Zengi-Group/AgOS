@@ -109,6 +109,14 @@ export function catLabel(b: Batch): string {
   return b.cat ? (CATS[b.cat]?.name ?? 'Партия') : 'Черновик партии'
 }
 
+// Сорт партии (КРС · Высшая/Первая/Вторая) — тот же, по которому закупает МПК.
+// Коды VS/S/NS приходят из fn_tsp_batch_grade. null/неизвестный → не показываем.
+const GRADE_RU: Record<string, string> = { VS: 'Высшая', S: 'Первая', NS: 'Вторая' }
+export function gradeLabel(b: Batch): string | null {
+  const ru = b.grade ? GRADE_RU[b.grade] : undefined
+  return ru ? `КРС · ${ru}` : null
+}
+
 // Защитная цена категории (для DecisionActions / BatchPriceSheet)
 export function protPrice(b: Batch): number | null {
   return b.cat ? (CATS[b.cat]?.prot ?? null) : null

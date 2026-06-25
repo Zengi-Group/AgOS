@@ -365,6 +365,10 @@ begin
     select jsonb_build_object(
         'id',         b.id,
         'cat',        public.fn_tsp_cat_display(b.notes, b.tsp_sku_id),
+        -- Сорт партии (VS/S/NS) — тот же, по которому матчится закупка МПК
+        -- (fn_tsp_grade_for_mpk_key). Фронт показывает его фермеру для паритета
+        -- с логикой покупки. null = сорт ещё не присвоен (нет SKU/grade).
+        'grade',      public.fn_tsp_batch_grade(b.id),
         'breed',      coalesce(meta->>'breed', ''),
         'heads',      b.heads,
         'avgWeight',  b.avg_weight_kg,

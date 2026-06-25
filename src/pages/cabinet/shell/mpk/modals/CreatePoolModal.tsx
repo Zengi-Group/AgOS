@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { REGIONS } from '@/pages/registration/constants'
 import { Cta } from '../../components/Cta'
 import { MPK_CATS, type MpkCatKey, type Pool, type PoolLine } from '../types'
 
@@ -12,14 +13,21 @@ interface Props {
 }
 
 // Окно поставки → первый день целевого месяца (для pool_requests.target_month).
+// Строку собираем из ЛОКАЛЬНЫХ компонент: toISOString() сдвигает локальную полночь
+// 1-го числа в UTC и при положительном offset (UTC+5 в KZ) откатывает дату на конец
+// прошлого месяца → пул «Этот месяц» рождался просроченным и авто-закрывался.
 function windowToDate(key: string): string {
   const off = key === 'm1' ? 1 : key === 'm2' ? 2 : 0
-  const now = new Date()
-  const d = new Date(now.getFullYear(), now.getMonth() + off, 1)
-  return d.toISOString().slice(0, 10)
+  const d = new Date()
+  d.setMonth(d.getMonth() + off, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
 
-const REGIONS = ['ЮКО', 'Алматинская обл.', 'Жамбылская обл.', 'Все регионы']
+// Реальные области (UUID = public.regions, тот же список что в регистрации).
+// «Все области» = пустой id → p_region_id=null → пул матчится по любому региону
+// (мягкий приоритет в rpc_self_auto_match_batch). МПК может выбрать область точечно.
+const ALL_REGIONS = ''
+const REGION_OPTS = [{ id: ALL_REGIONS, name: 'Все области' }, ...REGIONS]
 const WINDOWS: { k: string; t: string }[] = [
   { k: 'm0', t: 'Этот месяц' },
   { k: 'm1', t: 'Следующий' },
@@ -31,7 +39,8 @@ const CAT_KEYS = Object.keys(MPK_CATS) as MpkCatKey[]
 export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
   const [saving, setSaving] = useState(false)
   const [totalHeads, setTotalHeads] = useState('')
-  const [region, setRegion] = useState<string>(REGIONS[0] ?? 'ЮКО')
+  const [regionId, setRegionId] = useState<string>(ALL_REGIONS)
+  const region = REGION_OPTS.find((r) => r.id === regionId)?.name ?? 'Все области'
   const [targetMonth, setTargetMonth] = useState('')
   const [lines, setLines] = useState<PoolLine[]>([{ catKey: 'vysshaya', price: 0 }])
 
@@ -76,6 +85,7 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
         p_organization_id: orgId,
         p_total_heads: heads,
         p_target_month: windowToDate(targetMonth),
+        p_region_id: regionId || null,
         p_accepted_skus: lines.map((l) => ({ code: l.catKey, price: l.price })),
         p_notes: null,
       })
@@ -120,8 +130,8 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
 
         <div>
           <div className="mpk-field-label">Регион закупа</div>
-          <select className="mpk-select" value={region} onChange={(e) => setRegion(e.target.value)}>
-            {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+          <select className="mpk-select" value={regionId} onChange={(e) => setRegionId(e.target.value)}>
+            {REGION_OPTS.map((r) => <option key={r.id || 'all'} value={r.id}>{r.name}</option>)}
           </select>
         </div>
 
