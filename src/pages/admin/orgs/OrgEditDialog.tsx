@@ -7,6 +7,8 @@ import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 import { useUpdateOrg } from '@/hooks/admin/useUpdateOrg'
 import type { AdminOrg } from '@/hooks/admin/useAdminOrgs'
+import { formatPhoneKz } from '@/lib/phone'
+import { OrgDocumentsPanel } from './OrgDocumentsPanel'
 
 interface Props {
   org: AdminOrg | null
@@ -30,7 +32,7 @@ export function OrgEditDialog({ org, open, onOpenChange }: Props) {
     setLoadedId(org.id)
     setLegalName(org.legal_name ?? '')
     setBinIin(org.bin_iin ?? '')
-    setPhone(org.phone ?? '')
+    setPhone(org.phone ? formatPhoneKz(org.phone) : '')
     setEmail(org.email ?? '')
     setAddress(org.address_text ?? '')
     setIsActive(org.is_active)
@@ -71,7 +73,7 @@ export function OrgEditDialog({ org, open, onOpenChange }: Props) {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="oe-phone">Телефон</Label>
-              <Input id="oe-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <Input id="oe-phone" inputMode="tel" value={phone} onChange={(e) => setPhone(formatPhoneKz(e.target.value))} placeholder="+7 771 085 6566" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3 items-end">
@@ -87,6 +89,10 @@ export function OrgEditDialog({ org, open, onOpenChange }: Props) {
           <div className="space-y-1.5">
             <Label htmlFor="oe-address">Адрес</Label>
             <Input id="oe-address" value={address} onChange={(e) => setAddress(e.target.value)} />
+          </div>
+
+          <div className="border-t pt-4">
+            <OrgDocumentsPanel orgId={org.id} />
           </div>
         </div>
 

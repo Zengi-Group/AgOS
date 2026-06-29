@@ -7,6 +7,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { toast } from 'sonner'
 import { useCreateUser } from '@/hooks/admin/useCreateUser'
 import { useAdminOrgs } from '@/hooks/admin/useAdminOrgs'
+import { formatPhoneKz, normalizePhoneKz } from '@/lib/phone'
 
 interface Props {
   open: boolean
@@ -39,10 +40,11 @@ export function UserCreateDialog({ open, onOpenChange }: Props) {
   }
 
   async function handleCreate() {
-    if (!phone.trim()) return toast.error('Укажите телефон')
+    const normalizedPhone = normalizePhoneKz(phone)
+    if (!normalizedPhone) return toast.error('Телефон в формате +7 771 085 6566')
     if (!/^\d{6}$/.test(pin)) return toast.error('ПИН-код — ровно 6 цифр')
     if (!organizationId) return toast.error('Выберите организацию')
-    await create.mutateAsync({ phone, pin, organizationId, role, fullName, email, language })
+    await create.mutateAsync({ phone: normalizedPhone, pin, organizationId, role, fullName, email, language })
     reset()
     onOpenChange(false)
   }
@@ -62,7 +64,13 @@ export function UserCreateDialog({ open, onOpenChange }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="new-phone">Телефон *</Label>
-              <Input id="new-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="77001234567" />
+              <Input
+                id="new-phone"
+                inputMode="tel"
+                value={phone}
+                onChange={(e) => setPhone(formatPhoneKz(e.target.value))}
+                placeholder="+7 771 085 6566"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="new-pin">ПИН-код (6 цифр) *</Label>
@@ -120,7 +128,7 @@ export function UserCreateDialog({ open, onOpenChange }: Props) {
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Пользователь войдёт по телефону и ПИН-коду и будет привязан к выбранной организации.
+            Пользователь войдёт по телефону и ПИН-коду, будет привязан к выбранной организации, а её членство сразу активируется.
           </p>
         </div>
 

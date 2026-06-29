@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { useCreateOrg, type CreateOrgInput } from '@/hooks/admin/useCreateOrg'
+import { formatPhoneKz } from '@/lib/phone'
 
 interface Props {
   open: boolean
@@ -74,7 +75,7 @@ export function OrgCreateDialog({ open, onOpenChange }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="org-phone">Телефон</Label>
-              <Input id="org-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="77001234567" />
+              <Input id="org-phone" inputMode="tel" value={phone} onChange={(e) => setPhone(formatPhoneKz(e.target.value))} placeholder="+7 771 085 6566" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="org-email">Email</Label>

@@ -11,6 +11,8 @@ import { toast } from 'sonner'
 import { useUpdateUser } from '@/hooks/admin/useUpdateUser'
 import { useUploadAvatar } from '@/hooks/admin/useUploadAvatar'
 import type { AdminUser } from '@/hooks/admin/useAdminUsers'
+import { formatPhoneKz, normalizePhoneKz } from '@/lib/phone'
+import { OrgDocumentsPanel } from '@/pages/admin/orgs/OrgDocumentsPanel'
 
 const MAX_AVATAR = 5 * 1024 * 1024
 
@@ -36,7 +38,7 @@ export function UserEditDialog({ user, open, onOpenChange }: Props) {
   if (user && user.user_id !== loadedId) {
     setLoadedId(user.user_id)
     setFullName(user.full_name ?? '')
-    setPhone(user.phone ?? '')
+    setPhone(user.phone ? formatPhoneKz(user.phone) : '')
     setEmail(user.email ?? '')
     setLanguage(user.preferred_language ?? 'ru')
     setIsActive(user.is_active)
@@ -57,10 +59,16 @@ export function UserEditDialog({ user, open, onOpenChange }: Props) {
   }
 
   async function handleSave() {
+    let phoneOut = ''
+    if (phone.trim()) {
+      const normalized = normalizePhoneKz(phone)
+      if (!normalized) return toast.error('Телефон в формате +7 771 085 6566')
+      phoneOut = normalized
+    }
     await update.mutateAsync({
       userId: user!.user_id,
       fullName,
-      phone,
+      phone: phoneOut,
       email,
       language,
       isActive,
@@ -110,7 +118,13 @@ export function UserEditDialog({ user, open, onOpenChange }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="edit-phone">Телефон</Label>
-              <Input id="edit-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7700…" />
+              <Input
+                id="edit-phone"
+                inputMode="tel"
+                value={phone}
+                onChange={(e) => setPhone(formatPhoneKz(e.target.value))}
+                placeholder="+7 771 085 6566"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-email">Email</Label>
@@ -133,6 +147,11 @@ export function UserEditDialog({ user, open, onOpenChange }: Props) {
               <Switch id="edit-active" checked={isActive} onCheckedChange={setIsActive} />
               <Label htmlFor="edit-active">Активен</Label>
             </div>
+          </div>
+
+          <div className="border-t pt-4">
+            <OrgDocumentsPanel orgId={user.organization_id ?? undefined} />
+            <p className="mt-1 text-[11px] text-muted-foreground">Документы организации пользователя.</p>
           </div>
         </div>
 
