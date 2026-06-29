@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
-import { readEdgeError } from './edgeError'
 
 export interface CreateUserInput {
   email: string
@@ -15,17 +14,14 @@ export function useCreateUser() {
   const qc = useQueryClient()
   return useMutation<void, Error, CreateUserInput>({
     mutationFn: async (input) => {
-      const { data, error } = await supabase.functions.invoke('admin-create-user', {
-        body: {
-          email: input.email,
-          phone: input.phone,
-          password: input.password,
-          full_name: input.fullName,
-          preferred_language: input.language,
-        },
+      const { error } = await supabase.rpc('rpc_admin_create_user', {
+        p_email: input.email || null,
+        p_phone: input.phone || null,
+        p_password: input.password,
+        p_full_name: input.fullName || null,
+        p_language: input.language || 'ru',
       })
-      if (error) throw new Error(await readEdgeError(error, 'Ошибка создания'))
-      if (data?.error) throw new Error(data.error)
+      if (error) throw error
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
