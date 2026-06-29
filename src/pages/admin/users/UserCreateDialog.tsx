@@ -6,28 +6,43 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { useCreateUser } from '@/hooks/admin/useCreateUser'
+import { useAdminOrgs } from '@/hooks/admin/useAdminOrgs'
 
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
+type Role = 'owner' | 'manager' | 'employee' | 'viewer'
+
+const ROLE_LABEL: Record<Role, string> = {
+  owner: 'Владелец',
+  manager: 'Менеджер',
+  employee: 'Сотрудник',
+  viewer: 'Наблюдатель',
+}
+
 export function UserCreateDialog({ open, onOpenChange }: Props) {
   const create = useCreateUser()
+  const { data: orgs, isLoading: orgsLoading } = useAdminOrgs('')
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
+  const [pin, setPin] = useState('')
+  const [organizationId, setOrganizationId] = useState('')
+  const [role, setRole] = useState<Role>('owner')
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [language, setLanguage] = useState('ru')
 
   function reset() {
-    setFullName(''); setPhone(''); setEmail(''); setPassword(''); setLanguage('ru')
+    setFullName(''); setPhone(''); setPin(''); setOrganizationId('')
+    setRole('owner'); setEmail(''); setLanguage('ru')
   }
 
   async function handleCreate() {
-    if (!email && !phone) return toast.error('Укажите email или телефон')
-    if (password.length < 6) return toast.error('Пароль не короче 6 символов')
-    await create.mutateAsync({ email, phone, password, fullName, language })
+    if (!phone.trim()) return toast.error('Укажите телефон')
+    if (!/^\d{6}$/.test(pin)) return toast.error('ПИН-код — ровно 6 цифр')
+    if (!organizationId) return toast.error('Выберите организацию')
+    await create.mutateAsync({ phone, pin, organizationId, role, fullName, email, language })
     reset()
     onOpenChange(false)
   }
@@ -46,18 +61,51 @@ export function UserCreateDialog({ open, onOpenChange }: Props) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="new-phone">Телефон</Label>
-              <Input id="new-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7700…" />
+              <Label htmlFor="new-phone">Телефон *</Label>
+              <Input id="new-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="77001234567" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="new-email">Email</Label>
-              <Input id="new-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Label htmlFor="new-pin">ПИН-код (6 цифр) *</Label>
+              <Input
+                id="new-pin"
+                inputMode="numeric"
+                maxLength={6}
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="••••••"
+              />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 items-end">
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="new-pass">Пароль</Label>
-              <Input id="new-pass" type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="мин. 6 символов" />
+              <Label>Организация *</Label>
+              <Select value={organizationId} onValueChange={setOrganizationId} disabled={orgsLoading}>
+                <SelectTrigger>
+                  <SelectValue placeholder={orgsLoading ? 'Загрузка…' : 'Выберите организацию'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(orgs ?? []).map((o) => (
+                    <SelectItem key={o.id} value={o.id}>{o.legal_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Роль</Label>
+              <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
+                    <SelectItem key={r} value={r}>{ROLE_LABEL[r]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="new-email">Email (необяз.)</Label>
+              <Input id="new-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label>Язык</Label>
@@ -72,7 +120,7 @@ export function UserCreateDialog({ open, onOpenChange }: Props) {
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Укажите email или телефон (можно оба). Пользователь сможет войти с этим паролем.
+            Пользователь войдёт по телефону и ПИН-коду и будет привязан к выбранной организации.
           </p>
         </div>
 
