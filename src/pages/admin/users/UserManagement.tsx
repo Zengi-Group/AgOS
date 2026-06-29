@@ -22,7 +22,7 @@ export function UserManagement() {
   useSetTopbar({ title: 'Пользователи', titleIcon: <UserCog size={15} /> })
   const { isAdmin, checking } = useAdminGuard()
   const [search, setSearch] = useState('')
-  const { data: users, isLoading } = useAdminUsers(search)
+  const { data: users, isLoading, error } = useAdminUsers(search)
   const deleteUser = useDeleteUser()
 
   const [editing, setEditing] = useState<AdminUser | null>(null)
@@ -61,7 +61,14 @@ export function UserManagement() {
         </Button>
       </div>
 
-      {isLoading ? (
+      {error ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+          Не удалось загрузить пользователей: {(error as Error).message}
+          <div className="mt-1 text-xs text-destructive/80">
+            Если ошибка про функцию <code>rpc_admin_list_farmer_mpk_users</code> — миграция ещё не применена в Supabase.
+          </div>
+        </div>
+      ) : isLoading ? (
         <Skeleton className="h-48 w-full" />
       ) : (
         <div className="overflow-x-auto">

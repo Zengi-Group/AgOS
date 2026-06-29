@@ -24,7 +24,10 @@ export function useAdminUsers(search: string) {
       const { data, error } = await supabase.rpc('rpc_admin_list_farmer_mpk_users', {
         p_search: search || null,
       })
-      if (error) throw error
+      if (error) {
+        console.error('[useAdminUsers] rpc error:', error)
+        throw error
+      }
       return (data ?? []) as AdminUser[]
     },
   })
