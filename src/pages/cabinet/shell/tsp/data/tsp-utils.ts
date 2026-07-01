@@ -28,6 +28,39 @@ export function deriveCategory(w: WizState): CatKey | null {
   return 'telki'
 }
 
+// ── Единая формула сорта МПК (упитанность + порода + вес + возраст) ─────────────
+// Тот же расчёт, что бэкенд применяет к grade_standard_id партии
+// (fn_tsp_grade_id_from_fatness): упитанность — основа сорта. Фермер видит, к какой
+// закупаемой категории МПК относится его скот, ещё на этапе ввода данных.
+//   Хорошая      → Высшая (Премиум, если элитная порода и вес ≥ 450 кг) · сорт VS
+//   Средняя      → Первая  · сорт S
+//   Ниже средней → Вторая  · сорт NS
+export type MpkSort = 'premium' | 'vysshaya' | 'pervaya' | 'vtoraya'
+
+export const MPK_SORT_LABEL: Record<MpkSort, string> = {
+  premium:  'Премиум',
+  vysshaya: 'Высшая',
+  pervaya:  'Первая',
+  vtoraya:  'Вторая',
+}
+
+// Элитные мясные породы — синхронно с fn_tsp_resolve_sku (breed_group='elite_meat').
+const ELITE_BREED_RE = /ангус|герефорд|абердин|вагю|wagyu|angus|hereford|шароле|лимузин|limousin|charolais|симмент/i
+
+export function deriveMpkGrade(
+  w: Pick<WizState, 'breed' | 'avgWeight' | 'age' | 'fatness'>,
+): MpkSort | null {
+  let sort: MpkSort | null =
+    w.fatness === 'Хорошая'      ? 'vysshaya'
+    : w.fatness === 'Средняя'      ? 'pervaya'
+    : w.fatness === 'Ниже средней' ? 'vtoraya'
+    : null
+  if (sort === 'vysshaya' && ELITE_BREED_RE.test(w.breed) && w.avgWeight >= 450) {
+    sort = 'premium'
+  }
+  return sort
+}
+
 // Пресеты окна готовности
 export interface WindowPreset {
   k: string; t: string; from?: Date; to?: Date

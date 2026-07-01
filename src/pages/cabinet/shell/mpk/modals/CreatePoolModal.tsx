@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { REGIONS } from '@/pages/registration/constants'
+import { REGIONS, DISTRICTS } from '@/pages/registration/constants'
 import { BREEDS } from '@/pages/cabinet/shell/tsp/data/tsp-dicts'
 import { Cta } from '../../components/Cta'
 import { MPK_CATS, type MpkCatKey, type Pool, type PoolLine } from '../types'
@@ -40,17 +40,35 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
   const [totalHeads, setTotalHeads] = useState('')
   // Мультивыбор областей: пустой набор = «Все области».
   const [regionIds, setRegionIds] = useState<string[]>([])
+  // Районы (слаги DISTRICTS) — уточняют внутри областей. Пусто = вся область.
+  // ЖЁСТКИЙ матч: заданы районы → партия матчится только если её район в списке.
+  const [districtIds, setDistrictIds] = useState<string[]>([])
+  const [geoSheet, setGeoSheet] = useState(false)
   const allRegions = regionIds.length === 0
   const region = allRegions
     ? 'Все области'
     : regionIds.length === 1
       ? (REGIONS.find((r) => r.id === regionIds[0])?.name ?? 'Область')
       : `${regionIds.length} обл.`
+  const geoSummary = allRegions
+    ? 'Все области'
+    : `${region}${districtIds.length ? ` · ${districtIds.length} р-н` : ''}`
   const [targetMonth, setTargetMonth] = useState('')
   const [lines, setLines] = useState<PoolLine[]>([{ catKey: 'vysshaya', price: 0, breed: '' }])
 
+  // При снятии области убираем и её районы из выбора.
   const toggleRegion = (id: string) =>
-    setRegionIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]))
+    setRegionIds((ids) => {
+      if (ids.includes(id)) {
+        const slugs = (DISTRICTS[id] ?? []).map((d) => d.value)
+        setDistrictIds((ds) => ds.filter((s) => !slugs.includes(s)))
+        return ids.filter((x) => x !== id)
+      }
+      return [...ids, id]
+    })
+  const toggleDistrict = (slug: string) =>
+    setDistrictIds((ds) => (ds.includes(slug) ? ds.filter((x) => x !== slug) : [...ds, slug]))
+  const resetGeo = () => { setRegionIds([]); setDistrictIds([]) }
 
   const heads = parseInt(totalHeads, 10)
   const headsValid = !Number.isNaN(heads) && heads > 0
@@ -95,6 +113,7 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
         p_target_month: windowToDate(targetMonth),
         p_region_id: regionIds[0] ?? null,
         p_region_ids: regionIds.length ? regionIds : null,
+        p_district_ids: districtIds.length ? districtIds : null,
         p_accepted_skus: lines.map((l) => ({
           code: l.catKey,
           price: l.price,
@@ -123,6 +142,7 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
   }
 
   return (
+    <>
     <div className="mpk-modal">
       <div className="mpk-modal-head">
         <div className="mpk-modal-title">Заявка на закупку</div>
@@ -143,28 +163,18 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
         </div>
 
         <div>
-          <div className="mpk-field-label">Регионы закупа</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button
-              className={'pool-chip ' + (allRegions ? 'filling' : '')}
-              style={{ padding: '8px 12px', fontSize: 12, cursor: 'pointer', border: 'none' }}
-              onClick={() => setRegionIds([])}
-            >
-              Все области
-            </button>
-            {REGIONS.map((r) => (
-              <button
-                key={r.id}
-                className={'pool-chip ' + (regionIds.includes(r.id) ? 'filling' : '')}
-                style={{ padding: '8px 12px', fontSize: 12, cursor: 'pointer', border: 'none' }}
-                onClick={() => toggleRegion(r.id)}
-              >
-                {r.name}
-              </button>
-            ))}
-          </div>
+          <div className="mpk-field-label">География закупа</div>
+          <button
+            className="mpk-input"
+            style={{ textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            onClick={() => setGeoSheet(true)}
+          >
+            <span>{geoSummary}</span>
+            <span style={{ opacity: 0.5 }}>Выбрать ›</span>
+          </button>
           <div className="mpk-hint" style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>
-            Не выбрано ни одной = все области. Можно отметить несколько.
+            Не выбрано = все области. Районы — жёсткий матч: партия подходит, только если
+            её район в списке. Без районов — вся область.
           </div>
         </div>
 
@@ -252,5 +262,74 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
         <Cta variant="ghost" onClick={() => onSubmit(buildPool('filling'))}>Сохранить черновик</Cta>
       </div>
     </div>
+
+    {geoSheet && (
+      <div
+        className="mpk-sheet-scrim"
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 60, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+        onClick={() => setGeoSheet(false)}
+      >
+        <div
+          className="mpk-sheet"
+          style={{ background: 'var(--card, #fff)', width: '100%', maxWidth: 480, maxHeight: '82vh', borderRadius: '16px 16px 0 0', display: 'flex', flexDirection: 'column' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mpk-modal-head" style={{ padding: '14px 16px', borderBottom: '1px solid var(--border, #eee)' }}>
+            <div className="mpk-modal-title">Области и районы</div>
+            <button className="mpk-modal-close" onClick={() => setGeoSheet(false)} aria-label="Закрыть">×</button>
+          </div>
+
+          <div style={{ overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button
+              className={'pool-chip ' + (allRegions ? 'filling' : '')}
+              style={{ padding: '8px 12px', fontSize: 12, cursor: 'pointer', border: 'none', alignSelf: 'flex-start' }}
+              onClick={resetGeo}
+            >
+              Все области
+            </button>
+
+            {REGIONS.map((r) => {
+              const active = regionIds.includes(r.id)
+              const ds = DISTRICTS[r.id] ?? []
+              return (
+                <div key={r.id}>
+                  <button
+                    className={'pool-chip ' + (active ? 'filling' : '')}
+                    style={{ padding: '8px 12px', fontSize: 12, cursor: 'pointer', border: 'none' }}
+                    onClick={() => toggleRegion(r.id)}
+                  >
+                    {r.name}
+                  </button>
+                  {active && ds.length > 0 && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0 4px 12px', paddingLeft: 8, borderLeft: '2px solid var(--border, #eee)' }}>
+                      {ds.map((d) => (
+                        <button
+                          key={d.value}
+                          className={'pool-chip ' + (districtIds.includes(d.value) ? 'filling' : '')}
+                          style={{ padding: '6px 10px', fontSize: 11, cursor: 'pointer', border: 'none' }}
+                          onClick={() => toggleDistrict(d.value)}
+                        >
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {active && ds.length === 0 && (
+                    <div style={{ fontSize: 11, opacity: 0.6, margin: '6px 0 4px 12px' }}>
+                      Районы недоступны — матч по всей области.
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border, #eee)' }}>
+            <Cta onClick={() => setGeoSheet(false)}>Готово · {geoSummary}</Cta>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
