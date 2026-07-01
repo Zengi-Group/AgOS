@@ -87,6 +87,11 @@ export function BatchWizard({ onDone, onExit, onTuran, initialStep, initialWiz }
       const delayed = pi?.delayed ?? false
       const at: Date | null = pi && pi.delayed ? (pi.at ?? null) : null
 
+      // Регион партии НЕ выбирается фермером — берётся из данных регистрации
+      // хозяйства (ctx.farmRegion → organizations.region_id на бэкенде). Пусто →
+      // бэкенд дофолбэчит на область org (fn_tsp_region_id).
+      const district = ctx.farmRegion || ''
+
       let batch: Batch
       try {
         const { data, error } = await supabase.rpc('rpc_create_batch', {
@@ -96,7 +101,7 @@ export function BatchWizard({ onDone, onExit, onTuran, initialStep, initialWiz }
           p_avg_weight:  w.avgWeight,
           p_age:         w.age,
           p_fatness:     w.fatness,
-          p_district:    w.district,
+          p_district:    district,
           p_price:       price,
           p_window_from: win.from.toISOString().slice(0, 10),
           p_window_to:   win.to.toISOString().slice(0, 10),
@@ -125,7 +130,7 @@ export function BatchWizard({ onDone, onExit, onTuran, initialStep, initialWiz }
         // Нет backend (схема не задеплоена / офлайн) — собираем партию локально,
         // чтобы публикация работала в демо. RPC отработает, когда backend появится.
         console.warn('rpc_create_batch недоступен, публикуем локально:', rpcErr)
-        batch = buildLocalBatch(w, price, delayed, at)
+        batch = buildLocalBatch({ ...w, district }, price, delayed, at)
       }
 
       clear()

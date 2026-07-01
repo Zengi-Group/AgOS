@@ -31,6 +31,7 @@ export interface PoolLine {
   catKey: MpkCatKey
   price: number          // ₸/кг
   maxHeads?: number      // необязательно
+  breed?: string         // желаемая порода строки (пусто = любая) — жёсткий матч
 }
 
 export interface SupplierRow {

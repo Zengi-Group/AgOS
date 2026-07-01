@@ -322,6 +322,7 @@ export function CabinetApp() {
     tab, go, route,
     openAI, openPrices, aiCtxDefault: tab === 'farm' ? 'farm' : 'home',
     marketDot, msgBadge, avatarDot, avatarInitials,
+    farmRegion: profile?.district ?? null,
     offline, offlineToast, toast: showToast,
     membership, isPro, memberAct,
   }

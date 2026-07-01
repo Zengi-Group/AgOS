@@ -119,6 +119,7 @@ export interface ShellContextValue {
   msgBadge: number
   avatarDot: boolean
   avatarInitials: string   // инициалы хозяйства из реального аккаунта (демо-фолбэк «АД»)
+  farmRegion: string | null // область регистрации хозяйства (regions.name_ru) — для read-only в визарде
   // состояние/действия
   offline: boolean
   offlineToast: () => void
