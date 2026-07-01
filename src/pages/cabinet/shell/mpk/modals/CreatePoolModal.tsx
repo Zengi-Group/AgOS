@@ -75,10 +75,16 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
 
   const targetMonthLabel = WINDOWS.find((w) => w.k === targetMonth)?.t ?? ''
 
+  // Сумма «Макс гол» по строкам не должна превышать общий объём закупа.
+  const allocatedHeads = lines.reduce((s, l) => s + (l.maxHeads ?? 0), 0)
+  const overCapacity = headsValid && allocatedHeads > heads
+  const remainingHeads = headsValid ? heads - allocatedHeads : 0
+
   const canPublish =
     headsValid &&
     lines.length > 0 &&
     lines.every((l) => l.catKey && l.price >= MPK_CATS[l.catKey].floorPrice) &&
+    !overCapacity &&
     targetMonth !== ''
 
   const patchLine = (i: number, patch: Partial<PoolLine>) =>
@@ -219,7 +225,7 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
                       onChange={(e) => patchLine(i, { price: parseInt(e.target.value, 10) || 0 })}
                     />
                     <input
-                      className="mpk-input"
+                      className={'mpk-input' + (overCapacity && (l.maxHeads ?? 0) > 0 ? ' error' : '')}
                       type="number"
                       min={1}
                       value={l.maxHeads ?? ''}
@@ -254,12 +260,23 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
           >
             + Добавить строку (категория + порода)
           </button>
+          {headsValid && (
+            overCapacity ? (
+              <div className="mpk-error-hint" style={{ marginTop: 6 }}>
+                Сумма «Макс гол» ({allocatedHeads}) превышает объём закупа ({heads}). Уменьшите на {allocatedHeads - heads}.
+              </div>
+            ) : allocatedHeads > 0 ? (
+              <div className="mpk-hint" style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>
+                Распределено {allocatedHeads} из {heads} гол · осталось {remainingHeads}.
+              </div>
+            ) : null
+          )}
         </div>
 
         <Cta onClick={publish} disabled={!canPublish || saving}>
           {saving ? 'Публикуем…' : 'Опубликовать'}
         </Cta>
-        <Cta variant="ghost" onClick={() => onSubmit(buildPool('filling'))}>Сохранить черновик</Cta>
+        <Cta variant="ghost" disabled={overCapacity} onClick={() => onSubmit(buildPool('filling'))}>Сохранить черновик</Cta>
       </div>
     </div>
 
