@@ -38,10 +38,19 @@ export function deriveCategory(w: WizState): CatKey | null {
 export type MpkSort = 'premium' | 'vysshaya' | 'pervaya' | 'vtoraya'
 
 export const MPK_SORT_LABEL: Record<MpkSort, string> = {
-  premium:  'Премиум',
-  vysshaya: 'Высшая',
-  pervaya:  'Первая',
-  vtoraya:  'Вторая',
+  premium:  'КРС · Премиум',
+  vysshaya: 'КРС · Высшая',
+  pervaya:  'КРС · Первая',
+  vtoraya:  'КРС · Вторая',
+}
+
+// Единый пол цены по сорту (₸/кг) — один источник правды для фермера и МПК.
+// Совпадает с floorPrices в mpk/types.ts (МПК видит те же цифры при закупке).
+export const MPK_SORT_FLOOR: Record<MpkSort, number> = {
+  premium:  1850,
+  vysshaya: 1650,
+  pervaya:  1500,
+  vtoraya:  1350,
 }
 
 // Элитные мясные породы — синхронно с fn_tsp_resolve_sku (breed_group='elite_meat').

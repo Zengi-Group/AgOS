@@ -37,6 +37,7 @@ const CAT_KEYS = Object.keys(MPK_CATS) as MpkCatKey[]
 
 export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
   const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
   const [totalHeads, setTotalHeads] = useState('')
   // Мультивыбор областей: пустой набор = «Все области».
   const [regionIds, setRegionIds] = useState<string[]>([])
@@ -110,41 +111,49 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
 
   // Записать заявку в БД: create_pool_request → activate. Реальный pool_id
   // проставляем в Pool.id, чтобы оффер на партию матчился к настоящему пулу.
+  // Ошибки НЕ глотаем — пробрасываем наверх, чтобы пользователь увидел причину
+  // (напр. «функция не найдена» = миграция 20260701150000 не применена), а
+  // фейковый пул не добавлялся в UI (полл потом всё равно бы его затёр).
   const persist = async (pool: Pool): Promise<Pool> => {
     if (!orgId) return pool
-    try {
-      const { data: reqId, error: e1 } = await supabase.rpc('rpc_self_create_pool_request', {
-        p_organization_id: orgId,
-        p_total_heads: heads,
-        p_target_month: windowToDate(targetMonth),
-        p_region_id: regionIds[0] ?? null,
-        p_region_ids: regionIds.length ? regionIds : null,
-        p_district_ids: districtIds.length ? districtIds : null,
-        p_accepted_skus: lines.map((l) => ({
-          code: l.catKey,
-          price: l.price,
-          maxHeads: l.maxHeads ?? null,
-          breed: l.breed || null,
-        })),
-        p_notes: null,
-      })
-      if (e1 || !reqId) return pool
-      const { data: act, error: e2 } = await supabase.rpc('rpc_self_activate_pool_request', {
-        p_request_id: reqId,
-      })
-      const poolId = (act as { pool_id?: string } | null)?.pool_id
-      if (e2 || !poolId) return pool
-      return { ...pool, id: poolId }
-    } catch {
-      return pool
-    }
+    const { data: reqId, error: e1 } = await supabase.rpc('rpc_self_create_pool_request', {
+      p_organization_id: orgId,
+      p_total_heads: heads,
+      p_target_month: windowToDate(targetMonth),
+      p_region_id: regionIds[0] ?? null,
+      p_region_ids: regionIds.length ? regionIds : null,
+      p_district_ids: districtIds.length ? districtIds : null,
+      p_accepted_skus: lines.map((l) => ({
+        code: l.catKey,
+        price: l.price,
+        maxHeads: l.maxHeads ?? null,
+        breed: l.breed || null,
+      })),
+      p_notes: null,
+    })
+    if (e1) throw new Error(e1.message)
+    if (!reqId) throw new Error('Заявка не создана (пустой ответ сервера)')
+    const { data: act, error: e2 } = await supabase.rpc('rpc_self_activate_pool_request', {
+      p_request_id: reqId,
+    })
+    if (e2) throw new Error(e2.message)
+    const poolId = (act as { pool_id?: string } | null)?.pool_id
+    if (!poolId) throw new Error('Пул не активирован (нет pool_id)')
+    return { ...pool, id: poolId }
   }
 
   const publish = async () => {
     if (!canPublish || saving) return
     setSaving(true)
-    const pool = await persist(buildPool('filling'))
-    onSubmit(pool)
+    setErr(null)
+    try {
+      const pool = await persist(buildPool('filling'))
+      onSubmit(pool)   // успех: закрывает модал и добавляет пул в MpkApp
+    } catch (e) {
+      // Оставляем модал открытым, показываем реальную причину — пул НЕ добавляем.
+      setErr(e instanceof Error ? e.message : 'Не удалось сохранить заявку')
+      setSaving(false)
+    }
   }
 
   return (
@@ -272,6 +281,12 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
             ) : null
           )}
         </div>
+
+        {err && (
+          <div className="mpk-error-hint" style={{ marginBottom: 8 }}>
+            Не удалось сохранить заявку: {err}
+          </div>
+        )}
 
         <Cta onClick={publish} disabled={!canPublish || saving}>
           {saving ? 'Публикуем…' : 'Опубликовать'}
