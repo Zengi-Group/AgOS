@@ -7,7 +7,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { toast } from 'sonner'
 import { useCreateOrg, type CreateOrgInput } from '@/hooks/admin/useCreateOrg'
 import { formatPhoneKz } from '@/lib/phone'
-import { REGIONS } from '@/pages/registration/constants'
+import { REGIONS, DISTRICTS } from '@/pages/registration/constants'
 
 interface Props {
   open: boolean
@@ -33,14 +33,16 @@ export function OrgCreateDialog({ open, onOpenChange }: Props) {
   const [email, setEmail] = useState('')
   const [address, setAddress] = useState('')
   const [regionId, setRegionId] = useState('')
+  const [districtId, setDistrictId] = useState('')
+  const districtOptions = regionId ? DISTRICTS[regionId] ?? [] : []
 
   function reset() {
-    setLegalName(''); setOrgType('farmer'); setBinIin(''); setPhone(''); setEmail(''); setAddress(''); setRegionId('')
+    setLegalName(''); setOrgType('farmer'); setBinIin(''); setPhone(''); setEmail(''); setAddress(''); setRegionId(''); setDistrictId('')
   }
 
   async function handleCreate() {
     if (!legalName.trim()) return toast.error('Укажите название')
-    await create.mutateAsync({ legalName, orgType, binIin, phone, email, address, regionId: regionId || null })
+    await create.mutateAsync({ legalName, orgType, binIin, phone, email, address, regionId: regionId || null, districtId: districtId || null })
     reset()
     onOpenChange(false)
   }
@@ -88,16 +90,31 @@ export function OrgCreateDialog({ open, onOpenChange }: Props) {
             <Label htmlFor="org-address">Адрес</Label>
             <Input id="org-address" value={address} onChange={(e) => setAddress(e.target.value)} />
           </div>
-          <div className="space-y-1.5">
-            <Label>Область / регион</Label>
-            <Select value={regionId} onValueChange={setRegionId}>
-              <SelectTrigger><SelectValue placeholder="Выберите область" /></SelectTrigger>
-              <SelectContent>
-                {REGIONS.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Область</Label>
+              <Select value={regionId} onValueChange={(v) => { setRegionId(v); setDistrictId('') }}>
+                <SelectTrigger><SelectValue placeholder="Выберите область" /></SelectTrigger>
+                <SelectContent>
+                  {REGIONS.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Район</Label>
+              <Select value={districtId} onValueChange={setDistrictId} disabled={districtOptions.length === 0}>
+                <SelectTrigger>
+                  <SelectValue placeholder={regionId ? 'Выберите район' : 'Сначала область'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {districtOptions.map((d) => (
+                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 

@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import { useUpdateOrg } from '@/hooks/admin/useUpdateOrg'
 import type { AdminOrg } from '@/hooks/admin/useAdminOrgs'
 import { formatPhoneKz } from '@/lib/phone'
-import { REGIONS } from '@/pages/registration/constants'
+import { REGIONS, DISTRICTS } from '@/pages/registration/constants'
 import { OrgDocumentsPanel } from './OrgDocumentsPanel'
 
 interface Props {
@@ -28,6 +28,8 @@ export function OrgEditDialog({ org, open, onOpenChange }: Props) {
   const [address, setAddress] = useState('')
   const [isActive, setIsActive] = useState(true)
   const [regionId, setRegionId] = useState<string>('')
+  const [districtId, setDistrictId] = useState<string>('')
+  const districtOptions = regionId ? DISTRICTS[regionId] ?? [] : []
 
   // Синхронизируем форму при открытии новой организации
   const [loadedId, setLoadedId] = useState<string | null>(null)
@@ -40,6 +42,7 @@ export function OrgEditDialog({ org, open, onOpenChange }: Props) {
     setAddress(org.address_text ?? '')
     setIsActive(org.is_active)
     setRegionId(org.region_id ?? '')
+    setDistrictId(org.district_id ?? '')
   }
 
   if (!org) return null
@@ -55,6 +58,7 @@ export function OrgEditDialog({ org, open, onOpenChange }: Props) {
       address,
       isActive,
       regionId: regionId || null,
+      districtId: districtId || null,
     })
     onOpenChange(false)
   }
@@ -95,20 +99,35 @@ export function OrgEditDialog({ org, open, onOpenChange }: Props) {
             <Label htmlFor="oe-address">Адрес</Label>
             <Input id="oe-address" value={address} onChange={(e) => setAddress(e.target.value)} />
           </div>
-          <div className="space-y-1.5">
-            <Label>Область / регион</Label>
-            <Select value={regionId} onValueChange={setRegionId}>
-              <SelectTrigger><SelectValue placeholder="Выберите область" /></SelectTrigger>
-              <SelectContent>
-                {REGIONS.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Новые партии фермеров этого хозяйства будут публиковаться с этой области.
-            </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Область</Label>
+              <Select value={regionId} onValueChange={(v) => { setRegionId(v); setDistrictId('') }}>
+                <SelectTrigger><SelectValue placeholder="Выберите область" /></SelectTrigger>
+                <SelectContent>
+                  {REGIONS.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Район</Label>
+              <Select value={districtId} onValueChange={setDistrictId} disabled={districtOptions.length === 0}>
+                <SelectTrigger>
+                  <SelectValue placeholder={regionId ? 'Выберите район' : 'Сначала область'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {districtOptions.map((d) => (
+                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Новые партии фермеров этого хозяйства будут публиковаться с этой области. Район — адресная метка.
+          </p>
 
           <div className="border-t pt-4">
             <OrgDocumentsPanel orgId={org.id} />

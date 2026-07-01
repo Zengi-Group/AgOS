@@ -10,6 +10,7 @@ export interface CreateOrgInput {
   email: string
   address: string
   regionId?: string | null
+  districtId?: string | null
 }
 
 export function useCreateOrg() {
@@ -24,6 +25,7 @@ export function useCreateOrg() {
         p_email: input.email || null,
         p_address: input.address || null,
         p_region_id: input.regionId || null,
+        p_district_id: input.districtId || null,
       })
       if (error) throw error
       return data as string

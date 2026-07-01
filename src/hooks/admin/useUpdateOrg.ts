@@ -11,6 +11,7 @@ export interface UpdateOrgInput {
   address: string
   isActive: boolean
   regionId: string | null
+  districtId: string | null
 }
 
 export function useUpdateOrg() {
@@ -26,6 +27,7 @@ export function useUpdateOrg() {
         p_address: input.address,
         p_is_active: input.isActive,
         p_region_id: input.regionId,
+        p_district_id: input.districtId ?? '',
       })
       if (error) throw error
     },

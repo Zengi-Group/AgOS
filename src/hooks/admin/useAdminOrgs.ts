@@ -13,6 +13,7 @@ export interface AdminOrg {
   created_at: string
   region_id: string | null
   region_name: string | null
+  district_id: string | null
   org_types: string[]
   member_count: number
 }
