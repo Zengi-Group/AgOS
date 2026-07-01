@@ -4,10 +4,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { useUpdateOrg } from '@/hooks/admin/useUpdateOrg'
 import type { AdminOrg } from '@/hooks/admin/useAdminOrgs'
 import { formatPhoneKz } from '@/lib/phone'
+import { REGIONS } from '@/pages/registration/constants'
 import { OrgDocumentsPanel } from './OrgDocumentsPanel'
 
 interface Props {
@@ -25,6 +27,7 @@ export function OrgEditDialog({ org, open, onOpenChange }: Props) {
   const [email, setEmail] = useState('')
   const [address, setAddress] = useState('')
   const [isActive, setIsActive] = useState(true)
+  const [regionId, setRegionId] = useState<string>('')
 
   // Синхронизируем форму при открытии новой организации
   const [loadedId, setLoadedId] = useState<string | null>(null)
@@ -36,6 +39,7 @@ export function OrgEditDialog({ org, open, onOpenChange }: Props) {
     setEmail(org.email ?? '')
     setAddress(org.address_text ?? '')
     setIsActive(org.is_active)
+    setRegionId(org.region_id ?? '')
   }
 
   if (!org) return null
@@ -50,6 +54,7 @@ export function OrgEditDialog({ org, open, onOpenChange }: Props) {
       email,
       address,
       isActive,
+      regionId: regionId || null,
     })
     onOpenChange(false)
   }
@@ -89,6 +94,20 @@ export function OrgEditDialog({ org, open, onOpenChange }: Props) {
           <div className="space-y-1.5">
             <Label htmlFor="oe-address">Адрес</Label>
             <Input id="oe-address" value={address} onChange={(e) => setAddress(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Область / регион</Label>
+            <Select value={regionId} onValueChange={setRegionId}>
+              <SelectTrigger><SelectValue placeholder="Выберите область" /></SelectTrigger>
+              <SelectContent>
+                {REGIONS.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Новые партии фермеров этого хозяйства будут публиковаться с этой области.
+            </p>
           </div>
 
           <div className="border-t pt-4">

@@ -10,6 +10,7 @@ export interface UpdateOrgInput {
   email: string
   address: string
   isActive: boolean
+  regionId: string | null
 }
 
 export function useUpdateOrg() {
@@ -24,6 +25,7 @@ export function useUpdateOrg() {
         p_email: input.email,
         p_address: input.address,
         p_is_active: input.isActive,
+        p_region_id: input.regionId,
       })
       if (error) throw error
     },

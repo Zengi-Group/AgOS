@@ -11,6 +11,8 @@ export interface AdminOrg {
   address_text: string | null
   is_active: boolean
   created_at: string
+  region_id: string | null
+  region_name: string | null
   org_types: string[]
   member_count: number
 }

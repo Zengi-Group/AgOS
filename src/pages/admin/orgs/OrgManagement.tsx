@@ -78,6 +78,7 @@ export function OrgManagement() {
               <tr className="border-b text-left text-muted-foreground">
                 <th className="p-2">Название</th>
                 <th className="p-2">Тип</th>
+                <th className="p-2">Область</th>
                 <th className="p-2">БИН/ИИН</th>
                 <th className="p-2">Телефон</th>
                 <th className="p-2">Участников</th>
@@ -98,6 +99,7 @@ export function OrgManagement() {
                       ))}
                     </div>
                   </td>
+                  <td className="p-2">{o.region_name || '—'}</td>
                   <td className="p-2">{o.bin_iin || '—'}</td>
                   <td className="p-2">{o.phone || '—'}</td>
                   <td className="p-2">{o.member_count}</td>
@@ -126,7 +128,7 @@ export function OrgManagement() {
               ))}
               {(orgs ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                  <td colSpan={8} className="p-6 text-center text-muted-foreground">
                     Организации не найдены
                   </td>
                 </tr>

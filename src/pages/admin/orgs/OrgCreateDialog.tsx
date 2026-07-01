@@ -7,6 +7,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { toast } from 'sonner'
 import { useCreateOrg, type CreateOrgInput } from '@/hooks/admin/useCreateOrg'
 import { formatPhoneKz } from '@/lib/phone'
+import { REGIONS } from '@/pages/registration/constants'
 
 interface Props {
   open: boolean
@@ -31,14 +32,15 @@ export function OrgCreateDialog({ open, onOpenChange }: Props) {
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [address, setAddress] = useState('')
+  const [regionId, setRegionId] = useState('')
 
   function reset() {
-    setLegalName(''); setOrgType('farmer'); setBinIin(''); setPhone(''); setEmail(''); setAddress('')
+    setLegalName(''); setOrgType('farmer'); setBinIin(''); setPhone(''); setEmail(''); setAddress(''); setRegionId('')
   }
 
   async function handleCreate() {
     if (!legalName.trim()) return toast.error('Укажите название')
-    await create.mutateAsync({ legalName, orgType, binIin, phone, email, address })
+    await create.mutateAsync({ legalName, orgType, binIin, phone, email, address, regionId: regionId || null })
     reset()
     onOpenChange(false)
   }
@@ -85,6 +87,17 @@ export function OrgCreateDialog({ open, onOpenChange }: Props) {
           <div className="space-y-1.5">
             <Label htmlFor="org-address">Адрес</Label>
             <Input id="org-address" value={address} onChange={(e) => setAddress(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Область / регион</Label>
+            <Select value={regionId} onValueChange={setRegionId}>
+              <SelectTrigger><SelectValue placeholder="Выберите область" /></SelectTrigger>
+              <SelectContent>
+                {REGIONS.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
