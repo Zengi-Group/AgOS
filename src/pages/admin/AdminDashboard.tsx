@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Users, Stethoscope, Syringe, Activity, BarChart3, BookOpen, Shield, FileText, Package, DollarSign, LayoutDashboard } from 'lucide-react'
+import { Users, Stethoscope, Syringe, Activity, BarChart3, BookOpen, Shield, FileText, Package, DollarSign, LayoutDashboard, Store } from 'lucide-react'
 import { useSetTopbar } from '@/components/layout/TopbarContext'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -63,6 +63,13 @@ const ADMIN_ONLY_CARDS: DashCard[] = [
     description: 'Ветеринарные ограничения на реализацию скота',
     route: '/admin/restrictions',
     color: 'var(--amber)',
+  },
+  {
+    icon: Store,
+    label: 'Торговая площадка',
+    description: 'Все батчи, пулы и сделки с полными данными (обзор)',
+    route: '/admin/marketplace',
+    color: 'var(--green)',
   },
   {
     icon: Package,
