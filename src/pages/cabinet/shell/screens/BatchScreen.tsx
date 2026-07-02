@@ -8,18 +8,93 @@ import { ShellFrame } from '../components/ShellFrame'
 import { WithdrawSheet } from '../components/sheets/WithdrawSheet'
 import { DispatchSheet } from '../components/sheets/DispatchSheet'
 import { BatchPriceSheet } from '../components/sheets/BatchPriceSheet'
-import { STATUS, protPrice } from '../data/status'
+import { STATUS, protPrice, catLabel, gradeLabel } from '../data/status'
 import { fmtMoney, batchSum } from '../tsp/data/tsp-utils'
 import { NBSP } from '../tsp/data/tsp-dicts'
+import { printDealDoc, fmtDealDate, type DealDocData } from '../data/deal-doc'
+
+interface FarmerAccount {
+  name?: string | null
+  bin?: string | null
+  phone?: string | null
+  district?: string | null
+}
 
 interface Props {
   batch: Batch
+  account?: FarmerAccount | null
   onBack: () => void
   onPatch: (patch: Partial<Batch>) => void
   onNew: () => void
   onReview: () => void
   onTuran: () => void
   toast: (text: string) => void
+}
+
+// Слайс 9 (S4): сборка документа сделки со стороны ФЕРМЕРА (продавец).
+// Куски = allocations (каждый — покупатель/пул). Даты берём из *AtIso партии.
+function buildFarmerDealDoc(batch: Batch, account?: FarmerAccount | null): DealDocData {
+  const allocs = Array.isArray(batch.allocations) ? batch.allocations : []
+  const iso = (k: string): string | undefined => {
+    const v = (batch as Record<string, unknown>)[k]
+    return typeof v === 'string' ? v : undefined
+  }
+  const chunks = allocs.length > 0
+    ? allocs.map((a) => ({
+        counterparty: a.buyer ?? null,
+        counterpartyPhone: a.buyerPhone ?? null,
+        heads: a.heads,
+        price: a.price,
+        weight: batch.avgWeight ?? null,
+        statusLabel: chunkStatusLabel(a.status),
+      }))
+    : [{
+        counterparty: (batch.buyer as string | undefined) ?? null,
+        counterpartyPhone: (batch.buyerPhone as string | undefined) ?? null,
+        heads: batch.heads ?? 0,
+        price: batch.dealPrice ?? batch.price ?? 0,
+        weight: batch.avgWeight ?? null,
+        statusLabel: STATUS[batch.state]?.chip ?? '',
+      }]
+  return {
+    side: 'farmer',
+    dealNo: String(batch.id).slice(0, 8).toUpperCase(),
+    self: {
+      role: 'Продавец',
+      name: account?.name || 'Ваше хозяйство',
+      bin: account?.bin ?? null,
+      phone: account?.phone ?? null,
+      region: account?.district || batch.district || null,
+    },
+    subject: {
+      catName: catLabel(batch),
+      grade: gradeLabel(batch),
+      breed: batch.breed ?? null,
+      avgWeight: batch.avgWeight ?? null,
+      fatness: batch.fatness ?? null,
+      age: batch.age ?? null,
+    },
+    totalHeads: batch.heads ?? 0,
+    dealPrice: batch.dealPrice ?? null,
+    chunks,
+    statusLabel: STATUS[batch.state]?.chip ?? batch.state,
+    timeline: [
+      { label: 'Создана', value: fmtDealDate(iso('createdAtIso')) },
+      { label: 'Выставлена', value: fmtDealDate(iso('publishedAtIso')) },
+      { label: 'Покупатель подобран', value: fmtDealDate(iso('matchedAtIso')) },
+      { label: 'Сделка подтверждена', value: fmtDealDate(iso('confirmedAtIso')) },
+      { label: 'Отгружена', value: fmtDealDate(iso('dispatchedAtIso')) },
+      { label: 'Принята', value: fmtDealDate(iso('deliveredAtIso')) },
+    ],
+  }
+}
+
+// Документ доступен, когда сделка состоялась (есть цена сделки и подобран покупатель).
+const DEAL_STATES = new Set(['matched', 'confirmed', 'dispatched', 'delivered', 'partial'])
+function hasDeal(batch: Batch): boolean {
+  return DEAL_STATES.has(batch.state)
+    && (batch.dealPrice != null
+        || (Array.isArray(batch.allocations) && batch.allocations.length > 0))
 }
 
 type LocalSheet = null | 'withdraw' | 'dispatch' | 'price'
@@ -269,11 +344,16 @@ function QuietZone({ batch }: { batch: Batch }) {
   const [showAllHist, setShowAllHist] = useState(false)
   const history = batch.history ?? []
   const shownHist = showAllHist ? history : history.slice(0, 2)
+  const grade = gradeLabel(batch)
   const details: [string, string | number | undefined][] = [
+    ['Сорт', grade ?? undefined],
     ['Порода', batch.breed],
+    ['Средний вес', batch.avgWeight != null ? `${batch.avgWeight} кг` : undefined],
+    ['Всего голов', batch.heads],
     ['Упитанность', batch.fatness],
-    ['Район', batch.district],
     ['Возраст', batch.age != null ? `${batch.age} мес.` : undefined],
+    ['Район', batch.district],
+    ['Окно готовности', strField(batch, 'windowLabel')],
   ]
 
   return (
@@ -319,9 +399,14 @@ function QuietZone({ batch }: { batch: Batch }) {
   )
 }
 
-export function BatchScreen({ batch, onBack, onPatch, onNew, onReview, onTuran, toast }: Props) {
+export function BatchScreen({ batch, account, onBack, onPatch, onNew, onReview, onTuran, toast }: Props) {
   const [sheet, setSheet] = useState<LocalSheet>(null)
   const def = STATUS[batch.state]
+
+  const downloadDoc = () => {
+    const ok = printDealDoc(buildFarmerDealDoc(batch, account))
+    if (!ok) toast('Разрешите всплывающие окна, чтобы скачать документ')
+  }
 
   const nextText = batch.state === 'offering'
     ? (strField(batch, 'deadlineLabel') ? `Ответ до ${strField(batch, 'deadlineLabel')}` : 'Ждём ответа')
@@ -375,6 +460,13 @@ export function BatchScreen({ batch, onBack, onPatch, onNew, onReview, onTuran, 
               && typeof batch.matchedHeads === 'number' && typeof batch.heads === 'number'
               && batch.matchedHeads < batch.heads)) && (
           <SplitPanel batch={batch} />
+        )}
+
+        {/* Слайс 9 (S4) — документ сделки (печать → PDF). Доступен, когда сделка состоялась. */}
+        {hasDeal(batch) && (
+          <div style={{ padding: '0 16px 8px' }}>
+            <Cta variant="ghost" onClick={downloadDoc}>Скачать документ сделки</Cta>
+          </div>
         )}
 
         {/* Зона 3 — Действие */}

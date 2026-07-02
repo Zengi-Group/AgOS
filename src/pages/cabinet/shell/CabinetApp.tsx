@@ -410,6 +410,7 @@ export function CabinetApp() {
       screen = (
         <BatchScreen
           batch={currentBatch}
+          account={profile ? { name: profile.name, bin: profile.bin, phone: profile.phone, district: profile.district } : null}
           onBack={() => go(route.back ?? { name: 'p1list' })}
           onPatch={(patch) => patchBatch(currentBatch.id, patch)}
           onNew={() => setWizActive(true)}

@@ -21,11 +21,17 @@ interface RawMatch {
   matchId: string
   batchId: string
   cat: string
+  grade: string | null
+  breed: string
   heads: number
   avgWeight: number
   price: number
   region: string
   status: string
+  matchedAt: string | null
+  confirmedAt: string | null
+  dispatchedAt: string | null
+  deliveredAt: string | null
   farmName: string | null
   farmPhone: string | null
 }
@@ -106,6 +112,17 @@ function toSupplier(m: RawMatch): SupplierRow {
       : 'awaiting_dispatch',
     farmName: m.farmName ?? undefined,
     district: m.region,
+    // Слайс 9 (S4): поля для документа сделки + карточки поставщика.
+    batchId: m.batchId,
+    cat: m.cat,
+    grade: m.grade,
+    breed: m.breed,
+    avgWeight: m.avgWeight,
+    farmPhone: m.farmPhone ?? undefined,
+    matchedAt: m.matchedAt,
+    confirmedAt: m.confirmedAt,
+    dispatchedAt: m.dispatchedAt,
+    deliveredAt: m.deliveredAt,
   }
 }
 

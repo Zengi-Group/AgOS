@@ -43,6 +43,17 @@ export interface SupplierRow {
   farmName?: string      // null до executing
   district?: string
   myRating?: number      // оценка МПК после executed
+  // Слайс 9 (S4): поля для документа сделки + более полной карточки поставщика.
+  batchId?: string
+  cat?: string           // код категории партии (для лейбла)
+  grade?: string | null  // сорт КРС (VS/S/NS)
+  breed?: string
+  avgWeight?: number     // средний вес, кг
+  farmPhone?: string     // раскрыт после закрытия пула
+  matchedAt?: string | null
+  confirmedAt?: string | null
+  dispatchedAt?: string | null
+  deliveredAt?: string | null
 }
 
 export interface Pool {

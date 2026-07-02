@@ -255,6 +255,7 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
             onPatch={(patch) => patchPool(pool.id, patch)}
             toast={showToast}
             onContactTuran={() => { setModal(null); setSheet({ kind: 'contact_turan' }) }}
+            mpk={{ orgName, region, bin }}
             onAdvance={advancePool}
             onLoadMatches={loadPoolMatches}
             onConfirmDelivery={confirmDelivery}
