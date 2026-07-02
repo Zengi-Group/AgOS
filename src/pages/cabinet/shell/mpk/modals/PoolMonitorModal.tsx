@@ -15,7 +15,7 @@ interface Props {
   onContactTuran: () => void
   onAdvance?: (poolId: string, status: string) => Promise<void>     // реальный перевод статуса в БД
   onLoadMatches?: (poolId: string) => Promise<SupplierRow[] | null> // реальные поставщики пула
-  onConfirmDelivery?: (batchId: string) => Promise<void>            // МПК подтверждает приёмку партии (BT-18)
+  onConfirmDelivery?: (allocationId: string) => Promise<void>       // МПК подтверждает приёмку КУСКА (BT-18, Слайс 9 S3)
 }
 
 // Реальный пул — строка БД (UUID). Только для него дёргаем self-serve RPC.
@@ -84,8 +84,12 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
   useEffect(() => {
     if (!realPool || !onLoadMatches) return
     let alive = true
-    onLoadMatches(pool.id).then((rows) => { if (alive && rows !== null) setLiveSuppliers(rows) })
-    return () => { alive = false }
+    const load = () => onLoadMatches(pool.id).then((rows) => { if (alive && rows !== null) setLiveSuppliers(rows) })
+    load()
+    // Лёгкий поллинг (Слайс 9 S3): пока модалка открыта, тихо перечитываем куски —
+    // МПК видит отгрузку фермера (matched→dispatched) без переоткрытия окна.
+    const iv = setInterval(load, 8000)
+    return () => { alive = false; clearInterval(iv) }
   }, [realPool, pool.id, onLoadMatches])
 
   const suppliers = liveSuppliers ?? pool.suppliers ?? []
@@ -157,32 +161,6 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
     )
   }
 
-  // ── filled ────────────────────────────────────────────────────────────
-  if (pool.status === 'filled') {
-    return (
-      <div className="mpk-modal">
-        <ModalHead title={pool.title} onClose={onClose} />
-        <div className="mpk-modal-body">
-          <div className="mpk-banner ok">
-            <div className="mpk-banner-t">✓ Заявка закрыта — готовим приёмку</div>
-            <div className="mpk-banner-s">Контакты поставщиков раскрыты (сделка подтверждена)</div>
-          </div>
-          <LinesList pool={pool} />
-          <div className="pool-card-sub">Средняя цена: {fmtMoney(avgPrice)}{NBSP}₸/кг</div>
-          <div>
-            <div className="mpk-field-label">Поставщики</div>
-            {suppliers.map((s) => (
-              <div className="pool-card-sub" key={s.id}>{s.farmName ?? 'Хозяйство'} — {s.heads} гол</div>
-            ))}
-          </div>
-          <Cta onClick={() => { applyStatus({ status: 'executing' }); toast('Приёмка начата') }}>
-            Перейти к приёмке
-          </Cta>
-        </div>
-      </div>
-    )
-  }
-
   // ── expired ─────────────────────────────────────────────────────────────
   if (pool.status === 'expired') {
     if (suppliers.length === 0) {
@@ -223,14 +201,24 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
     )
   }
 
-  // ── executing ───────────────────────────────────────────────────────────
-  if (pool.status === 'executing') {
-    const allDone = suppliers.every((s) => s.deliveryStatus === 'delivered' || s.deliveryStatus === 'withdrawn')
+  // ── filled / executing (приёмка ПО КУСКАМ) ───────────────────────────────
+  // Слайс 9 S3: контакты раскрыты по факту закрытия пула (mpk_contact_revealed_at),
+  // а приёмку МПК подтверждает по КАЖДОМУ куску, как только фермер его отгрузил.
+  // Поэтому отдельный шаг «Перейти к приёмке» не нужен — filled и executing едины:
+  // как только пул набран, МПК сразу видит куски и принимает отгруженные.
+  if (pool.status === 'executing' || pool.status === 'filled') {
+    const allDone = suppliers.length > 0
+      && suppliers.every((s) => s.deliveryStatus === 'delivered' || s.deliveryStatus === 'withdrawn')
+    const anyInTransit = suppliers.some((s) => s.deliveryStatus === 'in_transit')
     return (
       <div className="mpk-modal">
         <ModalHead title={pool.title} onClose={onClose} />
         <div className="mpk-modal-body">
-          <div className="mpk-banner ok"><div className="mpk-banner-t">Идёт приёмка</div></div>
+          <div className="mpk-banner ok"><div className="mpk-banner-t">
+            {anyInTransit ? 'Идёт приёмка'
+              : pool.status === 'filled' ? '✓ Заявка набрана — ждём отгрузки от поставщиков'
+              : 'Идёт приёмка'}
+          </div></div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {suppliers.map((s) => (
               <div className="supplier-row" key={s.id}>
