@@ -58,7 +58,9 @@ export interface SheetState {
 export interface BatchAllocation {
   heads: number
   price: number
-  status: 'matched' | 'confirmed' | 'cancelled'
+  // Слайс 9 S3: matched (ждёт заполнения пула) → confirmed (готов к отгрузке) →
+  // dispatched (отгружен) → delivered (принят МПК). cancelled — кусок отменён.
+  status: 'matched' | 'confirmed' | 'dispatched' | 'delivered' | 'cancelled'
   buyer?: string | null
   buyerPhone?: string | null
 }

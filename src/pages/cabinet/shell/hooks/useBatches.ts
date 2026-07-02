@@ -112,6 +112,26 @@ export function useBatches(accountId?: string | null): UseBatchesResult {
     //   'remainder' — снять только остаток (безплатно), 'matched' — + отменить
     //   проданные куски (за штраф). Реальный статус берём из refetch (partial→matched/
     //   confirmed/cancelled), поэтому оптимистично state не трогаем.
+    // Слайс 9 (S3): по-кусковая отгрузка. Сигнал _dispatchReady — фермер отгружает
+    // все готовые (confirmed) куски. rpc_self_dispatch_ready сам делает rollup статуса
+    // батча (matched/partial→dispatched при полной готовности); реальный статус — из refetch.
+    if ('_dispatchReady' in (patch as Record<string, unknown>)) {
+      try {
+        const { error } = await supabase.rpc('rpc_self_dispatch_ready', { p_batch_id: id })
+        if (error) throw error
+        await fetch({ silent: true })
+      } catch (e: unknown) {
+        // Нет backend (демо/офлайн) — локально помечаем отгруженным, не падаем.
+        setBatches((prev) => {
+          const next = prev.map((b) => (b.id === id ? { ...b, state: 'dispatched' } : b))
+          saveLocal(lsKey, next)
+          return next
+        })
+        console.warn('dispatchReady: RPC недоступен, помечено локально:', e)
+      }
+      return
+    }
+
     if ('_withdraw' in (patch as Record<string, unknown>)) {
       const includeMatched = (patch as { _withdraw?: string })._withdraw === 'matched'
       try {

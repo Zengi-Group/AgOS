@@ -119,6 +119,17 @@ function DecisionActions({ batch, onPatch, toast }: {
 // ── Панель частичной продажи (state=partial или несколько кусков) ───────────
 // Показывает прогресс «продано X / Y, осталось Z» + список кусков с покупателями.
 // Контакт покупателя раскрыт только после закрытия его пула (иначе «скрыт до сделки»).
+// Слайс 9 S3: человекочитаемый статус куска в панели частичной продажи.
+function chunkStatusLabel(s: string): string {
+  switch (s) {
+    case 'matched':    return 'ждёт заполнения пула'
+    case 'confirmed':  return 'готов к отгрузке'
+    case 'dispatched': return 'отгружено'
+    case 'delivered':  return 'принято'
+    default:           return ''
+  }
+}
+
 function SplitPanel({ batch }: { batch: Batch }) {
   const allocs = Array.isArray(batch.allocations) ? batch.allocations : []
   const total = typeof batch.heads === 'number' ? batch.heads : 0
@@ -150,6 +161,7 @@ function SplitPanel({ batch }: { batch: Batch }) {
             <div className="bat-kv-row" key={i}>
               <span className="bat-kv-k">
                 {a.heads} гол. · {fmtMoney(a.price)}{NBSP}₸/кг
+                {chunkStatusLabel(a.status) ? ` · ${chunkStatusLabel(a.status)}` : ''}
               </span>
               <span className="bat-kv-v">
                 {a.buyer
@@ -199,16 +211,26 @@ function Actions({ batch, onPatch, onNew, onReview, onTuran, toast, openSheet }:
       )
     case 'offering':
       return <Cta variant="danger" onClick={() => openSheet('withdraw')}>Снять с продажи</Cta>
-    case 'partial':
+    case 'partial': {
       // Часть партии уже продана (matched/подтверждённые куски). Снятие идёт через
       // rpc_self_withdraw_batch (Слайс 9 S1b): остаток — безплатно, matched-куски —
       // за штраф, подтверждённые — нельзя. Сценарии выбираются в WithdrawSheet.
+      // Слайс 9 S3: куски со статусом confirmed (их пул заполнился) можно ОТГРУЗИТЬ,
+      // не дожидаясь распродажи остатка — по-кусковая отгрузка (rpc_self_dispatch_ready).
+      const allocs = Array.isArray(batch.allocations) ? batch.allocations : []
+      const readyHeads = allocs.filter((a) => a.status === 'confirmed').reduce((s, a) => s + a.heads, 0)
       return (
         <>
           <div className="bat-warn-note">Часть партии уже продана. Остаток продолжает продаваться автоматически.</div>
+          {readyHeads > 0 && (
+            <Cta variant="primary-green" onClick={() => openSheet('dispatch')}>
+              Отгрузить готовое ({readyHeads} гол.)
+            </Cta>
+          )}
           <Cta variant="danger" onClick={() => openSheet('withdraw')}>Снять с продажи</Cta>
         </>
       )
+    }
     case 'decision':
       return (
         <>
@@ -394,7 +416,14 @@ export function BatchScreen({ batch, onBack, onPatch, onNew, onReview, onTuran, 
         batch={batch}
         open={sheet === 'dispatch'}
         onClose={() => setSheet(null)}
-        onConfirm={() => { onPatch({ state: 'dispatched', dispatchedLabel: 'сегодня' }); toast('Покупатель уведомлён об отгрузке'); setSheet(null) }}
+        onConfirm={() => {
+          // Слайс 9 S3: по-кусковая отгрузка через rpc_self_dispatch_ready (сигнал
+          // _dispatchReady). Отгружает все готовые (confirmed) куски; для цельного
+          // confirmed-батча без кусков — легаси-фолбэк (confirmed→dispatched).
+          onPatch({ _dispatchReady: true, dispatchedLabel: 'сегодня' })
+          toast('Покупатель уведомлён об отгрузке')
+          setSheet(null)
+        }}
       />
       <BatchPriceSheet
         batch={batch}

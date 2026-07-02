@@ -139,9 +139,10 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     await refetchOffers()
   }
 
-  // Подтвердить приёмку партии (BT-18): dispatched→delivered. Бросает при ошибке.
-  const confirmDelivery = async (batchId: string) => {
-    const { error } = await supabase.rpc('rpc_self_confirm_delivery', { p_batch_id: batchId })
+  // Подтвердить приёмку КУСКА (BT-18): allocation dispatched→delivered (Слайс 9 S3).
+  // id строки поставщика = allocation.id (rpc_get_pool_matches.matchId). Бросает при ошибке.
+  const confirmDelivery = async (allocationId: string) => {
+    const { error } = await supabase.rpc('rpc_self_confirm_delivery_alloc', { p_allocation_id: allocationId })
     if (error) throw new Error(error.message)
     await refetchPools()
   }
