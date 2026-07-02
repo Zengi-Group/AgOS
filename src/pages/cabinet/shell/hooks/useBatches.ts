@@ -106,6 +106,31 @@ export function useBatches(): UseBatchesResult {
   }, [fetch])
 
   const patchBatch = useCallback(async (id: string, patch: Partial<Batch>) => {
+    // Слайс 9 (S1b): самоотмена с учётом дробления. Сигнал _withdraw:
+    //   'remainder' — снять только остаток (безплатно), 'matched' — + отменить
+    //   проданные куски (за штраф). Реальный статус берём из refetch (partial→matched/
+    //   confirmed/cancelled), поэтому оптимистично state не трогаем.
+    if ('_withdraw' in (patch as Record<string, unknown>)) {
+      const includeMatched = (patch as { _withdraw?: string })._withdraw === 'matched'
+      try {
+        const { error } = await supabase.rpc('rpc_self_withdraw_batch', {
+          p_batch_id: id,
+          p_include_matched: includeMatched,
+        })
+        if (error) throw error
+        await fetch({ silent: true })   // синхронизировать статус/куски/остаток
+      } catch (e: unknown) {
+        // Нет backend (демо/офлайн) — локально помечаем снятым, не падаем.
+        setBatches((prev) => {
+          const next = prev.map((b) => (b.id === id ? { ...b, state: 'cancelled' } : b))
+          saveLocal(next)
+          return next
+        })
+        console.warn('withdraw: RPC недоступен, помечено локально:', e)
+      }
+      return
+    }
+
     // Оптимистичное обновление + сохранить локально (демо без backend)
     setBatches((prev) => {
       const next = prev.map((b) => (b.id === id ? { ...b, ...patch } : b))
@@ -170,7 +195,7 @@ export function useBatches(): UseBatchesResult {
       // Когда backend появится, RPC отработает и рефетч синхронизирует данные.
       console.warn('patchBatch: RPC недоступен, изменение сохранено локально:', e)
     }
-  }, [])
+  }, [fetch])
 
   return { batches, loading, error, refetch, addBatch, patchBatch }
 }

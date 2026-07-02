@@ -53,6 +53,16 @@ export interface SheetState {
   batchId?: string   // для withdraw, dispatch, batchprice
 }
 
+// Слайс 9: один проданный кусок партии (батч продаётся частями разным покупателям).
+// Контакт покупателя раскрыт только после закрытия его пула (buyer/buyerPhone = null до).
+export interface BatchAllocation {
+  heads: number
+  price: number
+  status: 'matched' | 'confirmed' | 'cancelled'
+  buyer?: string | null
+  buyerPhone?: string | null
+}
+
 export interface Batch {
   id: string
   state: string
@@ -66,6 +76,9 @@ export interface Batch {
   district?: string
   price?: number
   dealPrice?: number | null
+  matchedHeads?: number         // Слайс 9: сколько голов уже продано (сумма кусков)
+  remainingHeads?: number       // Слайс 9: сколько осталось на рынке
+  allocations?: BatchAllocation[]  // Слайс 9: проданные куски + покупатели
   history?: { t: string; d: string }[]
   [key: string]: unknown
 }
