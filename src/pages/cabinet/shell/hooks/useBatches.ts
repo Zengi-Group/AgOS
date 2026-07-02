@@ -10,20 +10,24 @@ import type { Batch } from '../types'
 // Локальное хранилище партий — фолбэк для разработки без backend (TSP demo).
 // Если RPC недоступен (нет деплоя схемы / офлайн), кабинет работает на localStorage:
 // созданные через визард партии сохраняются и кликаются в рамках браузера.
-const LS_KEY = 'agos.cabinet.batches.v1'
+// ВАЖНО: ключ СКОУПИТСЯ по аккаунту (userId) — иначе кеш одного владельца утекал бы
+// другому при входе под новым аккаунтом в том же браузере. Аноним/демо → общий ключ.
+const LS_BASE = 'agos.cabinet.batches.v1'
+const lsKeyFor = (accountId?: string | null): string =>
+  accountId ? `${LS_BASE}.${accountId}` : LS_BASE
 
-function loadLocal(): Batch[] {
+function loadLocal(key: string): Batch[] {
   try {
-    const raw = localStorage.getItem(LS_KEY)
+    const raw = localStorage.getItem(key)
     return raw ? (JSON.parse(raw) as Batch[]) : []
   } catch {
     return []
   }
 }
 
-function saveLocal(list: Batch[]): void {
+function saveLocal(key: string, list: Batch[]): void {
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify(list))
+    localStorage.setItem(key, JSON.stringify(list))
   } catch {
     /* localStorage недоступен — игнорируем */
   }
@@ -38,10 +42,11 @@ interface UseBatchesResult {
   patchBatch: (id: string, patch: Partial<Batch>) => Promise<void>
 }
 
-export function useBatches(): UseBatchesResult {
+export function useBatches(accountId?: string | null): UseBatchesResult {
   const [batches, setBatches] = useState<Batch[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const lsKey = lsKeyFor(accountId)
 
   const fetch = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = opts?.silent ?? false
@@ -50,24 +55,21 @@ export function useBatches(): UseBatchesResult {
     try {
       const { data, error: rpcError } = await supabase.rpc('rpc_get_org_batches', {})
       if (rpcError) throw rpcError
-      // rpc_get_org_batches возвращает JSONB массив
+      // rpc_get_org_batches возвращает JSONB массив, отфильтрованный по org (fn_my_org_ids).
+      // Backend — источник правды: показываем ровно то, что он вернул, ДАЖЕ пустой список.
+      // (Раньше при пустом ответе показывался localStorage-кеш — из-за этого партии
+      // предыдущего аккаунта «протекали» на новый аккаунт в том же браузере.)
       const list = Array.isArray(data) ? (data as Batch[]) : []
-      if (list.length > 0) {
-        // Есть backend и данные — синхронизируем локальную копию
-        setBatches(list)
-        saveLocal(list)
-      } else {
-        // Backend пуст (нет партий у org) — показываем локальные, созданные в демо
-        setBatches(loadLocal())
-      }
+      setBatches(list)
+      saveLocal(lsKey, list)
     } catch {
       // Нет backend (схема не задеплоена / офлайн) — работаем на localStorage,
-      // не падать с белым экраном
-      setBatches(loadLocal())
+      // не падать с белым экраном. Ключ скоуплен по аккаунту.
+      setBatches(loadLocal(lsKey))
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [])
+  }, [lsKey])
 
   // Рекомендация цены (D-PRICEREC-01): партии published/offering, провисевшие 24ч
   // без покупателя, переводятся в 'decision' — фермеру показывается экран снижения
@@ -98,12 +100,12 @@ export function useBatches(): UseBatchesResult {
       // Избежать дублей если рефетч уже добавил
       if (prev.some((x) => x.id === b.id)) return prev
       const next = [b, ...prev]
-      saveLocal(next)   // сохранить локально (демо без backend)
+      saveLocal(lsKey, next)   // сохранить локально (демо без backend)
       return next
     })
     // Рефетч в фоне для синхронизации с сервером (если backend есть)
     fetch()
-  }, [fetch])
+  }, [fetch, lsKey])
 
   const patchBatch = useCallback(async (id: string, patch: Partial<Batch>) => {
     // Слайс 9 (S1b): самоотмена с учётом дробления. Сигнал _withdraw:
@@ -123,7 +125,7 @@ export function useBatches(): UseBatchesResult {
         // Нет backend (демо/офлайн) — локально помечаем снятым, не падаем.
         setBatches((prev) => {
           const next = prev.map((b) => (b.id === id ? { ...b, state: 'cancelled' } : b))
-          saveLocal(next)
+          saveLocal(lsKey, next)
           return next
         })
         console.warn('withdraw: RPC недоступен, помечено локально:', e)
@@ -134,7 +136,7 @@ export function useBatches(): UseBatchesResult {
     // Оптимистичное обновление + сохранить локально (демо без backend)
     setBatches((prev) => {
       const next = prev.map((b) => (b.id === id ? { ...b, ...patch } : b))
-      saveLocal(next)
+      saveLocal(lsKey, next)
       return next
     })
 
@@ -164,7 +166,7 @@ export function useBatches(): UseBatchesResult {
             setBatches((prev) => {
               const next = prev.map((b) =>
                 b.id === id ? { ...b, state: 'matched' as Batch['state'], dealPrice: match.dealPrice ?? b.dealPrice } : b)
-              saveLocal(next)
+              saveLocal(lsKey, next)
               return next
             })
           }
@@ -195,7 +197,7 @@ export function useBatches(): UseBatchesResult {
       // Когда backend появится, RPC отработает и рефетч синхронизирует данные.
       console.warn('patchBatch: RPC недоступен, изменение сохранено локально:', e)
     }
-  }, [fetch])
+  }, [fetch, lsKey])
 
   return { batches, loading, error, refetch, addBatch, patchBatch }
 }
