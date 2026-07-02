@@ -45,7 +45,7 @@ export const STATUS: Record<string, StatusDef> = {
   },
   decision: {
     chip: 'Нужно решение',
-    phrase: 'Покупатели не согласились с ценой',
+    phrase: 'Пока нет покупателя по этой цене',
     next: 'Решите: снизить цену или ждать',
     fact: () => 'Требует решения',
   },
