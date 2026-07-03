@@ -291,7 +291,10 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
         <Cta onClick={publish} disabled={!canPublish || saving}>
           {saving ? 'Публикуем…' : 'Опубликовать'}
         </Cta>
-        <Cta variant="ghost" disabled={overCapacity} onClick={() => onSubmit(buildPool('filling'))}>Сохранить черновик</Cta>
+        {/* «Сохранить черновик» удалён: он создавал пул ТОЛЬКО в UI (fake id, без БД),
+            и следующий 20-сек полл его затирал реальным списком → пул «пропадал».
+            Бэкенд не имеет draft-состояния пула (activate сразу делает filling+свип),
+            поэтому единственный путь сохранения — «Опубликовать» через persist(). */}
       </div>
     </div>
 

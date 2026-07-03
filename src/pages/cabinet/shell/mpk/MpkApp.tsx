@@ -65,13 +65,16 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     loadAccountProfile('mpk').then(async (p) => {
       if (!alive) return
       if (!p) {
-        // Профиль пуст при сессии: возможна «осиротевшая» сессия (пользователь удалён из БД).
-        // getUser() обращается к Auth и возвращает 401/403, если пользователя нет → выходим
-        // и уводим на лендинг (не залипаем в демо). Сетевые сбои (без статуса) не разлогиниваем.
-        const { data, error } = await supabase.auth.getUser()
+        // Профиль пуст при сессии: возможна «осиротевшая» сессия (пользователь удалён из БД),
+        // но ГОРАЗДО чаще — временный сбой rpc_get_my_context или гонка обновления токена
+        // (создание пула шлёт несколько RPC разом). Разлогиниваем ТОЛЬКО при явном 401/403
+        // от Auth (сессия реально невалидна). Неоднозначный ответ getUser (нет ошибки, но и
+        // нет user) НЕ выкидываем — оставляем на демо-фолбэке, иначе МПК вылетает на ровном
+        // месте при каждом транзиентном сбое профиля. (Фикс: «с аккаунта МПК выкидывает».)
+        const { error } = await supabase.auth.getUser()
         if (!alive) return
-        const orphaned = (!!error && (error.status === 401 || error.status === 403)) || (!error && !data?.user)
-        if (orphaned) {
+        const authInvalid = !!error && (error.status === 401 || error.status === 403)
+        if (authInvalid) {
           await signOut()
           navigate('/', { replace: true })
         }
