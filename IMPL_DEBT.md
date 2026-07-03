@@ -35,7 +35,7 @@
 | MEMBERSHIP-02 | membership | code↔canon | Code requires pre-existing membership row at submit + FK membership_id NOT NULL; canon: row created at T2 approve | d01_kernel.sql:3480-3483,339 | Make membership_applications org-anchored (drop NOT NULL FK); approve(T2) creates row in grace_period |
 | MEMBERSHIP-03 | membership | code lags | grace_period/expired/revoked + transitions T4-T10 + MembershipStateTransition log unimplemented | canon Microstep2 §3,§7 | Backlog billing-driven (T4/T7/T9) + cron-driven (T5/T6/T8) + admin revoke (T10) + audit table |
 
-## 🟠 Significant (36)
+## 🟠 Significant (37)
 
 | id | domain | conflict | what | action |
 |----|--------|----------|------|--------|
@@ -75,8 +75,9 @@
 | TSP-ADAPTER-02 | TSP-schema | deploy-order | rebind дропает d07 `rpc_create_batch(uuid)`/`rpc_get_org_batches(uuid,text)` → text-sig/no-arg. На проде применён ПОСЛЕ d07 (text-sig wins, AI-19/AI-20 uuid-sig retired). Полный `deploy_sql.py` (d02<d07) БЕЗ re-apply adapter → возврат uuid-sig → PGRST203 overload | Deploy-порядок: d-файлы → затем `supabase/migrations/` adapter. Phase-2: при конвергенции убрать d07 uuid-sig defs. **✅ DECIDED 2026-06-23 (D-TSP-CANON-01):** канонический порядок деплоя = d-файлы → adapter; d07 uuid-sig defs убрать при конвергенции. |
 | CABINET-SHELL-01 | market-ui | code lags | MPK-юзеры не авто-роутятся на `/mpk`: `pickShellPath()` (account.ts) есть, но main `Login` хардкодит `/cabinet` (protected main-auth). `/mpk` reachable только прямым URL | Phase-2: role-based post-login redirect (не ломая main-auth) ИЛИ `CabinetApp` self-redirect для mpk-орг. **✅ FIXED 2026-06-23 (commit `ca34bd6`)** — `pickShellPath` redirect в Login.tsx (deep-link `from` сохранён, main-auth не тронут). **✅ FIXED 2026-06-25** — post-registration redirect в Registration.tsx тоже учитывает роль (`role === 'mpk' ? '/mpk' : '/cabinet'`); раньше хардкодил `/cabinet` → МПК после реги попадал в фермерский шелл. |
 | REG-EXPERT-01 | identity | code lags | expert-роль регистрации из `feature/my-changes` отложена: `'expert'` нет в d01 `org_type` CHECK + `rpc_register_organization`; UI `ExpertDetails`/`ExpertDocs`/`WelcomeStep` не взяты | Phase-2: extend org_type CHECK + `rpc_register_organization` под expert (+expert fields), затем порт UI; связано с IDENTITY-07. **✅ PARTIAL 2026-06-23 (commit `44ddb26`, Option A — reuse `consultant`):** UI (5-я роль + ExpertDetails/Docs ported) + expert→consultant через `orgTypeMap`, БЕЗ изменения org_type CHECK. PENDING Option B: запись `expert_profiles` при регистрации (решения по таксономии: vet→veterinarian map, single spec, is_staff, experience/price/about). |
+| DEPLOY-PIPE-01 | deploy | deploy-order | `deploy_sql.py` SQL_FILES не включает `d10_public_site.sql` (docstring до 2026-07-03 тоже отставал: «d01→…→d08» при факте d09+d11) — свежий полный деплой молча пропустит public-site схему (registration_applications, news, storage buckets). Найдено 2026-07-03 при сверке apply order для CLAUDE.md | добавить d10 в SQL_FILES после d09 ЛИБО задокументировать отдельный путь деплоя d10; учесть TSP-ADAPTER-02 (adapter в `supabase/migrations/` применяется ПОСЛЕ d-файлов) |
 
-## 🟡 Minor (12)
+## 🟡 Minor (13)
 
 | id | domain | what | action |
 |----|--------|------|--------|
@@ -92,5 +93,6 @@
 | IDENTITY-13 | identity | DEF-009 fn_* dual defs (d01 naive + d07 JWT); last-applied wins | Add comments at d01 defs noting d07 override (low risk) |
 | TSP-SCHEMA-08-code | TSP-schema | (canon-internal, no code change) Batch links pool_line not Pool | Cross-ref note only — Task 14 |
 | CABINET-SHELL-02 | market-ui | Новый мобильный shell = primary `/cabinet` (+`/mpk`, вне AppLayout); legacy веб-кабинет → `/cabinet-legacy` (Sidebar/Header/22 страницы перепривязаны). Консалтинг `/admin` не затронут | Решить судьбу `/cabinet-legacy` после фидбэка (fallback vs убрать) — ADR-CABINET-SHELL-01 |
+| QA-GATE-01 | qa | `cross_check.sh` SQL_FILES не включает `d11_norms.sql` — d11 вне QA-гейта; заодно: `farm_norms_ref` PK = `serial`, а Code Rules требуют uuid (найдено 2026-07-03) | добавить d11 в SQL_FILES cross_check.sh (проверить, что гейт не падает на serial PK); решить судьбу serial PK — справочник P8, low risk |
 
 > **Note on VET-02:** ✅ FIXED on branch `fix/vet-f11-isolation` (commit `4a961c9`) — ownership guard added, single definition confirmed, cross_check 0/0/0. **NOT YET DEPLOYED** — apply via `python3 deploy_sql.py <DB_PASSWORD>` to Supabase `mwtbozflyldcadypherr` before prod is safe.
