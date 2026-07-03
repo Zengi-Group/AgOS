@@ -225,6 +225,21 @@ comment on table public.organizations is
      D4: RestrictionRecord.organization_id blocks ALL membership types simultaneously.
      bin_iin nullable: P11 gradual accumulation — farmers often register without БИН on day 1.';
 
+-- 2026-07-03 sync (задеплоено миграцией 20260701140000_org_district):
+-- район организации как настоящее поле. Раньше район выбирался при регистрации,
+-- но хранился только в аудит-событии platform_events.role_data. Бэкфилл из событий
+-- регистрации и триггер переноса (fn_sync_org_district) живут в миграции.
+-- Матчинг маркетплейса остаётся на уровне области — район это адресная метка
+-- + жёсткий фильтр district_ids заявок МПК (см. d02 pool_requests.district_ids).
+alter table public.organizations
+    add column if not exists district_id text;
+
+comment on column public.organizations.district_id is
+    'Район организации — text-слаг справочника DISTRICTS фронта (НЕ FK на regions).
+     Источник: регистрация (role_data.district_id) либо админ-правка.
+     ТСП-матчинг: сверяется с pool_requests.district_ids (жёсткий фильтр,
+     20260701150000_tsp_district_sort).';
+
 -- -------------------------------------------------------
 -- organization_type_assignments
 -- D1: Separates "what type is this org" from membership level

@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useEffect, useState } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { useHost } from '@/platform/host/HostContext'
 
 export interface Organization {
   id: string
@@ -82,6 +83,7 @@ export const AuthContext = createContext<AuthContextValue>({
 })
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const host = useHost()
   const [session, setSession] = useState<Session | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [userContext, setUserContext] = useState<UserContext | null>(null)
@@ -106,13 +108,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
+    let cancelled = false
+    // Host Bridge (ARS-147): webview/capacitor могут инжектить сессию до чтения из storage;
+    // WebHost возвращает null — supabase-js читает localStorage сам, поведение web не меняется.
+    const init = async () => {
+      const injected = await host.bootstrapSession()
+      if (injected) {
+        await supabase.auth.setSession(injected)
+      }
+      const {
+        data: { session: s },
+      } = await supabase.auth.getSession()
+      if (cancelled) return
       setSession(s)
       setIsLoading(false)
       if (s) {
         loadContext()
       }
-    })
+    }
+    init()
 
     const {
       data: { subscription },
@@ -128,14 +142,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // TOKEN_REFRESHED: session already updated via setSession — no reload needed
     })
 
-    return () => subscription.unsubscribe()
-  }, [loadContext])
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
+  }, [loadContext, host])
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut()
+    // Host Bridge: хост чистит своё хранилище (Preferences / мост) и зовёт supabase.signOut
+    await host.signOut()
     setSession(null)
     setUserContext(null)
-  }, [])
+  }, [host])
 
   return (
     <AuthContext.Provider

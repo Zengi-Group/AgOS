@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { HelmetProvider } from 'react-helmet-async'
 import { Toaster } from '@/components/ui/sonner'
 import { AuthProvider } from '@/contexts/AuthContext'
+import { HostProvider } from '@/platform/host/HostContext'
 import { RequireAuth } from '@/components/guards/RequireAuth'
 
 import { RequireExpert } from '@/components/guards/RequireExpert'
@@ -131,6 +132,7 @@ function App() {
   return (
     <HelmetProvider>
     <QueryClientProvider client={queryClient}>
+      <HostProvider>
       <AuthProvider>
         <BrowserRouter>
           <Routes>
@@ -297,6 +299,7 @@ function App() {
         </BrowserRouter>
         <Toaster position="top-center" richColors />
       </AuthProvider>
+      </HostProvider>
     </QueryClientProvider>
     </HelmetProvider>
   )

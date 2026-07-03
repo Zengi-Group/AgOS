@@ -3112,3 +3112,49 @@ end if;
 **Остаток**: preview-UI прогон (фронтовая половина G2-метода); Art.171 явная цитата на шаге цены (формулировка за ARS-10 / D-LEGAL-1); TSP-FLOW-07 фикс; Slice D (3 overload-дубля + AI-repoint + deploy-order).
 
 **Files**: `apex-brain/projects/agos/specs/tsp-farmer-sell-flow.md` (синтез, status=building), `apex-brain/index.md` + `log.md`; `IMPL_DEBT.md` (реконсиляция + TSP-FLOW-07); Linear ARS-94 (epic) + sub-tasks. Кода в репо НЕ менял (только записи). E2E = read-only/rollback, прод не мутирован.
+
+---
+
+### 2026-06-29: ADMIN-MGMT-01 — админ управляет пользователями/организациями напрямую через auth.users (без Edge Functions)
+
+**What**: Миграции `20260629120000…150000`. Полный админ-CRUD: `rpc_admin_update_user` / `rpc_admin_list_users`; `rpc_admin_create_user` / `rpc_admin_delete_user` пишут **напрямую в `auth.users` + `auth.identities`** (security definer от postgres, пароль bcrypt через pgcrypto; каскад auth→public при удалении) — первоначальный план с Edge Functions `admin-create-user`/`admin-delete-user` (service-role) отброшен. Создаваемый пользователь привязывается к **существующей** организации (`p_organization_id` обязателен, организация НЕ создаётся попутно), членство активируется сразу (`registered→observer`) — «как обычный, но уже с активированным членством». Телефон нормализуется `fn_normalize_phone_kz` к виду GoTrue `7XXXXXXXXXX` (вход по номеру работает); смена телефона синхронизирует `auth.users.phone` + identity. Орг-CRUD: `rpc_admin_list/create/update/delete_organization` (delete = динамический NULL-out nullable-FK → delete → каскад); `20260701130000` добавил `region_id` в лист/апдейт/креэйт (партии фермера фолбэчат регион на `organizations.region_id` — batch-логика не тронута).
+
+**Why**: оперативное заведение и чистка аккаунтов админом без деплоя и поддержки Edge Functions; паттерн повторяет `rpc_assign_role` (security definer + `fn_is_admin()` guard + аудит `platform_events`, `is_audit=true`).
+
+**Consequences / риск**: прямая запись в `auth.*` = зависимость от внутренней схемы GoTrue — при апгрейде Supabase Auth проверять совместимость (bcrypt, identities). RPC живут в миграциях; канон d01 их не содержит (реплей d-файлов их не откатывает).
+
+**Files**: `supabase/migrations/20260629{12,13,14,15}0000_*.sql`, `20260701130000_admin_org_region.sql` (PR #20).
+
+---
+
+### 2026-07-01: DISTRICT-01 — районы как text-слаги фронтового справочника (не FK на regions)
+
+**What**: район хранится как **text-слаг** справочника `DISTRICTS` фронта: `organizations.district_id text` (20260701140000; бэкфилл из событий регистрации `role_data.district_id` + триггер `fn_sync_org_district` на `platform_events` — RPC регистрации не тронут) и `pool_requests.district_ids text[]` (20260701150000). Плюс мультивыбор областей `pool_requests.region_ids uuid[]` и порода `pool_lines.breed_label` (сверка через `fn_tsp_norm_breed`, 20260701120000). Матчинг: заданы `district_ids` → район партии обязан входить (жёсткий фильтр); NULL/пусто = вся область. Ручной матч МПК район не фильтрует (осознанный выбор).
+
+**Why**: справочник районов живёт на фронте, `regions` уровня района в БД не заполнен — для MVP район это адресная метка/фильтр, матчинг остаётся на уровне области. Слаг даёт паритет с регистрацией без сидинга таблицы районов.
+
+**Consequences**: нет FK-целостности района (мусорный слаг возможен, валидирует фронт); при будущем переезде справочника в БД нужен маппинг слаг→uuid. Канон: d01 (organizations) + d02 SECTION 9.1.
+
+**Files**: `supabase/migrations/202607011{2,4,5}0000_*.sql` (PR #20), `d01_kernel.sql`, `d02_tsp.sql` §9.1.
+
+---
+
+### 2026-07-02: BATCH-SPLIT-01 (Слайс 9) — дробление партии на куски; batch_allocations = источник правды сделки
+
+**What**: партия продаётся **кусками** между несколькими покупателями. Новая таблица `batch_allocations` (кусок = сделка: heads, price_per_kg, via, статусы `matched→confirmed→dispatched→delivered | cancelled`, таймстемпы этапов; RLS farmer/mpk read, запись только через security-definer аллокатор). `batches.matched_heads` (+CHECK ≤ heads) + новый статус `partially_matched`. Единый аллокатор `fn_tsp_alloc_chunk`: take = min(остаток, свободно строки/пула/по kg); **min-правило** — кусок ≥ `tsp_config.min_split_heads` (дефолт 5) и остаток либо 0, либо ≥ min; весь остаток целиком — всегда можно. Статус батча = rollup «самого отстающего» активного куска (`fn_tsp_rollup_batch_status`); отгрузка/приёмка по-кусковые (20260702190000), reveal контакта — per-кусок по закрытию ЕГО пула (D40/D-M6-5 per-chunk, `fn_tsp_batch_json.allocations[]`). Самоотмена: остаток — всегда бесплатно; matched-куски — за штраф (`cancelled_after_match` → D-TSP-14) по явному флагу; confirmed — залочены. Предпосылка (Слайс 8, 20260702120000, CEO-тест 2026-07-02): атомарная партия переливала лимит пула (41/40) либо зависала + broadcast шёл без цена-гейта → сначала жёсткий потолок и `bid >= ask`, затем решение дробить. Довесок: `tsp_config.price_decision_after_minutes` — таймер перевода непроданной партии в `awaiting_price_decision` (poll-driven `rpc_self_review_due_batches`, дефолт 1 мин на тест). Deal-doc поля (20260702210000) и админ-обзор маркетплейса read-only с контактами сторон (20260702220000; двойная слепота D40 — между контрагентами, не против оператора).
+
+**Why**: CEO 2026-07-02 — размеры партий не совпадают с ёмкостью строк пулов; атомарность = «перелив или зависание». «Отдаётся столько, сколько нужно», хвост остаётся на рынке (`partially_matched`).
+
+**Consequences**: `batches.pool_line_id` = легаси (первый кусок), полный список кусков — `batch_allocations`; `batches.matched_heads` = derived (SUM активных кусков); фронт/RPC читают `allocations[]`. Канон схемы: d02 SECTION 9 (тела RPC — в миграциях). `batches_status_check` = 13 статусов.
+
+**Files**: `supabase/migrations/202607021{2,4,6,7,8,9}0000_*.sql`, `2026070221,220000_*.sql` (PR #20), `d02_tsp.sql` §9.2–9.5.
+
+---
+
+### 2026-07-03: CLAUDE.md восстановлен (битый симлинк после PR #16) + apply order d09–d11
+
+**What**: Корневой `CLAUDE.md` был симлинком на `Docs/CLAUDE.md`; PR #16 (c8f3401) удалил таргет как «byte-дубль корневого», не заметив симлинк — мастер-контекст (HARD STOP, 12 принципов, Prohibited Actions, Lessons Learned) был нечитаем для Claude Code с 2026-06-24. Восстановлен из `c8f3401~1:Docs/CLAUDE.md` как ОБЫЧНЫЙ файл в корне (mode 120000→100644) — больше нет зависимости от второго файла (P4 через один физический файл, не симлинк). Вычитка: HS-3 шаг 3 `Docs/DECISIONS_LOG.md` → `DECISIONS_LOG.md` (корень, перемещён в PR #16); SQL apply order дополнен `→ d09 → d10 → d11` (подтверждено заголовками d10/d11 «apply after d09» + deploy_sql.py + cross_check.sh). Попутно найдены разрывы деплой-пайплайна → IMPL_DEBT: **DEPLOY-PIPE-01** (deploy_sql.py не применяет d10_public_site.sql) и **QA-GATE-01** (cross_check.sh не проверяет d11_norms.sql; заодно d11 PK=serial против Code Rules). Docstring deploy_sql.py приведён к факту, отсутствие d10 зафлагано комментарием — НЕ добавлял d10 в деплой молча (возможен отдельный путь деплоя public-site).
+
+**Why**: Без корневого CLAUDE.md сессии Claude Code шли без HARD STOP/принципов — прямой риск повторения инцидентов HS-1…HS-6. Разрывы пайплайна зафлаганы, не исправлены молча — по правилу конфликт-резолюции самого CLAUDE.md.
+
+**Files**: `CLAUDE.md` (восстановлен), `deploy_sql.py` (docstring+комментарий), `IMPL_DEBT.md` (+2 записи), `DECISIONS_LOG.md`. PR #21.

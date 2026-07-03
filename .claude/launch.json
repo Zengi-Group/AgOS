@@ -8,6 +8,12 @@
       "port": 5173
     },
     {
+      "name": "Frontend dist (vite preview)",
+      "runtimeExecutable": "/usr/local/bin/node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "preview"],
+      "port": 4173
+    },
+    {
       "name": "AI Gateway (FastAPI)",
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "uvicorn", "ai_gateway.main:app", "--loop", "asyncio", "--http", "h11", "--port", "8000"],
