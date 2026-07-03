@@ -229,7 +229,7 @@ TSP is coordination infrastructure of the association, NOT a marketplace. It doe
 - All timestamps: `timestamptz` (UTC)
 - Soft-delete: `is_active boolean` (not `deleted_at`)
 - All changes go into canonical domain files — separate patch files are FORBIDDEN
-- Apply order: d01 → d02 → d03 → d04 → d05 → d07 → d08
+- Apply order: d01 → d02 → d03 → d04 → d05 → d07 → d08 → d09 → d10 → d11
 
 ### RPC
 

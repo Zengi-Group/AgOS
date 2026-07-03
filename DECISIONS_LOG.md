@@ -3112,3 +3112,13 @@ end if;
 **Остаток**: preview-UI прогон (фронтовая половина G2-метода); Art.171 явная цитата на шаге цены (формулировка за ARS-10 / D-LEGAL-1); TSP-FLOW-07 фикс; Slice D (3 overload-дубля + AI-repoint + deploy-order).
 
 **Files**: `apex-brain/projects/agos/specs/tsp-farmer-sell-flow.md` (синтез, status=building), `apex-brain/index.md` + `log.md`; `IMPL_DEBT.md` (реконсиляция + TSP-FLOW-07); Linear ARS-94 (epic) + sub-tasks. Кода в репо НЕ менял (только записи). E2E = read-only/rollback, прод не мутирован.
+
+---
+
+### 2026-07-03: CLAUDE.md восстановлен (битый симлинк после PR #16) + apply order d09–d11
+
+**What**: Корневой `CLAUDE.md` был симлинком на `Docs/CLAUDE.md`; PR #16 (c8f3401) удалил таргет как «byte-дубль корневого», не заметив симлинк — мастер-контекст (HARD STOP, 12 принципов, Prohibited Actions, Lessons Learned) был нечитаем для Claude Code с 2026-06-24. Восстановлен из `c8f3401~1:Docs/CLAUDE.md` как ОБЫЧНЫЙ файл в корне (mode 120000→100644) — больше нет зависимости от второго файла (P4 через один физический файл, не симлинк). Вычитка: HS-3 шаг 3 `Docs/DECISIONS_LOG.md` → `DECISIONS_LOG.md` (корень, перемещён в PR #16); SQL apply order дополнен `→ d09 → d10 → d11` (подтверждено заголовками d10/d11 «apply after d09» + deploy_sql.py + cross_check.sh). Попутно найдены разрывы деплой-пайплайна → IMPL_DEBT: **DEPLOY-PIPE-01** (deploy_sql.py не применяет d10_public_site.sql) и **QA-GATE-01** (cross_check.sh не проверяет d11_norms.sql; заодно d11 PK=serial против Code Rules). Docstring deploy_sql.py приведён к факту, отсутствие d10 зафлагано комментарием — НЕ добавлял d10 в деплой молча (возможен отдельный путь деплоя public-site).
+
+**Why**: Без корневого CLAUDE.md сессии Claude Code шли без HARD STOP/принципов — прямой риск повторения инцидентов HS-1…HS-6. Разрывы пайплайна зафлаганы, не исправлены молча — по правилу конфликт-резолюции самого CLAUDE.md.
+
+**Files**: `CLAUDE.md` (восстановлен), `deploy_sql.py` (docstring+комментарий), `IMPL_DEBT.md` (+2 записи), `DECISIONS_LOG.md`. PR #21.
