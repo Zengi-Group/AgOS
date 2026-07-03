@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { appStorage } from '@/platform/storage'
 import type { Batch } from '../types'
 
 // Локальное хранилище партий — фолбэк для разработки без backend (TSP demo).
@@ -18,7 +19,7 @@ const lsKeyFor = (accountId?: string | null): string =>
 
 function loadLocal(key: string): Batch[] {
   try {
-    const raw = localStorage.getItem(key)
+    const raw = appStorage.getItem(key)
     return raw ? (JSON.parse(raw) as Batch[]) : []
   } catch {
     return []
@@ -27,9 +28,9 @@ function loadLocal(key: string): Batch[] {
 
 function saveLocal(key: string, list: Batch[]): void {
   try {
-    localStorage.setItem(key, JSON.stringify(list))
+    appStorage.setItem(key, JSON.stringify(list))
   } catch {
-    /* localStorage недоступен — игнорируем */
+    /* хранилище недоступно — игнорируем */
   }
 }
 

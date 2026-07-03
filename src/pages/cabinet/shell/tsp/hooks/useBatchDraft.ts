@@ -1,5 +1,7 @@
-// AgOS · TSP-1 · Персист черновика визарда в sessionStorage.
+// AgOS · TSP-1 · Персист черновика визарда: session-скоуп платформенного адаптера
+// (web = sessionStorage; нативка (S4) = Preferences — form preservation по Dok6).
 
+import { draftStorage } from '@/platform/storage'
 import { FRESH_WIZ, type WizState } from '../types/batch'
 
 const DRAFT_KEY = 'agos.tsp.draft.v1'
@@ -7,7 +9,7 @@ const DRAFT_KEY = 'agos.tsp.draft.v1'
 export function useBatchDraft() {
   const load = (): WizState => {
     try {
-      const s = sessionStorage.getItem(DRAFT_KEY)
+      const s = draftStorage.getItem(DRAFT_KEY)
       if (s) {
         const parsed = JSON.parse(s) as Partial<WizState>
         // catLoading сбрасываем — не хотим висящего спиннера при восстановлении
@@ -18,11 +20,11 @@ export function useBatchDraft() {
   }
 
   const save = (w: WizState) => {
-    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(w)) } catch { /* ignore */ }
+    try { draftStorage.setItem(DRAFT_KEY, JSON.stringify(w)) } catch { /* ignore */ }
   }
 
   const clear = () => {
-    try { sessionStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
+    try { draftStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
   }
 
   return { load, save, clear }
