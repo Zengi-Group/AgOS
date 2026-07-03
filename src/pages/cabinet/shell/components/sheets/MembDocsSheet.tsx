@@ -8,6 +8,7 @@ import { Sheet } from '../Sheet'
 import { Cta } from '../Cta'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
+import { useHost } from '@/platform/host/HostContext'
 import { REQUIRED_DOCUMENTS, ACCEPTED_FILE_TYPES, MAX_FILE_SIZE_MB } from '@/types/application-flow'
 
 // Русские подписи для слотов (i18n-ключи REQUIRED_DOCUMENTS не используем — шелл на русском).
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export function MembDocsSheet({ orgId, onClose, onSubmitted, open = true }: Props) {
+  const host = useHost()
   // slotKey → имя загруженного файла (null = не загружен).
   const [uploaded, setUploaded] = useState<Record<string, string | null>>({})
   const [busy, setBusy] = useState<string | null>(null)        // slotKey в процессе загрузки
@@ -91,6 +93,20 @@ export function MembDocsSheet({ orgId, onClose, onSubmitted, open = true }: Prop
     }
   }
 
+  // S3 (ARS-149, EngSpec §4 files): на нативке (caps.camera) документ снимаем камерой /
+  // берём из галереи через Host Bridge — <input type=file> в WebView не даёт нативного UX.
+  // Web: caps.camera=false → прежний <input> (PDF и т.п. сохраняются), путь не меняется.
+  const pickViaHost = async (slotKey: string) => {
+    const blob = await host.pickImage()
+    if (!blob) return
+    const ext = blob.type.split('/')[1] || 'jpg'
+    await onFile(slotKey, new File([blob], `${slotKey}.${ext}`, { type: blob.type }))
+  }
+  const pickDoc = (slotKey: string) => {
+    if (host.caps.camera) { void pickViaHost(slotKey); return }
+    inputs.current[slotKey]?.click()
+  }
+
   const total = REQUIRED_DOCUMENTS.length
   const doneCount = REQUIRED_DOCUMENTS.filter((s) => uploaded[s.key]).length
   const allDone = doneCount >= total
@@ -143,7 +159,7 @@ export function MembDocsSheet({ orgId, onClose, onSubmitted, open = true }: Prop
           className="cta ghost"
           style={{ marginTop: 0, padding: '7px 12px', fontSize: 12.5, width: 'auto' }}
           disabled={loading}
-          onClick={() => inputs.current[slot.key]?.click()}
+          onClick={() => pickDoc(slot.key)}
         >
           {loading ? 'Загрузка…' : done ? 'Заменить' : 'Загрузить'}
         </button>

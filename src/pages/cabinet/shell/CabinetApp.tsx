@@ -52,6 +52,9 @@ import { FARMER_LEAD_CAT, stickerData } from './data/prices'
 import type { BannerCard, ServiceDef } from './data/banners'
 import { loadAccountProfile, type AccountProfile } from '@/lib/account'
 import { loadFarmState } from './data/farm-load'
+// S3 (ARS-149, EngSpec §4): платформенные адаптеры — KV-хранилище и реальный сетевой статус.
+import { appStorage } from '@/platform/storage'
+import { useOnline } from '@/platform/network'
 
 // Инициалы для аватара хозяйства из названия орг/имени владельца.
 // «КХ Тестовое» → «ТЕ», «Алтын Дала» → «АД». Снимаем юр. форму-приставку,
@@ -73,11 +76,11 @@ function deriveInitials(name: string | null | undefined): string {
 // этот флаг — фолбэк, чтобы фермер после оплаты не видел повторный запрос подтверждения.
 const PAID_KEY = (userId: string) => 'agos.memb.paid.' + userId
 const isPaidLocally = (userId: string | undefined | null) =>
-  !!userId && localStorage.getItem(PAID_KEY(userId)) === '1'
+  !!userId && appStorage.getItem(PAID_KEY(userId)) === '1'
 
 function loadState(): ShellState {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = appStorage.getItem(STORAGE_KEY)
     if (raw) {
       const saved = JSON.parse(raw) as Partial<ShellState>
       return { ...INITIAL_STATE, ...saved, route: saved.route?.name ? saved.route : { name: 'home' } }
@@ -130,7 +133,10 @@ export function CabinetApp() {
   // ниже подгружается реальная сводка стада (rpc_get_farm_summary) и перекрывает сид.
   const [farm, setFarm] = useState(init.farm)
 
-  const [offline] = useState(false)
+  // S3 (ARS-149): реальный сетевой статус вместо заглушки — OfflineBar и
+  // офлайн-гейты (memberAct → offlineToast) оживают. Web = navigator.onLine (Dok6 Slice1).
+  const online = useOnline()
+  const offline = !online
   const loading = batchesLoading
 
   // Реальная сводка фермы (стадо + задачи) перекрывает демо-сид. Хойстнута из эффекта
@@ -167,17 +173,28 @@ export function CabinetApp() {
     return () => { alive = false; clearInterval(id) }
   }, [pullFarm])
 
+  // Dok6 offline-контракт: retry — при восстановлении сети сразу перезагружаем данные,
+  // не дожидаясь 30с-поллинга. Первый рендер пропускаем (данные и так грузятся на маунте).
+  const wasOffline = useRef(false)
+  useEffect(() => {
+    if (offline) { wasOffline.current = true; return }
+    if (!wasOffline.current) return
+    wasOffline.current = false
+    pullFarm()
+    refetchBatches()
+  }, [offline, pullFarm, refetchBatches])
+
   // Изоляция по аккаунту: при входе под другим userId не наследуем кабинет предыдущего.
   useEffect(() => {
     if (!profile?.userId) return
     const ACC_KEY = 'agos.cabinet.account'
-    const last = localStorage.getItem(ACC_KEY)
+    const last = appStorage.getItem(ACC_KEY)
     if (last && last !== profile.userId) {
-      localStorage.removeItem(STORAGE_KEY)
+      appStorage.removeItem(STORAGE_KEY)
       // Партии предыдущего аккаунта: чистим и его скоуп-кеш, и легаси-ключ без скоупа
       // (в нём могли остаться партии старого владельца до введения скоупинга по userId).
-      localStorage.removeItem(`agos.cabinet.batches.v1.${last}`)
-      localStorage.removeItem('agos.cabinet.batches.v1')
+      appStorage.removeItem(`agos.cabinet.batches.v1.${last}`)
+      appStorage.removeItem('agos.cabinet.batches.v1')
       setMembership(INITIAL_STATE.membership)
       setIsPro(INITIAL_STATE.isPro)
       setRoute(INITIAL_STATE.route)
@@ -187,7 +204,7 @@ export function CabinetApp() {
       setTuranUnread(INITIAL_STATE.turanUnread)
       setAiLog(INITIAL_STATE.aiLog)
     }
-    localStorage.setItem(ACC_KEY, profile.userId)
+    appStorage.setItem(ACC_KEY, profile.userId)
   }, [profile?.userId])
 
   // Реальный статус членства из БД перекрывает локальный (для вошедшего аккаунта).
@@ -224,7 +241,7 @@ export function CabinetApp() {
         membership, isPro, route, notifs, aiLog,
         newsOn, profileIncomplete, farmUnread, turanUnread,
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+      appStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     } catch {
       /* noop */
     }
@@ -332,7 +349,7 @@ export function CabinetApp() {
       if (!error) serverOk = true
       else console.warn('rpc_pay_membership_dues не прошёл, локальный фолбэк:', error.message)
     }
-    if (!serverOk && profile?.userId) localStorage.setItem(PAID_KEY(profile.userId), '1')
+    if (!serverOk && profile?.userId) appStorage.setItem(PAID_KEY(profile.userId), '1')
     setMembership('active')
     showToast('Взнос оплачен · членство активно')
   }

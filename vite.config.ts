@@ -78,6 +78,14 @@ export default defineConfig({
   },
   test: {
     projects: [{
+      // S3 (ARS-149): unit-тесты платформенных адаптеров (node, без DOM/браузера).
+      extends: true,
+      test: {
+        name: 'unit',
+        environment: 'node',
+        include: ['src/platform/**/*.test.ts']
+      }
+    }, {
       extends: true,
       plugins: [
       // The plugin will run tests for the stories defined in your Storybook config

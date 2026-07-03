@@ -8,6 +8,12 @@
       "port": 5173
     },
     {
+      "name": "Frontend (Vite, alt port)",
+      "runtimeExecutable": "/usr/local/bin/node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5199", "--strictPort"],
+      "port": 5199
+    },
+    {
       "name": "Frontend dist (vite preview)",
       "runtimeExecutable": "/usr/local/bin/node",
       "runtimeArgs": ["node_modules/vite/bin/vite.js", "preview"],
