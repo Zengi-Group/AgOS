@@ -22,6 +22,7 @@ import {
   Syringe,
   Shield,
   FileText,
+  Store,
   Activity,
   BarChart3,
   PanelLeftClose,
@@ -136,6 +137,7 @@ const ADMIN_GROUPS: NavGroup[] = [
     items: [
       { id: 'knowledge', icon: BookOpen, label: 'База знаний', route: '/admin/knowledge' },
       { id: 'audit', icon: FileText, label: 'Аудит', route: '/admin/audit' },
+      { id: 'marketplace', icon: Store, label: 'Торговая площадка', route: '/admin/marketplace' },
       { id: 'pools', icon: Package, label: 'Пулы', route: '/admin/pools' },
       { id: 'pricing', icon: DollarSign, label: 'Цены', route: '/admin/pricing' },
       { id: 'settings', icon: Settings, label: 'Настройки', route: '/admin/settings' },
