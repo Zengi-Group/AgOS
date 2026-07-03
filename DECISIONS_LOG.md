@@ -3158,3 +3158,15 @@ end if;
 **Why**: Без корневого CLAUDE.md сессии Claude Code шли без HARD STOP/принципов — прямой риск повторения инцидентов HS-1…HS-6. Разрывы пайплайна зафлаганы, не исправлены молча — по правилу конфликт-резолюции самого CLAUDE.md.
 
 **Files**: `CLAUDE.md` (восстановлен), `deploy_sql.py` (docstring+комментарий), `IMPL_DEBT.md` (+2 записи), `DECISIONS_LOG.md`. PR #21.
+
+---
+
+### 2026-07-03: S1 Host Bridge — контракт AgOSHost + WebHost + PWA-гигиена (ARS-147, PR #24)
+
+**What**: Введён host-agnostic слой `src/platform/host/`: интерфейс `AgOSHost` (`bootstrapSession · signOut · registerPushToken · onPushToken · onDeepLink` + capability-gated `haptics/pickImage/caps`, `kind: web|webview|capacitor`), реализация `WebHost` (no-op мост), рантайм-детект хоста, `HostProvider/useHost()`. Ядро (`AuthContext`) переведено на контракт: `bootstrapSession()` перед `getSession` (webview/capacitor смогут инжектить сессию), `signOut` через хост. PWA-гигиена: `manifest.webmanifest` (standalone, start_url `/cabinet`, иконки 192/512/maskable), SW через vite-plugin-pwa (precache app-shell ~3 МБ; маркетинговые фоны 6–8 МБ исключены — 3G-бюджеты Dok6; RPC не кешируются), регистрация SW через Host Bridge только web+PROD.
+
+**Why**: Анти-дивергенция двух треков (наша нативка ARS-110 + партнёрский WebView Ернура ARS-135): ядро зовёт ТОЛЬКО `AgOSHost`, транспорты (postMessage A4 / Capacitor S4) — реализации одного контракта. Ревью-инвариант: `@capacitor/` вне `platform/host/` = нарушение.
+
+**Consequences**: разблокированы S2 (ARS-148), S3 (ARS-149); `WebViewHost` (S7, Ернур) и `CapacitorHost` (S4) подключаются в фабрику `HostContext.tsx`; web ставится на домашний экран standalone. Долг: favicon-512 = апскейл 192px (настоящий asset к S4).
+
+**Files**: `src/platform/host/{AgOSHost,WebHost,detect}.ts`, `HostContext.tsx`, `src/contexts/AuthContext.tsx`, `src/App.tsx`, `index.html`, `vite.config.ts`, `public/manifest.webmanifest`. Спека: `Docs/AGOS-NativeApp-EngSpec-v0_1.md` §2/§5.
