@@ -82,7 +82,14 @@ export function CabinetApp() {
   const [membership, setMembership] = useState<MembershipStatus>(init.membership)
   const [isPro, setIsPro] = useState(init.isPro)
   const [route, setRoute] = useState<Route>(init.route)
-  const { batches, loading: batchesLoading, addBatch, patchBatch: patchBatchAsync } = useBatches()
+  // Профиль реального аккаунта (если вошёл). null = демо-режим (аноним / нет бэкенда).
+  const [profile, setProfile] = useState<AccountProfile | null>(null)
+  // Пока профиль грузится — показываем лоадер вместо демо-экрана. /cabinet всегда за
+  // RequireAuth (сессия гарантирована), поэтому демо-фолбэк не должен даже мелькать.
+  const [profileLoading, setProfileLoading] = useState(true)
+  // Партии скоупятся по аккаунту (userId): backend фильтрует по org (fn_my_org_ids), а
+  // localStorage-кеш — по ключу с userId, поэтому партии одного владельца не видны другому.
+  const { batches, loading: batchesLoading, addBatch, patchBatch: patchBatchAsync } = useBatches(profile?.userId)
   const [notifs, setNotifs] = useState(init.notifs)
   const [newsOn, setNewsOn] = useState(init.newsOn)
   const [profileIncomplete] = useState(init.profileIncomplete)
@@ -96,11 +103,6 @@ export function CabinetApp() {
   const [offline] = useState(false)
   const loading = batchesLoading
 
-  // Профиль реального аккаунта (если вошёл). null = демо-режим (аноним / нет бэкенда).
-  const [profile, setProfile] = useState<AccountProfile | null>(null)
-  // Пока профиль грузится — показываем лоадер вместо демо-экрана. /cabinet всегда за
-  // RequireAuth (сессия гарантирована), поэтому демо-фолбэк не должен даже мелькать.
-  const [profileLoading, setProfileLoading] = useState(true)
   useEffect(() => {
     let alive = true
     loadAccountProfile('farmer').then(async (p) => {
@@ -137,6 +139,10 @@ export function CabinetApp() {
     const last = localStorage.getItem(ACC_KEY)
     if (last && last !== profile.userId) {
       localStorage.removeItem(STORAGE_KEY)
+      // Партии предыдущего аккаунта: чистим и его скоуп-кеш, и легаси-ключ без скоупа
+      // (в нём могли остаться партии старого владельца до введения скоупинга по userId).
+      localStorage.removeItem(`agos.cabinet.batches.v1.${last}`)
+      localStorage.removeItem('agos.cabinet.batches.v1')
       setMembership(INITIAL_STATE.membership)
       setIsPro(INITIAL_STATE.isPro)
       setRoute(INITIAL_STATE.route)
@@ -322,6 +328,7 @@ export function CabinetApp() {
     tab, go, route,
     openAI, openPrices, aiCtxDefault: tab === 'farm' ? 'farm' : 'home',
     marketDot, msgBadge, avatarDot, avatarInitials,
+    farmRegion: profile?.district ?? null,
     offline, offlineToast, toast: showToast,
     membership, isPro, memberAct,
   }
@@ -403,6 +410,7 @@ export function CabinetApp() {
       screen = (
         <BatchScreen
           batch={currentBatch}
+          account={profile ? { name: profile.name, bin: profile.bin, phone: profile.phone, district: profile.district } : null}
           onBack={() => go(route.back ?? { name: 'p1list' })}
           onPatch={(patch) => patchBatch(currentBatch.id, patch)}
           onNew={() => setWizActive(true)}

@@ -45,9 +45,19 @@ export const STATUS: Record<string, StatusDef> = {
   },
   decision: {
     chip: 'Нужно решение',
-    phrase: 'Покупатели не согласились с ценой',
+    phrase: 'Пока нет покупателя по этой цене',
     next: 'Решите: снизить цену или ждать',
     fact: () => 'Требует решения',
+  },
+  partial: {
+    chip: 'Продаётся частями',
+    phrase: 'Часть партии продана',
+    next: 'Остаток продолжает продаваться на рынке',
+    fact: (b) => {
+      const m = typeof b.matchedHeads === 'number' ? b.matchedHeads : 0
+      const total = typeof b.heads === 'number' ? b.heads : 0
+      return total ? `Продано ${m} из ${total} гол.` : 'Продаётся частями'
+    },
   },
   matched: {
     chip: 'Покупатель найден',
@@ -84,7 +94,7 @@ export const STATUS: Record<string, StatusDef> = {
 // Сортировка для ListScreen — decision всегда первое
 export const STATE_RANK: Record<string, number> = {
   decision: 0,
-  offering: 1, published: 1, matched: 1, confirmed: 1, dispatched: 1, scheduled: 1, draft: 1,
+  offering: 1, published: 1, partial: 1, matched: 1, confirmed: 1, dispatched: 1, scheduled: 1, draft: 1,
   delivered: 2, cancelled: 2,
 }
 
@@ -92,7 +102,7 @@ export const STATE_RANK: Record<string, number> = {
 export type ListFilter = 'all' | 'active' | 'done'
 
 export const ACTIVE_STATES_SET = new Set([
-  'scheduled', 'published', 'offering', 'decision', 'matched', 'confirmed', 'dispatched', 'draft',
+  'scheduled', 'published', 'offering', 'decision', 'partial', 'matched', 'confirmed', 'dispatched', 'draft',
 ])
 export const DONE_STATES_SET = new Set(['delivered', 'cancelled'])
 
@@ -107,6 +117,14 @@ export function filterBatches(batches: Batch[], f: ListFilter): Batch[] {
 // Имя категории для карточки
 export function catLabel(b: Batch): string {
   return b.cat ? (CATS[b.cat]?.name ?? 'Партия') : 'Черновик партии'
+}
+
+// Сорт партии (КРС · Высшая/Первая/Вторая) — тот же, по которому закупает МПК.
+// Коды VS/S/NS приходят из fn_tsp_batch_grade. null/неизвестный → не показываем.
+const GRADE_RU: Record<string, string> = { VS: 'Высшая', S: 'Первая', NS: 'Вторая' }
+export function gradeLabel(b: Batch): string | null {
+  const ru = b.grade ? GRADE_RU[b.grade] : undefined
+  return ru ? `КРС · ${ru}` : null
 }
 
 // Защитная цена категории (для DecisionActions / BatchPriceSheet)

@@ -227,8 +227,9 @@ export function Registration() {
       sessionStorage.removeItem(STORAGE_KEY)
 
       // Registration complete — user already has a session (signed in after PIN).
-      // Go straight to the cabinet.
-      navigate('/cabinet')
+      // Route to the shell matching the chosen role: МПК → /mpk, остальные → /cabinet
+      // (совпадает с pickShellPath; роль здесь уже известна из формы).
+      navigate(role === 'mpk' ? '/mpk' : '/cabinet')
     } catch (err) {
       toast.error('Ошибка регистрации')
       console.error(err)

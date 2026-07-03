@@ -53,10 +53,23 @@ export interface SheetState {
   batchId?: string   // для withdraw, dispatch, batchprice
 }
 
+// Слайс 9: один проданный кусок партии (батч продаётся частями разным покупателям).
+// Контакт покупателя раскрыт только после закрытия его пула (buyer/buyerPhone = null до).
+export interface BatchAllocation {
+  heads: number
+  price: number
+  // Слайс 9 S3: matched (ждёт заполнения пула) → confirmed (готов к отгрузке) →
+  // dispatched (отгружен) → delivered (принят МПК). cancelled — кусок отменён.
+  status: 'matched' | 'confirmed' | 'dispatched' | 'delivered' | 'cancelled'
+  buyer?: string | null
+  buyerPhone?: string | null
+}
+
 export interface Batch {
   id: string
   state: string
   cat?: string
+  grade?: string | null   // сорт VS/S/NS из fn_tsp_batch_grade — для паритета с закупкой МПК
   breed?: string
   heads?: number
   avgWeight?: number
@@ -65,6 +78,9 @@ export interface Batch {
   district?: string
   price?: number
   dealPrice?: number | null
+  matchedHeads?: number         // Слайс 9: сколько голов уже продано (сумма кусков)
+  remainingHeads?: number       // Слайс 9: сколько осталось на рынке
+  allocations?: BatchAllocation[]  // Слайс 9: проданные куски + покупатели
   history?: { t: string; d: string }[]
   [key: string]: unknown
 }
@@ -118,6 +134,7 @@ export interface ShellContextValue {
   msgBadge: number
   avatarDot: boolean
   avatarInitials: string   // инициалы хозяйства из реального аккаунта (демо-фолбэк «АД»)
+  farmRegion: string | null // область регистрации хозяйства (regions.name_ru) — для read-only в визарде
   // состояние/действия
   offline: boolean
   offlineToast: () => void

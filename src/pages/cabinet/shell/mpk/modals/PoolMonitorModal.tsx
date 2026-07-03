@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { Cta } from '../../components/Cta'
 import { fmtMoney } from '../../tsp/data/tsp-utils'
 import { NBSP } from '../../tsp/data/tsp-dicts'
+import { printDealDoc, fmtDealDate, type DealDocData } from '../../data/deal-doc'
 import { MPK_CATS, type Pool, type SupplierRow } from '../types'
 
 interface Props {
@@ -13,9 +14,82 @@ interface Props {
   onPatch: (patch: Partial<Pool>) => void
   toast: (text: string) => void
   onContactTuran: () => void
+  mpk?: { orgName: string; region: string; bin: string }            // реквизиты МПК — для документа сделки
   onAdvance?: (poolId: string, status: string) => Promise<void>     // реальный перевод статуса в БД
   onLoadMatches?: (poolId: string) => Promise<SupplierRow[] | null> // реальные поставщики пула
-  onConfirmDelivery?: (batchId: string) => Promise<void>            // МПК подтверждает приёмку партии (BT-18)
+  onConfirmDelivery?: (allocationId: string) => Promise<void>       // МПК подтверждает приёмку КУСКА (BT-18, Слайс 9 S3)
+}
+
+// Код категории партии → человекочитаемо (fn_tsp_cat_display отдаёт код bychki/telki/korovy).
+const CAT_RU: Record<string, string> = { bychki: 'Бычки', telki: 'Тёлки', korovy: 'Коровы' }
+const GRADE_RU: Record<string, string> = { VS: 'КРС · Высшая', S: 'КРС · Первая', NS: 'КРС · Вторая' }
+function supplierCatLabel(s: SupplierRow): string {
+  const cat = s.cat ? (CAT_RU[s.cat] ?? s.cat) : ''
+  const grade = s.grade ? GRADE_RU[s.grade] : ''
+  return [cat, grade].filter(Boolean).join(' · ')
+}
+function deliveryLabel(st: SupplierRow['deliveryStatus']): string {
+  switch (st) {
+    case 'awaiting_dispatch': return 'Ожидает отгрузки'
+    case 'in_transit':        return 'В пути'
+    case 'delivered':         return 'Принята'
+    case 'withdrawn':         return 'Отозвана'
+    default:                  return ''
+  }
+}
+function supplierSum(s: SupplierRow): number {
+  return s.avgWeight ? Math.round(s.heads * s.avgWeight * s.price) : 0
+}
+
+// Слайс 9 (S4): документ сделки со стороны МПК (покупатель). Куски = поставщики пула.
+function minIso(rows: SupplierRow[], key: keyof SupplierRow): string | null {
+  const vals = rows.map((r) => r[key]).filter((v): v is string => typeof v === 'string')
+  return vals.length ? vals.reduce((a, b) => (a < b ? a : b)) : null
+}
+function maxIso(rows: SupplierRow[], key: keyof SupplierRow): string | null {
+  const vals = rows.map((r) => r[key]).filter((v): v is string => typeof v === 'string')
+  return vals.length ? vals.reduce((a, b) => (a > b ? a : b)) : null
+}
+function buildMpkDealDoc(pool: Pool, suppliers: SupplierRow[], mpk?: Props['mpk']): DealDocData {
+  const totalHeads = suppliers.reduce((s, r) => s + r.heads, 0)
+  return {
+    side: 'mpk',
+    dealNo: String(pool.id).slice(0, 8).toUpperCase(),
+    self: {
+      role: 'Покупатель',
+      name: mpk?.orgName || 'Ваше предприятие',
+      bin: mpk?.bin ?? null,
+      region: mpk?.region ?? pool.region,
+    },
+    subject: {
+      catName: pool.title,
+      grade: null,
+      breed: null,
+      avgWeight: null,      // пул разнородный — вес берём по каждому куску
+      fatness: null,
+      age: null,
+    },
+    totalHeads,
+    dealPrice: null,        // цена варьируется по кускам — в таблице
+    chunks: suppliers.map((s) => ({
+      counterparty: s.farmName ?? null,
+      counterpartyPhone: s.farmPhone ?? null,
+      heads: s.heads,
+      price: s.price,
+      weight: s.avgWeight ?? null,
+      statusLabel: deliveryLabel(s.deliveryStatus),
+    })),
+    statusLabel: pool.status === 'executed' ? 'Сделка завершена'
+      : pool.status === 'executing' ? 'Идёт приёмка'
+      : 'Заявка набрана',
+    timeline: [
+      { label: 'Заявка создана', value: pool.createdAt || '—' },
+      { label: 'Первый матч', value: fmtDealDate(minIso(suppliers, 'matchedAt')) },
+      { label: 'Пул закрыт (подтверждён)', value: fmtDealDate(minIso(suppliers, 'confirmedAt')) },
+      { label: 'Отгрузки начаты', value: fmtDealDate(minIso(suppliers, 'dispatchedAt')) },
+      { label: 'Приёмка завершена', value: fmtDealDate(maxIso(suppliers, 'deliveredAt')) },
+    ],
+  }
 }
 
 // Реальный пул — строка БД (UUID). Только для него дёргаем self-serve RPC.
@@ -77,19 +151,28 @@ function LinesList({ pool }: { pool: Pool }) {
   )
 }
 
-export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran, onAdvance, onLoadMatches, onConfirmDelivery }: Props) {
+export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran, mpk, onAdvance, onLoadMatches, onConfirmDelivery }: Props) {
   const realPool = UUID_RE.test(pool.id)
   // Реальные поставщики из БД перекрывают демо-список (контакты — только при executing, D40).
   const [liveSuppliers, setLiveSuppliers] = useState<SupplierRow[] | null>(null)
   useEffect(() => {
     if (!realPool || !onLoadMatches) return
     let alive = true
-    onLoadMatches(pool.id).then((rows) => { if (alive && rows !== null) setLiveSuppliers(rows) })
-    return () => { alive = false }
+    const load = () => onLoadMatches(pool.id).then((rows) => { if (alive && rows !== null) setLiveSuppliers(rows) })
+    load()
+    // Лёгкий поллинг (Слайс 9 S3): пока модалка открыта, тихо перечитываем куски —
+    // МПК видит отгрузку фермера (matched→dispatched) без переоткрытия окна.
+    const iv = setInterval(load, 8000)
+    return () => { alive = false; clearInterval(iv) }
   }, [realPool, pool.id, onLoadMatches])
 
   const suppliers = liveSuppliers ?? pool.suppliers ?? []
   const avgPrice = avgLinePrice(pool)
+
+  const downloadDoc = () => {
+    const ok = printDealDoc(buildMpkDealDoc(pool, suppliers, mpk))
+    if (!ok) toast('Разрешите всплывающие окна, чтобы скачать документ')
+  }
 
   const patchSupplier = (id: string, patch: Partial<SupplierRow>) => {
     if (liveSuppliers) {
@@ -157,32 +240,6 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
     )
   }
 
-  // ── filled ────────────────────────────────────────────────────────────
-  if (pool.status === 'filled') {
-    return (
-      <div className="mpk-modal">
-        <ModalHead title={pool.title} onClose={onClose} />
-        <div className="mpk-modal-body">
-          <div className="mpk-banner ok">
-            <div className="mpk-banner-t">✓ Заявка закрыта — готовим приёмку</div>
-            <div className="mpk-banner-s">Контакты поставщиков раскрыты (сделка подтверждена)</div>
-          </div>
-          <LinesList pool={pool} />
-          <div className="pool-card-sub">Средняя цена: {fmtMoney(avgPrice)}{NBSP}₸/кг</div>
-          <div>
-            <div className="mpk-field-label">Поставщики</div>
-            {suppliers.map((s) => (
-              <div className="pool-card-sub" key={s.id}>{s.farmName ?? 'Хозяйство'} — {s.heads} гол</div>
-            ))}
-          </div>
-          <Cta onClick={() => { applyStatus({ status: 'executing' }); toast('Приёмка начата') }}>
-            Перейти к приёмке
-          </Cta>
-        </div>
-      </div>
-    )
-  }
-
   // ── expired ─────────────────────────────────────────────────────────────
   if (pool.status === 'expired') {
     if (suppliers.length === 0) {
@@ -223,14 +280,25 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
     )
   }
 
-  // ── executing ───────────────────────────────────────────────────────────
-  if (pool.status === 'executing') {
-    const allDone = suppliers.every((s) => s.deliveryStatus === 'delivered' || s.deliveryStatus === 'withdrawn')
+  // ── filled / executing (приёмка ПО КУСКАМ) ───────────────────────────────
+  // Слайс 9 S3: контакты раскрыты по факту закрытия пула (mpk_contact_revealed_at),
+  // а приёмку МПК подтверждает по КАЖДОМУ куску, как только фермер его отгрузил.
+  // Поэтому отдельный шаг «Перейти к приёмке» не нужен — filled и executing едины:
+  // как только пул набран, МПК сразу видит куски и принимает отгруженные.
+  if (pool.status === 'executing' || pool.status === 'filled') {
+    const allDone = suppliers.length > 0
+      && suppliers.every((s) => s.deliveryStatus === 'delivered' || s.deliveryStatus === 'withdrawn')
+    const anyInTransit = suppliers.some((s) => s.deliveryStatus === 'in_transit')
     return (
       <div className="mpk-modal">
         <ModalHead title={pool.title} onClose={onClose} />
         <div className="mpk-modal-body">
-          <div className="mpk-banner ok"><div className="mpk-banner-t">Идёт приёмка</div></div>
+          <div className="mpk-banner ok"><div className="mpk-banner-t">
+            {anyInTransit ? 'Идёт приёмка'
+              : pool.status === 'filled' ? '✓ Заявка набрана — ждём отгрузки от поставщиков'
+              : 'Идёт приёмка'}
+          </div></div>
+          <Cta variant="ghost" onClick={downloadDoc}>Скачать документ сделки</Cta>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {suppliers.map((s) => (
               <div className="supplier-row" key={s.id}>
@@ -238,7 +306,11 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                   <span>{s.farmName ?? 'Хозяйство'}</span>
                   <span className="supplier-row-s">{s.district ?? ''}</span>
                 </div>
-                <div className="supplier-row-s">{s.heads} гол · {fmtMoney(s.price)}{NBSP}₸/кг</div>
+                {supplierCatLabel(s) && <div className="supplier-row-s">{supplierCatLabel(s)}</div>}
+                <div className="supplier-row-s">
+                  {s.heads} гол{s.avgWeight ? ` · ~${s.avgWeight}${NBSP}кг` : ''} · {fmtMoney(s.price)}{NBSP}₸/кг
+                  {supplierSum(s) > 0 ? ` · ≈ ${fmtMoney(supplierSum(s))}${NBSP}₸` : ''}
+                </div>
                 {s.deliveryStatus === 'awaiting_dispatch' && (
                   <>
                     <div className="supplier-status">Ожидает отгрузки</div>
@@ -309,6 +381,9 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
             </div>
             {allRated && <div className="mpk-ok-hint">Все поставщики оценены ✓</div>}
           </>
+        )}
+        {suppliers.length > 0 && (
+          <Cta variant="ghost" onClick={downloadDoc}>Скачать документ сделки</Cta>
         )}
         <Cta variant="ghost" onClick={onClose}>Готово</Cta>
       </div>

@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import type { WizState } from '../types/batch'
 import { CATS } from '../data/tsp-dicts'
-import { deriveCategory } from '../data/tsp-utils'
+import { deriveCategory, deriveMpkGrade, MPK_SORT_LABEL } from '../data/tsp-utils'
 import { WizShell } from './WizShell'
 import { Cta } from '../../components/Cta'
 
@@ -64,6 +64,7 @@ export function WizStep3Category({ w, sw, onNext, onBack, onExit, onTuran }: Pro
   }
 
   const cat = CATS[w.catKey!]
+  const mpkSort = deriveMpkGrade(w)
   return (
     <WizShell step={3} onBack={onBack} onExit={onExit} title="Категория"
       cta="Далее →" onCta={onNext}>
@@ -72,6 +73,13 @@ export function WizStep3Category({ w, sw, onNext, onBack, onExit, onTuran }: Pro
         <div className="cc-name">{cat.name}</div>
         <div className="cc-b">Определяется автоматически по породе, весу, возрасту и упитанности. Категорию нельзя выбрать вручную — так все партии оцениваются одинаково.</div>
       </div>
+      {mpkSort && (
+        <div className="cat-card ok" style={{ marginTop: 10 }}>
+          <div className="cc-k mono">СОРТ ДЛЯ ПОКУПАТЕЛЯ</div>
+          <div className="cc-name">{MPK_SORT_LABEL[mpkSort]}</div>
+          <div className="cc-b">По упитанности «{w.fatness}» мясокомбинаты видят вашу партию как сорт «{MPK_SORT_LABEL[mpkSort]}» и могут закупить именно эту категорию.</div>
+        </div>
+      )}
     </WizShell>
   )
 }

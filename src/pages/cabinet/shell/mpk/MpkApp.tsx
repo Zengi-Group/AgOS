@@ -65,13 +65,16 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     loadAccountProfile('mpk').then(async (p) => {
       if (!alive) return
       if (!p) {
-        // Профиль пуст при сессии: возможна «осиротевшая» сессия (пользователь удалён из БД).
-        // getUser() обращается к Auth и возвращает 401/403, если пользователя нет → выходим
-        // и уводим на лендинг (не залипаем в демо). Сетевые сбои (без статуса) не разлогиниваем.
-        const { data, error } = await supabase.auth.getUser()
+        // Профиль пуст при сессии: возможна «осиротевшая» сессия (пользователь удалён из БД),
+        // но ГОРАЗДО чаще — временный сбой rpc_get_my_context или гонка обновления токена
+        // (создание пула шлёт несколько RPC разом). Разлогиниваем ТОЛЬКО при явном 401/403
+        // от Auth (сессия реально невалидна). Неоднозначный ответ getUser (нет ошибки, но и
+        // нет user) НЕ выкидываем — оставляем на демо-фолбэке, иначе МПК вылетает на ровном
+        // месте при каждом транзиентном сбое профиля. (Фикс: «с аккаунта МПК выкидывает».)
+        const { error } = await supabase.auth.getUser()
         if (!alive) return
-        const orphaned = (!!error && (error.status === 401 || error.status === 403)) || (!error && !data?.user)
-        if (orphaned) {
+        const authInvalid = !!error && (error.status === 401 || error.status === 403)
+        if (authInvalid) {
           await signOut()
           navigate('/', { replace: true })
         }
@@ -139,9 +142,10 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     await refetchOffers()
   }
 
-  // Подтвердить приёмку партии (BT-18): dispatched→delivered. Бросает при ошибке.
-  const confirmDelivery = async (batchId: string) => {
-    const { error } = await supabase.rpc('rpc_self_confirm_delivery', { p_batch_id: batchId })
+  // Подтвердить приёмку КУСКА (BT-18): allocation dispatched→delivered (Слайс 9 S3).
+  // id строки поставщика = allocation.id (rpc_get_pool_matches.matchId). Бросает при ошибке.
+  const confirmDelivery = async (allocationId: string) => {
+    const { error } = await supabase.rpc('rpc_self_confirm_delivery_alloc', { p_allocation_id: allocationId })
     if (error) throw new Error(error.message)
     await refetchPools()
   }
@@ -254,6 +258,7 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
             onPatch={(patch) => patchPool(pool.id, patch)}
             toast={showToast}
             onContactTuran={() => { setModal(null); setSheet({ kind: 'contact_turan' }) }}
+            mpk={{ orgName, region, bin }}
             onAdvance={advancePool}
             onLoadMatches={loadPoolMatches}
             onConfirmDelivery={confirmDelivery}

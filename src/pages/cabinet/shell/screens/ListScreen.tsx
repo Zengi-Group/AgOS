@@ -6,7 +6,7 @@ import type { Batch } from '../types'
 import { fmtMoney } from '../tsp/data/tsp-utils'
 import { NBSP } from '../tsp/data/tsp-dicts'
 import {
-  STATUS, catLabel, filterBatches,
+  STATUS, catLabel, gradeLabel, filterBatches,
   type ListFilter,
 } from '../data/status'
 import { ShellFrame } from '../components/ShellFrame'
@@ -35,9 +35,12 @@ function BatchCard({ b, onClick }: { b: Batch; onClick: () => void }) {
   const def = STATUS[b.state]
   const price = b.dealPrice ?? b.price ?? 0
   const isDecision = b.state === 'decision'
+  const grade = gradeLabel(b)
   return (
     <button className={'lst-card' + (isDecision ? ' decision' : '')} onClick={onClick}>
-      <span className="lst-card-r1">{catLabel(b)} · {b.heads} гол. · ~{b.avgWeight} кг</span>
+      <span className="lst-card-r1">
+        {catLabel(b)}{grade ? ` · ${grade}` : ''} · {b.heads} гол. · ~{b.avgWeight} кг
+      </span>
       <span className="lst-card-r2">
         <span className="lst-dot" style={{ background: dotColor(b.state) }} />
         {def?.chip ?? b.state} · {def ? def.fact(b) : ''}

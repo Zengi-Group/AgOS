@@ -91,6 +91,7 @@ import { Restrictions } from '@/pages/admin/restrictions/Restrictions'
 import { AuditLog } from '@/pages/admin/audit/AuditLog'
 import { PoolQueue } from '@/pages/admin/pools/PoolQueue'
 import { PoolDetail } from '@/pages/admin/pools/PoolDetail'
+import { MarketplaceAdmin } from '@/pages/admin/marketplace/MarketplaceAdmin'
 import { PriceGridManagement } from '@/pages/admin/pricing/PriceGridManagement'
 import { UserManagement } from '@/pages/admin/users/UserManagement'
 import { RoleAssignment } from '@/pages/admin/roles/RoleAssignment'
@@ -217,6 +218,7 @@ function App() {
                     <Route path="knowledge" element={<KnowledgeBase />} />
                     <Route path="restrictions" element={<Restrictions />} />
                     <Route path="audit" element={<AuditLog />} />
+                    <Route path="marketplace" element={<MarketplaceAdmin />} />
                     <Route path="pools" element={<PoolQueue />} />
                     <Route path="pools/:poolId" element={<PoolDetail />} />
                     <Route path="pricing" element={<PriceGridManagement />} />

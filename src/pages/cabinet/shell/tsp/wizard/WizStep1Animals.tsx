@@ -3,9 +3,10 @@
 
 import { useRef, useState } from 'react'
 import type { WizState } from '../types/batch'
-import { BREEDS, DISTRICTS, FATNESS } from '../data/tsp-dicts'
+import { BREEDS, FATNESS } from '../data/tsp-dicts'
 import { WizShell } from './WizShell'
 import { StepperCtl } from '../components/StepperCtl'
+import { useShell } from '../../context'
 
 function wizScrollTo(el: HTMLElement | null) {
   if (!el) return
@@ -26,6 +27,7 @@ interface Props {
 }
 
 export function WizStep1Animals({ w, sw, onNext, onBack, onExit }: Props) {
+  const { farmRegion } = useShell()
   const wErr = w.avgWeight < 100 || w.avgWeight > 800
   const aErr = w.age < 3 || w.age > 120
   const hErr = w.heads < 1 || w.heads > 500
@@ -92,15 +94,13 @@ export function WizStep1Animals({ w, sw, onNext, onBack, onExit }: Props) {
         </div>
       </div>
       {miss.fatness && <div className="field-err amber">Выберите упитанность</div>}
-      <label className="field nomb">
-        <div className="lab">район</div>
-        <span className="selwrap">
-          <select className="fselect" value={w.district} onChange={(e) => sw({ district: e.target.value })}>
-            {DISTRICTS.map((d) => <option key={d}>{d}</option>)}
-          </select>
-        </span>
-        <div className="hint">предзаполнен из профиля хозяйства</div>
-      </label>
+      <div className="field nomb">
+        <div className="lab">регион</div>
+        <div className="kind-row" style={{ marginTop: 4 }}>
+          <span className="fix-badge">{farmRegion || 'из профиля хозяйства'}</span>
+        </div>
+        <div className="hint">берётся из данных регистрации хозяйства — менять не нужно</div>
+      </div>
     </WizShell>
   )
 }
