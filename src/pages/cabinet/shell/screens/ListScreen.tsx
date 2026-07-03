@@ -9,7 +9,7 @@ import {
   STATUS, catLabel, gradeLabel, filterBatches,
   type ListFilter,
 } from '../data/status'
-import { ShellFrame } from '../components/ShellFrame'
+import { IonShellFrame } from '../components/IonShellFrame'
 
 interface Props {
   batches: Batch[]
@@ -65,7 +65,7 @@ export function ListScreen({ batches, onBatch, onNew, onBack }: Props) {
   const canCreateFromEmpty = filter === 'all' || filter === 'active'
 
   return (
-    <ShellFrame noTabs label="Мои партии">
+    <IonShellFrame noTabs label="Мои партии">
       <div className="lst-head">
         <button className="lst-back" onClick={onBack} aria-label="Назад">←</button>
         <div className="lst-title">Мои партии</div>
@@ -113,6 +113,6 @@ export function ListScreen({ batches, onBatch, onNew, onBack }: Props) {
       {batches.length > 0 && (
         <button className="lst-fab" onClick={onNew}>+ Новая партия</button>
       )}
-    </ShellFrame>
+    </IonShellFrame>
   )
 }

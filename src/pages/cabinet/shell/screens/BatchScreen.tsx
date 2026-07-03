@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import type { Batch } from '../types'
 import { Cta } from '../components/Cta'
-import { ShellFrame } from '../components/ShellFrame'
+import { IonShellFrame } from '../components/IonShellFrame'
 import { WithdrawSheet } from '../components/sheets/WithdrawSheet'
 import { DispatchSheet } from '../components/sheets/DispatchSheet'
 import { BatchPriceSheet } from '../components/sheets/BatchPriceSheet'
@@ -416,7 +416,7 @@ export function BatchScreen({ batch, account, onBack, onPatch, onNew, onReview, 
   const bigPrice = batch.dealPrice ?? batch.price ?? 0
 
   return (
-    <ShellFrame noTabs label={`Партия · ${batch.state}`}>
+    <IonShellFrame noTabs label={`Партия · ${batch.state}`}>
       <div className="bat-wrap">
         <div className="bat-back-row">
           <button className="bat-back" onClick={onBack} aria-label="Назад">←</button>
@@ -523,6 +523,6 @@ export function BatchScreen({ batch, account, onBack, onPatch, onNew, onReview, 
         onClose={() => setSheet(null)}
         onConfirm={(newPrice) => { onPatch({ price: newPrice }); toast('Цена обновлена'); setSheet(null) }}
       />
-    </ShellFrame>
+    </IonShellFrame>
   )
 }

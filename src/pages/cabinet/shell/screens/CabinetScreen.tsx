@@ -2,7 +2,7 @@
 // Вход через аватар на Главной. Тексты — слово в слово из прототипа.
 
 import type { ReactNode } from 'react'
-import { ShellFrame } from '../components/ShellFrame'
+import { IonShellFrame } from '../components/IonShellFrame'
 import { ShellHead } from '../components/ShellHead'
 import { ShIc } from '../components/icons/ShIc'
 import { MEMBERSHIP_DICT, FARM } from '../store'
@@ -64,7 +64,7 @@ export function CabinetScreen({ membership, profileIncomplete, newsOn, onNewsTog
   const legalFormText = (profile?.legalForm && LEGAL_FORM_LABELS[profile.legalForm]) || 'Крестьянское хозяйство'
 
   return (
-    <ShellFrame label={'Кабинет · ' + membership}>
+    <IonShellFrame label={'Кабинет · ' + membership}>
       <button className="back-strip" onClick={onBack}><span className="arrow mono">‹</span> Главная</button>
       <ShellHead big title="Кабинет" sub={farmName} />
       <div className="home-stack">
@@ -116,6 +116,6 @@ export function CabinetScreen({ membership, profileIncomplete, newsOn, onNewsTog
           </div>
         </div>
       </div>
-    </ShellFrame>
+    </IonShellFrame>
   )
 }

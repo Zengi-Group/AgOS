@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import type { Batch } from '../types'
 import { Cta } from '../components/Cta'
-import { ShellFrame } from '../components/ShellFrame'
+import { IonShellFrame } from '../components/IonShellFrame'
 import { catLabel } from '../data/status'
 
 interface Props {
@@ -43,7 +43,7 @@ export function ReviewScreen({ batch, onBack, onPatch, toast }: Props) {
   }
 
   return (
-    <ShellFrame noTabs label="Отзыв">
+    <IonShellFrame noTabs label="Отзыв">
       <div className="rev-wrap">
         <div className="bat-back-row" style={{ padding: 0 }}>
         <button className="bat-back" onClick={onBack} aria-label="Назад">←</button>
@@ -76,6 +76,6 @@ export function ReviewScreen({ batch, onBack, onPatch, toast }: Props) {
 
         <Cta onClick={submit} disabled={!canSubmit}>Отправить отзыв</Cta>
       </div>
-    </ShellFrame>
+    </IonShellFrame>
   )
 }

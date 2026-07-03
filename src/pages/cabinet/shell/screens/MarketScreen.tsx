@@ -6,7 +6,7 @@ import { gated } from '../store'
 import { ACTIVE_STATES, catName } from '../data/batches'
 import { fmtMoney } from '../tsp/data/tsp-utils'
 import { NBSP } from '../tsp/data/tsp-dicts'
-import { ShellFrame } from '../components/ShellFrame'
+import { IonShellFrame } from '../components/IonShellFrame'
 import { ShellHead } from '../components/ShellHead'
 import { SkeletonBlocks } from '../components/SkeletonBlocks'
 
@@ -51,9 +51,10 @@ interface Props {
   onApply: () => void
   onPay: () => void
   go: (r: Route) => void
+  onRefresh?: () => Promise<unknown>   // S2: pull-to-refresh (spec §7)
 }
 
-export function MarketScreen({ membership, batches, loading, onNew, onApply, onPay, go }: Props) {
+export function MarketScreen({ membership, batches, loading, onNew, onApply, onPay, go, onRefresh }: Props) {
   const isGate = gated(membership)
   const expired = membership === 'expired'
   const active = batches
@@ -61,7 +62,7 @@ export function MarketScreen({ membership, batches, loading, onNew, onApply, onP
     .sort((a, b2) => (a.state === 'decision' ? -1 : 0) - (b2.state === 'decision' ? -1 : 0))
 
   return (
-    <ShellFrame label={'Рынок · ' + membership}>
+    <IonShellFrame label={'Рынок · ' + membership} onRefresh={onRefresh}>
       <ShellHead big title="Рынок" sub="продажа скота" />
       {loading ? <SkeletonBlocks n={4} /> : (
         <div className="home-stack">
@@ -101,6 +102,6 @@ export function MarketScreen({ membership, batches, loading, onNew, onApply, onP
           )}
         </div>
       )}
-    </ShellFrame>
+    </IonShellFrame>
   )
 }

@@ -96,3 +96,16 @@
 | QA-GATE-01 | qa | `cross_check.sh` SQL_FILES не включает `d11_norms.sql` — d11 вне QA-гейта; заодно: `farm_norms_ref` PK = `serial`, а Code Rules требуют uuid (найдено 2026-07-03) | добавить d11 в SQL_FILES cross_check.sh (проверить, что гейт не падает на serial PK); решить судьбу serial PK — справочник P8, low risk |
 
 > **Note on VET-02:** ✅ FIXED on branch `fix/vet-f11-isolation` (commit `4a961c9`) — ownership guard added, single definition confirmed, cross_check 0/0/0. **NOT YET DEPLOYED** — apply via `python3 deploy_sql.py <DB_PASSWORD>` to Supabase `mwtbozflyldcadypherr` before prod is safe.
+
+## 🟢 Native app (design-tracked, 1)
+
+### DEBT-NATIVE-ROUTER-01 — dual react-router (v5-остров для Ionic-оболочек) ИЛИ отложенный edge-swipe
+**Context:** ADR-NATIVE-ROUTER-01 AMEND-1 (2026-07-03). v6-совместимого Ionic-роутера не существует; движок стека страниц/переходов Ionic React (`StackManager`) шипится ТОЛЬКО в `@ionic/react-router`, который статически импортирует v5-only API (спайк: standalone outlet на v6 = белый экран). Решение: вариант A = изолированное поддерево react-router **v5** для `/cabinet/*` + `/mpk/*` через Vite resolve.alias (остальное приложение v6), за гейт-спайком сосуществования; фолбэк — вариант C = плоский Ionic на v6 без edge-swipe.
+**Debt если шипим A:**
+- Две версии react-router сосуществуют (v5 для Ionic-оболочек, v6 для остального), читая один `window.history`. Пересматривать при любом мажорном бампе любой из версий. Retire-when: Ionic выпустит официальный react-router v6 адаптер (трекать ionic-framework#24177) → снять v5-alias.
+- Vite-alias обязан оставаться scoped только на Ionic-пакет; регрессия, «протёкшая» v5 в дерево приложения (или наоборот) = тихий слом — покрыть smoke-тестом: v6-роут приложения И v5-роут оболочки оба рендерятся и навигируются.
+**Debt если шипим C (фолбэк):**
+- Нет edge-swipe-назад и независимых back-стеков вкладок; push/pop = ручной CSS. ОСОЗНАННО пожертвованный acceptance-пункт (трек fast-follow, D-ROADMAP-01). Retire — миграцией на A или на официальный v6-роутер Ionic.
+**Blocking pre-work:** ✅ ГЕЙТ ПРОЙДЕН 2026-07-03 (см. DECISIONS_LOG ADR-NATIVE-ROUTER-01 AMEND-1) — dual-router доказан в этом Vite 6 без patch-package (importer-keyed `resolveId`-плагин `agos:ionic-v5-island` + nested optimizeDeps.include CJS-депсов). **Ветка A активна**; ветка C не понадобилась. Остаточный долг = блок «если шипим A» выше + smoke-тест v6+v5 роутов (ещё не написан). Dev-нюанс: после рестарта Vite-сервера нужен полный reload страницы (стейл-граф → тихий no-op навигации).
+**Severity:** medium (A: ограничено, конфиг-уровень, гейт пройден; smoke-тест отсутствует).
+**Owner surface:** `vite.config.ts`, `package.json`, `src/pages/cabinet/shell/CabinetApp.tsx`, `src/pages/cabinet/shell/mpk/MpkApp.tsx`. Слайсы: ARS-148 (S2), ARS-152 (S6).

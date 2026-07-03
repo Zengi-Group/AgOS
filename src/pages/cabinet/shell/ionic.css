@@ -1,0 +1,74 @@
+/* AgOS · S2 (ARS-148) · Ionic внутри фермерской оболочки: TURAN-тема (старт UI-кита
+   ARS-109) + layout-глю. Подключается ПОСЛЕ @ionic/react/css/core.css и cabinet.css.
+   Скоуп — .agos-cabinet-stage: Ionic-переменные не протекают в админку/сайт (v6-мир). */
+
+/* ---------- TURAN-тема через Ionic CSS-переменные ---------- */
+.agos-cabinet-stage {
+  /* фон — существующая тёплая палитра кабинета (визуальная непрерывность, HS-2);
+     #fdf6ee — направление ARS-109, применяется дизайн-проходом UI-кита */
+  --ion-background-color: var(--bg);
+  --ion-text-color: var(--ink);
+  --ion-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* бренд-оранжевый TURAN — акцент Ionic-хрома (рефрешер, грабер шторки) */
+  --ion-color-primary: #e07a3b;
+  --ion-color-primary-rgb: 224, 122, 59;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #c56b34;
+  --ion-color-primary-tint: #e3874f;
+}
+
+/* ---------- layout-глю: ion-app живёт внутри 440px-рамки .phone ---------- */
+.agos-cabinet-stage .phone { position: relative; }
+.agos-cabinet-stage .phone ion-app { position: absolute; inset: 0; }
+
+/* ion-content: прозрачный фон (фон даёт ion-page = --ion-background-color);
+   .phone-scroll внутри — только отступы, скроллит ion-content (нативная инерция) */
+.agos-cabinet-stage ion-content.agos-ion-content {
+  --background: transparent;
+}
+.agos-cabinet-stage ion-content.agos-ion-content .phone-scroll {
+  flex: none;
+  overflow-y: visible;
+}
+
+/* ---------- таб-бар: цвета прежнего .bottom-nav ---------- */
+.agos-cabinet-stage ion-tab-bar.agos-tabbar {
+  --background: var(--card);
+  --color: var(--ink-3);
+  --color-selected: var(--green-d);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.agos-cabinet-stage ion-tab-bar.agos-tabbar ion-tab-button {
+  --padding-start: 2px;
+  --padding-end: 2px;
+  font-size: 11px;
+}
+.agos-cabinet-stage ion-tab-bar.agos-tabbar .bn-ic { position: relative; line-height: 0; }
+.agos-cabinet-stage ion-tab-bar.agos-tabbar .bn-t { font-size: 11px; margin-top: 2px; }
+
+/* ---------- шторки: IonModal-sheet с высотой по контенту ---------- */
+/* Рецепт auto-height sheet: --height auto + прижатие к низу; drag-to-dismiss
+   даёт сам IonModal (breakpoints [0,1] в Sheet.tsx). Ширина = рамка телефона. */
+ion-modal.agos-sheet-modal {
+  --height: auto;
+  --width: 100%;
+  --max-width: 440px;
+  --border-radius: 20px 20px 0 0;
+  --background: transparent;
+  --box-shadow: 0 -8px 40px rgba(20, 12, 4, .18);
+  align-items: flex-end;
+}
+/* внутренняя карточка сохраняет прежний вид .sheet; позиционирование/анимацию
+   теперь даёт модал — глушим только их */
+ion-modal.agos-sheet-modal .sheet {
+  animation: none;
+  max-height: 88vh;
+}
+
+/* ---------- полноэкранные флоу без IonShellFrame (BatchWizard / PubResult) ---------- */
+.agos-cabinet-stage .agos-flow-page {
+  background: var(--bg);
+  overflow-y: auto;
+}
