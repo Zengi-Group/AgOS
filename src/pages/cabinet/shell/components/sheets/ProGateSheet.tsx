@@ -5,9 +5,9 @@ import { Sheet } from '../Sheet'
 import { Cta } from '../Cta'
 import { NBSP } from '../../store'
 
-export function ProGateSheet({ onClose, onPay }: { onClose: () => void; onPay: () => void }) {
+export function ProGateSheet({ onClose, onPay, open = true }: { onClose: () => void; onPay: () => void; open?: boolean }) {
   return (
-    <Sheet open onClose={onClose}>
+    <Sheet open={open} onClose={onClose}>
       <div className="sh-t">Консультант — в Platform Pro</div>
       <div className="sh-b">
         AI-зоотехник TURAN доступен с подпиской Platform Pro — 4 900{NBSP}₸/мес. Помогает с рационом, болезнями, отёлом и ценой.

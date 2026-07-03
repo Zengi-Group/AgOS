@@ -25,7 +25,7 @@ import {
 import { routeToUrl, urlToRoute, routeKey, dirFor } from './nav'
 import { supabase } from '@/lib/supabase'
 import type {
-  MembershipStatus, Route, SheetState, ShellState, ToastState, ShellContextValue, Batch,
+  MembershipStatus, Route, SheetKind, SheetState, ShellState, ToastState, ShellContextValue, Batch,
 } from './types'
 import { useBatches } from './hooks/useBatches'
 import { Toast } from './components/Toast'
@@ -202,6 +202,13 @@ export function CabinetApp() {
   }, [profile?.userId, profile?.membershipLevel, profile?.applicationStatus])
   const [sheet, setSheet] = useState<SheetState | null>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
+  // S2-ревью (PR #27): IonModal-шторки держим смонтированными — программное закрытие
+  // анимируется через isOpen=false (условный unmount рвал dismiss-анимацию). Сброс
+  // внутреннего состояния stateful-шторок — у них самих по open=true (НЕ через key-remount:
+  // размонтирование ion-modal в момент презентации соседнего ломает overlay-стек Ionic).
+  // closeSheet гардит по kind: поздний onDidDismiss закрывающейся шторки не должен убить
+  // следующую, уже открытую (переход progate→paypro).
+  const closeSheet = (kind: SheetKind) => setSheet((cur) => (cur?.kind === kind ? null : cur))
 
   // ---------- TSP-1: визард «Новая партия» + результат публикации ----------
   const [wizActive, setWizActive] = useState(false)
@@ -249,6 +256,16 @@ export function CabinetApp() {
     if (dir === 'back' && ion.canGoBack()) ion.goBack()
     else if (dir === 'root') ion.push(url, 'root', 'replace')
     else ion.push(url, dir)
+  }
+  // Явный «назад» (кнопки ←): настоящий pop, когда стек позволяет — иначе возврат на
+  // таб-корень анимировался как смена корня (ревью PR #27, SIG-2). Холодный deep-link
+  // (стек пуст) → push с back-анимацией; URL→Route-синк выправит состояние при расхождении.
+  const goBackTo = (r: Route) => {
+    setRoute(r)
+    const ion = ionRef.current
+    if (!ion) return
+    if (ion.canGoBack()) ion.goBack()
+    else ion.push(routeToUrl(r), 'back')
   }
   // URL → Route-синк: browser-back / edge-swipe / deep-link меняют URL мимо go().
   // `back` при этом не восстанавливается — onBack-хендлеры используют `route.back ?? fallback`.
@@ -469,7 +486,7 @@ export function CabinetApp() {
           if (activeCount >= ACTIVE_COUNT_LIMIT) { setSheet({ kind: 'limit' }); return }
           setWizActive(true)
         }}
-        onBack={() => go({ name: 'market' })}
+        onBack={() => goBackTo({ name: 'market' })}
       />
     )
   }
@@ -481,7 +498,7 @@ export function CabinetApp() {
       <BatchScreen
         batch={currentBatch}
         account={profile ? { name: profile.name, bin: profile.bin, phone: profile.phone, district: profile.district } : null}
-        onBack={() => go(route.back ?? { name: 'p1list' })}
+        onBack={() => goBackTo(route.back ?? { name: 'p1list' })}
         onPatch={(patch) => patchBatch(currentBatch.id, patch)}
         onNew={() => setWizActive(true)}
         onReview={() => go({ name: 'review', batchId: currentBatch.id, back: { name: 'batch', batchId: currentBatch.id } })}
@@ -497,7 +514,7 @@ export function CabinetApp() {
     return (
       <ReviewScreen
         batch={reviewBatch}
-        onBack={() => go(route.back ?? { name: 'batch', batchId: reviewBatch.id })}
+        onBack={() => goBackTo(route.back ?? { name: 'batch', batchId: reviewBatch.id })}
         onPatch={(patch) => patchBatch(reviewBatch.id, patch)}
         toast={showToast}
       />
@@ -511,7 +528,7 @@ export function CabinetApp() {
       newsOn={newsOn}
       onNewsToggle={() => setNewsOn((v) => !v)}
       memberAct={memberAct}
-      onBack={() => go({ name: 'home' })}
+      onBack={() => goBackTo({ name: 'home' })}
       onTuran={() => go({ name: 'thread', tid: 'turan', back: { name: 'cabinet' } })}
       onLogout={handleLogout}
       profile={profile}
@@ -520,7 +537,7 @@ export function CabinetApp() {
 
   const renderTuran = () => (
     <TuranScreen
-      onBack={() => go(route.back ?? { name: 'home' })}
+      onBack={() => goBackTo(route.back ?? { name: 'home' })}
       toast={showToast}
     />
   )
@@ -557,33 +574,43 @@ export function CabinetApp() {
                 <RouteV5 render={renderHome} />
               </IonRouterOutlet>
             </IonReactRouter>
-            {/* Тост и шторки — поверх страниц; IonModal (Sheet.tsx) сам портится в ion-app */}
+            {/* Тост и шторки — поверх страниц; IonModal (Sheet.tsx) сам портится в ion-app.
+                Шторки смонтированы постоянно (open-флаг) — dismiss-анимация играет и при
+                программном закрытии (ревью PR #27). key=epoch у stateful-шторок — каждый
+                показ с чистого состояния. PriceSheet — своя не-Ionic шторка, условный маунт. */}
             <Toast toast={toast} />
-            {sheet?.kind === 'payvznos' && (
-              <PayVznosSheet membership={membership} onClose={() => setSheet(null)} onDone={payVznosDone} />
-            )}
-            {sheet?.kind === 'paypro' && (
-              <PayProSheet onClose={() => setSheet(null)} onDone={payProDone} />
-            )}
-            {sheet?.kind === 'progate' && (
-              <ProGateSheet onClose={() => setSheet(null)} onPay={() => setSheet({ kind: 'paypro' })} />
-            )}
-            {sheet?.kind === 'membgate' && (
-              <MembGateSheet membership={membership} onClose={() => setSheet(null)} onAct={memberAct} />
-            )}
-            {sheet?.kind === 'membdocs' && (
-              <MembDocsSheet orgId={profile?.orgId ?? null} onClose={() => setSheet(null)} onSubmitted={onMembDocsSubmitted} />
-            )}
+            <PayVznosSheet
+              open={sheet?.kind === 'payvznos'}
+              membership={membership}
+              onClose={() => closeSheet('payvznos')}
+              onDone={payVznosDone}
+            />
+            <PayProSheet open={sheet?.kind === 'paypro'} onClose={() => closeSheet('paypro')} onDone={payProDone} />
+            <ProGateSheet
+              open={sheet?.kind === 'progate'}
+              onClose={() => closeSheet('progate')}
+              onPay={() => setSheet({ kind: 'paypro' })}
+            />
+            <MembGateSheet
+              open={sheet?.kind === 'membgate'}
+              membership={membership}
+              onClose={() => closeSheet('membgate')}
+              onAct={memberAct}
+            />
+            <MembDocsSheet
+              open={sheet?.kind === 'membdocs'}
+              orgId={profile?.orgId ?? null}
+              onClose={() => closeSheet('membdocs')}
+              onSubmitted={onMembDocsSubmitted}
+            />
             {sheet?.kind === 'prices' && (
-              <PriceSheet catKey={sheet.catKey} onClose={() => setSheet(null)} onSell={sellByPrice} />
+              <PriceSheet catKey={sheet.catKey} onClose={() => closeSheet('prices')} onSell={sellByPrice} />
             )}
-            {sheet?.kind === 'limit' && (
-              <LimitSheet
-                open
-                onClose={() => setSheet(null)}
-                onToList={() => { setSheet(null); go({ name: 'p1list' }) }}
-              />
-            )}
+            <LimitSheet
+              open={sheet?.kind === 'limit'}
+              onClose={() => closeSheet('limit')}
+              onToList={() => { setSheet(null); go({ name: 'p1list' }) }}
+            />
           </IonApp>
         </div>
       </div>

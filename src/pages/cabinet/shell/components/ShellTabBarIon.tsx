@@ -10,7 +10,7 @@ import { SHELL_TABS } from './ShellTabBar'
 export function ShellTabBarIon() {
   const ctx = useShell()
   return (
-    <IonTabBar className="agos-tabbar" selectedTab={ctx.tab}>
+    <IonTabBar className="agos-tabbar">
       {SHELL_TABS.map(([k, t, ic]) => (
         <IonTabButton
           key={k}

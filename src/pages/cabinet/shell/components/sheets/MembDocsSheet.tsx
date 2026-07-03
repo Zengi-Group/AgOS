@@ -21,9 +21,10 @@ interface Props {
   orgId: string | null
   onClose: () => void
   onSubmitted: () => void
+  open?: boolean   // S2: IonModal-анимация закрытия — родитель держит шторку смонтированной
 }
 
-export function MembDocsSheet({ orgId, onClose, onSubmitted }: Props) {
+export function MembDocsSheet({ orgId, onClose, onSubmitted, open = true }: Props) {
   // slotKey → имя загруженного файла (null = не загружен).
   const [uploaded, setUploaded] = useState<Record<string, string | null>>({})
   const [busy, setBusy] = useState<string | null>(null)        // slotKey в процессе загрузки
@@ -31,7 +32,12 @@ export function MembDocsSheet({ orgId, onClose, onSubmitted }: Props) {
   const inputs = useRef<Record<string, HTMLInputElement | null>>({})
 
   // Предзаполняем состояние из уже загруженных файлов (если возвращается к заявке).
+  // Шторка смонтирована постоянно (S2) — перечитываем список и сбрасываем busy/submitting
+  // на каждое открытие, как при прежнем условном маунте.
   useEffect(() => {
+    if (!open) return
+    setBusy(null)
+    setSubmitting(false)
     if (!orgId) return
     let alive = true
     supabase.storage
@@ -47,7 +53,7 @@ export function MembDocsSheet({ orgId, onClose, onSubmitted }: Props) {
         setUploaded(next)
       })
     return () => { alive = false }
-  }, [orgId])
+  }, [orgId, open])
 
   const onFile = async (slotKey: string, file: File | undefined) => {
     if (!file) return
@@ -146,7 +152,7 @@ export function MembDocsSheet({ orgId, onClose, onSubmitted }: Props) {
   }
 
   return (
-    <Sheet open onClose={onClose}>
+    <Sheet open={open} onClose={onClose}>
       <div className="sh-t">Документы для членства</div>
       <div className="sh-b">Заявка в ассоциацию ТУРАН. Прикрепите документы — после одобрения откроется оплата взноса и Рынок (TSP).</div>
       <div style={{ maxHeight: 430, overflowY: 'auto', margin: '0 -2px' }}>

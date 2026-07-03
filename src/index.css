@@ -1281,3 +1281,14 @@ input[type=number] { -moz-appearance: textfield; }
   color: hsl(var(--primary));
   font-weight: 500;
 }
+
+/* ── S2 (ARS-148, ревью PR #27): страховка от глобального body-правила Ionic ──
+   @ionic/react/css/core.css содержит body{background:var(--ion-background-color);
+   color:var(--ion-text-color)} БЕЗ слоя. Чанк кабинета lazy (App.tsx), но после
+   визита в /cabinet CSS остаётся загруженным на весь SPA-сеанс. Задаём переменным
+   дефолты сайта — правило Ionic вычисляется ровно в те же цвета. Внутри кабинета
+   их перекрывает .agos-cabinet-stage (shell/ionic.css). */
+:root {
+  --ion-background-color: #fdf6ee;
+  --ion-text-color: hsl(var(--foreground));
+}
