@@ -1,18 +1,31 @@
 // AgOS · Этап 1 · Корень оболочки фермера: состояние, localStorage, навигация,
 // бейджи, AI-гейт, действия членства, платёжные шторки. Источник истины — прототип shell/app.jsx.
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
+// S2 (ARS-148, ADR-NATIVE-ROUTER-01 AMEND-1): Ionic-навигация. IonReactRouter живёт
+// на изолированном react-router v5 (v5-остров, vite.config.ts agos:ionic-v5-island);
+// остальное приложение остаётся на v6. Гейт-спайк пройден 2026-07-03.
+import { setupIonicReact, IonApp, IonPage, IonRouterOutlet } from '@ionic/react'
+import type { UseIonRouterResult } from '@ionic/react'
+import { useIonRouter } from '@ionic/react'
+import { IonReactRouter } from '@ionic/react-router'
+// @ts-expect-error v5-alias пакет без @types — импорты v5-острова (спайк-проверено).
+// RouteV5 — иначе конфликт имён с типом Route из './types'.
+import { Route as RouteV5, useLocation } from 'react-router-dom-v5'
+import '@ionic/react/css/core.css'
 import './cabinet.css'
+import './ionic.css'
 import { useAuth } from '@/hooks/useAuth'
 import { ShellCtx } from './context'
 import {
   INITIAL_STATE, STORAGE_KEY, tabOf, deriveMembership,
 } from './store'
+import { routeToUrl, urlToRoute, routeKey, dirFor } from './nav'
 import { supabase } from '@/lib/supabase'
 import type {
-  MembershipStatus, Route, SheetState, ShellState, ToastState, ShellContextValue, Batch,
+  MembershipStatus, Route, SheetKind, SheetState, ShellState, ToastState, ShellContextValue, Batch,
 } from './types'
 import { useBatches } from './hooks/useBatches'
 import { Toast } from './components/Toast'
@@ -75,13 +88,30 @@ function loadState(): ShellState {
   return INITIAL_STATE
 }
 
+// iOS-режим для всей оболочки: slide push/pop-переходы + edge-swipe-назад
+// (в браузере/Android md-режим не даёт swipe-back — acceptance ARS-148 требует).
+setupIonicReact({ mode: 'ios' })
+
+// Мост v5-роутера: отдаёт ionRouter наружу для go() и синкает URL → Route-состояние
+// (browser-back / edge-swipe / deep-link меняют URL мимо go()).
+function IonBridge({ onIon, onPath }: { onIon: (ion: UseIonRouterResult) => void; onPath: (path: string) => void }) {
+  const ion = useIonRouter()
+  useEffect(() => { onIon(ion) })
+  const loc = useLocation() as { pathname: string }
+  useEffect(() => { onPath(loc.pathname) }, [loc.pathname, onPath])
+  return null
+}
+
 export function CabinetApp() {
   const navigate = useNavigate()
   const { signOut } = useAuth()
   const init = loadState()
   const [membership, setMembership] = useState<MembershipStatus>(init.membership)
   const [isPro, setIsPro] = useState(init.isPro)
-  const [route, setRoute] = useState<Route>(init.route)
+  // S2: URL — источник истины экрана (deep-link открывает нужный экран);
+  // сохранённый в localStorage route больше не восстанавливает экран после перезагрузки —
+  // его роль выполняет сам URL (перезагрузка держит текущий экран автоматически).
+  const [route, setRoute] = useState<Route>(() => urlToRoute(window.location.pathname))
   // Профиль реального аккаунта (если вошёл). null = демо-режим (аноним / нет бэкенда).
   const [profile, setProfile] = useState<AccountProfile | null>(null)
   // Пока профиль грузится — показываем лоадер вместо демо-экрана. /cabinet всегда за
@@ -89,7 +119,7 @@ export function CabinetApp() {
   const [profileLoading, setProfileLoading] = useState(true)
   // Партии скоупятся по аккаунту (userId): backend фильтрует по org (fn_my_org_ids), а
   // localStorage-кеш — по ключу с userId, поэтому партии одного владельца не видны другому.
-  const { batches, loading: batchesLoading, addBatch, patchBatch: patchBatchAsync } = useBatches(profile?.userId)
+  const { batches, loading: batchesLoading, addBatch, patchBatch: patchBatchAsync, refetch: refetchBatches } = useBatches(profile?.userId)
   const [notifs, setNotifs] = useState(init.notifs)
   const [newsOn, setNewsOn] = useState(init.newsOn)
   const [profileIncomplete] = useState(init.profileIncomplete)
@@ -102,6 +132,13 @@ export function CabinetApp() {
 
   const [offline] = useState(false)
   const loading = batchesLoading
+
+  // Реальная сводка фермы (стадо + задачи) перекрывает демо-сид. Хойстнута из эффекта
+  // (S2): переиспользуется pull-to-refresh на Главной (IonRefresher, spec §7).
+  const pullFarm = useCallback(
+    () => loadFarmState().then((fs) => { if (fs) setFarm(fs) }),
+    []
+  )
 
   useEffect(() => {
     let alive = true
@@ -123,14 +160,12 @@ export function CabinetApp() {
       setProfile(null)
       setProfileLoading(false)
     })
-    // Реальная сводка фермы (стадо + задачи) перекрывает демо-сид. null = аноним/нет
-    // бэкенда/нет фермы → оставляем seedFarm() (демо). Лёгкий поллинг 30с — стадо/задачи
-    // обновляются без перезагрузки после правок в профиле фермы (D-SYNC-01).
-    const pullFarm = () => loadFarmState().then((fs) => { if (alive && fs) setFarm(fs) })
+    // null = аноним/нет бэкенда/нет фермы → остаётся seedFarm() (демо). Лёгкий поллинг 30с —
+    // стадо/задачи обновляются без перезагрузки после правок в профиле фермы (D-SYNC-01).
     pullFarm()
     const id = setInterval(pullFarm, 30000)
     return () => { alive = false; clearInterval(id) }
-  }, [])
+  }, [pullFarm])
 
   // Изоляция по аккаунту: при входе под другим userId не наследуем кабинет предыдущего.
   useEffect(() => {
@@ -167,6 +202,13 @@ export function CabinetApp() {
   }, [profile?.userId, profile?.membershipLevel, profile?.applicationStatus])
   const [sheet, setSheet] = useState<SheetState | null>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
+  // S2-ревью (PR #27): IonModal-шторки держим смонтированными — программное закрытие
+  // анимируется через isOpen=false (условный unmount рвал dismiss-анимацию). Сброс
+  // внутреннего состояния stateful-шторок — у них самих по open=true (НЕ через key-remount:
+  // размонтирование ion-modal в момент презентации соседнего ломает overlay-стек Ionic).
+  // closeSheet гардит по kind: поздний onDidDismiss закрывающейся шторки не должен убить
+  // следующую, уже открытую (переход progate→paypro).
+  const closeSheet = (kind: SheetKind) => setSheet((cur) => (cur?.kind === kind ? null : cur))
 
   // ---------- TSP-1: визард «Новая партия» + результат публикации ----------
   const [wizActive, setWizActive] = useState(false)
@@ -195,7 +237,42 @@ export function CabinetApp() {
     setTimeout(() => setToast((cur) => (cur && cur.id === t.id ? null : cur)), 2800)
   }
   const offlineToast = () => showToast('Нет связи. Попробуйте, когда появится сеть')
-  const go = (r: Route) => setRoute(r)
+
+  // ---------- S2: навигация через Ionic-роутер (v5-остров) ----------
+  // go сохраняет сигнатуру (r: Route) => void — экраны не переписываются (spec §3).
+  // Направление анимации — из карты глубины nav.ts (DEBT-NATIVE-ROUTER-01: поддерживать
+  // при добавлении роутов). Таб-корни — 'root'+'replace' (native tab UX, история не растёт).
+  const ionRef = useRef<UseIonRouterResult | null>(null)
+  const routeRef = useRef(route)
+  routeRef.current = route
+  const go = (r: Route) => {
+    const from = routeRef.current
+    setRoute(r)
+    if (routeKey(from) === routeKey(r)) return   // тот же экран — обновилось только состояние (back/tid)
+    const ion = ionRef.current
+    if (!ion) return
+    const dir = dirFor(from, r)
+    const url = routeToUrl(r)
+    if (dir === 'back' && ion.canGoBack()) ion.goBack()
+    else if (dir === 'root') ion.push(url, 'root', 'replace')
+    else ion.push(url, dir)
+  }
+  // Явный «назад» (кнопки ←): настоящий pop, когда стек позволяет — иначе возврат на
+  // таб-корень анимировался как смена корня (ревью PR #27, SIG-2). Холодный deep-link
+  // (стек пуст) → push с back-анимацией; URL→Route-синк выправит состояние при расхождении.
+  const goBackTo = (r: Route) => {
+    setRoute(r)
+    const ion = ionRef.current
+    if (!ion) return
+    if (ion.canGoBack()) ion.goBack()
+    else ion.push(routeToUrl(r), 'back')
+  }
+  // URL → Route-синк: browser-back / edge-swipe / deep-link меняют URL мимо go().
+  // `back` при этом не восстанавливается — onBack-хендлеры используют `route.back ?? fallback`.
+  const syncFromPath = useCallback((path: string) => {
+    const r = urlToRoute(path)
+    setRoute((cur) => (routeKey(cur) === routeKey(r) ? cur : r))
+  }, [])
   const tab = tabOf(route)
 
   const handleLogout = async () => {
@@ -216,7 +293,9 @@ export function CabinetApp() {
       return
     }
     setAiLog((l) => l)
-    setRoute((r) => (r.name === 'thread' && r.tid === 'consultant' ? r : { name: 'thread', tid: 'consultant', back: r }))
+    // S2: через go() — иначе URL разъедется с экраном (прямой setRoute мимо роутера).
+    const r = routeRef.current
+    if (!(r.name === 'thread' && r.tid === 'consultant')) go({ name: 'thread', tid: 'consultant', back: r })
   }
   const openPrices = (catKey: string) => setSheet({ kind: 'prices', catKey })
 
@@ -333,65 +412,73 @@ export function CabinetApp() {
     membership, isPro, memberAct,
   }
 
-  // ---------- рендер экрана ----------
-  let screen
-  if (route.name === 'cabinet') {
-    screen = (
-      <CabinetScreen
-        membership={membership}
-        profileIncomplete={profileIncomplete}
-        newsOn={newsOn}
-        onNewsToggle={() => setNewsOn((v) => !v)}
-        memberAct={memberAct}
-        onBack={() => go({ name: 'home' })}
-        onTuran={() => go({ name: 'thread', tid: 'turan', back: { name: 'cabinet' } })}
-        onLogout={handleLogout}
-        profile={profile}
-      />
-    )
-  } else if (route.name === 'farm') {
-    screen = <PlaceholderScreen title="Ферма" sub="Стадо, задачи, события" />
-  } else if (route.name === 'market') {
+  // ---------- рендер экрана: v5-Route в IonRouterOutlet (S2, spec §3) ----------
+  // Каждый рендер — 1:1 ветка прежнего if/else switch; экраны получают те же пропсы
+  // (замыкания CabinetApp). batchId приходит из URL-параметра (:id), не из route-state.
+  const renderHome = () => (
+    <HomeScreen
+      membership={membership}
+      farm={farm}
+      decisions={decisions}
+      observe={observe}
+      bannerVariant={bannerVariant}
+      sticker={sticker}
+      loading={loading}
+      onBanner={onBanner}
+      openService={openService}
+      go={go}
+      onRefresh={() => Promise.all([pullFarm(), refetchBatches()])}
+    />
+  )
+
+  const renderMarket = () => {
     if (wizActive) {
-      screen = (
-        <BatchWizard
-          onDone={(batch, variant) => {
-            addBatch(batch)
-            setWizActive(false)
-            setPubResult({ batch, variant })
-          }}
-          onExit={() => setWizActive(false)}
-          onTuran={() => { setWizActive(false); go({ name: 'thread', tid: 'turan', back: { name: 'market' } }) }}
-        />
-      )
-    } else if (pubResult) {
-      screen = (
-        <PubResult
-          variant={pubResult.variant}
-          batch={pubResult.batch}
-          onToBatch={() => { const id = pubResult.batch.id; setPubResult(null); go({ name: 'batch', batchId: id }) }}
-          onToList={() => { setPubResult(null); go({ name: 'p1list' }) }}
-        />
-      )
-    } else {
-      screen = (
-        <MarketScreen
-          membership={membership}
-          batches={batches}
-          loading={loading}
-          onNew={() => setWizActive(true)}
-          onApply={() => memberAct('apply')}
-          onPay={() => memberAct('pay')}
-          go={go}
-        />
+      return (
+        <IonPage className="agos-flow-page">
+          <BatchWizard
+            onDone={(batch, variant) => {
+              addBatch(batch)
+              setWizActive(false)
+              setPubResult({ batch, variant })
+            }}
+            onExit={() => setWizActive(false)}
+            onTuran={() => { setWizActive(false); go({ name: 'thread', tid: 'turan', back: { name: 'market' } }) }}
+          />
+        </IonPage>
       )
     }
-  } else if (route.name === 'p1list') {
+    if (pubResult) {
+      return (
+        <IonPage className="agos-flow-page">
+          <PubResult
+            variant={pubResult.variant}
+            batch={pubResult.batch}
+            onToBatch={() => { const id = pubResult.batch.id; setPubResult(null); go({ name: 'batch', batchId: id }) }}
+            onToList={() => { setPubResult(null); go({ name: 'p1list' }) }}
+          />
+        </IonPage>
+      )
+    }
+    return (
+      <MarketScreen
+        membership={membership}
+        batches={batches}
+        loading={loading}
+        onNew={() => setWizActive(true)}
+        onApply={() => memberAct('apply')}
+        onPay={() => memberAct('pay')}
+        go={go}
+        onRefresh={refetchBatches}
+      />
+    )
+  }
+
+  const renderList = () => {
     const ACTIVE_COUNT_LIMIT = 5
     const activeCount = batches.filter((b) =>
       ['scheduled', 'published', 'offering', 'decision', 'matched', 'confirmed', 'dispatched'].includes(b.state)
     ).length
-    screen = (
+    return (
       <ListScreen
         batches={batches}
         onBatch={(id) => go({ name: 'batch', batchId: id, back: { name: 'p1list' } })}
@@ -399,68 +486,61 @@ export function CabinetApp() {
           if (activeCount >= ACTIVE_COUNT_LIMIT) { setSheet({ kind: 'limit' }); return }
           setWizActive(true)
         }}
-        onBack={() => go({ name: 'market' })}
-      />
-    )
-  } else if (route.name === 'batch') {
-    const currentBatch = batches.find((b) => b.id === route.batchId)
-    if (!currentBatch) {
-      screen = <PlaceholderScreen title="Партия не найдена" sub="" />
-    } else {
-      screen = (
-        <BatchScreen
-          batch={currentBatch}
-          account={profile ? { name: profile.name, bin: profile.bin, phone: profile.phone, district: profile.district } : null}
-          onBack={() => go(route.back ?? { name: 'p1list' })}
-          onPatch={(patch) => patchBatch(currentBatch.id, patch)}
-          onNew={() => setWizActive(true)}
-          onReview={() => go({ name: 'review', batchId: currentBatch.id, back: { name: 'batch', batchId: currentBatch.id } })}
-          onTuran={() => go({ name: 'thread', tid: 'turan', back: { name: 'batch', batchId: currentBatch.id } })}
-          toast={showToast}
-        />
-      )
-    }
-  } else if (route.name === 'review') {
-    const reviewBatch = batches.find((b) => b.id === route.batchId)
-    if (!reviewBatch) {
-      screen = <PlaceholderScreen title="Партия не найдена" sub="" />
-    } else {
-      screen = (
-        <ReviewScreen
-          batch={reviewBatch}
-          onBack={() => go(route.back ?? { name: 'batch', batchId: reviewBatch.id })}
-          onPatch={(patch) => patchBatch(reviewBatch.id, patch)}
-          toast={showToast}
-        />
-      )
-    }
-  } else if (route.name === 'shop') {
-    screen = <PlaceholderScreen title="Маркет" sub="Дистрибуция и специалисты TURAN" />
-  } else if (route.name === 'thread' && route.tid === 'turan') {
-    screen = (
-      <TuranScreen
-        onBack={() => go(route.back ?? { name: 'home' })}
-        toast={showToast}
-      />
-    )
-  } else if (route.name === 'messages' || route.name === 'thread') {
-    screen = <PlaceholderScreen title="Сообщения" sub="Треды Рынка, Фермы и TURAN" />
-  } else {
-    screen = (
-      <HomeScreen
-        membership={membership}
-        farm={farm}
-        decisions={decisions}
-        observe={observe}
-        bannerVariant={bannerVariant}
-        sticker={sticker}
-        loading={loading}
-        onBanner={onBanner}
-        openService={openService}
-        go={go}
+        onBack={() => goBackTo({ name: 'market' })}
       />
     )
   }
+
+  const renderBatch = ({ match }: { match: { params: { id: string } } }) => {
+    const currentBatch = batches.find((b) => b.id === match.params.id)
+    if (!currentBatch) return <PlaceholderScreen title="Партия не найдена" sub="" />
+    return (
+      <BatchScreen
+        batch={currentBatch}
+        account={profile ? { name: profile.name, bin: profile.bin, phone: profile.phone, district: profile.district } : null}
+        onBack={() => goBackTo(route.back ?? { name: 'p1list' })}
+        onPatch={(patch) => patchBatch(currentBatch.id, patch)}
+        onNew={() => setWizActive(true)}
+        onReview={() => go({ name: 'review', batchId: currentBatch.id, back: { name: 'batch', batchId: currentBatch.id } })}
+        onTuran={() => go({ name: 'thread', tid: 'turan', back: { name: 'batch', batchId: currentBatch.id } })}
+        toast={showToast}
+      />
+    )
+  }
+
+  const renderReview = ({ match }: { match: { params: { id: string } } }) => {
+    const reviewBatch = batches.find((b) => b.id === match.params.id)
+    if (!reviewBatch) return <PlaceholderScreen title="Партия не найдена" sub="" />
+    return (
+      <ReviewScreen
+        batch={reviewBatch}
+        onBack={() => goBackTo(route.back ?? { name: 'batch', batchId: reviewBatch.id })}
+        onPatch={(patch) => patchBatch(reviewBatch.id, patch)}
+        toast={showToast}
+      />
+    )
+  }
+
+  const renderCabinet = () => (
+    <CabinetScreen
+      membership={membership}
+      profileIncomplete={profileIncomplete}
+      newsOn={newsOn}
+      onNewsToggle={() => setNewsOn((v) => !v)}
+      memberAct={memberAct}
+      onBack={() => goBackTo({ name: 'home' })}
+      onTuran={() => go({ name: 'thread', tid: 'turan', back: { name: 'cabinet' } })}
+      onLogout={handleLogout}
+      profile={profile}
+    />
+  )
+
+  const renderTuran = () => (
+    <TuranScreen
+      onBack={() => goBackTo(route.back ?? { name: 'home' })}
+      toast={showToast}
+    />
+  )
 
   // Пока грузится реальный профиль — лоадер (а не демо-экран). См. profileLoading выше.
   if (profileLoading) {
@@ -474,33 +554,65 @@ export function CabinetApp() {
   return (
     <ShellCtx.Provider value={ctxVal}>
       <div className="agos-cabinet-stage">
-        {screen}
-        <Toast toast={toast} />
-        {sheet?.kind === 'payvznos' && (
-          <PayVznosSheet membership={membership} onClose={() => setSheet(null)} onDone={payVznosDone} />
-        )}
-        {sheet?.kind === 'paypro' && (
-          <PayProSheet onClose={() => setSheet(null)} onDone={payProDone} />
-        )}
-        {sheet?.kind === 'progate' && (
-          <ProGateSheet onClose={() => setSheet(null)} onPay={() => setSheet({ kind: 'paypro' })} />
-        )}
-        {sheet?.kind === 'membgate' && (
-          <MembGateSheet membership={membership} onClose={() => setSheet(null)} onAct={memberAct} />
-        )}
-        {sheet?.kind === 'membdocs' && (
-          <MembDocsSheet orgId={profile?.orgId ?? null} onClose={() => setSheet(null)} onSubmitted={onMembDocsSubmitted} />
-        )}
-        {sheet?.kind === 'prices' && (
-          <PriceSheet catKey={sheet.catKey} onClose={() => setSheet(null)} onSell={sellByPrice} />
-        )}
-        {sheet?.kind === 'limit' && (
-          <LimitSheet
-            open
-            onClose={() => setSheet(null)}
-            onToList={() => { setSheet(null); go({ name: 'p1list' }) }}
-          />
-        )}
+        <div className="phone">
+          <IonApp>
+            <IonReactRouter>
+              <IonBridge onIon={(ion) => { ionRef.current = ion }} onPath={syncFromPath} />
+              <IonRouterOutlet>
+                <RouteV5 exact path="/cabinet" render={renderHome} />
+                <RouteV5 exact path="/cabinet/market" render={renderMarket} />
+                <RouteV5 exact path="/cabinet/list" render={renderList} />
+                <RouteV5 exact path="/cabinet/batch/:id" render={renderBatch} />
+                <RouteV5 exact path="/cabinet/review/:id" render={renderReview} />
+                <RouteV5 exact path="/cabinet/account" render={renderCabinet} />
+                <RouteV5 exact path="/cabinet/turan" render={renderTuran} />
+                <RouteV5 exact path="/cabinet/farm" render={() => <PlaceholderScreen title="Ферма" sub="Стадо, задачи, события" />} />
+                <RouteV5 exact path="/cabinet/shop" render={() => <PlaceholderScreen title="Маркет" sub="Дистрибуция и специалисты TURAN" />} />
+                <RouteV5 exact path="/cabinet/messages" render={() => <PlaceholderScreen title="Сообщения" sub="Треды Рынка, Фермы и TURAN" />} />
+                <RouteV5 exact path="/cabinet/thread/:tid" render={() => <PlaceholderScreen title="Сообщения" sub="Треды Рынка, Фермы и TURAN" />} />
+                {/* неизвестный под-путь → Главная (первое совпадение выигрывает) */}
+                <RouteV5 render={renderHome} />
+              </IonRouterOutlet>
+            </IonReactRouter>
+            {/* Тост и шторки — поверх страниц; IonModal (Sheet.tsx) сам портится в ion-app.
+                Шторки смонтированы постоянно (open-флаг) — dismiss-анимация играет и при
+                программном закрытии (ревью PR #27). key=epoch у stateful-шторок — каждый
+                показ с чистого состояния. PriceSheet — своя не-Ionic шторка, условный маунт. */}
+            <Toast toast={toast} />
+            <PayVznosSheet
+              open={sheet?.kind === 'payvznos'}
+              membership={membership}
+              onClose={() => closeSheet('payvznos')}
+              onDone={payVznosDone}
+            />
+            <PayProSheet open={sheet?.kind === 'paypro'} onClose={() => closeSheet('paypro')} onDone={payProDone} />
+            <ProGateSheet
+              open={sheet?.kind === 'progate'}
+              onClose={() => closeSheet('progate')}
+              onPay={() => setSheet({ kind: 'paypro' })}
+            />
+            <MembGateSheet
+              open={sheet?.kind === 'membgate'}
+              membership={membership}
+              onClose={() => closeSheet('membgate')}
+              onAct={memberAct}
+            />
+            <MembDocsSheet
+              open={sheet?.kind === 'membdocs'}
+              orgId={profile?.orgId ?? null}
+              onClose={() => closeSheet('membdocs')}
+              onSubmitted={onMembDocsSubmitted}
+            />
+            {sheet?.kind === 'prices' && (
+              <PriceSheet catKey={sheet.catKey} onClose={() => closeSheet('prices')} onSell={sellByPrice} />
+            )}
+            <LimitSheet
+              open={sheet?.kind === 'limit'}
+              onClose={() => closeSheet('limit')}
+              onToList={() => { setSheet(null); go({ name: 'p1list' }) }}
+            />
+          </IonApp>
+        </div>
       </div>
     </ShellCtx.Provider>
   )

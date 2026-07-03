@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import type { Batch } from '../types'
 import { Cta } from '../components/Cta'
-import { ShellFrame } from '../components/ShellFrame'
+import { IonShellFrame } from '../components/IonShellFrame'
 import { WithdrawSheet } from '../components/sheets/WithdrawSheet'
 import { DispatchSheet } from '../components/sheets/DispatchSheet'
 import { BatchPriceSheet } from '../components/sheets/BatchPriceSheet'
@@ -416,7 +416,7 @@ export function BatchScreen({ batch, account, onBack, onPatch, onNew, onReview, 
   const bigPrice = batch.dealPrice ?? batch.price ?? 0
 
   return (
-    <ShellFrame noTabs label={`Партия · ${batch.state}`}>
+    <IonShellFrame noTabs label={`Партия · ${batch.state}`}>
       <div className="bat-wrap">
         <div className="bat-back-row">
           <button className="bat-back" onClick={onBack} aria-label="Назад">←</button>
@@ -490,7 +490,7 @@ export function BatchScreen({ batch, account, onBack, onPatch, onNew, onReview, 
       <WithdrawSheet
         batch={batch}
         open={sheet === 'withdraw'}
-        onClose={() => setSheet(null)}
+        onClose={() => setSheet((s) => (s === 'withdraw' ? null : s))}
         onConfirm={(includeMatched) => {
           // partial/matched → rpc_self_withdraw_batch (сигнал _withdraw); остальные
           // состояния тоже безопасно проходят через тот же RPC (matched_heads=0 → cancelled).
@@ -507,7 +507,7 @@ export function BatchScreen({ batch, account, onBack, onPatch, onNew, onReview, 
       <DispatchSheet
         batch={batch}
         open={sheet === 'dispatch'}
-        onClose={() => setSheet(null)}
+        onClose={() => setSheet((s) => (s === 'dispatch' ? null : s))}
         onConfirm={() => {
           // Слайс 9 S3: по-кусковая отгрузка через rpc_self_dispatch_ready (сигнал
           // _dispatchReady). Отгружает все готовые (confirmed) куски; для цельного
@@ -520,9 +520,9 @@ export function BatchScreen({ batch, account, onBack, onPatch, onNew, onReview, 
       <BatchPriceSheet
         batch={batch}
         open={sheet === 'price'}
-        onClose={() => setSheet(null)}
+        onClose={() => setSheet((s) => (s === 'price' ? null : s))}
         onConfirm={(newPrice) => { onPatch({ price: newPrice }); toast('Цена обновлена'); setSheet(null) }}
       />
-    </ShellFrame>
+    </IonShellFrame>
   )
 }

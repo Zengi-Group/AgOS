@@ -15,9 +15,9 @@ const METHODS: [string, string][] = [
   ['Банковская карта', 'Visa, Mastercard'],
 ]
 
-export function PayProSheet({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+export function PayProSheet({ onClose, onDone, open = true }: { onClose: () => void; onDone: () => void; open?: boolean }) {
   return (
-    <Sheet open onClose={onClose}>
+    <Sheet open={open} onClose={onClose}>
       <div className="sh-t">Platform Pro</div>
       <div className="sh-b">Личная подписка. Открывает Консультанта TURAN — AI-зоотехника без ограничений.</div>
       <div className="gate-list" style={{ margin: '2px 0 10px' }}>

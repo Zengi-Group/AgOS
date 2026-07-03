@@ -92,22 +92,63 @@ export interface AgOSHost {
 
 ## 3. Роутинг-миграция shell → Ionic
 
-### Развилка (главный вопрос слайсинга)
-- **(a) Полный `IonReactRouter`** — оба корня (`CabinetApp`, `MpkApp`) переводятся на `IonRouterOutlet` + `IonPage`. Даёт бесплатно: нативные page-transitions push/pop, edge-swipe-назад, правильный стек истории. Цена: рефактор собственного `Route` state-machine на URL-роуты (react-router уже в проекте на верхнем уровне — `App.tsx`; конфликт `BrowserRouter` vs `IonReactRouter` нужно развести: Ionic-роутер монтируется под `/cabinet/*` и `/mpk/*` как вложенный).
-- **(b) Только Ionic-компоненты** — `IonModal`/`IonContent`/`ion-tab-bar`/`IonRefresher` без замены роутера. Меньше рефактор. Но НЕТ бесплатных page-transitions и edge-swipe — а это и есть «нативное ощущение», ради которого выбран Ionic (см. бриф: нативность = слой ремесла, жесты/переходы). Вариант (b) не выполняет исходное требование CEO.
+### ⚠️ Проверено спайком (2026-07-03, ADR-NATIVE-ROUTER-01 AMEND-1) — движок нативного стека живёт в @ionic/react-router (v5), НЕ в ядре
+Эмпирический спайк (браузер, приложение на react-router v6, `@ionic/react@8`+`@ionic/core@8`,
+БЕЗ `@ionic/react-router`): standalone `<IonRouterOutlet>`, которому скормили v6 `<Routes>`,
+рендерит НОЛЬ детей — белый экран. Исходники подтверждают: `@ionic/react-router@8.8.13`
+(`dist/index.js`) содержит `StackManager`/`ReactRouterViewStack` — движок стека страниц и
+переходов — и его НЕТ в ядре `@ionic/react`. Пакет статически импортирует v5-only API
+(`withRouter`, v5 `matchPath`), поэтому на v6 не работает в принципе. Ionic v6-роутер
+не планируется (#24177 открыт с 2021, #28558 closed-not-planned).
+Вывод: нативные URL-переходы push/pop + edge-swipe возможны ТОЛЬКО через `@ionic/react-router`,
+а он требует react-router v5. Всё приложение — на v6.
 
-### Рекомендация: **(a) полный IonReactRouter**, поэтапно
-Без него Ionic не даёт того, ради чего выбран. Смягчаем риск рефактора инкрементальностью: `Route`/`MpkRoute` state-machine → URL-роуты 1:1, а **контент экранов и data-хуки сохраняются дословно** (аддитивно к бизнес-логике, HS-1). `go(r)` становится тонкой обёрткой над `useIonRouter().push/pop`. `ShellCtx.go` сохраняет сигнатуру `(r: Route) => void` — экраны не переписываются.
+### Решение: вариант A — изолированный v5-остров под `/cabinet/*` и `/mpk/*` (за спайк-гейтом)
+`@ionic/react-router` монтируем на изолированном поддереве react-router **v5** для оболочек;
+остальное приложение остаётся на v6. v5-импорты пакета — статические ESM bare-спецификаторы,
+поэтому Vite `resolve.alias`/resolver-plugin (+ пакет `history`) перенаправляет их на этапе
+сборки — вероятно БЕЗ patch-package. `go(r)` становится обёрткой над `useIonRouter().push/pop`;
+сигнатура `ShellCtx.go: (r: Route) => void` сохраняется — экраны не переписываются.
 
-Маппинг `Route` → URL (фермер):
-`home`→`/cabinet`, `market`→`/cabinet/market`, `p1list`→`/cabinet/list`, `batch`→`/cabinet/batch/:id`, `review`→`/cabinet/review/:id`, `cabinet`→`/cabinet/account`, `thread(turan)`→`/cabinet/turan`, `farm`/`shop`/`messages`→плейсхолдеры. `back?: Route` заменяется нативным стеком.
+**ГЕЙТ (обязателен до кода оболочки):** 1-дневный спайк должен доказать сосуществование двух
+react-router в ЭТОМ Vite 6: v5-поддерево `<IonReactRouter>` и верхнеуровневый v6
+`<BrowserRouter>` делят один `window.history` без конфликта back/forward, а Vite-alias
+изолирует v5 только для пакета Ionic (приложение остаётся v6). Провал спайка / необходимость
+patch-package → откат на вариант C.
+
+**Вариант C (фолбэк):** «плоский» Ionic на v6 — `IonPage`/`IonModal`/`IonTabs` (активная вкладка
+через state, без независимого back-стека на вкладку)/`IonContent`/`IonRefresher` рендерятся на v6
+БЕЗ outlet (проверено спайком: не требуют роутера). Deep-link — тривиально через v6 `navigate`.
+Push/pop — вручную CSS-переход; **edge-swipe откладывается** до появления v6-роутера Ionic.
+Явно жертвуем acceptance-пунктом «edge-swipe» (трек fast-follow, D-ROADMAP-01).
+
+**Вариант B (IonNav + ручной URL-мост): ОТКЛОНЁН.** Спайк доказал: `IonNav` работает без роутера
+(push/pop с анимацией). Но документация Ionic: «ion-nav is not meant to be used for routing», он
+«не привязан к роутеру» (назначение — суб-навигация внутри модала). Мост URL↔IonNav на 5 вкладок +
+под-роуты + deep-link — большой самописный слой против назначения компонента (риск L-1/L-2),
+дороже конфиг-уровня варианта A.
+
+Маппинг `Route` → URL (фермер, для A и C):
+`home`→`/cabinet`, `market`→`/cabinet/market`, `p1list`→`/cabinet/list`,
+`batch`→`/cabinet/batch/:id`, `review`→`/cabinet/review/:id`, `cabinet`→`/cabinet/account`,
+`thread(turan)`→`/cabinet/turan`, `farm`/`shop`/`messages`→плейсхолдеры.
 МПК: `home`→`/mpk`, `tsp`→`/mpk/tsp`, `offers`→`/mpk/offers`. Модалы → `IonModal` (не роут).
+`App.tsx` уже отдаёт `/cabinet/*` и `/mpk/*` целиком в `CabinetApp`/`MpkApp` (v6 splat) —
+внутри острова (A) роуты объявляются v5 `<Route>` в `IonRouterOutlet`.
 
-### Затронутые файлы (из graphify)
-- **Заменяются на Ionic-навигацию:** `CabinetApp.tsx`, `mpk/MpkApp.tsx`, `types.ts` (`Route`/`MpkRoute`/`RouteName`), `components/ShellTabBar.tsx` → `IonTabBar`, `components/ShellFrame.tsx`, `components/Sheet.tsx` → `IonModal`.
-- **Оборачиваются в `IonPage`/`IonContent` (контент не трогаем):** 8 фермерских экранов (`screens/*`), 3 МПК экрана (`mpk/screens/*`).
-- **Шторки → `IonModal`:** 10 фермерских (`components/sheets/*`) + `mpk/sheets/ContactTuranSheet`. МПК 4 модала (`mpk/modals/*`) → `IonModal`.
-- **Не трогаем:** `context.tsx`, `store.ts`, все `data/*`, `hooks/useBatches.ts`, `tsp/*` — чистая бизнес-логика/данные.
+### Затронутые файлы
+- **A:** `package.json` (+`@ionic/react-router`, alias `react-router-dom-v5@npm:react-router-dom@5`,
+  `react-router-v5@npm:react-router@5`, `history@4`), `vite.config.ts` (scoped alias/resolver-plugin),
+  `CabinetApp.tsx`/`mpk/MpkApp.tsx` (единственный санкционированный 1:1 rewrite оболочки —
+  бизнес-логика и `go`-контракт сохраняются), `ShellTabBar.tsx`→`IonTabs`/`IonTabBar`,
+  `Sheet.tsx`→`IonModal`, экраны `screens/*`/`mpk/screens/*`→`IonPage`/`IonContent` (контент дословно).
+  `types.ts` — `Route`/`RouteName` СОХРАНЯЮТСЯ (не ломаем).
+- **C:** как A, но без `@ionic/react-router`/alias; `IonTabs` активная вкладка через state;
+  переходы — CSS; edge-swipe отсутствует.
+- **Шторки → `IonModal` (оба варианта):** 10 фермерских (`components/sheets/*`) + МПК модалы
+  (`mpk/modals/*`, `mpk/sheets/ContactTuranSheet`). Контент шторок сохраняется, меняется только
+  обёртка (HS-2).
+- **Не трогаем (оба варианта):** `context.tsx`, `store.ts`, все `data/*`, `hooks/useBatches.ts`, `tsp/*`.
 
 ---
 
@@ -143,7 +184,7 @@ export interface AgOSHost {
 2. Хост возвращает токен (FCM/APNs для capacitor; токен хоста для webview; null для web).
 3. Ядро отправляет токен в общий бэкенд: `rpc_register_push_token` (модель ARS-139) с `organization_id` + platform.
 4. Отправка: edge-функция (ARS-141) + канал Notification Worker (ARS-142, Dok4) — общие для всех хостов.
-5. Deep-link из push: `host.onDeepLink(path => ionRouter.push(path))`. Пример: пуш о матче партии → `/cabinet/batch/:id`. Маппинг path → экран един с §3.
+5. Deep-link из push: при A — `host.onDeepLink(path => ionRouter.push(path, 'forward'))`; при C — `host.onDeepLink(path => navigate(path))` (v6). См. ADR-NATIVE-ROUTER-01 AMEND-1. Пример: пуш о матче партии → `/cabinet/batch/:id`. Маппинг path → экран един с §3.
 
 **Не дублировать:** C-серия — ОДИН бэкенд. Наш Capacitor и WebView Ернура кладут токены в ту же таблицу через тот же RPC; различие только в источнике токена (Host Bridge абстрагирует).
 

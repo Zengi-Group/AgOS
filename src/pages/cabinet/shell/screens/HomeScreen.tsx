@@ -8,7 +8,7 @@ import type { BannerCard, ServiceDef } from '../data/banners'
 import type { DecisionCardModel, ObserveItemModel } from '../data/membership'
 import type { StickerData } from '../data/prices'
 import type { MembershipStatus, Route } from '../types'
-import { ShellFrame } from '../components/ShellFrame'
+import { IonShellFrame } from '../components/IonShellFrame'
 import { HomeHead } from '../components/HomeHead'
 import { HomeBanner } from '../components/HomeBanner'
 import { ServiceGrid } from '../components/ServiceGrid'
@@ -30,9 +30,10 @@ interface Props {
   onBanner: (c: BannerCard) => void
   openService: (s: ServiceDef) => void
   go: (r: Route) => void
+  onRefresh?: () => Promise<unknown>   // S2: pull-to-refresh (spec §7)
 }
 
-export function HomeScreen({ membership, farm, decisions, observe, bannerVariant, sticker, loading, onBanner, openService, go }: Props) {
+export function HomeScreen({ membership, farm, decisions, observe, bannerVariant, sticker, loading, onBanner, openService, go, onRefresh }: Props) {
   const farmTasksN = farmOpenTasks(farm).length
   const quiet = decisions.length === 0 && observe.length <= 1
   const showAhead = quiet
@@ -57,7 +58,7 @@ export function HomeScreen({ membership, farm, decisions, observe, bannerVariant
   else if (!farm.herd && farmOverdue) farmSub += ' · есть просрочка'
 
   return (
-    <ShellFrame label={'Главная · ' + membership}>
+    <IonShellFrame label={'Главная · ' + membership} onRefresh={onRefresh}>
       <HomeHead sticker={sticker} />
       {loading ? <SkeletonBlocks n={5} /> : (
         <div className="home-stack">
@@ -97,6 +98,6 @@ export function HomeScreen({ membership, farm, decisions, observe, bannerVariant
           </div>
         </div>
       )}
-    </ShellFrame>
+    </IonShellFrame>
   )
 }

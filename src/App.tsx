@@ -59,7 +59,10 @@ import { VetCaseDetail } from '@/pages/cabinet/vet/VetCaseDetail'
 import { CabinetDashboard } from '@/pages/cabinet/CabinetDashboard'
 // New mobile shells (farmer + MPK) — own full-screen chrome, mounted OUTSIDE AppLayout.
 // New = primary /cabinet; legacy web cabinet → /cabinet-legacy (CEO decision 2026-06-23).
-import { CabinetApp } from '@/pages/cabinet/shell/CabinetApp'
+// CabinetApp — lazy (S2, ревью PR #27): он тянет Ionic core.css с НЕслойным body-правилом
+// и v5-остров — им нечего делать в main-чанке публичного сайта/админки (3G-бюджет Dok6);
+// плюс каскад body перестаёт зависеть от порядка импортов в main.tsx.
+const CabinetApp = lazy(() => import('@/pages/cabinet/shell/CabinetApp').then(m => ({ default: m.CabinetApp })))
 import { MpkApp } from '@/pages/cabinet/shell/mpk/MpkApp'
 import { HerdOverview } from '@/pages/cabinet/herd/HerdOverview'
 import { HerdGroupForm } from '@/pages/cabinet/herd/HerdGroupForm'
@@ -172,7 +175,7 @@ function App() {
             <Route element={<RequireAuth />}>
               {/* New mobile shells — full-screen, own chrome, NOT wrapped in AppLayout.
                   Primary /cabinet (farmer) + /mpk (МПК); legacy web cabinet → /cabinet-legacy. */}
-              <Route path="/cabinet/*" element={<CabinetApp />} />
+              <Route path="/cabinet/*" element={<Suspense fallback={null}><CabinetApp /></Suspense>} />
               <Route path="/mpk/*" element={<MpkApp />} />
               <Route element={<AppLayout />}>
                 <Route path="/cabinet-legacy">

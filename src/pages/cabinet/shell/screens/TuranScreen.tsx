@@ -2,7 +2,7 @@
 // Маршрут: route.name === 'thread' && route.tid === 'turan'
 
 import { useState } from 'react'
-import { ShellFrame } from '../components/ShellFrame'
+import { IonShellFrame } from '../components/IonShellFrame'
 import { Cta } from '../components/Cta'
 
 const TOPICS = [
@@ -34,7 +34,7 @@ export function TuranScreen({ onBack, toast, prefillTopic }: Props) {
   }
 
   return (
-    <ShellFrame noTabs label="TURAN">
+    <IonShellFrame noTabs label="TURAN">
       <div className="lst-head">
         <button className="lst-back" onClick={onBack} aria-label="Назад">←</button>
         <div className="lst-title">TURAN · Поддержка</div>
@@ -126,6 +126,6 @@ export function TuranScreen({ onBack, toast, prefillTopic }: Props) {
           </div>
         </div>
       )}
-    </ShellFrame>
+    </IonShellFrame>
   )
 }

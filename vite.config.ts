@@ -8,9 +8,51 @@ import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
 import { playwright } from '@vitest/browser-playwright';
 const dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 
+// ── v5-остров для @ionic/react-router (ADR-NATIVE-ROUTER-01 AMEND-1, гейт-спайк ARS-148) ──
+// @ionic/react-router статически импортирует v5-only API ('react-router'/'react-router-dom').
+// Перенаправляем эти bare-импорты на v5-копии (alias-пакеты react-router-v5 /
+// react-router-dom-v5) ТОЛЬКО когда импортёр — внутри island-пакетов; остальное приложение
+// продолжает резолвить v6. Redirect унифицирует и вложенную копию react-router внутри
+// react-router-dom-v5 — один v5-инстанс, иначе ломается RouterContext.
+function ionicV5Island() {
+  const ISLAND = ['@ionic/react-router/', 'react-router-dom-v5/', 'react-router-v5/'];
+  const inIsland = (importer?: string) =>
+    !!importer && ISLAND.some((p) => importer.includes(`node_modules/${p}`));
+  return {
+    name: 'agos:ionic-v5-island',
+    enforce: 'pre' as const,
+    resolveId(this: any, source: string, importer?: string) {
+      if (!inIsland(importer)) return null;
+      if (source === 'react-router') return this.resolve('react-router-v5', importer, { skipSelf: true });
+      if (source === 'react-router-dom') return this.resolve('react-router-dom-v5', importer, { skipSelf: true });
+      return null;
+    },
+  };
+}
+
 // More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 export default defineConfig({
+  optimizeDeps: {
+    // island-пакеты не пре-бандлим esbuild'ом (он не видит наш resolveId-plugin) —
+    // их импорты должны идти через Vite-пайплайн, где работает redirect.
+    exclude: ['@ionic/react-router', 'react-router-v5', 'react-router-dom-v5'],
+    // CJS-зависимости исключённых пакетов обязаны пре-бандлиться с ESM-интеропом
+    // (иначе `import PropTypes from 'prop-types'` падает) — вложенный include-синтаксис Vite.
+    include: [
+      'react-router-dom-v5 > prop-types',
+      'react-router-v5 > prop-types',
+      'react-router-v5 > path-to-regexp',
+      'react-router-v5 > mini-create-react-context',
+      'react-router-dom-v5 > path-to-regexp',
+      'react-router-dom-v5 > mini-create-react-context',
+      'react-router-v5 > hoist-non-react-statics',
+      'react-router-dom-v5 > hoist-non-react-statics',
+      'react-router-v5 > react-is',
+      'react-router-dom-v5 > react-is',
+    ],
+  },
   plugins: [
+    ionicV5Island(),
     react(),
     // PWA-гигиена (EngSpec §5, ARS-147): SW = precache app-shell, регистрация —
     // вручную через Host Bridge (только web); manifest — свой в public/.

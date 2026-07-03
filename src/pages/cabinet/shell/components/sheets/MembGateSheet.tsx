@@ -17,12 +17,13 @@ interface Props {
   membership: MembershipStatus
   onClose: () => void
   onAct: (act: string) => void
+  open?: boolean   // S2: IonModal-анимация закрытия — родитель держит шторку смонтированной
 }
 
-export function MembGateSheet({ membership, onClose, onAct }: Props) {
+export function MembGateSheet({ membership, onClose, onAct, open = true }: Props) {
   const copy = gateCopy(membership)
   return (
-    <Sheet open onClose={onClose}>
+    <Sheet open={open} onClose={onClose}>
       <div className="sh-t">{copy.t}</div>
       <div className="sh-b">{copy.b}</div>
       {copy.cta && <Cta onClick={() => onAct(copy.act as string)}>{copy.cta}</Cta>}

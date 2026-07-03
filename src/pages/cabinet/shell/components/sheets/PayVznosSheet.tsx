@@ -1,7 +1,7 @@
 // AgOS · Этап 1 · Шторка оплаты членского взноса (shell/app.jsx kind="payvznos").
 // Тексты — слово в слово из прототипа.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sheet } from '../Sheet'
 import { Cta } from '../Cta'
 import { NBSP } from '../../store'
@@ -17,16 +17,20 @@ interface Props {
   membership: MembershipStatus
   onClose: () => void
   onDone: () => void
+  open?: boolean   // S2: IonModal-анимация закрытия — родитель держит шторку смонтированной
 }
 
-export function PayVznosSheet({ membership, onClose, onDone }: Props) {
+export function PayVznosSheet({ membership, onClose, onDone, open = true }: Props) {
   const renewal = ['active', 'expiring', 'grace', 'expired'].includes(membership)
   // Выбор способа оплаты (по умолчанию первый). Оплата — мок на пилоте: выбор способа →
   // «Оплатить» → onDone (членство активируется, Рынок открывается). Реальной платёжной
   // системы пока нет, поэтому клик по способу только выбирает, а оплачивает кнопка снизу.
   const [selected, setSelected] = useState(0)
+  // Шторка смонтирована постоянно (S2) — каждый показ начинается с первого способа,
+  // как при прежнем условном маунте.
+  useEffect(() => { if (open) setSelected(0) }, [open])
   return (
-    <Sheet open onClose={onClose}>
+    <Sheet open={open} onClose={onClose}>
       <div className="sh-t">{renewal ? 'Продление членства' : 'Членский взнос'}</div>
       <div className="sh-b">Доступ к Рынку (TSP), справочным ценам и сообществу ассоциации на 12 месяцев.</div>
       <div className="win-sum" style={{ marginTop: 2 }}>
