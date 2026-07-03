@@ -4,6 +4,9 @@
 -- Consolidated: 2026-03-05 (pre-development baseline)
 -- Extended:    2026-06-15 — M4 (Batch/Pool/Offer v1.0) + M6 (TSP Flow v1.0)
 --              merged from d09_tsp_m4m6_patch.sql (see SECTION 7).
+--              2026-07-03 — Слайс 8–9 schema sync: дробление партий
+--              (batch_allocations), порода/мультирегион/район, лимиты голов,
+--              price-decision timer (see SECTION 9).
 --
 -- Market / TSP (Transparent Supply Pool) module.
 Batches, Pools, Matches, Delivery, Prices.
@@ -4554,5 +4557,182 @@ on conflict (sql_name) do update
 
 -- ============================================================
 -- END SECTION 8 (M4 + M6 RPC IMPLEMENTATIONS)
+-- ============================================================
+
+-- ============================================================
+-- SECTION 9: СЛАЙС 8–9 SCHEMA SYNC (канон = прод, 2026-07-03)
+-- ============================================================
+-- Синхронизация канона со схемой, задеплоенной миграциями 2026-07-01…07-02 (PR #20):
+--   20260701120000_tsp_breed_multiregion_match  pool_requests.region_ids, pool_lines.breed_label
+--   20260701150000_tsp_district_sort            pool_requests.district_ids
+--   20260702140000_tsp_pool_line_heads_cap      pool_lines.max_heads/current_heads + 2 CHECK
+--   20260702160000_tsp_batch_split_allocations  batches.matched_heads + 'partially_matched',
+--                                               tsp_config.min_split_heads, ТАБЛИЦА batch_allocations
+--   20260702190000_tsp_chunk_dispatch           batch_allocations += dispatched/delivered_at + CHECK
+--   20260702200000_tsp_price_decision_timer     tsp_config.price_decision_after_minutes
+-- (organizations.district_id — в d01_kernel.sql, миграция 20260701140000_org_district.)
+--
+-- Тела RPC Слайса 8–9 (перевыпуски rpc_self_*, fn_tsp_alloc_chunk,
+-- fn_tsp_rollup_batch_status, fn_tsp_batch_json, rpc_get_pool_matches,
+-- rpc_admin_tsp_*) живут в миграциях; в каноне их определений НЕТ —
+-- реплей d-файлов их не откатывает. Канон фиксирует СХЕМУ.
+--
+-- ВАЖНО: секция стоит в КОНЦЕ файла намеренно — пересборка batches_status_check
+-- (9.3) обязана выполняться ПОСЛЕ пересборки в 7.1.6, иначе реплей канона
+-- откатил бы статус 'partially_matched'.
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- 9.1: pool_requests — мультивыбор областей и районов закупа МПК
+-- ------------------------------------------------------------
+alter table public.pool_requests add column if not exists region_ids   uuid[];
+alter table public.pool_requests add column if not exists district_ids text[];
+
+comment on column public.pool_requests.region_ids is
+    'Мультивыбор областей закупа МПК (regions.id уровня области). NULL/пусто = все
+     области. Легаси region_id — обратная совместимость (мягкий фолбэк матчинга).';
+comment on column public.pool_requests.district_ids is
+    'Выбор районов закупа МПК (слаги DISTRICTS фронта, сверяются с
+     organizations.district_id фермера). NULL/пусто = вся область (район не
+     ограничивает). Жёсткий матч: заданы районы → район партии обязан входить.';
+
+-- ------------------------------------------------------------
+-- 9.2: pool_lines — желаемая порода + лимит/набор голов по строке
+-- ------------------------------------------------------------
+alter table public.pool_lines add column if not exists breed_label text;
+alter table public.pool_lines add column if not exists max_heads     int;
+alter table public.pool_lines add column if not exists current_heads int not null default 0;
+
+alter table public.pool_lines drop constraint if exists chk_pool_lines_max_heads;
+alter table public.pool_lines add  constraint chk_pool_lines_max_heads check (max_heads is null or max_heads > 0);
+alter table public.pool_lines drop constraint if exists chk_pool_lines_current_heads;
+alter table public.pool_lines add  constraint chk_pool_lines_current_heads check (current_heads >= 0);
+
+comment on column public.pool_lines.breed_label is
+    'Желаемая порода строки пула (свободный лейбл, сверяется с batches.notes breed
+     через fn_tsp_norm_breed). NULL/пусто = любая порода.';
+comment on column public.pool_lines.max_heads is
+    'Лимит голов строки пула (МПК «Макс гол» из accepted_categories.maxHeads).
+     NULL = без лимита. Матч не берёт партию, если current_heads + heads > max_heads.';
+comment on column public.pool_lines.current_heads is
+    'Набрано голов по строке (инкремент при каждом матче партии к этой строке).';
+
+-- ------------------------------------------------------------
+-- 9.3: batches — прогресс частичной продажи (Слайс 9: дробление)
+-- ------------------------------------------------------------
+alter table public.batches
+    add column if not exists matched_heads int not null default 0;
+alter table public.batches drop constraint if exists chk_batches_matched_heads;
+alter table public.batches add  constraint chk_batches_matched_heads
+    check (matched_heads >= 0 and matched_heads <= heads);
+comment on column public.batches.matched_heads is
+    'Слайс 9: сумма голов по активным batch_allocations. remaining = heads - matched_heads.
+     0 = ничего не продано; = heads → полностью продан (matched); между → partially_matched.';
+
+-- Пересборка CHECK статуса: набор из 7.1.6 + 'partially_matched' (Слайс 9).
+-- Обязана идти ПОСЛЕ 7.1.6 — последняя пересборка выигрывает.
+alter table public.batches drop constraint if exists batches_status_check;
+alter table public.batches add  constraint batches_status_check check (status in (
+    'draft', 'scheduled', 'published', 'offering', 'awaiting_price_decision',
+    'matched', 'partially_matched',   -- Слайс 9: часть продана, остаток на рынке
+    'confirmed', 'dispatched', 'delivered', 'cancelled', 'failed', 'expired'
+));
+
+-- ------------------------------------------------------------
+-- 9.4: tsp_config — параметры дробления и таймера цены (P8: standards as data)
+-- ------------------------------------------------------------
+alter table public.tsp_config
+    add column if not exists min_split_heads int not null default 5;
+alter table public.tsp_config drop constraint if exists chk_tsp_config_min_split_heads;
+alter table public.tsp_config add  constraint chk_tsp_config_min_split_heads check (min_split_heads > 0);
+comment on column public.tsp_config.min_split_heads is
+    'Слайс 9: минимальный размер куска при дроблении батча (голов). Кусок >= min и
+     остаток либо 0, либо >= min. Продажа всего остатка целиком разрешена всегда.';
+
+alter table public.tsp_config
+    add column if not exists price_decision_after_minutes int not null default 1;
+alter table public.tsp_config drop constraint if exists chk_tsp_config_price_decision_after_minutes;
+alter table public.tsp_config add  constraint chk_tsp_config_price_decision_after_minutes
+    check (price_decision_after_minutes > 0);
+comment on column public.tsp_config.price_decision_after_minutes is
+    'Слайс C: через сколько минут непроданная партия (published/offering, matched_heads=0)
+     переводится в awaiting_price_decision (экран снижения цены). Дефолт 1 мин (тест).';
+
+-- ------------------------------------------------------------
+-- 9.5: НОВАЯ ТАБЛИЦА — batch_allocations (кусок = сделка)
+-- 20260702160000_tsp_batch_split_allocations
+-- ------------------------------------------------------------
+create table if not exists public.batch_allocations (
+    id            uuid primary key default gen_random_uuid(),
+    batch_id      uuid not null references public.batches(id) on delete cascade,
+    pool_line_id  uuid not null references public.pool_lines(id),
+    pool_id       uuid not null references public.pools(id),
+    heads         int  not null check (heads > 0),
+    price_per_kg  int  not null check (price_per_kg > 0),
+    status        text not null default 'matched'
+                       check (status in ('matched','confirmed','cancelled')),
+    via           text,          -- канал матча: auto_match|pool_activate_sweep|offer_accept|manual_match
+    matched_at    timestamptz not null default now(),
+    confirmed_at  timestamptz,
+    cancelled_at  timestamptz,
+    created_by    uuid references public.users(id),
+    created_at    timestamptz not null default now()
+);
+comment on table public.batch_allocations is
+    'Слайс 9: одна строка = один проданный КУСОК батча (партия дробится между покупателями).
+     Источник правды «кому и сколько продано» + триггер раскрытия контакта по куску (D40).
+     batches.matched_heads = SUM(heads) активных (matched|confirmed) аллокаций батча.';
+
+create index if not exists idx_batch_alloc_batch   on public.batch_allocations (batch_id);
+create index if not exists idx_batch_alloc_line    on public.batch_allocations (pool_line_id);
+create index if not exists idx_batch_alloc_pool    on public.batch_allocations (pool_id);
+create index if not exists idx_batch_alloc_status  on public.batch_allocations (status);
+
+alter table public.batch_allocations enable row level security;
+
+-- Фермер видит аллокации своих батчей (кому продал куски + контакты через S2).
+drop policy if exists batch_alloc_farmer_read on public.batch_allocations;
+create policy batch_alloc_farmer_read on public.batch_allocations for select
+    using (batch_id in (
+        select id from public.batches where organization_id = any (public.fn_my_org_ids())
+    ));
+-- МПК видит аллокации в своих пулах (что набралось в строки).
+drop policy if exists batch_alloc_mpk_read on public.batch_allocations;
+create policy batch_alloc_mpk_read on public.batch_allocations for select
+    using (pool_id in (
+        select id from public.pools where organization_id = any (public.fn_my_org_ids())
+    ));
+-- Запись — только через security-definer RPC (аллокатор). Прямых INSERT/UPDATE-политик нет.
+-- Админ читает через security-definer rpc_admin_tsp_* (20260702220000), политика не нужна.
+
+-- 9.5b: по-кусковая отгрузка/приёмка (20260702190000_tsp_chunk_dispatch) —
+-- статусы куска расширены до полного цикла, таймстемпы этапов.
+alter table public.batch_allocations
+    add column if not exists dispatched_at timestamptz,
+    add column if not exists delivered_at  timestamptz;
+
+-- Пересобираем CHECK статуса куска: + dispatched/delivered (matched/confirmed/cancelled — как были).
+alter table public.batch_allocations drop constraint if exists batch_allocations_status_check;
+alter table public.batch_allocations add  constraint batch_allocations_status_check
+    check (status in ('matched', 'confirmed', 'dispatched', 'delivered', 'cancelled'));
+
+-- ============================================================
+-- SECTION 9 SUMMARY (СЛАЙС 8–9 SCHEMA SYNC)
+-- ============================================================
+-- Tables altered (additive):
+--   pool_requests  +2 колонки (region_ids, district_ids)
+--   pool_lines     +3 колонки (breed_label, max_heads, current_heads) + 2 CHECK
+--   batches        +1 колонка (matched_heads) + CHECK; batches_status_check
+--                  пересобран (13 статусов: + partially_matched)
+--   tsp_config     +2 колонки (min_split_heads, price_decision_after_minutes) + 2 CHECK
+--
+-- Tables created (1): batch_allocations (+2 колонки этапов из 20260702190000,
+--   batch_allocations_status_check: 5 статусов)
+--
+-- Indexes: 4 | RLS enabled: 1 таблица | Policies: 2 (farmer read / mpk read)
+-- ============================================================
+
+-- ============================================================
+-- END SECTION 9 (СЛАЙС 8–9 SCHEMA SYNC)
 -- ============================================================
 
