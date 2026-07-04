@@ -169,6 +169,8 @@ Push/pop — вручную CSS-переход; **edge-swipe откладыва�
 
 **Offline реально:** `network.ts` подписывается на статус → `ShellContextValue.offline` наконец получает правду; `offlineToast()` и гейты (`memberAct` при offline) начинают работать.
 
+**S3 реализован (ARS-149, PR #28, смержен 2026-07-03) — constraint для S4:** seam `KVStorage` в `src/platform/storage.ts` — **синхронный** (call-sites shell читают при инициализации, `authStorage` обёрнут в async под supabase-js), а API `@capacitor/preferences` — async. CapacitorHost (S4) обязан: (1) реализовать Preferences-бэкенд как write-through in-memory кеш, **гидратированный ДО маунта React** (и до первого чтения supabase-сессии в `AuthContext`); (2) вызвать `setAppStorageBackend` / `setDraftStorageBackend` / `setNetworkBackend` в bootstrap до рендера. Сетевой бэкенд S4 — `@capacitor/network` через `setNetworkBackend` (web/webview остаются на `navigator.onLine`). Пункт «safe-area / StatusBar / Keyboard / haptics» из тикета ARS-149 сознательно НЕ реализован в S3 — принадлежит S4 (CapacitorHost + theme CSS) per §9; в S3 только seam'ы, `host.haptics()` уже в контракте S1.
+
 ---
 
 ## 5. PWA-гигиена (web mobile)
@@ -203,6 +205,8 @@ Push/pop — вручную CSS-переход; **edge-swipe откладыва�
 - **App-target флаг:** `VITE_APP_TARGET=native|web`. При `native` роутер (`App.tsx`) монтирует только `/cabinet/*` + `/mpk/*` + auth-экраны (`/login`, `/forgot-pin`, `/register`), исключает публичный сайт (`/news`, `/finance`, `/subsidies`, `/card`) и админку (`/admin/*`). Реализация: условный набор `<Route>` по флагу (аддитивно). Apple 4.2 — нативка = фокус на функции фермера, не «обёрнутый сайт».
 - **Env в рантайме:** `import.meta.env.VITE_*` фиксируется на билд-тайме. Для нативки — отдельный `.env.native` (Supabase URL/anon key одинаковые; отличается `VITE_APP_TARGET`). Секретов в бандле нет (anon key публичный по дизайну).
 - **Capacitor проекты:** `capacitor.config.ts` (`webDir: dist`, `appId: kz.turan.agos`), `npx cap add ios`, `npx cap add android`. CI: `vite build` → `cap sync` → сборка нативных проектов. Web mobile — тот же `dist` на Vercel.
+
+> **S4 РЕАЛИЗОВАН (2026-07-04, ARS-150):** `CapacitorHost` + `capacitor.config.ts` + `android/`/`ios/` проекты + app-target флаг (`VITE_APP_TARGET=native`, режет native-бандл tree-shaking'ом) + deep links + ст.171 дисклеймер. Детали, тест-матрица, Apple 4.2 risk-чеклист, шаги сборки на build-машине → **[`AGOS-NativeApp-S4-BuildAndAcceptance.md`](AGOS-NativeApp-S4-BuildAndAcceptance.md)** + DECISIONS_LOG 2026-07-04. Долги: DEBT-NATIVE-ASSETS-01, DEBT-NATIVE-STORE-01 (IMPL_DEBT).
 
 ---
 
