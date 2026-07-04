@@ -266,6 +266,14 @@ Rules:
 - For dynamic titles (loaded from DB), use `useTopbarConfig().setConfig` in `useEffect`
 - For custom multi-row headers, use `headerContent` override (see ProjectPage pattern)
 
+### Dependency Bumps (D-DEP-BUMP-01)
+
+Repo root `.npmrc` sets `legacy-peer-deps=true` — the deliberate cost of the Ionic v5-island (ADR-NATIVE-ROUTER-01 AMEND-1, `IMPL_DEBT.md` DEBT-NATIVE-ROUTER-01). It disables npm's peer-dependency validation for **ALL** packages, not just the island — so a real future peer conflict will NOT surface on `npm install`; it only surfaces at PR review.
+
+- Every dependency bump (add/upgrade/remove in `package.json`) MUST be reviewed with a manual peer-tree check: run `npm ls <pkg>` (or `npm ls` for the full tree) and eyeball peer ranges before merge. Do not rely on install failing.
+- Flag any peer mismatch in the PR description, not just fix it silently.
+- Retire this rule together with the `.npmrc` when the v5-island is dropped (official Ionic v6 router, track ionic-framework#24177).
+
 ---
 
 ## Prohibited Actions

@@ -66,6 +66,13 @@ ion-modal.agos-sheet-modal .sheet {
   animation: none;
   max-height: 88vh;
 }
+/* S2.1 (ARS-157): PriceSheet держит свою .ps-sheet-карточку (внутренний flex-скролл
+   с липкими шапкой/кнопкой), но едет в том же модале — глушим её агрегатную анимацию
+   и переводим max-height:90% → 88vh (в auto-height-модале % не к чему привязать). */
+ion-modal.agos-sheet-modal .ps-sheet {
+  animation: none;
+  max-height: 88vh;
+}
 
 /* ---------- полноэкранные флоу без IonShellFrame (BatchWizard / PubResult) ---------- */
 .agos-cabinet-stage .agos-flow-page {
