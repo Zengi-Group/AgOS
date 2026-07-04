@@ -44,6 +44,7 @@ storybook-static
 
 # vitest browser-mode: скриншоты/артефакты упавших тестов
 .vitest-attachments/
+__screenshots__/
 
 # local DB password for one-off prod deploys — NEVER commit
 .db_password
