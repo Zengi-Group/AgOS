@@ -6,6 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:native": "tsc -b && vite build --mode native",
+    "cap:sync": "npm run build:native && cap sync",
+    "cap:sync:ios": "npm run build:native && cap sync ios",
+    "cap:sync:android": "npm run build:native && cap sync android",
+    "cap:ios": "npm run cap:sync:ios && cap open ios",
+    "cap:android": "npm run cap:sync:android && cap open android",
+    "cap:assets": "capacitor-assets generate --iconBackgroundColor '#fdf6ee' --splashBackgroundColor '#fdf6ee'",
     "preview": "vite preview",
     "test:unit": "vitest run --project unit",
     "storybook": "storybook dev -p 6006",
@@ -13,6 +20,18 @@
     "chromatic": "npx chromatic --project-token=chpt_62e4587bfebe36b"
   },
   "dependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/app": "^6.0.2",
+    "@capacitor/camera": "^6.1.2",
+    "@capacitor/core": "^6.2.1",
+    "@capacitor/ios": "^6.2.1",
+    "@capacitor/haptics": "^6.0.2",
+    "@capacitor/keyboard": "^6.0.4",
+    "@capacitor/network": "^6.0.3",
+    "@capacitor/preferences": "^6.0.3",
+    "@capacitor/push-notifications": "^6.0.4",
+    "@capacitor/splash-screen": "^6.0.3",
+    "@capacitor/status-bar": "^6.0.2",
     "@hookform/resolvers": "^3.10.0",
     "@ionic/core": "^8.8.13",
     "@ionic/react": "^8.8.13",
@@ -75,6 +94,8 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^6.2.1",
     "@chromatic-com/storybook": "^5.1.2",
     "@storybook/addon-a11y": "^10.3.5",
     "@storybook/addon-docs": "^10.3.5",

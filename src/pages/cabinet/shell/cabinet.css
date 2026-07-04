@@ -224,6 +224,8 @@
 .agos-cabinet-stage .cab-link.quiet { color: var(--ink-3); }
 .agos-cabinet-stage .att-arr { color: var(--ink-3); line-height: 0; }
 .agos-cabinet-stage .cab-ver { font-size: 11px; color: var(--ink-4); padding: 12px 0 6px; }
+/* Юр-дисклеймер ст.171 ПК РК (D-LEGAL-1, ARS-150): обязателен в приложении для сторов. */
+.agos-cabinet-stage .cab-legal { font-size: 10.5px; line-height: 1.5; color: var(--ink-3); padding: 8px 0 2px; border-top: 1px solid var(--line); }
 
 /* ---------- нижний лист ---------- */
 .agos-cabinet-stage .sheet-wrap {

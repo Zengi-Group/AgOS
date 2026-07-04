@@ -110,3 +110,13 @@
 - **Install-mode долг (найден Vercel-билдом PR #27):** peer-требование `react-router@^5` у `@ionic/react-router` осознанно не удовлетворяется → чистый `npm install` падает с ERESOLVE. Фикс: репо-уровневый `.npmrc` `legacy-peer-deps=true` (детерминированно для Vercel/CI/локали). Цена: npm перестаёт валидировать peer-конфликты ВСЕХ пакетов — будущие реальные peer-конфликты не всплывут на install; ловить их на PR-ревью бампов. Убрать `.npmrc` вместе с v5-островом.
 **Severity:** medium (A: ограничено, конфиг-уровень, гейт пройден; smoke-тест отсутствует).
 **Owner surface:** `vite.config.ts`, `package.json`, `src/pages/cabinet/shell/CabinetApp.tsx`, `src/pages/cabinet/shell/mpk/MpkApp.tsx`. Слайсы: ARS-148 (S2), ARS-152 (S6).
+
+### DEBT-NATIVE-ASSETS-01 — иконка/сплэш = апскейл, не векторный мастер (ARS-150 / S4)
+**Context:** `assets/logo.png` (источник `npm run cap:assets`) сейчас — lossy-апскейл `public/favicon-512.png` до 1024 (в песочнице нет векторного мастера). Нативные иконки/сплэши сгенерированы из него.
+**Retire-when:** финальная бренд-иконка из дизайн-прохода UI-кита **ARS-109** → заменить `assets/logo.png` (+ опц. `logo-dark.png`/кастомный сплэш), перегенерировать `npm run cap:assets` + `npx cap sync`.
+**Severity:** low (визуальный долг, не функциональный). **Owner surface:** `assets/`, `android/app/src/main/res/**`, `ios/App/App/Assets.xcassets/**`.
+
+### DEBT-NATIVE-STORE-01 — deep-link плейсхолдеры + iOS pod/сборка на build-машине (ARS-150 / S4)
+**Context:** (1) `public/.well-known/apple-app-site-association` `TEAMID` и `assetlinks.json` `REPLACE_WITH_SIGNING_CERT_SHA256` — плейсхолдеры до определения store-аккаунта (открытый вопрос: TURAN vs Zengi, Apple D-U-N-S). (2) iOS `pod install` + сборка + прогон на устройствах не выполнены в песочнице (нет CocoaPods/полного Xcode) — шаг acceptance на настроенной Mac-build-машине. (3) iOS Associated Domains capability и `google-services.json`/APNs (push, S5) заводятся вручную при первой настройке подписи.
+**Retire-when:** store-аккаунт определён → подставить Team ID + signing SHA256; прогон TestFlight/Internal testing зелёный (ARS-156 E2E push). См. `Docs/AGOS-NativeApp-S4-BuildAndAcceptance.md`.
+**Severity:** medium (блокирует финальный deep-link + публикацию, НЕ блокирует сборку). **Owner surface:** `public/.well-known/*`, `ios/`, `android/app/`. Связ.: ARS-156 (S5.4), C-серия push.

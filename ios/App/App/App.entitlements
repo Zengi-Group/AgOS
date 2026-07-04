@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Universal Links (ARS-150 §8): https://app.turanstandard.kz/cabinet|/mpk открываются
+	     в приложении. Требует /.well-known/apple-app-site-association на домене (см. public/).
+	     В Xcode: Signing & Capabilities → Associated Domains должен ссылаться на этот файл
+	     (CODE_SIGN_ENTITLEMENTS = App/App.entitlements) — заводится при первой настройке подписи. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:app.turanstandard.kz</string>
+	</array>
+</dict>
+</plist>

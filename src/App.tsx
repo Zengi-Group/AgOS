@@ -131,6 +131,12 @@ const queryClient = new QueryClient({
   },
 })
 
+// App-target (EngSpec §8, ARS-150 / S4): нативный бандл (VITE_APP_TARGET=native) грузит
+// ТОЛЬКО фермерскую оболочку /cabinet + МПК /mpk + auth — без публичного сайта, админки
+// и экспертки (Apple 4.2 «minimum functionality»: приложение = функции фермера, не
+// обёрнутый сайт). Гейт аддитивный — web-таргет монтирует всё как раньше.
+const IS_NATIVE = import.meta.env.VITE_APP_TARGET === 'native'
+
 function App() {
   return (
     <HelmetProvider>
@@ -139,11 +145,16 @@ function App() {
       <AuthProvider>
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<PublicLanding />} />
+            {/* Native: корень уводит в кабинет (RequireAuth отбросит на /login если нет сессии). */}
+            <Route path="/" element={IS_NATIVE ? <Navigate to="/cabinet" replace /> : <PublicLanding />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/forgot-pin" element={<ForgotPin />} />
             <Route path="/register" element={<Registration />} />
+
+            {/* ── Публичный сайт + админ-логин: только web-таргет (§8) ─── */}
+            {!IS_NATIVE && (
+              <>
+            <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/membership-policy" element={<Suspense fallback={null}><PublicMembershipPolicy /></Suspense>} />
 
             {/* ── Public site (migrated from turan-industry-catalyst) ─── */}
@@ -171,12 +182,16 @@ function App() {
               <Route path="/subsidies/compare" element={<Suspense fallback={null}><SubsidyComparison /></Suspense>} />
               <Route path="/subsidies/:id" element={<Suspense fallback={null}><SubsidyDetail /></Suspense>} />
             </Route>
+              </>
+            )}
 
             <Route element={<RequireAuth />}>
               {/* New mobile shells — full-screen, own chrome, NOT wrapped in AppLayout.
                   Primary /cabinet (farmer) + /mpk (МПК); legacy web cabinet → /cabinet-legacy. */}
               <Route path="/cabinet/*" element={<Suspense fallback={null}><CabinetApp /></Suspense>} />
               <Route path="/mpk/*" element={<MpkApp />} />
+              {/* Легаси web-кабинет + админ/эксперт-консоль: только web-таргет (§8). */}
+              {!IS_NATIVE && (
               <Route element={<AppLayout />}>
                 <Route path="/cabinet-legacy">
                   <Route index element={<CabinetDashboard />} />
@@ -295,6 +310,7 @@ function App() {
                   </Route>
                 </Route>
               </Route>
+              )}
             </Route>
 
             <Route path="*" element={<NotFound />} />
