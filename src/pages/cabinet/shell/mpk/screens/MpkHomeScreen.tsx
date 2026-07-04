@@ -1,6 +1,7 @@
 // AgOS · TSP-3 · Главная МПК. Герой + два гейт-баннера + TSP-замок/вход + первые шаги.
 
-import { ShellFrame } from '../../components/ShellFrame'
+// S6 (ARS-152): IonShellFrame вместо ShellFrame — IonPage + нативный скролл + refresher.
+import { IonShellFrame } from '../../components/IonShellFrame'
 import { Cta } from '../../components/Cta'
 import type { MpkMembership, MpkTypeStatus, Pool, PoolStatus } from '../types'
 
@@ -20,6 +21,8 @@ interface Props {
   realAccount?: boolean   // реальный аккаунт МПК (orgId есть) → кнопка членства не «демо»
   onSimulateApprove: () => void
   onSimulateMember: () => void
+  // Pull-to-refresh (spec §7): экран с поллингом получает рефетч от MpkApp.
+  onRefresh?: () => Promise<unknown>
 }
 
 const CHIP_LABEL: Record<PoolStatus, string> = {
@@ -94,6 +97,7 @@ function MpkMemberBanner({ membership, realAccount, onSimulateMember }: {
 export function MpkHomeScreen({
   typeStatus, membership, pools, tspOpen, orgName, region, bin,
   onOpenTsp, onOpenOffers, offersCount, onOpenPool, onOpenContactTuran, realAccount, onSimulateApprove, onSimulateMember,
+  onRefresh,
 }: Props) {
   const activeCount = pools.filter((p) => p.status === 'filling' || p.status === 'executing').length
   const totalTonnes = Math.round(
@@ -103,7 +107,7 @@ export function MpkHomeScreen({
   const recentPools = pools.slice(0, 2)
 
   return (
-    <ShellFrame noTabs label="МПК · Главная">
+    <IonShellFrame noTabs label="МПК · Главная" onRefresh={onRefresh}>
       {/* 4.1 — Герой */}
       <div className="mpk-hero">
         <div className="mpk-hero-ic">🏭</div>
@@ -178,6 +182,6 @@ export function MpkHomeScreen({
           </ul>
         </div>
       )}
-    </ShellFrame>
+    </IonShellFrame>
   )
 }

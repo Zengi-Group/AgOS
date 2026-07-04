@@ -1,12 +1,27 @@
-// AgOS · TSP-3 · Корень оболочки МПК (мясокомбинат). Мок, без Supabase.
-// Аналог CabinetApp, но проще: 2 маршрута (home/tsp), модалы и одна шторка.
+// AgOS · TSP-3 · Корень оболочки МПК (мясокомбинат). Аналог CabinetApp:
+// 3 маршрута (home/tsp/offers), 4 модала и одна шторка.
+// S6 (ARS-152, ADR-NATIVE-ROUTER-01 AMEND-1): Ionic-навигация по S2-паттерну —
+// IonReactRouter живёт на изолированном react-router v5 (v5-остров,
+// vite.config.ts agos:ionic-v5-island); остальное приложение остаётся на v6.
+// Бизнес-логика (RPC, поллинг, seed-фолбэк) сохранена дословно.
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { setupIonicReact, IonApp, IonModal, IonRouterOutlet } from '@ionic/react'
+import type { UseIonRouterResult } from '@ionic/react'
+import { useIonRouter } from '@ionic/react'
+import { IonReactRouter } from '@ionic/react-router'
+// @ts-expect-error v5-alias пакет без @types — импорты v5-острова (спайк-проверено, S2).
+import { Route as RouteV5, useLocation } from 'react-router-dom-v5'
+import '@ionic/react/css/core.css'
 import '../cabinet.css'
+import '../ionic.css'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { loadAccountProfile } from '@/lib/account'
+// S2.1-паттерн (ARS-157): тактильный отклик на ключевых действиях через Host Bridge.
+// В web — no-op; CapacitorHost даёт вибрацию. НЕ звать @capacitor/* напрямую.
+import { useHost } from '@/platform/host/HostContext'
 import { Toast } from '../components/Toast'
 import { MpkHomeScreen } from './screens/MpkHomeScreen'
 import { MpkTspScreen } from './screens/MpkTspScreen'
@@ -20,8 +35,9 @@ import { seedPools } from './data/pools'
 import { loadMarketBatches, seedMarketBatches, type MarketBatch } from './data/market'
 import { loadMyPools, loadPoolMatches, closeDuePools } from './data/pools-load'
 import { loadIncomingOffers } from './data/offers-load'
+import { mpkRouteToUrl, mpkUrlToRoute, mpkRouteKey, mpkDirFor } from './nav'
 import type {
-  IncomingOffer, MpkMembership, MpkModal, MpkRoute, MpkSheet, MpkState, MpkTypeStatus, Pool,
+  IncomingOffer, MpkMembership, MpkModal, MpkRoute, MpkSheet, MpkState, MpkTypeStatus, PendingDeal, Pool,
 } from './types'
 
 interface MpkAppProps {
@@ -40,16 +56,59 @@ function deriveMpkMembership(level: string | null): MpkMembership {
   return 'none'
 }
 
+// iOS-режим для всей оболочки (S-1 архитект-ревью ARS-152): МПК не полагается на
+// побочный эффект модуля CabinetApp — идемпотентный вызов и здесь (конфиг идентичен).
+setupIonicReact({ mode: 'ios' })
+
+// Мост v5-роутера (зеркало CabinetApp.IonBridge — унифицировать в ARS-109): отдаёт
+// ionRouter наружу для go() и синкает URL → Route-состояние (browser-back /
+// edge-swipe / deep-link меняют URL мимо go()).
+function IonBridge({ onIon, onPath }: { onIon: (ion: UseIonRouterResult) => void; onPath: (path: string) => void }) {
+  const ion = useIonRouter()
+  useEffect(() => { onIon(ion) })
+  const loc = useLocation() as { pathname: string }
+  useEffect(() => { onPath(loc.pathname) }, [loc.pathname, onPath])
+  return null
+}
+
 export function MpkApp({ initialState }: MpkAppProps = {}) {
   const navigate = useNavigate()
   const { signOut } = useAuth()
+  const host = useHost()   // S2.1-паттерн: тактильный отклик (web no-op)
   const [typeStatus, setTypeStatus] = useState<MpkTypeStatus>(initialState?.typeStatus ?? 'under_review')
   const [membership, setMembership] = useState<MpkMembership>(initialState?.membership ?? 'submitted')
   const [pools, setPools] = useState<Pool[]>(initialState?.pools ?? seedPools())
-  const [route, setRoute] = useState<MpkRoute>({ name: 'home' })
+  // S6: URL — источник истины экрана (deep-link открывает нужный экран).
+  const [route, setRoute] = useState<MpkRoute>(() => mpkUrlToRoute(window.location.pathname))
   const [modal, setModal] = useState<MpkModal>(null)
   const [sheet, setSheet] = useState<MpkSheet>(null)
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
+
+  // S-2 (архитект-ревью ARS-152): параметры модалов переживают dismiss-анимацию —
+  // контент размонтируется в onDidDismiss, а не в момент isOpen=false (урок ревью
+  // PR #27: условный unmount рвал анимацию). Ремоунт контента при следующем открытии
+  // сбрасывает форм-состояние модалов с чистого листа, а cleanup эффектов
+  // останавливает их внутренний поллинг (PoolMonitor, 8с).
+  const [monitorPoolId, setMonitorPoolId] = useState<string | null>(null)
+  const [detailBatchId, setDetailBatchId] = useState<string | null>(null)
+  const [closedDeal, setClosedDeal] = useState<PendingDeal | null>(null)
+  const [createRendered, setCreateRendered] = useState(false)
+  // Тема шторки TURAN — переживает dismiss (шторка смонтирована постоянно, open-флаг).
+  const [sheetTopic, setSheetTopic] = useState<string | undefined>(undefined)
+
+  // Открытие модала: isOpen-состояние + rendered-параметры контента.
+  const openModal = (m: NonNullable<MpkModal>) => {
+    setModal(m)
+    if (m.kind === 'pool_monitor') setMonitorPoolId(m.poolId)
+    else if (m.kind === 'batch_detail') setDetailBatchId(m.batchId)
+    else if (m.kind === 'deal_closed') setClosedDeal(m.deal)
+    else setCreateRendered(true)
+  }
+  // Закрытие гардится по kind: поздний onDidDismiss закрывающегося модала не должен
+  // убить следующий, уже открытый (переход batch_detail → deal_closed).
+  const closeModal = (kind: NonNullable<MpkModal>['kind']) =>
+    setModal((cur) => (cur?.kind === kind ? null : cur))
+  const openSheet = (topic?: string) => { setSheetTopic(topic); setSheet({ kind: 'contact_turan', topic }) }
 
   // Профиль реального МПК-аккаунта перекрывает демо; иначе — демо-фолбэк.
   const [orgName, setOrgName] = useState(initialState?.orgName ?? 'ТОО «АгроМит»')
@@ -104,17 +163,20 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     return () => { alive = false }
   }, [])
 
+  // Перечитать всё разом — тело поллинга и pull-to-refresh (IonRefresher, spec §7).
+  // Безопасно для демо/анонима: load* вернут null → seed сохраняется.
+  const pullAll = useCallback(() => Promise.all([
+    closeDuePools().then(() => loadMyPools()).then((list) => { if (list !== null) setPools(list) }),
+    loadMarketBatches().then((list) => { if (list !== null) setMarketBatches(list) }),
+    loadIncomingOffers().then((list) => { if (list !== null) setOffers(list) }),
+  ]), [])
+
   // Лёгкий поллинг (D-SYNC-01): пулы и маркет-борд обновляются раз в 20с — МПК
-  // видит авто-матч партий фермеров и изменения без перезагрузки. Безопасно для
-  // демо/анонима: loadMyPools/loadMarketBatches вернут null → seed сохраняется.
+  // видит авто-матч партий фермеров и изменения без перезагрузки.
   useEffect(() => {
-    const id = setInterval(() => {
-      closeDuePools().then(() => loadMyPools()).then((list) => { if (list !== null) setPools(list) })
-      loadMarketBatches().then((list) => { if (list !== null) setMarketBatches(list) })
-      loadIncomingOffers().then((list) => { if (list !== null) setOffers(list) })
-    }, 20000)
+    const id = setInterval(pullAll, 20000)
     return () => clearInterval(id)
-  }, [])
+  }, [pullAll])
 
   // Перечитать маркет-борд (после матча матченная партия уходит из published).
   const refetchMarket = () =>
@@ -132,6 +194,7 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
   const acceptOffer = async (offerId: string) => {
     const { error } = await supabase.rpc('rpc_self_accept_offer', { p_offer_id: offerId })
     if (error) throw new Error(error.message)
+    host.haptics('medium')   // S2.1-паттерн: принятие оффера — ключевое действие
     await Promise.all([refetchOffers(), refetchPools(), refetchMarket()])
   }
 
@@ -147,6 +210,7 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
   const confirmDelivery = async (allocationId: string) => {
     const { error } = await supabase.rpc('rpc_self_confirm_delivery_alloc', { p_allocation_id: allocationId })
     if (error) throw new Error(error.message)
+    host.haptics('medium')   // S2.1-паттерн: приёмка подтверждена — ключевое действие
     await refetchPools()
   }
 
@@ -165,6 +229,7 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
       p_pool_id: poolId, p_batch_id: batchId, p_matched_heads: heads, p_price_per_kg: price,
     })
     if (error) throw new Error(error.message)
+    host.haptics('medium')   // S2.1-паттерн: оффер отправлен — ключевое действие
     await refetchMarket()
   }
 
@@ -188,112 +253,191 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     setPools((ps) => ps.map((p) => (p.id === id ? { ...p, ...patch } : p)))
   const addPool = (p: Pool) => setPools((ps) => [p, ...ps])
 
+  // ---------- S6: навигация через Ionic-роутер (v5-остров, S2-паттерн) ----------
+  // go сохраняет семантику прежнего setRoute — экраны не переписываются (spec §3).
+  // Направление — из карты глубины mpk/nav.ts (DEBT-NATIVE-ROUTER-01: поддерживать
+  // при добавлении роутов). К home — настоящий pop (edge-swipe/кнопка ← едины).
+  const ionRef = useRef<UseIonRouterResult | null>(null)
+  const routeRef = useRef(route)
+  routeRef.current = route
+  const go = (r: MpkRoute) => {
+    const from = routeRef.current
+    setRoute(r)
+    if (mpkRouteKey(from) === mpkRouteKey(r)) return
+    const ion = ionRef.current
+    if (!ion) return
+    const dir = mpkDirFor(from, r)
+    if (dir === 'back' && ion.canGoBack()) ion.goBack()
+    else ion.push(mpkRouteToUrl(r), dir)
+  }
+  // URL → Route-синк: browser-back / edge-swipe / deep-link меняют URL мимо go().
+  const syncFromPath = useCallback((path: string) => {
+    const r = mpkUrlToRoute(path)
+    setRoute((cur) => (mpkRouteKey(cur) === mpkRouteKey(r) ? cur : r))
+  }, [])
+
+  // ---------- рендер экрана: v5-Route в IonRouterOutlet (S6, spec §3) ----------
+  // Каждый рендер — 1:1 ветка прежнего route.name-switch; экраны получают те же пропсы.
+  const renderHome = () => (
+    <MpkHomeScreen
+      typeStatus={typeStatus}
+      membership={membership}
+      pools={pools}
+      tspOpen={tspOpen}
+      orgName={orgName}
+      region={region}
+      bin={bin}
+      onOpenTsp={() => go({ name: 'tsp' })}
+      onOpenOffers={() => go({ name: 'offers' })}
+      offersCount={offers.length}
+      onOpenPool={(id) => openModal({ kind: 'pool_monitor', poolId: id })}
+      onOpenContactTuran={(topic) => openSheet(topic)}
+      realAccount={orgId !== null}
+      onSimulateApprove={() => { setTypeStatus('approved'); showToast('Тип МПК подтверждён (демо)') }}
+      onSimulateMember={() => {
+        if (orgId) {
+          joinMembership()
+            .then(() => showToast('Членство активировано'))
+            .catch((e) => showToast('Не удалось: ' + (e instanceof Error ? e.message : '')))
+        } else {
+          setMembership('grace'); showToast('Членство активировано (демо)')
+        }
+      }}
+      onRefresh={pullAll}
+    />
+  )
+
+  const renderOffers = () => (
+    <MpkIncomingOffersScreen
+      offers={offers}
+      onBack={() => go({ name: 'home' })}
+      onAccept={(id) =>
+        acceptOffer(id)
+          .then(() => showToast('Оффер принят — партия в вашей заявке'))
+          .catch((e) => { showToast('Не удалось принять: ' + (e instanceof Error ? e.message : '')); throw e })}
+      onReject={(id) =>
+        rejectOffer(id)
+          .then(() => showToast('Оффер отклонён'))
+          .catch((e) => { showToast('Не удалось: ' + (e instanceof Error ? e.message : '')); throw e })}
+      onRefresh={pullAll}
+    />
+  )
+
+  const renderTsp = () => (
+    <MpkTspScreen
+      pools={pools}
+      batches={marketBatches}
+      onBack={() => go({ name: 'home' })}
+      onCreatePool={() => openModal({ kind: 'create_pool' })}
+      onOpenPool={(id) => openModal({ kind: 'pool_monitor', poolId: id })}
+      onOpenBatch={(id) => openModal({ kind: 'batch_detail', batchId: id })}
+      onRefresh={pullAll}
+    />
+  )
+
+  // Контент модалов по retained-параметрам (S-2): lookup живёт до onDidDismiss.
+  const monitorPool = monitorPoolId ? pools.find((p) => p.id === monitorPoolId) ?? null : null
+
   return (
     <div className="agos-cabinet-stage">
-      {route.name === 'home' ? (
-        <MpkHomeScreen
-          typeStatus={typeStatus}
-          membership={membership}
-          pools={pools}
-          tspOpen={tspOpen}
-          orgName={orgName}
-          region={region}
-          bin={bin}
-          onOpenTsp={() => setRoute({ name: 'tsp' })}
-          onOpenOffers={() => setRoute({ name: 'offers' })}
-          offersCount={offers.length}
-          onOpenPool={(id) => setModal({ kind: 'pool_monitor', poolId: id })}
-          onOpenContactTuran={(topic) => setSheet({ kind: 'contact_turan', topic })}
-          realAccount={orgId !== null}
-          onSimulateApprove={() => { setTypeStatus('approved'); showToast('Тип МПК подтверждён (демо)') }}
-          onSimulateMember={() => {
-            if (orgId) {
-              joinMembership()
-                .then(() => showToast('Членство активировано'))
-                .catch((e) => showToast('Не удалось: ' + (e instanceof Error ? e.message : '')))
-            } else {
-              setMembership('grace'); showToast('Членство активировано (демо)')
-            }
-          }}
-        />
-      ) : route.name === 'offers' ? (
-        <MpkIncomingOffersScreen
-          offers={offers}
-          onBack={() => setRoute({ name: 'home' })}
-          onAccept={(id) =>
-            acceptOffer(id)
-              .then(() => showToast('Оффер принят — партия в вашей заявке'))
-              .catch((e) => { showToast('Не удалось принять: ' + (e instanceof Error ? e.message : '')); throw e })}
-          onReject={(id) =>
-            rejectOffer(id)
-              .then(() => showToast('Оффер отклонён'))
-              .catch((e) => { showToast('Не удалось: ' + (e instanceof Error ? e.message : '')); throw e })}
-        />
-      ) : (
-        <MpkTspScreen
-          pools={pools}
-          batches={marketBatches}
-          onBack={() => setRoute({ name: 'home' })}
-          onCreatePool={() => setModal({ kind: 'create_pool' })}
-          onOpenPool={(id) => setModal({ kind: 'pool_monitor', poolId: id })}
-          onOpenBatch={(id) => setModal({ kind: 'batch_detail', batchId: id })}
-        />
-      )}
+      <div className="phone">
+        <IonApp>
+          <IonReactRouter>
+            <IonBridge onIon={(ion) => { ionRef.current = ion }} onPath={syncFromPath} />
+            <IonRouterOutlet>
+              <RouteV5 exact path="/mpk" render={renderHome} />
+              <RouteV5 exact path="/mpk/tsp" render={renderTsp} />
+              <RouteV5 exact path="/mpk/offers" render={renderOffers} />
+              {/* неизвестный под-путь → Главная (первое совпадение выигрывает) */}
+              <RouteV5 render={renderHome} />
+            </IonRouterOutlet>
+          </IonReactRouter>
 
-      {/* Модалы */}
-      {modal?.kind === 'create_pool' && (
-        <CreatePoolModal
-          orgId={orgId}
-          onClose={() => setModal(null)}
-          onSubmit={(pool) => { addPool(pool); setModal(null); showToast('Заявка на закупку создана') }}
-        />
-      )}
-      {modal?.kind === 'pool_monitor' && (() => {
-        const pool = pools.find((p) => p.id === modal.poolId)
-        if (!pool) return null
-        return (
-          <PoolMonitorModal
-            pool={pool}
-            onClose={() => setModal(null)}
-            onPatch={(patch) => patchPool(pool.id, patch)}
-            toast={showToast}
-            onContactTuran={() => { setModal(null); setSheet({ kind: 'contact_turan' }) }}
-            mpk={{ orgName, region, bin }}
-            onAdvance={advancePool}
-            onLoadMatches={loadPoolMatches}
-            onConfirmDelivery={confirmDelivery}
+          {/* Модалы — IonModal поверх страниц (полноэкранные, agos-mpk-modal в ionic.css).
+              Смонтированы постоянно (isOpen-флаг) — dismiss-анимация играет и при
+              программном закрытии; контент — по retained-параметрам до onDidDismiss. */}
+          <IonModal
+            isOpen={modal?.kind === 'create_pool'}
+            onDidDismiss={() => { closeModal('create_pool'); setCreateRendered(false) }}
+            className="agos-mpk-modal"
+          >
+            {createRendered && (
+              <CreatePoolModal
+                orgId={orgId}
+                onClose={() => closeModal('create_pool')}
+                onSubmit={(pool) => {
+                  addPool(pool)
+                  closeModal('create_pool')
+                  host.haptics('medium')   // S2.1-паттерн: публикация заявки — ключевое действие
+                  showToast('Заявка на закупку создана')
+                }}
+              />
+            )}
+          </IonModal>
+
+          <IonModal
+            isOpen={modal?.kind === 'pool_monitor'}
+            onDidDismiss={() => { closeModal('pool_monitor'); setMonitorPoolId(null) }}
+            className="agos-mpk-modal"
+          >
+            {monitorPool && (
+              <PoolMonitorModal
+                pool={monitorPool}
+                onClose={() => closeModal('pool_monitor')}
+                onPatch={(patch) => patchPool(monitorPool.id, patch)}
+                toast={showToast}
+                onContactTuran={() => { closeModal('pool_monitor'); openSheet() }}
+                mpk={{ orgName, region, bin }}
+                onAdvance={advancePool}
+                onLoadMatches={loadPoolMatches}
+                onConfirmDelivery={confirmDelivery}
+              />
+            )}
+          </IonModal>
+
+          <IonModal
+            isOpen={modal?.kind === 'batch_detail'}
+            onDidDismiss={() => { closeModal('batch_detail'); setDetailBatchId(null) }}
+            className="agos-mpk-modal"
+          >
+            {detailBatchId !== null && (
+              <BatchDetailModal
+                batch={marketBatches.find((b) => b.id === detailBatchId)}
+                pools={pools.filter((p) => p.status === 'filling')}
+                onClose={() => closeModal('batch_detail')}
+                toast={showToast}
+                onMatch={offerBatch}
+                onOffer={(deal) => openModal({ kind: 'deal_closed', deal })}
+              />
+            )}
+          </IonModal>
+
+          <IonModal
+            isOpen={modal?.kind === 'deal_closed'}
+            onDidDismiss={() => { closeModal('deal_closed'); setClosedDeal(null) }}
+            className="agos-mpk-modal"
+          >
+            {closedDeal && (
+              <DealClosedModal
+                deal={closedDeal}
+                onClose={() => closeModal('deal_closed')}
+                toast={showToast}
+              />
+            )}
+          </IonModal>
+
+          {/* Шторка — уже IonModal через Sheet.tsx (S2); смонтирована постоянно,
+              каждый показ с чистого состояния (реинициализация по open внутри). */}
+          <ContactTuranSheet
+            open={sheet?.kind === 'contact_turan'}
+            topic={sheetTopic}
+            onClose={() => setSheet(null)}
+            onSubmit={() => { setSheet(null); showToast('Обращение принято') }}
           />
-        )
-      })()}
-      {modal?.kind === 'batch_detail' && (
-        <BatchDetailModal
-          batch={marketBatches.find((b) => b.id === modal.batchId)}
-          pools={pools.filter((p) => p.status === 'filling')}
-          onClose={() => setModal(null)}
-          toast={showToast}
-          onMatch={offerBatch}
-          onOffer={(deal) => setModal({ kind: 'deal_closed', deal })}
-        />
-      )}
-      {modal?.kind === 'deal_closed' && (
-        <DealClosedModal
-          deal={modal.deal}
-          onClose={() => setModal(null)}
-          toast={showToast}
-        />
-      )}
 
-      {/* Шторки */}
-      {sheet?.kind === 'contact_turan' && (
-        <ContactTuranSheet
-          open
-          topic={sheet.topic}
-          onClose={() => setSheet(null)}
-          onSubmit={() => { setSheet(null); showToast('Обращение принято') }}
-        />
-      )}
-
-      <Toast toast={toast} />
+          <Toast toast={toast} />
+        </IonApp>
+      </div>
     </div>
   )
 }

@@ -1,7 +1,8 @@
 // AgOS · TSP-3 · Раздел закупок МПК. Таб «Мои заявки» + таб «Маркет-борд».
 
 import { useState } from 'react'
-import { ShellFrame } from '../../components/ShellFrame'
+// S6 (ARS-152): IonShellFrame вместо ShellFrame — IonPage + нативный скролл + refresher.
+import { IonShellFrame } from '../../components/IonShellFrame'
 import { fmtMoney } from '../../tsp/data/tsp-utils'
 import { NBSP } from '../../tsp/data/tsp-dicts'
 import type { MarketBatch } from '../data/pools'
@@ -14,6 +15,8 @@ interface Props {
   onCreatePool: () => void
   onOpenPool: (id: string) => void
   onOpenBatch: (id: string) => void
+  // Pull-to-refresh (spec §7): экран с поллингом получает рефетч от MpkApp.
+  onRefresh?: () => Promise<unknown>
 }
 
 const CHIP_LABEL: Record<PoolStatus, string> = {
@@ -55,7 +58,7 @@ function PoolCard({ p, onClick }: { p: Pool; onClick: () => void }) {
   )
 }
 
-export function MpkTspScreen({ pools, batches, onBack, onCreatePool, onOpenPool, onOpenBatch }: Props) {
+export function MpkTspScreen({ pools, batches, onBack, onCreatePool, onOpenPool, onOpenBatch, onRefresh }: Props) {
   const [tab, setTab] = useState<'pools' | 'board'>('pools')
 
   const activeCount = pools.filter((p) => p.status === 'filling' || p.status === 'executing').length
@@ -65,7 +68,7 @@ export function MpkTspScreen({ pools, batches, onBack, onCreatePool, onOpenPool,
   const dealsCount = pools.filter((p) => p.status === 'executed').length
 
   return (
-    <ShellFrame noTabs label="МПК · Закупки">
+    <IonShellFrame noTabs label="МПК · Закупки" onRefresh={onRefresh}>
       <div className="mpk-head">
         <button className="mpk-back" onClick={onBack} aria-label="Назад">←</button>
         <div className="mpk-title">TSP — Закупки</div>
@@ -128,6 +131,6 @@ export function MpkTspScreen({ pools, batches, onBack, onCreatePool, onOpenPool,
           })}
         </div>
       )}
-    </ShellFrame>
+    </IonShellFrame>
   )
 }

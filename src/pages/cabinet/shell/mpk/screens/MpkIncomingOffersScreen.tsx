@@ -4,7 +4,8 @@
 // Личность фермера НЕ раскрыта до подтверждения сделки (D-M6-12). Без подталкивания (ст.171).
 
 import { useState } from 'react'
-import { ShellFrame } from '../../components/ShellFrame'
+// S6 (ARS-152): IonShellFrame вместо ShellFrame — IonPage + нативный скролл + refresher.
+import { IonShellFrame } from '../../components/IonShellFrame'
 import { Cta } from '../../components/Cta'
 import { fmtMoney } from '../../tsp/data/tsp-utils'
 import { NBSP } from '../../tsp/data/tsp-dicts'
@@ -15,6 +16,8 @@ interface Props {
   onBack: () => void
   onAccept: (offerId: string) => Promise<void>
   onReject: (offerId: string) => Promise<void>
+  // Pull-to-refresh (spec §7): экран с поллингом получает рефетч от MpkApp.
+  onRefresh?: () => Promise<unknown>
 }
 
 const CAT_RU: Record<string, string> = {
@@ -67,9 +70,9 @@ function OfferCard({ offer, onAccept, onReject }: {
   )
 }
 
-export function MpkIncomingOffersScreen({ offers, onBack, onAccept, onReject }: Props) {
+export function MpkIncomingOffersScreen({ offers, onBack, onAccept, onReject, onRefresh }: Props) {
   return (
-    <ShellFrame noTabs label="МПК · Входящие офферы">
+    <IonShellFrame noTabs label="МПК · Входящие офферы" onRefresh={onRefresh}>
       <div className="mpk-head">
         <button className="mpk-back" onClick={onBack} aria-label="Назад">←</button>
         <div className="mpk-title">Входящие офферы</div>
@@ -95,6 +98,6 @@ export function MpkIncomingOffersScreen({ offers, onBack, onAccept, onReject }: 
           </>
         )}
       </div>
-    </ShellFrame>
+    </IonShellFrame>
   )
 }
