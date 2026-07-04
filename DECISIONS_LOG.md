@@ -3257,13 +3257,39 @@ end if;
 
 ---
 
+### 2026-07-04: Smoke-тест двух роутеров v6+v5 — DEBT-NATIVE-ROUTER-01 закрыт в части теста (ARS-152, mechanical)
+
+**What**: Написан отложенный smoke-тест сосуществования роутеров из DEBT-NATIVE-ROUTER-01: `src/tests/router-smoke.browser.test.tsx` + новый vitest browser-проект `routers` в `vite.config.ts` (`test.projects`, chromium headless — тот же провайдер, что у `storybook`) + скрипт `npm run test:routers`. Три кейса на реальном `App` (полная композиция HelmetProvider→HostProvider→AuthProvider→BrowserRouter): (1) v6 — `/login` рендерится, клик «Зарегистрироваться» навигирует на `/register`; (2) v5-остров — `/cabinet` рендерит Главную (IonPage через `data-screen-label`), тап таба «Рынок» гонит навигацию через `useIonRouter().push` → URL становится `/cabinet/market` и рендерится экран Рынка; (3) сосуществование — `/mpk` (v6-роут) рендерит оболочку МПК в том же дереве. Единственный мок — `@/lib/supabase` (сетевая граница): фейковая сессия проводит через `RequireAuth`, rpc-ошибки уводят оболочки в штатный демо-фолбэк — БД не нужна. Тест обязан быть браузерным: island-редирект `agos:ionic-v5-island` работает только в Vite-пайплайне, node-окружение остров не воспроизводит.
+
+**Why**: IMPL_DEBT DEBT-NATIVE-ROUTER-01: регрессия, «протёкшая» v5 в дерево приложения (или наоборот) — тихий слом (белый экран, спайк AMEND-1). До этого теста её ловил только ручной прогон. Рекомендация архитект-ревью ARS-152, tier:mechanical.
+
+**Consequences**: *Легко*: CI/пре-мерж ловит слом острова одной командой `npm run test:routers`; каркас `src/tests/*.browser.test.tsx` готов для будущих browser-smoke. *Требует внимания*: тест держится на `data-screen-label` (IonShellFrame) и демо-фолбэках оболочек — при их переработке обновить ассерты; долг самих двух роутеров ОСТАЁТСЯ (retire — официальный v6-адаптер Ionic, ionic-framework#24177).
+
+**Verification**: `npm run test:routers` 3/3 ✓ (7 с); негативная проверка «тест с зубами» — island-редирект временно отключён (inIsland→false) → тест `/cabinet` падает с `does not provide an export named 'withRouter'` (v6 попал в @ionic/react-router), v6-тесты живут; откат → снова 3/3 ✓; `npm run test:unit` 8/8 ✓; `tsc -b` чистый. Депсы не менялись (D-DEP-BUMP-01 не задет). Замечено (pre-existing, не трогал): предупреждение Vite «Failed to resolve dependency: react-router{,-dom}-v5 > mini-create-react-context» — react-router 5.3.4 больше не зависит от этого пакета, две строки в `optimizeDeps.include` мертвы; вычистить отдельным микро-PR.
+
+**Files**: new `src/tests/router-smoke.browser.test.tsx`; edit `vite.config.ts` (проект `routers`), `package.json` (скрипт `test:routers`), `IMPL_DEBT.md` (DEBT-NATIVE-ROUTER-01: smoke-пункт закрыт).
+
+---
+
+### 2026-07-04: Чистка optimizeDeps — два мёртвых include `mini-create-react-context` (ARS-159)
+
+**What**: Из `vite.config.ts` `optimizeDeps.include` удалены две строки: `'react-router-v5 > mini-create-react-context'` и `'react-router-dom-v5 > mini-create-react-context'`. Остальные nested-include (prop-types, path-to-regexp, hoist-non-react-statics, react-is) не тронуты — они нужны CJS-интеропу v5-острова (DEBT-NATIVE-ROUTER-01).
+
+**Why**: react-router 5.3.4 (alias-пакеты react-router-v5 / react-router-dom-v5) больше не зависит от `mini-create-react-context` — Vite на каждом старте dev-сервера и vitest-browser-прогонов писал предупреждение «Failed to resolve dependency: … present in client 'optimizeDeps.include'».
+
+**Verification**: `npm run test:unit` 8/8 ✓ (на момент ветки скрипта `test:routers` ещё не было — он пришёл с PR #32); dev-сервер поднимается без предупреждения, /login рендерится, консоль чистая ✓; `npm run build` ✓ (только pre-existing chunk-size warning). **Merge-note (2026-07-04):** конфликт с main (PR #32) разрешён — обе записи лога сохранены, graphify-out пересгенерирован от смерженного кода; на смерженном дереве `npm run test:routers` 3/3 ✓ и предупреждение исчезло, `npm run test:unit` 8/8 ✓.
+
+**Files**: `vite.config.ts` (−2 строки), `DECISIONS_LOG.md`.
+
+---
+
 ### 2026-07-04: S6 МПК-кабинет — Ionic-навигация по S2-паттерну (ARS-152)
 
 **What**: Оболочка МПК (`mpk/MpkApp.tsx`) мигрирована с собственной Route state-machine на **Ionic-навигацию v5-острова** (ADR-NATIVE-ROUTER-01 AMEND-1, тот же механизм что S2): `IonReactRouter` + `IonRouterOutlet` + v5 `<Route>` (`/mpk` · `/mpk/tsp` · `/mpk/offers`, маппинг в новом `mpk/nav.ts` — зеркало фермерского), `go(r)` = `ionRouter.push/goBack` с направлением из карты глубины, `IonBridge` (URL→Route синк для browser-back/edge-swipe/deep-link). Экраны ×3 — только swap `ShellFrame`→`IonShellFrame` (noTabs, контент дословно) + pull-to-refresh (`onRefresh=pullAll` на всех трёх — все поллятся). **4 модала (`mpk/modals/*`) — файлы НЕ тронуты**: IonModal-обёртки живут в MpkApp (класс `agos-mpk-modal`, полноэкранный slide-up в рамке телефона); контент — по retained-параметрам, размонтируется в `onDidDismiss` (S-2 архитект-ревью: контент жив до конца dismiss-анимации; ремоунт при следующем открытии сбрасывает формы с чистого листа, cleanup останавливает 8с-поллинг PoolMonitor). Закрытие гардится по kind (переход batch_detail→deal_closed, урок PR #27). `ContactTuranSheet` — постоянный маунт с open-флагом + реинициализация по open. Haptics по S2.1-паттерну через `useHost()` ×4 (принятие оффера, приёмка куска, отправка оффера, публикация заявки — medium). `setupIonicReact({mode:'ios'})` вызывается и в module scope MpkApp (S-1: не полагаться на побочный эффект модуля CabinetApp).
 
 **Why**: Слайс S6 эпика ARS-110 (EngSpec §3/§9): МПК-кабинет должен ощущаться нативно на всех трёх поверхностях; app-target S4 уже включает /mpk в нативный бандл. Архитект-гейт пройден (0 Critical, S-1/S-2 включены, M-1..M-3 приняты: `mpk/types.ts` не потребовался — аддитивность позволила не трогать; IonBridge — локальный дубль до унификации в ARS-109).
 
-**Consequences**: *Легко*: оба острова (фермер+МПК) на одной механике — deep-link из push (S5) работает для обоих; `ShellFrame`/`ShellTabBar` стали мёртвыми для оболочек (оставлены — используются легаси/сторибуком, снять при ARS-109). *Требует внимания*: карта направлений теперь в двух файлах (nav.ts + mpk/nav.ts) — IMPL_DEBT DEBT-NATIVE-ROUTER-01 дополнен; smoke-тест dual-router по-прежнему не написан (рекомендация архитекта: отдельная mechanical-задача).
+**Consequences**: *Легко*: оба острова (фермер+МПК) на одной механике — deep-link из push (S5) работает для обоих; `ShellFrame`/`ShellTabBar` стали мёртвыми для оболочек (оставлены — используются легаси/сторибуком, снять при ARS-109). *Требует внимания*: карта направлений теперь в двух файлах (nav.ts + mpk/nav.ts) — IMPL_DEBT DEBT-NATIVE-ROUTER-01 дополнен; smoke-тест dual-router написан параллельной сессией (PR #32, `npm run test:routers`) — долг в части теста закрыт.
 
 **Verification** (браузер, throwaway-сессия → демо-режим МПК): холодный deep-link `/mpk` и `/mpk/tsp` ✓; push home→tsp (URL+стек, предыдущая страница скрыта `ion-page-hidden`) ✓; pop ← и browser-back → URL↔Route синк ✓; CreatePool: форма→публикация→dismiss-анимация с живым контентом (S-2 инструментально: контент жив на 100мс dismiss, размонтирован после) ✓; PoolMonitor открыт/закрыт с filling-контентом ✓; offers-экран в стеке ✓; `tsc` чистый, `vite build`+PWA ✓, консоль без ошибок (только пред-существующие v5 future-flag варнинги). Edge-swipe на устройстве + реальный МПК-аккаунт = acceptance G3 (механизм острова доказан S2). Побочный артефакт верификации: throwaway-юзер `ars152-verify@example.com` в auth (удалить админом).
 

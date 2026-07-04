@@ -1,16 +1,16 @@
 # Graph Report - optimistic-benz-0869a4  (2026-07-04)
 
 ## Corpus Check
-- 543 files · ~387,292 words
+- 544 files · ~387,856 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2806 nodes · 6695 edges · 158 communities (140 shown, 18 thin omitted)
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 133 edges (avg confidence: 0.77)
+- 2809 nodes · 6715 edges · 155 communities (137 shown, 18 thin omitted)
+- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 149 edges (avg confidence: 0.77)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b93e0ba7`
+- Built from commit: `0b4c6680`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -119,11 +119,9 @@
 - [[_COMMUNITY_Community 101|Community 101]]
 - [[_COMMUNITY_Community 102|Community 102]]
 - [[_COMMUNITY_Community 103|Community 103]]
-- [[_COMMUNITY_Community 104|Community 104]]
 - [[_COMMUNITY_Community 106|Community 106]]
 - [[_COMMUNITY_Community 107|Community 107]]
 - [[_COMMUNITY_Community 108|Community 108]]
-- [[_COMMUNITY_Community 109|Community 109]]
 - [[_COMMUNITY_Community 110|Community 110]]
 - [[_COMMUNITY_Community 111|Community 111]]
 - [[_COMMUNITY_Community 112|Community 112]]
@@ -163,33 +161,33 @@
 10. `Input` - 42 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `StartupStatusBadge()` --calls--> `T`  [INFERRED]
+  src/components/admin/StartupStatusBadge.tsx → src/tests/router-smoke.browser.test.tsx
+- `ProjectOverlay()` --calls--> `T`  [INFERRED]
+  src/components/landing/ProjectOverlay.tsx → src/tests/router-smoke.browser.test.tsx
+- `TrustedBy()` --calls--> `T`  [INFERRED]
+  src/components/landing/TrustedBy.tsx → src/tests/router-smoke.browser.test.tsx
+- `SectionHeader()` --calls--> `T`  [INFERRED]
+  src/components/layout/SectionHeader.tsx → src/tests/router-smoke.browser.test.tsx
 - `calculate()` --calls--> `run_calculation()`  [INFERRED]
   consulting_engine/app/api/calculate.py → consulting_engine/app/engine/orchestrator.py
-- `run_calculation()` --calls--> `calculate_capex()`  [INFERRED]
-  consulting_engine/app/engine/orchestrator.py → consulting_engine/app/engine/capex.py
-- `run_calculation()` --calls--> `calculate_feeding()`  [INFERRED]
-  consulting_engine/app/engine/orchestrator.py → consulting_engine/app/engine/feeding_model.py
-- `calculate()` --calls--> `calculate_feeding()`  [INFERRED]
-  consulting_engine/tests/test_feeding.py → consulting_engine/app/engine/feeding_model.py
-- `run_calculation()` --calls--> `calculate_herd_turnover()`  [INFERRED]
-  consulting_engine/app/engine/orchestrator.py → consulting_engine/app/engine/herd_turnover.py
 
 ## Import Cycles
 - None detected.
 
-## Communities (158 total, 18 thin omitted)
+## Communities (155 total, 18 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.03
-Nodes (64): useDeleteOrg(), useDeleteUser(), AuditLog(), DIRECTORIES, DirectoriesHub(), DirectoryDef, PublicLanding(), RequireAuth() (+56 more)
+Cohesion: 0.04
+Nodes (79): MembershipDecision(), useDeleteOrg(), ApplicationsHub(), TABS, AuditLog(), FarmProfile(), CapexReferenceAdmin(), ConsultingDashboard() (+71 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.12
-Nodes (18): ChipOption, ChipSelect(), ChipSelectProps, FloatingInput(), FloatingInputProps, EXPERT_EXPERIENCE, EXPERT_SPECIALIZATIONS, FEED_TYPES (+10 more)
+Cohesion: 0.05
+Nodes (66): BottomSheet(), BottomSheetOption, BottomSheetProps, ChipOption, ChipSelect(), ChipSelectProps, FloatingInput(), FloatingInputProps (+58 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.07
-Nodes (67): AuditEntry, fmt(), fmtPct(), ProjectResults(), TabId, TABS, SEV_STYLES, Signal (+59 more)
+Cohesion: 0.08
+Nodes (48): AuditEntry, ProjectMeta, SEVERITY_STYLES, STATUS_LABELS, VetCase, VetCaseQueue(), CONFIDENCE_LABELS, FarmSummary (+40 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.08
@@ -197,15 +195,15 @@ Nodes (47): BigRadio(), InfoNote(), KV(), StepperCtl(), WizProgress(), BREEDS, C
 
 ### Community 4 - "Community 4"
 Cohesion: 0.06
-Nodes (36): BLOCK_CONFIG, CapexItem, CapexTab(), getMaterialName(), Material, OverrideRow, CashFlowTab(), lastOfYear() (+28 more)
+Nodes (35): DEFAULT_PARAMS, estimateSaleWeight(), MONTHS, ProjectWizard(), STEER_SALE_OPTIONS, STEPS, WizardParams, calculateProject() (+27 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.07
-Nodes (45): fmtDealDate(), DecH, CATS, ACTIVE_STATES_SET, catLabel(), DONE_STATES_SET, filterBatches(), GRADE_RU (+37 more)
+Cohesion: 0.06
+Nodes (49): Cta(), CtaProps, fmtDealDate(), ACTIVE_STATES_SET, catLabel(), DONE_STATES_SET, filterBatches(), GRADE_RU (+41 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.25
-Nodes (6): ApplicationItem, LEVEL_LABELS, ORG_TYPE_LABELS, QueueData, STATUS_LABELS, STATUS_TABS
+Cohesion: 0.05
+Nodes (36): ApplicationItem, LEVEL_LABELS, MembershipQueue(), ORG_TYPE_LABELS, QueueData, STATUS_LABELS, STATUS_TABS, MembershipLevelTab() (+28 more)
 
 ### Community 7 - "Community 7"
 Cohesion: 0.06
@@ -216,24 +214,24 @@ Cohesion: 0.06
 Nodes (51): get_settings(), get_supabase(), AgOS AI Gateway — Configuration & Supabase Client  P-AI-6: Service account authe, Environment-based settings. No defaults for secrets — fail fast., Return list of missing required env vars., P-AI-6: Create Supabase client with service_role key.     NEVER use user JWT — A, Settings, embedding_worker_loop() (+43 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.06
-Nodes (41): Toast(), buildDecisions(), buildObserve(), MEMB_DATES, lsKeyFor(), useBatches(), UseBatchesResult, useHost() (+33 more)
+Cohesion: 0.05
+Nodes (59): Sheet(), SheetProps, Toast(), BuildArgs, buildDecisions(), buildObserve(), useHost(), AccountProfile (+51 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.11
-Nodes (25): DecisionCard(), OBS_DOT, ObserveCard(), TierHead(), BAN_CARD_COURSE, BAN_CARD_JOIN, BAN_CARD_PRICES, BAN_CARD_PRO (+17 more)
+Cohesion: 0.06
+Nodes (43): AheadBlock(), DecisionCard(), HomeBanner(), HomeHead(), OBS_DOT, ObserveCard(), ServiceGrid(), ShellHead() (+35 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.07
-Nodes (46): Props, FIELDS, OPS, WizardRule, AVATAR_COLORS, ConsultingProject, STATUS_CONFIG, AdminFinanceRequestsPage() (+38 more)
+Cohesion: 0.09
+Nodes (36): FIELDS, OPS, WizardRule, AdminFinanceRequestsPage(), ConsultRequest, extractProgram(), STATUS_CONFIG, useConsultRequests() (+28 more)
 
 ### Community 12 - "Community 12"
-Cohesion: 0.04
-Nodes (55): MembershipQueue(), MembershipLevelTab(), APPLIES_TO_OPTIONS, BLOCK_LABELS, CAPEX_TABS, CapexMaterialsTab(), CapexNormsTab(), CapexReferenceAdmin() (+47 more)
+Cohesion: 0.07
+Nodes (27): APPLIES_TO_OPTIONS, BLOCK_LABELS, CAPEX_TABS, CapexSurchargesTab(), COST_MODEL_OPTIONS, InfraNormRow, InfraNormsByBlock, Material (+19 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.07
-Nodes (34): CategoryMappingRow, useInvalidateTaxonomyCache(), useTaxonomyRealtimeSync(), AppLayout(), ShellGrid(), ShellGrid(), DetailPanel(), getPageTitle() (+26 more)
+Cohesion: 0.10
+Nodes (25): CategoryMappingRow, useInvalidateTaxonomyCache(), useTaxonomyRealtimeSync(), AppLayout(), ShellGrid(), ShellGrid(), DetailPanel(), getPageTitle() (+17 more)
 
 ### Community 14 - "Community 14"
 Cohesion: 0.06
@@ -244,12 +242,12 @@ Cohesion: 0.09
 Nodes (31): AgOSHost, HostCaps, HostKind, configureChrome(), createCapacitorHost(), installNetwork(), installPreferencesStorage(), urlToPath() (+23 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.04
-Nodes (23): AdminLogin(), AuditEntry, useFarmProfile(), useUpdateFarmProfile(), AdjacentArticle, supabase, StartupMetrics, MembershipAppProps (+15 more)
+Cohesion: 0.07
+Nodes (9): CreateOrgInput, AdminLogin(), AdjacentArticle, supabase, StartupMetrics, MembershipAppProps, CrossCondition, Batch (+1 more)
 
 ### Community 17 - "Community 17"
-Cohesion: 0.05
-Nodes (57): ADMIN_ONLY_CARDS, AdminDashboard(), DashCard, EXPERT_CARDS, MembershipDecision(), ApplicationsHub(), TABS, CabinetDashboard() (+49 more)
+Cohesion: 0.11
+Nodes (16): CabinetDashboard(), Phase, PlanData, STATUS_COLORS, Timeline(), Skeleton(), ReportSick(), CREATED_VIA_LABELS (+8 more)
 
 ### Community 18 - "Community 18"
 Cohesion: 0.12
@@ -260,36 +258,36 @@ Cohesion: 0.08
 Nodes (20): formatKzt(), computeAmount(), estimateQty(), isProgramEligible(), matchesCategory(), matchSubsidies(), InvestmentItem, InvestmentPassport (+12 more)
 
 ### Community 20 - "Community 20"
-Cohesion: 0.08
-Nodes (19): useTransitionPool(), ANIMAL_CATEGORIES, BATCH_STATUSES, BatchStatus, BREED_GROUPS, ExecutionResult, GRADES, OtBreedGroup (+11 more)
+Cohesion: 0.07
+Nodes (20): useTransitionPool(), AggregatedSupply, ANIMAL_CATEGORIES, BATCH_STATUSES, BatchStatus, BREED_GROUPS, DemandByCategory, ExecutionResult (+12 more)
 
 ### Community 21 - "Community 21"
-Cohesion: 0.19
-Nodes (16): BottomSheet(), BottomSheetOption, BottomSheetProps, BREEDS, COMPANY_TYPES, HERD_SIZES, HOW_HEARD, LEGAL_FORMS (+8 more)
+Cohesion: 0.11
+Nodes (27): ArticleFormData, ArticleSettingsData, ArticleSettingsProps, TYPE_TABS, UrlParserInput(), UrlParserInputProps, CreateNewsArticleInput, useCreateNewsArticle() (+19 more)
 
 ### Community 22 - "Community 22"
-Cohesion: 0.11
-Nodes (22): useCreatePoolMatch(), useRevertMatchedBatch(), UpdatePriceParams, useUpdatePriceGrid(), useActivatePoolRequest(), useCancelBatch(), useCancelPoolRequest(), useClosePoolRequest() (+14 more)
+Cohesion: 0.09
+Nodes (25): useCreatePoolMatch(), useRevertMatchedBatch(), UpdatePriceParams, useUpdatePriceGrid(), useActivatePoolRequest(), useCancelBatch(), useCancelPoolRequest(), useClosePoolRequest() (+17 more)
 
 ### Community 23 - "Community 23"
-Cohesion: 0.10
-Nodes (31): PriceBars(), PriceDelta(), PriceSticker(), D(), seedBatches(), shellBatchesPreset(), STATUS_CHIP, addDays() (+23 more)
+Cohesion: 0.09
+Nodes (34): PriceBars(), PriceDelta(), PriceSticker(), D(), seedBatches(), shellBatchesPreset(), STATUS_CHIP, addDays() (+26 more)
 
 ### Community 24 - "Community 24"
-Cohesion: 0.26
-Nodes (9): ForgotPin(), Step, OtpInput(), OtpInputProps, PinInputProps, InputOTP, InputOTPGroup, InputOTPSeparator (+1 more)
+Cohesion: 0.09
+Nodes (26): ForgotPin(), Step, Login(), OtpInput(), OtpInputProps, PinInput(), PinInputProps, loadFarmState() (+18 more)
 
 ### Community 25 - "Community 25"
 Cohesion: 0.07
 Nodes (24): get_references(), _get_supabase(), GET /api/v1/references — справочники для wizard UI., Получить справочник по категории., Configuration for Consulting Engine — Supabase + JWT settings.  All fields have, Settings, FastAPI app — Consulting Engine for Zengi Farms., BaseSettings (+16 more)
 
 ### Community 26 - "Community 26"
-Cohesion: 0.07
-Nodes (36): ArticleFormData, ArticleFormProps, ArticleSettingsData, ArticleSettingsProps, ImageUpload(), ImageUploadProps, MarkdownEditorProps, ToolAction (+28 more)
+Cohesion: 0.08
+Nodes (20): ArticleFormProps, MarkdownEditorProps, ToolAction, tools, ProgramBasicFields(), Props, Props, SlugInput() (+12 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.09
-Nodes (28): HomeBanner(), HomeHead(), IonShellFrame(), Props, OfflineBar(), ServiceGrid(), ShellHead(), SHELL_TABS (+20 more)
+Cohesion: 0.24
+Nodes (6): SkeletonBlocks(), ACTIVE_STATES, catName(), MarketScreen(), Props, gated()
 
 ### Community 28 - "Community 28"
 Cohesion: 0.14
@@ -304,8 +302,8 @@ Cohesion: 0.07
 Nodes (27): Separator, Sidebar, SidebarContent, SidebarContext, SidebarFooter, SidebarGroup, SidebarGroupAction, SidebarGroupContent (+19 more)
 
 ### Community 31 - "Community 31"
-Cohesion: 0.20
-Nodes (8): BASE_PRICES, DEFAULT_RATIONS, FEED_NAMES, FEEDING_GROUP_LABELS, FeedItem, FeedPrice, RATION_GROUPS, RationsState
+Cohesion: 0.09
+Nodes (23): useAnimalCategoryMappings(), AnimalCategory, CATEGORY_CODE_TO_HERD, getHeadCount(), _HERD_METRIC, HerdData, HerdGroup, HerdMapping (+15 more)
 
 ### Community 32 - "Community 32"
 Cohesion: 0.13
@@ -316,16 +314,16 @@ Cohesion: 0.09
 Nodes (27): calculate(), _get_supabase(), _load_feed_reference(), POST /api/v1/calculate — запуск расчёта финансовой модели., Supabase client with service_role. Returns None if not configured., Load feed reference data from d03_feed tables and consulting rations.      Retur, Запуск полного расчёта финансовой модели.      1. Загружает справочники из Supab, BaseModel (+19 more)
 
 ### Community 34 - "Community 34"
-Cohesion: 0.11
-Nodes (20): Cta(), CtaProps, Sheet(), SheetProps, Props, TOPICS, LimitSheet(), Props (+12 more)
+Cohesion: 0.10
+Nodes (26): ADMIN_ONLY_CARDS, AdminDashboard(), DashCard, EXPERT_CARDS, AuditEntry, useAuditHistory(), useDeleteMembershipDoc(), useMembershipDocs() (+18 more)
 
 ### Community 35 - "Community 35"
 Cohesion: 0.09
 Nodes (25): _handle_taxonomy_updated(), Invalidate in-process L1 taxonomy cache on standards.animal_category.updated., get_l1_codes(), invalidate_l1(), is_valid_l1_code(), _L1Cache, TAXONOMY-M3b (ADR-ANIMAL-01) — AI Gateway canonical L1 code resolver.  Exposes t, Cheap validator for extraction / tool-input pre-check. (+17 more)
 
 ### Community 36 - "Community 36"
-Cohesion: 0.16
-Nodes (12): MemberFilters, StatusChangeParams, useUpdateMemberStatus(), Props, RequireRole(), KZ_REGIONS, MEMBERSHIP_HIERARCHY, MembershipStatus (+4 more)
+Cohesion: 0.09
+Nodes (23): MemberFilters, StatusChangeParams, useUpdateMemberStatus(), BADGE_STYLES, MembershipBadge(), Props, useFarmProfile(), useUpdateFarmProfile() (+15 more)
 
 ### Community 37 - "Community 37"
 Cohesion: 0.08
@@ -344,48 +342,48 @@ Cohesion: 0.13
 Nodes (26): extract_capex(), extract_cashflow(), extract_feeding(), extract_herd(), extract_input(), extract_pnl(), extract_staff(), extract_timeline() (+18 more)
 
 ### Community 41 - "Community 41"
-Cohesion: 0.14
-Nodes (18): BADGE_STYLES, MembershipBadge(), Props, cn(), ButtonProps, buttonVariants, Calendar(), CalendarProps (+10 more)
+Cohesion: 0.11
+Nodes (20): NavLink, NavLinkCompatProps, cn(), ButtonProps, buttonVariants, Calendar(), CalendarProps, HoverCardContent (+12 more)
 
 ### Community 42 - "Community 42"
 Cohesion: 0.11
 Nodes (25): _build_annual_cost_summary(), _calc_from_consulting_rations(), _calc_from_norms(), calculate_feeding(), _feed_cost(), _get_bulls_ration(), _get_calves_ration(), _get_cows_12m_ration() (+17 more)
 
 ### Community 43 - "Community 43"
-Cohesion: 0.09
-Nodes (33): STATUS_VARIANT, useAdminStartup(), useAdminStartups(), useApproveStartup(), useDeleteStartup(), useRejectStartup(), NewsActions(), useDeleteNewsArticle() (+25 more)
+Cohesion: 0.10
+Nodes (32): useAdminStartup(), useAdminStartups(), useApproveStartup(), useDeleteStartup(), useRejectStartup(), NewsActions(), useAdminNewsArticle(), useDeleteNewsArticle() (+24 more)
 
 ### Community 44 - "Community 44"
-Cohesion: 0.18
-Nodes (13): NewsActionsProps, NewsFilters(), NewsFiltersProps, NewsTableProps, useAdminNewsArticle(), AdminNewsFilters, useAdminNewsArticles(), AdminNewsPage() (+5 more)
+Cohesion: 0.29
+Nodes (11): PriceGridFilters, CreateBatchParams, CreatePoolRequestParams, UpdateDraftBatchParams, UpdatePublishedBatchParams, KzRegion, AggregatedDemand, AnimalCategory (+3 more)
 
 ### Community 45 - "Community 45"
 Cohesion: 0.12
 Nodes (15): calculate_herd_turnover(), Модуль ОБОРОТ СТАДА — КРИТИЧЕСКИЙ (Часть 4.3 спецификации).  Полная 10-летняя мо, Полный расчёт оборота стада на 120 месяцев., calculate(), load_reference(), make_input(), Tests for Feeding Model — validate against Excel CFC row 247., Total reproducer feeding cost (CFC row 247). (+7 more)
 
 ### Community 46 - "Community 46"
-Cohesion: 0.08
-Nodes (35): AdminOrg, useAdminOrgs(), CreateOrgInput, useCreateOrg(), CreateUserInput, useCreateUser(), UpdateOrgInput, useUpdateOrg() (+27 more)
+Cohesion: 0.09
+Nodes (34): Props, AdminOrg, useAdminOrgs(), useCreateOrg(), CreateUserInput, useCreateUser(), UpdateOrgInput, useUpdateOrg() (+26 more)
 
 ### Community 47 - "Community 47"
 Cohesion: 0.11
-Nodes (5): C, FD, MD, Num(), useCountUp()
+Nodes (8): C, FarmerMockup(), FD, MD, MpkMockup(), Num(), useCountUp(), useInView()
 
 ### Community 48 - "Community 48"
 Cohesion: 0.14
 Nodes (20): _avg_year1(), _compute_cost(), _data_driven_calculate_capex(), _effective_qty(), _first_value(), _legacy_calculate_capex(), _load_surcharges(), _material_resolved_label() (+12 more)
 
 ### Community 49 - "Community 49"
-Cohesion: 0.10
-Nodes (12): NavLink, NavLinkCompatProps, AccordionContent, AccordionItem, AccordionTrigger, HoverCardContent, PopoverContent, RadioGroup (+4 more)
+Cohesion: 0.50
+Nodes (3): AccordionContent, AccordionItem, AccordionTrigger
 
 ### Community 50 - "Community 50"
-Cohesion: 0.13
-Nodes (16): AdminDoc, useAdminOrgDocs(), AdminUser, useAdminUsers(), UpdateUserInput, useUpdateUser(), useUploadAvatar(), OrgDocumentsPanel() (+8 more)
+Cohesion: 0.22
+Nodes (13): AdminUser, useAdminUsers(), useDeleteUser(), UpdateUserInput, useUpdateUser(), useUploadAvatar(), Avatar, AvatarFallback (+5 more)
 
 ### Community 51 - "Community 51"
-Cohesion: 0.13
-Nodes (13): getYearLabels(), makeConstArr(), PnlData, PnlTab(), resolveAnnual(), resolveMonthly(), RowKind, safeArr() (+5 more)
+Cohesion: 0.08
+Nodes (25): absArr(), arrAdd(), arrSub(), buildRows(), HerdArrays, HerdTab(), resolveAnnual(), resolveMonthly() (+17 more)
 
 ### Community 52 - "Community 52"
 Cohesion: 0.13
@@ -396,15 +394,15 @@ Cohesion: 0.11
 Nodes (15): BREEDS, COMPANY_TYPES, FUNDING_STATUSES, HERD_SIZES, HOW_HEARD, MONTHLY_VOLUMES, MPK_BREEDS_CHIPS, PROCUREMENT_FREQ (+7 more)
 
 ### Community 54 - "Community 54"
-Cohesion: 0.12
-Nodes (21): generateSlug(), SubmitPayload, submitStartup(), AdminStartup, AdminStartupDetail, AdminStartupsFilters, AdminStartupsResponse, AiParsedData (+13 more)
+Cohesion: 0.09
+Nodes (28): StartupStatusBadge(), STATUS_VARIANT, generateSlug(), SubmitPayload, submitStartup(), AdminStartup, AdminStartupDetail, AdminStartupsFilters (+20 more)
 
 ### Community 55 - "Community 55"
-Cohesion: 0.27
-Nodes (12): PriceGridFilters, CreateBatchParams, useCreateBatch(), CreatePoolRequestParams, UpdateDraftBatchParams, UpdatePublishedBatchParams, useUpdateDraftBatch(), useUpdatePublishedBatch() (+4 more)
+Cohesion: 0.20
+Nodes (12): NewsActionsProps, NewsFilters(), NewsFiltersProps, NewsTableProps, AdminNewsFilters, useAdminNewsArticles(), AdminNewsPage(), NewsArticle (+4 more)
 
 ### Community 56 - "Community 56"
-Cohesion: 0.19
+Cohesion: 0.20
 Nodes (12): loadMarketBatches(), RawMarketBatch, MarketBatch, seedMarketBatches(), seedPools(), BatchDetailModal(), Props, Props (+4 more)
 
 ### Community 57 - "Community 57"
@@ -420,24 +418,24 @@ Cohesion: 0.16
 Nodes (13): AppHistory, ApplicationDetail, DOC_LABELS, FarmData, HerdGroup, LEVEL_LABELS, ORG_TYPE_LABELS, STATUS_LABELS (+5 more)
 
 ### Community 60 - "Community 60"
-Cohesion: 0.15
-Nodes (15): ProgressBar(), ProgressBarProps, getLabel(), INITIAL_FORM_DATA, RegistrationFormData, Step, STEP_ORDER, CreatePin() (+7 more)
+Cohesion: 0.16
+Nodes (12): MpkAppProps, DEPTH, mpkDirFor(), MpkNavDirection, mpkRouteKey(), mpkRouteToUrl(), mpkUrlToRoute(), MpkRoute (+4 more)
 
 ### Community 61 - "Community 61"
-Cohesion: 0.15
-Nodes (12): RoleType, BENEFIT_CONTENT, BenefitData, BenefitScreen(), BenefitScreenProps, ROLE_ILLOS, ROLE_ICONS, ROLES (+4 more)
+Cohesion: 0.12
+Nodes (8): AdminBatch, AdminDeal, AdminPool, AdminPoolLine, CAT_RU, GRADE_RU, MarketplaceAdmin(), STATUS_RU
 
 ### Community 62 - "Community 62"
 Cohesion: 0.15
-Nodes (10): Hero(), heroProjectCardsData, projectKeys, projectLinks, projectMetricKeys, projectMetricValues, stickerKeys, useProjectPopups() (+2 more)
+Nodes (11): Hero(), heroProjectCardsData, projectKeys, projectLinks, projectMetricKeys, projectMetricValues, stickerKeys, useProjectPopups() (+3 more)
 
 ### Community 63 - "Community 63"
-Cohesion: 0.19
-Nodes (10): MpkAppProps, DEPTH, mpkDirFor(), MpkNavDirection, mpkRouteKey(), mpkRouteToUrl(), mpkUrlToRoute(), MpkRoute (+2 more)
+Cohesion: 0.15
+Nodes (6): BAR_COLORS, FeedRowProps, OBJECTIVE_LABELS, RationData, RationItem, RationVersion
 
 ### Community 64 - "Community 64"
-Cohesion: 0.15
-Nodes (12): loadIncomingOffers(), RawOffer, CAT_KEYS, CreatePoolModal(), WINDOWS, MPK_CATS, MpkCatDef, MpkCatKey (+4 more)
+Cohesion: 0.19
+Nodes (10): CAT_KEYS, CreatePoolModal(), Props, WINDOWS, MPK_CATS, MpkCatDef, MpkCatKey, MpkModal (+2 more)
 
 ### Community 65 - "Community 65"
 Cohesion: 0.18
@@ -448,12 +446,12 @@ Cohesion: 0.14
 Nodes (12): Carousel, CarouselApi, CarouselContent, CarouselContext, CarouselContextProps, CarouselItem, CarouselNext, CarouselOptions (+4 more)
 
 ### Community 67 - "Community 67"
-Cohesion: 0.15
-Nodes (6): BAR_COLORS, FeedRowProps, OBJECTIVE_LABELS, RationData, RationItem, RationVersion
+Cohesion: 0.13
+Nodes (12): AuthContext, AuthContextValue, AuthProvider(), HealthRestriction, HerdGroup, Membership, Organization, UserContext (+4 more)
 
 ### Community 68 - "Community 68"
-Cohesion: 0.23
-Nodes (10): Login(), PinInput(), loadAccountProfile(), loadMyContext(), MyContext, MyFarm, MyMembership, MyOrg (+2 more)
+Cohesion: 0.22
+Nodes (7): ACTIVITY_TYPES, ANIMAL_CATEGORIES, CALVING_SYSTEMS, EMPTY_HERD_FORM, HerdGroupFormData, SHELTER_TYPES, Farm
 
 ### Community 69 - "Community 69"
 Cohesion: 0.21
@@ -466,6 +464,10 @@ Nodes (11): execute_tools_node(), Execute tool calls from Claude's response via 
 ### Community 71 - "Community 71"
 Cohesion: 0.23
 Nodes (10): closeDuePools(), fmtDay(), fmtMonth(), loadMyPools(), loadPoolMatches(), mapStatus(), RawMatch, RawPool (+2 more)
+
+### Community 72 - "Community 72"
+Cohesion: 0.17
+Nodes (6): Reveal(), RevealProps, SectionSticker(), Partner, partners, TrustedBy()
 
 ### Community 73 - "Community 73"
 Cohesion: 0.23
@@ -488,8 +490,12 @@ Cohesion: 0.24
 Nodes (10): Toast, ToastAction, ToastActionElement, ToastClose, ToastDescription, ToastProps, ToastTitle, toastVariants (+2 more)
 
 ### Community 78 - "Community 78"
-Cohesion: 0.14
-Nodes (16): AheadBlock(), loadFarmState(), mapHerd(), mapPlanFuture(), mapTasks(), RawHerdGroup, RawSummary, RawTask (+8 more)
+Cohesion: 0.33
+Nodes (7): buildDealDocHtml(), DealDocChunk, DealDocData, DealDocParty, esc(), partyBlock(), printDealDoc()
+
+### Community 79 - "Community 79"
+Cohesion: 0.24
+Nodes (7): fmt(), fmtPct(), ProjectResults(), TabId, TABS, PageHeader(), PageHeaderProps
 
 ### Community 80 - "Community 80"
 Cohesion: 0.18
@@ -500,12 +506,12 @@ Cohesion: 0.18
 Nodes (9): Command, CommandDialogProps, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator (+1 more)
 
 ### Community 82 - "Community 82"
-Cohesion: 0.36
-Nodes (7): IncomingOffer, CAT_RU, catLabel(), hoursLeft(), MpkIncomingOffersScreen(), OfferCard(), Props
+Cohesion: 0.11
+Nodes (20): IonShellFrame(), Props, OfflineBar(), ShellFrame(), ShellTabBar(), CAT_RU, catLabel(), hoursLeft() (+12 more)
 
 ### Community 83 - "Community 83"
-Cohesion: 0.11
-Nodes (19): ProjectMeta, ProjectPage(), DEFAULT_PARAMS, estimateSaleWeight(), MONTHS, ProjectWizard(), STEER_SALE_OPTIONS, STEPS (+11 more)
+Cohesion: 0.32
+Nodes (4): AdminDoc, useAdminOrgDocs(), OrgDocumentsPanel(), Props
 
 ### Community 84 - "Community 84"
 Cohesion: 0.22
@@ -516,40 +522,36 @@ Cohesion: 0.20
 Nodes (9): ContextMenuCheckboxItem, ContextMenuContent, ContextMenuItem, ContextMenuLabel, ContextMenuRadioItem, ContextMenuSeparator, ContextMenuShortcut(), ContextMenuSubContent (+1 more)
 
 ### Community 86 - "Community 86"
-Cohesion: 0.29
-Nodes (6): DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuRadioItem, DropdownMenuShortcut(), DropdownMenuSubContent, DropdownMenuSubTrigger
+Cohesion: 0.22
+Nodes (6): RejectDialog(), CTASection(), Footer(), ValueProposition(), getLocalizedLabel(), T
 
 ### Community 87 - "Community 87"
-Cohesion: 0.27
-Nodes (4): KzRegion, AggregatedDemand, AggregatedSupply, DemandByCategory
+Cohesion: 0.22
+Nodes (8): KpiDashboard(), Phase, PlanData, Phase, PlanData, ProductionPlan(), STATUS_COLORS, Progress
 
 ### Community 88 - "Community 88"
-Cohesion: 0.22
-Nodes (7): ACTIVITY_TYPES, ANIMAL_CATEGORIES, CALVING_SYSTEMS, EMPTY_HERD_FORM, HerdGroupFormData, SHELTER_TYPES, Farm
+Cohesion: 0.29
+Nodes (7): ApplicationProgress, useApplicationProgress(), useDeleteDocument(), useMarkPayment(), useUploadDocument(), useUploadSignedApplication(), ApplicationStep
 
 ### Community 89 - "Community 89"
-Cohesion: 0.13
-Nodes (12): AuthContext, AuthContextValue, AuthProvider(), HealthRestriction, HerdGroup, Membership, Organization, UserContext (+4 more)
+Cohesion: 0.25
+Nodes (4): BAR_COLORS, OBJECTIVE_LABELS, RationData, RationVersion
 
 ### Community 90 - "Community 90"
-Cohesion: 0.15
-Nodes (13): ShellFrame(), MpkMembership, MpkTypeStatus, PoolStatus, CHIP_LABEL, MpkHomeScreen(), Props, CHIP_LABEL (+5 more)
+Cohesion: 0.24
+Nodes (6): MpkMembership, MpkTypeStatus, PoolStatus, CHIP_LABEL, MpkHomeScreen(), Props
 
 ### Community 91 - "Community 91"
-Cohesion: 0.24
-Nodes (6): SkeletonBlocks(), ACTIVE_STATES, catName(), MarketScreen(), Props, gated()
+Cohesion: 0.60
+Nodes (3): ImageUpload(), ImageUploadProps, useUploadCoverImage()
 
 ### Community 92 - "Community 92"
 Cohesion: 0.22
 Nodes (8): SheetContent, SheetContentProps, SheetDescription, SheetFooter(), SheetHeader(), SheetOverlay, SheetTitle, sheetVariants
 
-### Community 93 - "Community 93"
-Cohesion: 0.33
-Nodes (7): buildDealDocHtml(), DealDocChunk, DealDocData, DealDocParty, esc(), partyBlock(), printDealDoc()
-
 ### Community 94 - "Community 94"
 Cohesion: 0.29
-Nodes (7): ApplicationProgress, useApplicationProgress(), useDeleteDocument(), useMarkPayment(), useUploadDocument(), useUploadSignedApplication(), ApplicationStep
+Nodes (5): loadIncomingOffers(), RawOffer, IncomingOffer, OfferStatus, Props
 
 ### Community 95 - "Community 95"
 Cohesion: 0.32
@@ -557,7 +559,7 @@ Nodes (6): computeNutrients(), corsHeaders, RationRequest, ROUGHAGE_CODES, round
 
 ### Community 96 - "Community 96"
 Cohesion: 0.67
-Nodes (3): formatPhone(), PhoneInput(), PhoneInputProps
+Nodes (3): GlossaryTerm, useGlossary(), useGlossaryMap()
 
 ### Community 97 - "Community 97"
 Cohesion: 0.32
@@ -571,10 +573,6 @@ Nodes (6): adminEmail, __dirname, env, findAuthUserByEmail(), main(), supabase
 Cohesion: 0.25
 Nodes (5): __dirname, env, payload, REQUIRED, supabase
 
-### Community 100 - "Community 100"
-Cohesion: 0.25
-Nodes (4): BAR_COLORS, OBJECTIVE_LABELS, RationData, RationVersion
-
 ### Community 101 - "Community 101"
 Cohesion: 0.25
 Nodes (7): Breadcrumb, BreadcrumbEllipsis(), BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator()
@@ -587,13 +585,9 @@ Nodes (6): DrawerContent, DrawerDescription, DrawerFooter(), DrawerHeader(), Dra
 Cohesion: 0.25
 Nodes (7): NavigationMenu, NavigationMenuContent, NavigationMenuIndicator, NavigationMenuList, NavigationMenuTrigger, navigationMenuTriggerStyle, NavigationMenuViewport
 
-### Community 104 - "Community 104"
-Cohesion: 0.48
-Nodes (3): Reveal(), RevealProps, SectionSticker()
-
 ### Community 106 - "Community 106"
-Cohesion: 0.67
-Nodes (3): GlossaryTerm, useGlossary(), useGlossaryMap()
+Cohesion: 0.33
+Nodes (5): BudgetFeed, BudgetResult, FeedRow(), formatKg(), PERIODS
 
 ### Community 107 - "Community 107"
 Cohesion: 0.29
@@ -602,10 +596,6 @@ Nodes (6): Application, ApplicationRole, ApplicationsFilters, ApplicationsRespon
 ### Community 108 - "Community 108"
 Cohesion: 0.33
 Nodes (5): ToggleGroup, ToggleGroupContext, ToggleGroupItem, Toggle, toggleVariants
-
-### Community 109 - "Community 109"
-Cohesion: 0.60
-Nodes (4): UrlParserInput(), UrlParserInputProps, ParsedArticle, useParseArticleUrl()
 
 ### Community 110 - "Community 110"
 Cohesion: 0.47
@@ -625,7 +615,7 @@ Nodes (3): corsHeaders, json(), sendSms()
 
 ### Community 117 - "Community 117"
 Cohesion: 0.40
-Nodes (3): LANGUAGES, Props, SectionTab
+Nodes (4): LANGUAGES, Props, SectionHeader(), SectionTab
 
 ### Community 118 - "Community 118"
 Cohesion: 0.50
@@ -660,8 +650,8 @@ _Questions this graph is uniquely positioned to answer:_
 - **What connects `config`, `preview`, `AgOS AI Gateway — Compliance Filter  P-AI-4: No numeric dosages from LLM — only` to the rest of the system?**
   _958 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.030111412225233364 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.03881511746680286 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.11594202898550725 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05170998632010944 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
-  _Cohesion score 0.07008086253369272 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08424908424908426 - nodes in this community are weakly interconnected._

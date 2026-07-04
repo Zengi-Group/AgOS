@@ -42,9 +42,7 @@ export default defineConfig({
       'react-router-dom-v5 > prop-types',
       'react-router-v5 > prop-types',
       'react-router-v5 > path-to-regexp',
-      'react-router-v5 > mini-create-react-context',
       'react-router-dom-v5 > path-to-regexp',
-      'react-router-dom-v5 > mini-create-react-context',
       'react-router-v5 > hoist-non-react-statics',
       'react-router-dom-v5 > hoist-non-react-statics',
       'react-router-v5 > react-is',
@@ -95,6 +93,24 @@ export default defineConfig({
       })],
       test: {
         name: 'storybook',
+        browser: {
+          enabled: true,
+          headless: true,
+          provider: playwright({}),
+          instances: [{
+            browser: 'chromium'
+          }]
+        }
+      }
+    }, {
+      // DEBT-NATIVE-ROUTER-01 (ARS-152): smoke двух роутеров — v6-приложение + v5-остров
+      // Ionic-оболочки. Обязательно браузерный проект: island-редирект (agos:ionic-v5-island
+      // выше) работает только в Vite-пайплайне — node-окружение остров не воспроизводит.
+      extends: true,
+      test: {
+        name: 'routers',
+        include: ['src/tests/**/*.browser.test.{ts,tsx}'],
+        testTimeout: 60_000,
         browser: {
           enabled: true,
           headless: true,
