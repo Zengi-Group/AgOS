@@ -42,6 +42,9 @@ tsconfig.tsbuildinfo
 *storybook.log
 storybook-static
 
+# vitest browser-mode: скриншоты/артефакты упавших тестов
+.vitest-attachments/
+
 # local DB password for one-off prod deploys — NEVER commit
 .db_password
 
