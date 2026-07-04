@@ -102,6 +102,24 @@ export default defineConfig({
           }]
         }
       }
+    }, {
+      // DEBT-NATIVE-ROUTER-01 (ARS-152): smoke двух роутеров — v6-приложение + v5-остров
+      // Ionic-оболочки. Обязательно браузерный проект: island-редирект (agos:ionic-v5-island
+      // выше) работает только в Vite-пайплайне — node-окружение остров не воспроизводит.
+      extends: true,
+      test: {
+        name: 'routers',
+        include: ['src/tests/**/*.browser.test.{ts,tsx}'],
+        testTimeout: 60_000,
+        browser: {
+          enabled: true,
+          headless: true,
+          provider: playwright({}),
+          instances: [{
+            browser: 'chromium'
+          }]
+        }
+      }
     }]
   }
 });
