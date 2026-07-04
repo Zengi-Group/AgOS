@@ -58,8 +58,10 @@ Graphify is **not a home** — it is the engine's eyes. Query it; never copy it 
 ## The 8 anchors
 
 **1 · Orient** 🤖
+**`git fetch origin main` — ПЕРВЫМ шагом**: интейк-карта и ветка считаются от `origin/main`,
+не от локального HEAD (worktree бывает на стейл-базе — ретро ARS-152: main уехал на 2 слайса).
 Read Brain `specs/<feature>.md` (if exists) + `graphify query "<feature>"` (what's in code, where
-canon lives) + `git log --oneline -10` + `git diff --stat`. Emit a 5-line **intake card**:
+canon lives) + `git log origin/main --oneline -10` + `git diff --stat`. Emit a 5-line **intake card**:
 `что это · какие сущности трогает · дельта замысел↔код · риски-конфликты · затронутые файлы/коммьюнити`.
 
 **2 · Linear task** 🤖
@@ -114,7 +116,7 @@ brain `log.md` line.
   - anchor 6 → **In Progress** · anchor 7–8 (PR open, verify + **G3**) → **In Review** · merged → **Done**
 - **Labels** (team ARS): `tier:mechanical` (`0be52c9e…`, agent may code) / `tier:semantic`
   (`90650f9a…`, human-led) set at anchor 5–6; `needs-decision` (`cbe6f46c…`) when stuck at a gate.
-- Each issue returns a Linear `gitBranchName` — use it as the feature branch (aligns Linear ↔ git).
+- Each issue returns a Linear `gitBranchName` — use it as the feature branch (aligns Linear ↔ git). Create it from `origin/main` after a fresh fetch — never from the local worktree HEAD. In a fresh Claude-worktree run `scripts/worktree-bootstrap.sh` first (node_modules-симлинк, .env*, graphify-индекс).
 - Tooling: `save_issue` (create/update, append-only relations), `list_issues`, `get_issue`,
   `create_issue_label`. **Statuses & teams are UI-only — not creatable via MCP.**
 
