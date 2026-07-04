@@ -1,13 +1,17 @@
 // AgOS · Этап 2 · Шторка цен (shell/pricesheet.jsx PriceSheet). Открывается тапом по стикеру.
 // Антитраст: только официальные справочные цены TURAN, никаких агрегатов сделок.
+// S2.1 (ARS-157): обёртка → IonModal-sheet (та же agos-sheet-modal-рецептура, что и Sheet.tsx:
+// drag-to-dismiss, backdrop-dismiss, однородность с остальными 9 шторками). Внутренняя
+// .ps-sheet-разметка и контент сохранены байт-в-байт (HS-2). Монтируется постоянно (open-флаг).
 
 import { useEffect, useState } from 'react'
+import { IonModal } from '@ionic/react'
 import { fmtDGen, fmtMoney, TODAY } from '../../data/fmt'
 import { FARMER_LEAD_CAT, PRICE_CAT_ORDER, PRICE_NEXT, herdValueMln, stickerData } from '../../data/prices'
 import { PriceBars } from '../PriceBars'
 import { PriceDelta } from '../PriceDelta'
 
-export function PriceSheet({ catKey, onClose, onSell }: { catKey?: string; onClose: () => void; onSell: (catKey: string) => void }) {
+export function PriceSheet({ open, catKey, onClose, onSell }: { open: boolean; catKey?: string; onClose: () => void; onSell: (catKey: string) => void }) {
   const [sel, setSel] = useState(catKey || FARMER_LEAD_CAT)
   useEffect(() => { if (catKey) setSel(catKey) }, [catKey])
   const s = stickerData(sel, 'auto')
@@ -15,8 +19,8 @@ export function PriceSheet({ catKey, onClose, onSell }: { catKey?: string; onClo
   const hv = s.herd ? herdValueMln(s.herd, s.price) : null
 
   return (
-    <div className="ps-wrap" onClick={onClose}>
-      <div className="ps-sheet" onClick={(e) => e.stopPropagation()} data-screen-label="шторка цен">
+    <IonModal isOpen={open} onDidDismiss={onClose} breakpoints={[0, 1]} initialBreakpoint={1} className="agos-sheet-modal">
+      <div className="ps-sheet" data-screen-label="шторка цен">
         <div className="ps-handle" />
         <div className="ps-head">
           <div className="ps-title">Цены TURAN</div>
@@ -66,6 +70,6 @@ export function PriceSheet({ catKey, onClose, onSell }: { catKey?: string; onClo
         </div>
         <button className="ps-close" onClick={onClose}>Закрыть</button>
       </div>
-    </div>
+    </IonModal>
   )
 }

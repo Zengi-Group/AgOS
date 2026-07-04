@@ -12,6 +12,8 @@ import { STATUS, protPrice, catLabel, gradeLabel } from '../data/status'
 import { fmtMoney, batchSum } from '../tsp/data/tsp-utils'
 import { NBSP } from '../tsp/data/tsp-dicts'
 import { printDealDoc, fmtDealDate, type DealDocData } from '../data/deal-doc'
+// S2.1 (ARS-157, spec §7): тактильный отклик на отгрузке через Host Bridge (web no-op).
+import { useHost } from '@/platform/host/HostContext'
 
 interface FarmerAccount {
   name?: string | null
@@ -401,6 +403,7 @@ function QuietZone({ batch }: { batch: Batch }) {
 
 export function BatchScreen({ batch, account, onBack, onPatch, onNew, onReview, onTuran, toast }: Props) {
   const [sheet, setSheet] = useState<LocalSheet>(null)
+  const host = useHost()   // S2.1: тактильный отклик на отгрузке (web no-op)
   const def = STATUS[batch.state]
 
   const downloadDoc = () => {
@@ -513,6 +516,7 @@ export function BatchScreen({ batch, account, onBack, onPatch, onNew, onReview, 
           // _dispatchReady). Отгружает все готовые (confirmed) куски; для цельного
           // confirmed-батча без кусков — легаси-фолбэк (confirmed→dispatched).
           onPatch({ _dispatchReady: true, dispatchedLabel: 'сегодня' })
+          host.haptics('medium')   // S2.1: отгрузка — ключевое действие
           toast('Покупатель уведомлён об отгрузке')
           setSheet(null)
         }}

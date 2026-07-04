@@ -55,6 +55,9 @@ import { loadFarmState } from './data/farm-load'
 // S3 (ARS-149, EngSpec §4): платформенные адаптеры — KV-хранилище и реальный сетевой статус.
 import { appStorage } from '@/platform/storage'
 import { useOnline } from '@/platform/network'
+// S2.1 (ARS-157, spec §7): тактильный отклик на ключевых действиях через Host Bridge.
+// В web — no-op; S4 (CapacitorHost) получит вибрацию бесплатно. НЕ звать @capacitor/* напрямую.
+import { useHost } from '@/platform/host/HostContext'
 
 // Инициалы для аватара хозяйства из названия орг/имени владельца.
 // «КХ Тестовое» → «ТЕ», «Алтын Дала» → «АД». Снимаем юр. форму-приставку,
@@ -108,6 +111,7 @@ function IonBridge({ onIon, onPath }: { onIon: (ion: UseIonRouterResult) => void
 export function CabinetApp() {
   const navigate = useNavigate()
   const { signOut } = useAuth()
+  const host = useHost()   // S2.1: тактильный отклик (web no-op)
   const init = loadState()
   const [membership, setMembership] = useState<MembershipStatus>(init.membership)
   const [isPro, setIsPro] = useState(init.isPro)
@@ -351,10 +355,12 @@ export function CabinetApp() {
     }
     if (!serverOk && profile?.userId) appStorage.setItem(PAID_KEY(profile.userId), '1')
     setMembership('active')
+    host.haptics('medium')   // S2.1: оплата взноса — ключевое действие
     showToast('Взнос оплачен · членство активно')
   }
   const payProDone = () => {
     setIsPro(true); setSheet(null)
+    host.haptics('medium')   // S2.1: подключение Pro — ключевое действие
     showToast('Platform Pro подключён · Консультант открыт')
   }
 
@@ -378,6 +384,7 @@ export function CabinetApp() {
     open: () => go({ name: 'market' }),
     dispatch: (b) => {
       patchBatch(b.id, { state: 'dispatched' })
+      host.haptics('medium')   // S2.1: отгрузка — ключевое действие
       showToast('Покупатель получил уведомление об отгрузке')
     },
     review: (b) => go({ name: 'review', batchId: b.id, back: { name: 'home' } }),
@@ -456,6 +463,7 @@ export function CabinetApp() {
             onDone={(batch, variant) => {
               addBatch(batch)
               setWizActive(false)
+              host.haptics('heavy')   // S2.1: публикация партии — крупное действие
               setPubResult({ batch, variant })
             }}
             onExit={() => setWizActive(false)}
@@ -501,7 +509,9 @@ export function CabinetApp() {
         onBatch={(id) => go({ name: 'batch', batchId: id, back: { name: 'p1list' } })}
         onNew={() => {
           if (activeCount >= ACTIVE_COUNT_LIMIT) { setSheet({ kind: 'limit' }); return }
-          setWizActive(true)
+          // S2.1 (ARS-157): визард рендерится только на market-роуте — уводим туда,
+          // иначе тап «+Новая» со Списка визуально ничего не делал (решение CEO: починить).
+          setWizActive(true); go({ name: 'market' })
         }}
         onBack={() => goBackTo({ name: 'market' })}
       />
@@ -517,7 +527,10 @@ export function CabinetApp() {
         account={profile ? { name: profile.name, bin: profile.bin, phone: profile.phone, district: profile.district } : null}
         onBack={() => goBackTo(route.back ?? { name: 'p1list' })}
         onPatch={(patch) => patchBatch(currentBatch.id, patch)}
-        onNew={() => setWizActive(true)}
+        onNew={() => {
+          // S2.1 (ARS-157): визард только на market-роуте — уводим туда (решение CEO: починить).
+          setWizActive(true); go({ name: 'market' })
+        }}
         onReview={() => go({ name: 'review', batchId: currentBatch.id, back: { name: 'batch', batchId: currentBatch.id } })}
         onTuran={() => go({ name: 'thread', tid: 'turan', back: { name: 'batch', batchId: currentBatch.id } })}
         toast={showToast}
@@ -594,7 +607,8 @@ export function CabinetApp() {
             {/* Тост и шторки — поверх страниц; IonModal (Sheet.tsx) сам портится в ion-app.
                 Шторки смонтированы постоянно (open-флаг) — dismiss-анимация играет и при
                 программном закрытии (ревью PR #27). key=epoch у stateful-шторок — каждый
-                показ с чистого состояния. PriceSheet — своя не-Ionic шторка, условный маунт. */}
+                показ с чистого состояния. S2.1 (ARS-157): PriceSheet теперь тоже IonModal
+                (agos-sheet-modal) и монтируется постоянно — все 10 шторок однородны. */}
             <Toast toast={toast} />
             <PayVznosSheet
               open={sheet?.kind === 'payvznos'}
@@ -620,9 +634,12 @@ export function CabinetApp() {
               onClose={() => closeSheet('membdocs')}
               onSubmitted={onMembDocsSubmitted}
             />
-            {sheet?.kind === 'prices' && (
-              <PriceSheet catKey={sheet.catKey} onClose={() => closeSheet('prices')} onSell={sellByPrice} />
-            )}
+            <PriceSheet
+              open={sheet?.kind === 'prices'}
+              catKey={sheet?.catKey}
+              onClose={() => closeSheet('prices')}
+              onSell={sellByPrice}
+            />
             <LimitSheet
               open={sheet?.kind === 'limit'}
               onClose={() => closeSheet('limit')}
