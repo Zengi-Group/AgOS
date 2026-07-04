@@ -3254,3 +3254,15 @@ end if;
 **Verification**: `tsc -b` чистый (×2); `vite build` ✓ (lazy `CabinetApp` island-чанк 146.96 КБ собирается, PWA SW регенерируется); dev-сервер — /login рендерится, консоль/сервер без ошибок, HMR применён. Интерактив шторки/haptics в браузере требует OTP-сессии (недоступна в этой среде) — но правки переиспользуют уже проверенную в S2 `agos-sheet-modal`-рецептуру 9 других шторок.
 
 **Files**: `src/pages/cabinet/shell/components/sheets/PriceSheet.tsx` (IonModal-обёртка + `open`-проп), `src/pages/cabinet/shell/ionic.css` (правило `.ps-sheet` в модале), `src/pages/cabinet/shell/cabinet.css` (убран мёртвый `.ps-wrap`), `src/pages/cabinet/shell/CabinetApp.tsx` (`useHost`, haptics ×4, wizActive-фикс ×2, PriceSheet постоянный маунт), `src/pages/cabinet/shell/screens/BatchScreen.tsx` (`useHost` + haptics на отгрузке), `CLAUDE.md` (D-DEP-BUMP-01). Ветка `smartmope/ars-157-…`.
+
+---
+
+### 2026-07-04: Чистка optimizeDeps — два мёртвых include `mini-create-react-context`
+
+**What**: Из `vite.config.ts` `optimizeDeps.include` удалены две строки: `'react-router-v5 > mini-create-react-context'` и `'react-router-dom-v5 > mini-create-react-context'`. Остальные nested-include (prop-types, path-to-regexp, hoist-non-react-statics, react-is) не тронуты — они нужны CJS-интеропу v5-острова (DEBT-NATIVE-ROUTER-01).
+
+**Why**: react-router 5.3.4 (alias-пакеты react-router-v5 / react-router-dom-v5) больше не зависит от `mini-create-react-context` — Vite на каждом старте dev-сервера и vitest-browser-прогонов писал предупреждение «Failed to resolve dependency: … present in client 'optimizeDeps.include'».
+
+**Verification**: `npm run test:unit` 8/8 ✓ (скрипта `test:routers` из постановки задачи в репо не существует — ближайший существующий прогон); dev-сервер поднимается без предупреждения, /login рендерится, консоль чистая ✓; `npm run build` ✓ (только pre-existing chunk-size warning).
+
+**Files**: `vite.config.ts` (−2 строки), `DECISIONS_LOG.md`.
