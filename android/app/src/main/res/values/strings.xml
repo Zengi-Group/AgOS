@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AgOS · TURAN</string>
+    <string name="title_activity_main">AgOS · TURAN</string>
+    <string name="package_name">kz.turan.agos</string>
+    <string name="custom_url_scheme">kz.turan.agos</string>
+</resources>
