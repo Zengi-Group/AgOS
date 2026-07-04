@@ -3268,3 +3268,15 @@ end if;
 **Verification**: `npm run test:routers` 3/3 ✓ (7 с); негативная проверка «тест с зубами» — island-редирект временно отключён (inIsland→false) → тест `/cabinet` падает с `does not provide an export named 'withRouter'` (v6 попал в @ionic/react-router), v6-тесты живут; откат → снова 3/3 ✓; `npm run test:unit` 8/8 ✓; `tsc -b` чистый. Депсы не менялись (D-DEP-BUMP-01 не задет). Замечено (pre-existing, не трогал): предупреждение Vite «Failed to resolve dependency: react-router{,-dom}-v5 > mini-create-react-context» — react-router 5.3.4 больше не зависит от этого пакета, две строки в `optimizeDeps.include` мертвы; вычистить отдельным микро-PR.
 
 **Files**: new `src/tests/router-smoke.browser.test.tsx`; edit `vite.config.ts` (проект `routers`), `package.json` (скрипт `test:routers`), `IMPL_DEBT.md` (DEBT-NATIVE-ROUTER-01: smoke-пункт закрыт).
+
+---
+
+### 2026-07-04: Чистка optimizeDeps — два мёртвых include `mini-create-react-context` (ARS-159)
+
+**What**: Из `vite.config.ts` `optimizeDeps.include` удалены две строки: `'react-router-v5 > mini-create-react-context'` и `'react-router-dom-v5 > mini-create-react-context'`. Остальные nested-include (prop-types, path-to-regexp, hoist-non-react-statics, react-is) не тронуты — они нужны CJS-интеропу v5-острова (DEBT-NATIVE-ROUTER-01).
+
+**Why**: react-router 5.3.4 (alias-пакеты react-router-v5 / react-router-dom-v5) больше не зависит от `mini-create-react-context` — Vite на каждом старте dev-сервера и vitest-browser-прогонов писал предупреждение «Failed to resolve dependency: … present in client 'optimizeDeps.include'».
+
+**Verification**: `npm run test:unit` 8/8 ✓ (на момент ветки скрипта `test:routers` ещё не было — он пришёл с PR #32); dev-сервер поднимается без предупреждения, /login рендерится, консоль чистая ✓; `npm run build` ✓ (только pre-existing chunk-size warning). **Merge-note (2026-07-04):** конфликт с main (PR #32) разрешён — обе записи лога сохранены, graphify-out пересгенерирован от смерженного кода; на смерженном дереве `npm run test:routers` 3/3 ✓ и предупреждение исчезло, `npm run test:unit` 8/8 ✓.
+
+**Files**: `vite.config.ts` (−2 строки), `DECISIONS_LOG.md`.
