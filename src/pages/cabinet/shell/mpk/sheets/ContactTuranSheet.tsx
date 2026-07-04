@@ -1,6 +1,6 @@
 // AgOS · TSP-3 · Шторка «Обратиться в TURAN».
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sheet } from '../../components/Sheet'
 import { Cta } from '../../components/Cta'
 
@@ -17,6 +17,14 @@ export function ContactTuranSheet({ open, topic, onClose, onSubmit }: Props) {
   const [selTopic, setSelTopic] = useState(topic && TOPICS.includes(topic) ? topic : TOPICS[0])
   const [message, setMessage] = useState('')
   const canSend = message.trim().length >= 5
+
+  // S6 (ARS-152): шторка смонтирована постоянно (open-флаг, S2-паттерн PR #27) —
+  // каждый показ с чистого состояния и актуальной темой (реинициализация по open).
+  useEffect(() => {
+    if (!open) return
+    setSelTopic(topic && TOPICS.includes(topic) ? topic : TOPICS[0])
+    setMessage('')
+  }, [open, topic])
 
   return (
     <Sheet open={open} onClose={onClose}>

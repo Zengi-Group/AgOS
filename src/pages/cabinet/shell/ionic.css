@@ -74,6 +74,16 @@ ion-modal.agos-sheet-modal .ps-sheet {
   max-height: 88vh;
 }
 
+/* ---------- S6 (ARS-152): полноэкранные МПК-модалы ---------- */
+/* .mpk-modal (absolute inset:0) сохраняет свою вёрстку внутри; IonModal даёт
+   нативный slide-up/dismiss. Рамка = телефон (как agos-sheet-modal). */
+ion-modal.agos-mpk-modal {
+  --width: 100%;
+  --max-width: 440px;
+  --height: 100%;
+  --border-radius: 0;
+}
+
 /* ---------- полноэкранные флоу без IonShellFrame (BatchWizard / PubResult) ---------- */
 .agos-cabinet-stage .agos-flow-page {
   background: var(--bg);
