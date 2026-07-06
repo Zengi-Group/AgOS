@@ -1766,6 +1766,19 @@ as $$
 declare
     v_batch record;
 begin
+    -- OWNERSHIP GUARD (SEC-RPC-ORGTRUST-01, data-isolation/Art.171): SECURITY DEFINER
+    -- bypasses RLS — p_organization_id is client-supplied and must be verified against
+    -- the caller, not trusted as given. service_role bypasses (AI Gateway market.py
+    -- already scopes org per P-AI-2 before calling this RPC).
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
     select * into v_batch
     from public.batches
     where id = p_batch_id and organization_id = p_organization_id;
@@ -3024,6 +3037,19 @@ declare
     v_offer_window_hours    int;
     v_mpk_count             int := 0;
 begin
+    -- OWNERSHIP GUARD (SEC-RPC-ORGTRUST-01, data-isolation/Art.171): SECURITY DEFINER
+    -- bypasses RLS — p_organization_id is client-supplied and must be verified against
+    -- the caller, not trusted as given. service_role bypasses (Dok3 registry lists this
+    -- as an AI-Gateway-capable RPC, per P-AI-2 org-scoping happens before the call).
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
     if p_new_price_per_kg is null or p_new_price_per_kg <= 0 then
         raise exception 'INVALID_INPUT: p_new_price_per_kg must be > 0'
             using errcode = 'P0001';

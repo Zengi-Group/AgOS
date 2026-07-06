@@ -135,8 +135,9 @@ export function BatchWizard({ onDone, onExit, onTuran, initialStep, initialWiz }
 
       clear()
 
-      // В MVP вариант определяет фронт (TSP-4: вернёт бэк): D если отложено, иначе B.
-      const variant: PubVariant = delayed ? 'D' : 'B'
+      // В MVP вариант определяет фронт (TSP-4: вернёт бэк): D если отложено,
+      // A если автоматч уже смэтчил партию (см. batch.state выше), иначе B.
+      const variant: PubVariant = delayed ? 'D' : (batch.state === 'matched' ? 'A' : 'B')
       onDone(batch, variant)
     } catch (err) {
       ctx.toast('Ошибка публикации')

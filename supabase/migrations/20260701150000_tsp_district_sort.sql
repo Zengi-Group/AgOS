@@ -120,6 +120,17 @@ begin
         raise exception 'ORG_NOT_FOUND' using errcode = 'P0001';
     end if;
 
+    -- SEC-GATE-MEMBERSHIP-01: pilot stand-in for MEMBERSHIP-01 (canon `state`
+    -- column not deployed yet) — deployed memberships.level stack still has
+    -- 'registered' as the pre-membership default; anything above it gates TSP.
+    if not exists (
+        select 1 from public.memberships
+        where organization_id = v_org_id and level <> 'registered'
+    ) then
+        raise exception 'MEMBERSHIP_REQUIRED: организация не является членом ассоциации'
+            using errcode = 'P0001';
+    end if;
+
     v_sku_id    := public.fn_tsp_resolve_sku(p_cat, p_breed, p_age, p_avg_weight);
     v_region_id := public.fn_tsp_region_id(p_district);
     if v_region_id is null then
