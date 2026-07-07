@@ -5,7 +5,8 @@ import { supabase } from '@/lib/supabase'
 import { REGIONS, DISTRICTS } from '@/pages/registration/constants'
 import { BREEDS } from '@/pages/cabinet/shell/tsp/data/tsp-dicts'
 import { Cta } from '../../components/Cta'
-import { MPK_CATS, type MpkCatKey, type Pool, type PoolLine } from '../types'
+import { useGradeFormula } from '@/hooks/useGradeFormula'
+import { MPK_CATS, mpkCatName, mpkCatFloor, type MpkCatKey, type Pool, type PoolLine } from '../types'
 
 interface Props {
   orgId?: string | null   // org реального МПК — если есть, заявка пишется в БД
@@ -36,6 +37,7 @@ const WINDOWS: { k: string; t: string }[] = [
 const CAT_KEYS = Object.keys(MPK_CATS) as MpkCatKey[]
 
 export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
+  useGradeFormula()
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [totalHeads, setTotalHeads] = useState('')
@@ -84,7 +86,7 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
   const canPublish =
     headsValid &&
     lines.length > 0 &&
-    lines.every((l) => l.catKey && l.price >= MPK_CATS[l.catKey].floorPrice) &&
+    lines.every((l) => l.catKey && l.price >= mpkCatFloor(l.catKey)) &&
     !overCapacity &&
     targetMonth !== ''
 
@@ -98,7 +100,7 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
     return {
     id: `p${Date.now()}`,
     status,
-    title: first ? `${MPK_CATS[first.catKey].name} · ${region}` : `Закупка · ${region}`,
+    title: first ? `${mpkCatName(first.catKey)} · ${region}` : `Закупка · ${region}`,
     region,
     totalHeads: heads,
     filledHeads: 0,
@@ -213,7 +215,7 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
           <div className="mpk-field-label">Категории и породы</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {lines.map((l, i) => {
-              const floor = MPK_CATS[l.catKey].floorPrice
+              const floor = mpkCatFloor(l.catKey)
               const below = l.price > 0 && l.price < floor
               return (
                 <div key={i}>
@@ -223,7 +225,7 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
                       value={l.catKey}
                       onChange={(e) => patchLine(i, { catKey: e.target.value as MpkCatKey })}
                     >
-                      {CAT_KEYS.map((k) => <option key={k} value={k}>{MPK_CATS[k].name}</option>)}
+                      {CAT_KEYS.map((k) => <option key={k} value={k}>{mpkCatName(k)}</option>)}
                     </select>
                     <input
                       className={'mpk-input' + (below ? ' error' : '')}

@@ -3,7 +3,8 @@
 import { useEffect } from 'react'
 import type { WizState } from '../types/batch'
 import { CATS } from '../data/tsp-dicts'
-import { deriveCategory, deriveMpkGrade, MPK_SORT_LABEL } from '../data/tsp-utils'
+import { deriveCategory, deriveMpkGrade, mpkSortLabel } from '../data/tsp-utils'
+import { useGradeFormula } from '@/hooks/useGradeFormula'
 import { WizShell } from './WizShell'
 import { Cta } from '../../components/Cta'
 
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export function WizStep3Category({ w, sw, onNext, onBack, onExit, onTuran }: Props) {
+  useGradeFormula()
   // запустить определение, если категория ещё не определена
   useEffect(() => {
     if (!w.catKey && !w.catUnknown && !w.catLoading) sw({ catLoading: true })
@@ -76,8 +78,8 @@ export function WizStep3Category({ w, sw, onNext, onBack, onExit, onTuran }: Pro
       {mpkSort && (
         <div className="cat-card ok" style={{ marginTop: 10 }}>
           <div className="cc-k mono">СОРТ ДЛЯ ПОКУПАТЕЛЯ</div>
-          <div className="cc-name">{MPK_SORT_LABEL[mpkSort]}</div>
-          <div className="cc-b">По упитанности «{w.fatness}» мясокомбинаты видят вашу партию как сорт «{MPK_SORT_LABEL[mpkSort]}» и могут закупить именно эту категорию.</div>
+          <div className="cc-name">{mpkSortLabel(mpkSort)}</div>
+          <div className="cc-b">По упитанности «{w.fatness}» мясокомбинаты видят вашу партию как сорт «{mpkSortLabel(mpkSort)}» и могут закупить именно эту категорию.</div>
         </div>
       )}
     </WizShell>

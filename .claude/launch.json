@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "Frontend (Vite)",
-      "runtimeExecutable": "/usr/local/bin/node",
+      "runtimeExecutable": "node",
       "runtimeArgs": ["node_modules/vite/bin/vite.js"],
       "port": 5173
     },

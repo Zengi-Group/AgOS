@@ -33,6 +33,8 @@ import {
   Briefcase,
   User,
   Library,
+  Tags,
+  SlidersHorizontal,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -140,6 +142,8 @@ const ADMIN_GROUPS: NavGroup[] = [
       { id: 'marketplace', icon: Store, label: 'Торговая площадка', route: '/admin/marketplace' },
       { id: 'pools', icon: Package, label: 'Пулы', route: '/admin/pools' },
       { id: 'pricing', icon: DollarSign, label: 'Цены', route: '/admin/pricing' },
+      { id: 'livestock-categories', icon: Tags, label: 'Категории скота', route: '/admin/livestock-categories' },
+      { id: 'grade-formula', icon: SlidersHorizontal, label: 'Формула сорта', route: '/admin/grade-formula' },
       { id: 'settings', icon: Settings, label: 'Настройки', route: '/admin/settings' },
       { id: 'consulting', icon: Briefcase, label: 'Консалтинг', route: '/admin/consulting' },
     ],
