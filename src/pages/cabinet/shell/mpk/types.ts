@@ -18,6 +18,9 @@ export interface MpkCatDef {
   floorPrice: number   // жёсткий минимум — блокирует публикацию
 }
 
+// Фолбэк-константы (= сид livestock_grade_formula). Используются, пока формула из БД
+// (rpc_get_grade_formula) не загружена. Актуальные значения читаются через геттеры
+// mpkCatName / mpkCatFloor после гидратации setMpkFormula (см. useGradeFormula).
 export const MPK_CATS: Record<MpkCatKey, MpkCatDef> = {
   premium:    { name: 'КРС · Премиум',  floorPrice: 1850 },
   vysshaya:   { name: 'КРС · Высшая',   floorPrice: 1650 },
@@ -25,6 +28,21 @@ export const MPK_CATS: Record<MpkCatKey, MpkCatDef> = {
   vtoraya:    { name: 'КРС · Вторая',   floorPrice: 1350 },
   mrs_vyssh:  { name: 'МРС · Высшая',   floorPrice: 950  },
   mrs_perv:   { name: 'МРС · Первая',   floorPrice: 850  },
+}
+
+// Data-driven оверрайд формулы (livestock_grade_formula через rpc_get_grade_formula).
+interface GradeFormulaLite { sort_key: string; name_ru: string; floor_price: number }
+let _mpkFormula: Record<string, GradeFormulaLite> | null = null
+export function setMpkFormula(rows: GradeFormulaLite[] | null | undefined): void {
+  _mpkFormula = rows && rows.length
+    ? Object.fromEntries(rows.map((r) => [r.sort_key, r]))
+    : null
+}
+export function mpkCatName(key: MpkCatKey): string {
+  return _mpkFormula?.[key]?.name_ru ?? MPK_CATS[key].name
+}
+export function mpkCatFloor(key: MpkCatKey): number {
+  return _mpkFormula?.[key]?.floor_price ?? MPK_CATS[key].floorPrice
 }
 
 export interface PoolLine {

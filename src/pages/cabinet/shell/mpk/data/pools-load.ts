@@ -3,7 +3,7 @@
 // (контакты раскрыты только после executing, D40). Фолбэк — caller берёт seed.
 
 import { supabase } from '@/lib/supabase'
-import { MPK_CATS, type MpkCatKey, type Pool, type PoolLine, type PoolStatus, type SupplierRow } from '../types'
+import { MPK_CATS, mpkCatName, type MpkCatKey, type Pool, type PoolLine, type PoolStatus, type SupplierRow } from '../types'
 
 interface RawPool {
   id: string
@@ -68,7 +68,7 @@ function toPool(r: RawPool): Pool {
   return {
     id: r.id,
     status: mapStatus(r.status),
-    title: first ? `${MPK_CATS[first.catKey].name} · ${r.region}` : `Закупка · ${r.region}`,
+    title: first ? `${mpkCatName(first.catKey)} · ${r.region}` : `Закупка · ${r.region}`,
     region: r.region,
     totalHeads: r.totalHeads,
     filledHeads: r.filledHeads,

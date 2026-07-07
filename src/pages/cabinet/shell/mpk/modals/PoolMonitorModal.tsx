@@ -6,7 +6,8 @@ import { Cta } from '../../components/Cta'
 import { fmtMoney } from '../../tsp/data/tsp-utils'
 import { NBSP } from '../../tsp/data/tsp-dicts'
 import { printDealDoc, fmtDealDate, type DealDocData } from '../../data/deal-doc'
-import { MPK_CATS, type Pool, type SupplierRow } from '../types'
+import { useGradeFormula } from '@/hooks/useGradeFormula'
+import { mpkCatName, type Pool, type SupplierRow } from '../types'
 
 interface Props {
   pool: Pool
@@ -146,13 +147,14 @@ function LinesList({ pool }: { pool: Pool }) {
     <div>
       <div className="mpk-field-label">По категориям</div>
       {pool.lines.map((l, i) => (
-        <div className="pool-card-sub" key={i}>{MPK_CATS[l.catKey].name}: {fmtMoney(l.price)}{NBSP}₸/кг</div>
+        <div className="pool-card-sub" key={i}>{mpkCatName(l.catKey)}: {fmtMoney(l.price)}{NBSP}₸/кг</div>
       ))}
     </div>
   )
 }
 
 export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran, mpk, onAdvance, onLoadMatches, onConfirmDelivery, onSubmitReview }: Props) {
+  useGradeFormula()
   const realPool = UUID_RE.test(pool.id)
   // Реальные поставщики из БД перекрывают демо-список (контакты — только при executing, D40).
   const [liveSuppliers, setLiveSuppliers] = useState<SupplierRow[] | null>(null)

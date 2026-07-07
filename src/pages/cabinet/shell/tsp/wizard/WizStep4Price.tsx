@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import type { WizState } from '../types/batch'
 import { NBSP, CATS } from '../data/tsp-dicts'
-import { fmtMoney, deriveMpkGrade, MPK_SORT_FLOOR, MPK_SORT_LABEL } from '../data/tsp-utils'
+import { fmtMoney, deriveMpkGrade, mpkSortFloor, mpkSortLabel } from '../data/tsp-utils'
+import { useGradeFormula } from '@/hooks/useGradeFormula'
 import { WizShell } from './WizShell'
 
 interface Props {
@@ -15,11 +16,12 @@ interface Props {
 }
 
 export function WizStep4Price({ w, sw, onNext, onBack, onExit }: Props) {
+  useGradeFormula()
   const cat = CATS[w.catKey!]
   // Защитный пол — по сорту МПК (единый источник правды для фермера и МПК).
   // Если сорт не определяется (нестандартная упитанность) — падаем на пол категории.
   const mpkSort = deriveMpkGrade(w)
-  const floor = mpkSort ? MPK_SORT_FLOOR[mpkSort] : cat.prot
+  const floor = mpkSort ? mpkSortFloor(mpkSort) : cat.prot
   const price = parseInt(w.price || '0', 10)
   const low = price > 0 && price < floor
   const valid = price > 0 && (!low || w.lowOk)
@@ -46,7 +48,7 @@ export function WizStep4Price({ w, sw, onNext, onBack, onExit }: Props) {
       {low && (
         <div className="warn-panel">
           <div className="wp-t">Цена ниже защитной цены ассоциации — {fmtMoney(floor)}{NBSP}₸/кг</div>
-          <div className="wp-b">{mpkSort ? `Защитная цена сорта «${MPK_SORT_LABEL[mpkSort]}» — это уровень, ниже которого ассоциация не рекомендует продавать. ` : 'Защитная цена — это уровень, ниже которого ассоциация не рекомендует продавать. '}Вы можете опубликовать и по своей цене.</div>
+          <div className="wp-b">{mpkSort ? `Защитная цена сорта «${mpkSortLabel(mpkSort)}» — это уровень, ниже которого ассоциация не рекомендует продавать. ` : 'Защитная цена — это уровень, ниже которого ассоциация не рекомендует продавать. '}Вы можете опубликовать и по своей цене.</div>
           <button className={'cb-row warn' + (miss && !w.lowOk ? ' miss' : '')} onClick={() => { sw({ lowOk: !w.lowOk }); setMiss(false) }}>
             <div className={'cb-box' + (w.lowOk ? ' ch' : '')}>{w.lowOk ? '✓' : ''}</div>
             <div>Понимаю и подтверждаю цену {fmtMoney(price)}{NBSP}₸/кг</div>

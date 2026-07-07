@@ -105,6 +105,8 @@ import { SystemSettings } from '@/pages/admin/settings/SystemSettings'
 import { FeedReferenceAdmin, CatalogTab as FeedCatalogTab, PricesTab as FeedPricesTab, NormsTab as FeedNormsTab } from '@/pages/admin/feeds/FeedReferenceAdmin'
 import { CapexReferenceAdmin, CapexMaterialsTab, CapexNormsTab, CapexSurchargesTab } from '@/pages/admin/capex/CapexReferenceAdmin'
 import { LivestockPricesAdmin } from '@/pages/admin/livestock-prices/LivestockPricesAdmin'
+import { LivestockCategoriesLayout, CategoriesTab as LivestockCategoriesTab, RulesTab as LivestockRulesTab } from '@/pages/admin/livestock-categories/LivestockCategoriesLayout'
+import { GradeFormulaAdmin } from '@/pages/admin/grade-formula/GradeFormulaAdmin'
 import { DirectoriesHub } from '@/pages/admin/directories/DirectoriesHub'
 import { NormsReferenceAdmin, FacilityNormsTab, PaddockNormsTab, CalvingScenariosTab, RegionalPastureTab, CapexCoefficientsTab } from '@/pages/admin/directories/norms/NormsReferenceAdmin'
 import { ConsultingDashboard } from '@/pages/admin/consulting/ConsultingDashboard'
@@ -266,6 +268,14 @@ function App() {
                       <Route path="surcharges" element={<CapexSurchargesTab />} />
                     </Route>
                     <Route path="directories/livestock-prices" element={<LivestockPricesAdmin />} />
+                    {/* A-CAT — Категории скота + формула классификации */}
+                    <Route path="livestock-categories" element={<LivestockCategoriesLayout />}>
+                      <Route index element={<Navigate to="/admin/livestock-categories/categories" replace />} />
+                      <Route path="categories" element={<LivestockCategoriesTab />} />
+                      <Route path="rules" element={<LivestockRulesTab />} />
+                    </Route>
+                    {/* A-GRADE — Формула сорта МПК (упитанность → сорт + защитная цена) */}
+                    <Route path="grade-formula" element={<GradeFormulaAdmin />} />
                     <Route path="directories/regions" element={<RegionDirectory />} />
                     <Route path="directories/norms" element={<NormsReferenceAdmin />}>
                       <Route path="facilities" element={<FacilityNormsTab />} />

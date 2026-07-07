@@ -54,11 +54,59 @@ export const MPK_SORT_FLOOR: Record<MpkSort, number> = {
 }
 
 // Элитные мясные породы — синхронно с fn_tsp_resolve_sku (breed_group='elite_meat').
+// Фолбэк, если формула из БД (rpc_get_grade_formula) ещё не загружена.
 const ELITE_BREED_RE = /ангус|герефорд|абердин|вагю|wagyu|angus|hereford|шароле|лимузин|limousin|charolais|симмент/i
+
+// ── Data-driven формула сорта (rpc_get_grade_formula) ───────────────────────────
+// Единый источник правды в БД: livestock_grade_formula. Пока не загружена —
+// работают захардкоженные фолбэки выше (совпадают с сидом → поведение идентично).
+export interface GradeFormulaRow {
+  sort_key: string
+  species: string
+  name_ru: string
+  fatness_match: string | null
+  grade_code: string | null
+  floor_price: number
+  elite_only: boolean
+  min_weight_kg: number | null
+  elite_breeds: string[] | null
+  sort_order: number
+}
+
+let _formula: GradeFormulaRow[] | null = null
+export function setGradeFormula(rows: GradeFormulaRow[] | null | undefined): void {
+  _formula = rows && rows.length ? rows : null
+}
+export function getGradeFormula(): GradeFormulaRow[] | null {
+  return _formula
+}
+
+const normFatness = (s: string) => s.toLowerCase().replace(/[^a-zа-яё]/gi, '')
 
 export function deriveMpkGrade(
   w: Pick<WizState, 'breed' | 'avgWeight' | 'age' | 'fatness'>,
 ): MpkSort | null {
+  const f = _formula
+  if (f) {
+    const base = f.find(
+      (r) => r.species === 'КРС' && !r.elite_only && r.fatness_match &&
+             normFatness(r.fatness_match) === normFatness(w.fatness || ''),
+    )
+    if (!base) return null
+    let sort = base.sort_key as MpkSort
+    if (sort === 'vysshaya') {
+      const prem = f.find((r) => r.elite_only && r.min_weight_kg != null && r.elite_breeds?.length)
+      if (
+        prem &&
+        prem.elite_breeds!.some((b) => new RegExp(b, 'i').test(w.breed)) &&
+        w.avgWeight >= (prem.min_weight_kg as number)
+      ) {
+        sort = prem.sort_key as MpkSort
+      }
+    }
+    return sort
+  }
+  // Фолбэк (формула из БД ещё не загружена).
   let sort: MpkSort | null =
     w.fatness === 'Хорошая'      ? 'vysshaya'
     : w.fatness === 'Средняя'      ? 'pervaya'
@@ -68,6 +116,14 @@ export function deriveMpkGrade(
     sort = 'premium'
   }
   return sort
+}
+
+// Лейбл/пол сорта: из БД-формулы, иначе фолбэк-константы.
+export function mpkSortLabel(sort: MpkSort): string {
+  return _formula?.find((r) => r.sort_key === sort)?.name_ru ?? MPK_SORT_LABEL[sort]
+}
+export function mpkSortFloor(sort: MpkSort): number {
+  return _formula?.find((r) => r.sort_key === sort)?.floor_price ?? MPK_SORT_FLOOR[sort]
 }
 
 // Пресеты окна готовности
