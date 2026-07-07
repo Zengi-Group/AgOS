@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
@@ -15,6 +14,7 @@ import { FeedProducerDetails } from './steps/FeedProducerDetails'
 import { ExpertDetails } from './steps/ExpertDetails'
 import { ExpertDocs } from './steps/ExpertDocs'
 import { Agreement } from './steps/Agreement'
+import { Success } from './steps/Success'
 import { INITIAL_FORM_DATA } from './constants'
 import type { RegistrationFormData, RoleType } from './constants'
 
@@ -28,6 +28,7 @@ type Step =
   | 'role_details'
   | 'expert_docs'
   | 'agreement'
+  | 'success'
 
 const STEP_ORDER: Step[] = [
   'contact',
@@ -37,11 +38,28 @@ const STEP_ORDER: Step[] = [
   'role_details',
   'expert_docs',
   'agreement',
+  'success',
 ]
+
+// Отображаемое название организации на экране Success (ONB-SUCCESS-ORPHAN-01) —
+// зеркалит выбор name в handleRegister, только для UI, не влияет на сабмит.
+function getDisplayName(role: RoleType | null, formData: RegistrationFormData): string {
+  switch (role) {
+    case 'farmer':
+      return formData.farm_name
+    case 'mpk':
+    case 'services':
+    case 'feed_producer':
+      return formData.company_name
+    case 'expert':
+      return formData.full_name
+    default:
+      return ''
+  }
+}
 
 export function Registration() {
   const { session } = useAuth()
-  const navigate = useNavigate()
   const [step, setStep] = useState<Step>('contact')
   const [direction, setDirection] = useState<'forward' | 'backward'>('forward')
   const [formData, setFormData] = useState<RegistrationFormData>(() => {
@@ -78,7 +96,7 @@ export function Registration() {
   // Warn on leaving with unsaved changes
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
-      if (step !== 'contact') {
+      if (step !== 'contact' && step !== 'success') {
         e.preventDefault()
       }
     }
@@ -227,9 +245,10 @@ export function Registration() {
       sessionStorage.removeItem(STORAGE_KEY)
 
       // Registration complete — user already has a session (signed in after PIN).
-      // Route to the shell matching the chosen role: МПК → /mpk, остальные → /cabinet
-      // (совпадает с pickShellPath; роль здесь уже известна из формы).
-      navigate(role === 'mpk' ? '/mpk' : '/cabinet')
+      // Экран Success (ONB-SUCCESS-ORPHAN-01): показываем KPI/«первые шаги»/баннер
+      // заявки перед переходом в кабинет — кнопка на самом экране ведёт в /cabinet
+      // или /mpk (см. Success.tsx CABINET_CONTENT, совпадает с pickShellPath).
+      goTo('success')
     } catch (err) {
       toast.error('Ошибка регистрации')
       console.error(err)
@@ -335,12 +354,20 @@ export function Registration() {
             isSubmitting={isSubmitting}
           />
         )
+      case 'success':
+        return (
+          <Success
+            role={formData.role!}
+            phone={formData.phone}
+            companyName={getDisplayName(formData.role, formData)}
+          />
+        )
       default:
         return null
     }
   }
 
-  const showBackButton = step !== 'contact'
+  const showBackButton = step !== 'contact' && step !== 'success'
   const stepIndex = STEP_ORDER.indexOf(step) + 1
 
   return (

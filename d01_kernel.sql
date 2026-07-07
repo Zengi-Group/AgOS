@@ -3498,8 +3498,12 @@ begin
             using errcode = 'P0001';
     end if;
 
-    -- Check: already active at a real membership level (beyond registered)
-    if v_current_level not in ('registered', 'observer') then
+    -- Check: already active membership — подать заявку может только level='registered'.
+    -- На пилоте observer = активное оплаченное членство (rpc_pay_membership_dues поднимает
+    -- registered→observer, апгрейд-пути выше нет: to_level захардкожен 'observer').
+    -- Канон MS2 (бинарная модель): активный член повторно не подаёт → ALREADY_ACTIVE.
+    -- QA MEM-SUB-05 / находка F-1. Зеркало идемпотентного гейта rpc_pay_membership_dues.
+    if v_current_level <> 'registered' then
         raise exception 'ALREADY_ACTIVE: organization already has active membership level %', v_current_level
             using errcode = 'P0001';
     end if;
@@ -3570,6 +3574,8 @@ $$;
 comment on function public.rpc_submit_membership_application(uuid, text, text) is
     'RPC-02 | Dok 3 §2.2 | Slice 1
      Submit membership application: status=submitted, from_level=current, to_level=observer.
+     Гейт: только level=registered может подать; observer и выше = активное членство → ALREADY_ACTIVE
+     (QA MEM-SUB-05/F-1; observer на пилоте выдаётся оплатой rpc_pay_membership_dues).
      p_membership_type stored in event payload (informational — actual levels follow FSM).
      Error codes: ALREADY_ACTIVE, PENDING_EXISTS, NO_MEMBERSHIP, INVALID_MEMBERSHIP_TYPE.
      Event: identity.membership_application.submitted (is_audit=true).';

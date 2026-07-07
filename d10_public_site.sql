@@ -862,16 +862,56 @@ create policy "startup_decks_select_admin"
   to authenticated
   using (bucket_id = 'startup-decks' and (public.fn_is_admin() or public.fn_is_expert()));
 
--- membership-documents: authenticated read/write, admin full access
-create policy "membership_documents_insert_auth"
+-- fn_storage_org_id: first path segment of a Storage object name, as uuid.
+-- Fails closed (returns null, never raises) on malformed/non-uuid segments so
+-- RLS predicates built on it can't be tripped into a runtime error by a bad path.
+create or replace function public.fn_storage_org_id(object_name text)
+returns uuid language sql immutable
+set search_path = public, pg_temp as $$
+    select case
+        when (storage.foldername(object_name))[1] ~
+             '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        then (storage.foldername(object_name))[1]::uuid
+        else null
+    end;
+$$;
+
+-- membership-documents: org-scoped read/write (SEC-STORAGE-01), admin full access.
+-- Path convention: membership-documents/{orgId}/... — first segment must match caller's org.
+drop policy if exists "membership_documents_insert_auth" on storage.objects;
+drop policy if exists "membership_documents_select_auth" on storage.objects;
+drop policy if exists "membership_documents_insert_org" on storage.objects;
+drop policy if exists "membership_documents_select_org" on storage.objects;
+drop policy if exists "membership_documents_update_org" on storage.objects;
+
+create policy "membership_documents_insert_org"
   on storage.objects for insert
   to authenticated
-  with check (bucket_id = 'membership-documents');
+  with check (
+    bucket_id = 'membership-documents'
+    and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
+  );
 
-create policy "membership_documents_select_auth"
+create policy "membership_documents_select_org"
   on storage.objects for select
   to authenticated
-  using (bucket_id = 'membership-documents');
+  using (
+    bucket_id = 'membership-documents'
+    and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
+  );
+
+-- upsert (used by cabinet + admin doc uploaders) does an UPDATE on replace — needs its own policy
+create policy "membership_documents_update_org"
+  on storage.objects for update
+  to authenticated
+  using (
+    bucket_id = 'membership-documents'
+    and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
+  )
+  with check (
+    bucket_id = 'membership-documents'
+    and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
+  );
 
 create policy "membership_documents_delete_admin"
   on storage.objects for delete

@@ -1095,6 +1095,19 @@ stable
 set search_path = public, pg_temp
 as $$
 begin
+    -- OWNERSHIP GUARD (SEC-RPC-ORGTRUST-01, data-isolation/Art.171): SECURITY DEFINER
+    -- bypasses RLS — p_organization_id is client-supplied and must be verified against
+    -- the caller, not trusted as given. service_role bypasses (AI Gateway already
+    -- scopes org per P-AI-2 before calling this RPC).
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
     return jsonb_build_object(
         'batches', (
             select coalesce(jsonb_agg(jsonb_build_object(
@@ -1152,9 +1165,34 @@ declare
     v_batch_id      uuid;
     v_restriction   record;
 begin
+    -- OWNERSHIP GUARD (SEC-RPC-ORGTRUST-01, data-isolation/Art.171): SECURITY DEFINER
+    -- bypasses RLS — p_organization_id is client-supplied and must be verified against
+    -- the caller, not trusted as given. service_role bypasses (AI Gateway already
+    -- scopes org per P-AI-2 before calling this RPC). _ai_check_farm_org below only
+    -- verifies farm↔org consistency, not caller↔org — does not substitute for this.
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
     if not public._ai_check_farm_org(p_farm_id, p_organization_id) then
         raise exception 'FORBIDDEN: farm % does not belong to organization %',
             p_farm_id, p_organization_id using errcode = 'P0001';
+    end if;
+
+    -- SEC-GATE-MEMBERSHIP-01: pilot stand-in for MEMBERSHIP-01 (canon `state`
+    -- column not deployed yet) — mirrors the self-serve rpc_create_batch gate
+    -- so the AI Gateway path enforces the same association-membership rule.
+    if not exists (
+        select 1 from public.memberships
+        where organization_id = p_organization_id and level <> 'registered'
+    ) then
+        raise exception 'MEMBERSHIP_REQUIRED: организация не является членом ассоциации'
+            using errcode = 'P0001';
     end if;
 
     -- ── C-4: Health Gate (D63 + D98) ─────────────────────────────────────────
@@ -1246,6 +1284,21 @@ as $$
 declare
     v_batch record;
 begin
+    -- OWNERSHIP GUARD (SEC-RPC-ORGTRUST-01, data-isolation/Art.171): SECURITY DEFINER
+    -- bypasses RLS — p_organization_id is client-supplied and must be verified against
+    -- the caller, not trusted as given. The WHERE clause below only confirms this
+    -- batch belongs to the claimed org, not that the caller belongs to it — passing a
+    -- foreign org+batch pair together would otherwise pass silently. service_role
+    -- bypasses (AI Gateway already scopes org per P-AI-2 before calling this RPC).
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
     select b.*, ts.sku_code
     into   v_batch
     from   public.batches b
@@ -1261,6 +1314,17 @@ begin
     if v_batch.status != 'draft' then
         raise exception 'INVALID: batch % is in status % (must be draft to publish)',
             p_batch_id, v_batch.status using errcode = 'P0003';
+    end if;
+
+    -- SEC-GATE-MEMBERSHIP-01: pilot stand-in for MEMBERSHIP-01 (canon `state`
+    -- column not deployed yet) — mirrors the self-serve rpc_create_batch gate
+    -- so the AI Gateway path enforces the same association-membership rule.
+    if not exists (
+        select 1 from public.memberships
+        where organization_id = p_organization_id and level <> 'registered'
+    ) then
+        raise exception 'MEMBERSHIP_REQUIRED: организация не является членом ассоциации'
+            using errcode = 'P0001';
     end if;
 
     -- Validate: tsp_sku_id required before publish
@@ -1344,6 +1408,15 @@ revoke execute on function public.rpc_get_aggregated_demand(uuid,date,uuid,int) 
 revoke execute on function public.rpc_get_org_batches(uuid,text) from anon;
 revoke execute on function public.rpc_create_batch(uuid,uuid,uuid,int,numeric,date,uuid,uuid,text,uuid,jsonb) from anon;
 revoke execute on function public.rpc_publish_batch(uuid,uuid,uuid,jsonb) from anon;
+-- SEC-RPC-ORGTRUST-01: эти 3 сигнатуры предназначены только для AI Gateway (P-AI-6,
+-- service_role); `revoke ... from anon` не закрывал доступ для authenticated JWT
+-- (PostgreSQL default PUBLIC execute). Body-guard выше уже блокирует чужую org,
+-- но AI-gateway-сигнатуры не имеют живого self-serve вызывающего (проверено:
+-- BatchWizard.tsx зовёт другую перегрузку rpc_create_batch без p_organization_id;
+-- легаси /cabinet-legacy/market — orphan, никуда не подключён) — второй слой защиты.
+revoke execute on function public.rpc_get_org_batches(uuid,text) from authenticated;
+revoke execute on function public.rpc_create_batch(uuid,uuid,uuid,int,numeric,date,uuid,uuid,text,uuid,jsonb) from authenticated;
+revoke execute on function public.rpc_publish_batch(uuid,uuid,uuid,jsonb) from authenticated;
 revoke execute on function public.rpc_update_conversation_language(uuid,text,uuid) from anon;
 
 -- ============================================================

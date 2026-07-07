@@ -34,6 +34,7 @@ interface RawMatch {
   deliveredAt: string | null
   farmName: string | null
   farmPhone: string | null
+  myRating: number | null   // GAP-REVIEW-MOCK-01: персистентная оценка МПК о фермере
 }
 
 // DB-статус пула → фронтовый PoolStatus (dispatched/delivered показываем как «Приёмка»).
@@ -123,6 +124,7 @@ function toSupplier(m: RawMatch): SupplierRow {
     confirmedAt: m.confirmedAt,
     dispatchedAt: m.dispatchedAt,
     deliveredAt: m.deliveredAt,
+    myRating: m.myRating ?? undefined,
   }
 }
 

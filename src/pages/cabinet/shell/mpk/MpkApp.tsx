@@ -214,6 +214,15 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     await refetchPools()
   }
 
+  // GAP-REVIEW-MOCK-01: МПК оценивает фермера по доставленному куску (rating = и overall,
+  // и ключевая размерность — форма пока с одной звёздной шкалой). Бросает при ошибке.
+  const submitMpkReview = async (batchId: string, rating: number) => {
+    const { error } = await supabase.rpc('rpc_self_submit_mpk_review', {
+      p_batch_id: batchId, p_r1: rating, p_r2: rating, p_comment: '',
+    })
+    if (error) throw new Error(error.message)
+  }
+
   // Реальный перевод статуса пула в БД. Бросает при ошибке (caller покажет тост).
   const advancePool = async (poolId: string, status: string) => {
     const { error } = await supabase.rpc('rpc_self_advance_pool_status', {
@@ -391,6 +400,7 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
                 onAdvance={advancePool}
                 onLoadMatches={loadPoolMatches}
                 onConfirmDelivery={confirmDelivery}
+                onSubmitReview={submitMpkReview}
               />
             )}
           </IonModal>

@@ -16,6 +16,9 @@
 --   never 'offering') or at accept_offer ('INVALID_STATUS: batch is published').
 -- POST-FIX EXPECTATION: raises 'TSP_TEST_PASS'.
 --
+-- @case E2E-TSP-01 TSPF-PUB-01 TSPF-LIFE-10 TSPM-OFF-02 TSPM-CLOSE-01
+--   (реестр кейсов: qa/scenarios/, сверка: qa/check_coverage.sh)
+--
 -- NOTE: requires the fixed d02_tsp.sql applied to the target DB. To test
 -- WITHOUT persisting the function change, apply the two CREATE OR REPLACE
 -- (rpc_retry_match_pool, rpc_set_batch_terms) at the top of the same tx, then

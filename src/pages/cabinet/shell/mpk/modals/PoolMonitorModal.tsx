@@ -18,6 +18,7 @@ interface Props {
   onAdvance?: (poolId: string, status: string) => Promise<void>     // реальный перевод статуса в БД
   onLoadMatches?: (poolId: string) => Promise<SupplierRow[] | null> // реальные поставщики пула
   onConfirmDelivery?: (allocationId: string) => Promise<void>       // МПК подтверждает приёмку КУСКА (BT-18, Слайс 9 S3)
+  onSubmitReview?: (batchId: string, rating: number) => Promise<void>  // GAP-REVIEW-MOCK-01: отзыв МПК о фермере
 }
 
 // Код категории партии → человекочитаемо (fn_tsp_cat_display отдаёт код bychki/telki/korovy).
@@ -151,7 +152,7 @@ function LinesList({ pool }: { pool: Pool }) {
   )
 }
 
-export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran, mpk, onAdvance, onLoadMatches, onConfirmDelivery }: Props) {
+export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran, mpk, onAdvance, onLoadMatches, onConfirmDelivery, onSubmitReview }: Props) {
   const realPool = UUID_RE.test(pool.id)
   // Реальные поставщики из БД перекрывают демо-список (контакты — только при executing, D40).
   const [liveSuppliers, setLiveSuppliers] = useState<SupplierRow[] | null>(null)
@@ -375,7 +376,20 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                     <span>{s.farmName ?? 'Хозяйство'}</span>
                     <span className="supplier-row-s">{s.heads} гол</span>
                   </div>
-                  <StarPicker value={s.myRating ?? 0} onChange={(n) => patchSupplier(s.id, { myRating: n })} />
+                  <StarPicker
+                    value={s.myRating ?? 0}
+                    onChange={(n) => {
+                      patchSupplier(s.id, { myRating: n })
+                      // GAP-REVIEW-MOCK-01: одна звёздная форма шлёт то же значение как
+                      // overall и как ключевую размерность («Соответствие скота заявленному»,
+                      // MS6 §4c) — раздельный ввод второй размерности + комментария не
+                      // добавлялся (это отдельное UX-расширение, не входит в этот фикс).
+                      if (realPool && s.batchId && onSubmitReview) {
+                        onSubmitReview(s.batchId, n).catch((e) =>
+                          toast('Не удалось отправить отзыв: ' + (e instanceof Error ? e.message : '')))
+                      }
+                    }}
+                  />
                 </div>
               ))}
             </div>
