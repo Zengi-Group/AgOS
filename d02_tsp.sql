@@ -4762,3 +4762,24 @@ alter table public.batch_allocations add  constraint batch_allocations_status_ch
 -- END SECTION 9 (СЛАЙС 8–9 SCHEMA SYNC)
 -- ============================================================
 
+-- ============================================================
+-- SECTION 10: BATCH REVIEWS — примечание, без новой схемы (GAP-REVIEW-MOCK-01)
+-- ============================================================
+-- QA-прогон 2026-07-05/06 (qa/scenarios/05-tsp-farmer.md TSPF-LIFE-16,
+-- qa/scenarios/06-tsp-mpk.md TSPM-CLOSE-05) заподозрил отсутствие RPC/таблицы
+-- отзывов (PGRST205 на тесте). При реализации выяснилось: rpc_submit_review
+-- (миграция 20260622120000, p_batch_id/p_r1/p_r2/p_comment — контракт фронта
+-- useBatches.ts) УЖЕ существует и пишет в batches.notes.review; реальный гэп —
+-- только (а) fn_tsp_batch_json не отдавал это поле обратно фронту и (б) МПК-сторона
+-- (PoolMonitorModal.tsx myRating) не вызывала вообще никакой RPC. Отдельно —
+-- полная каноническая система review_dimensions/deal_reviews/
+-- deal_review_dimension_scores/rpc_submit_deal_review (§7.13-7.15 выше) существует,
+-- но НЕ вызывается ни одним фронтовым файлом — orphan, конвергенция с ней отдельным
+-- слайсом (не в скоупе этого точечного фикса).
+--
+-- Новой таблицы НЕ заводим (не дублируем deal_reviews). Фикс — миграция
+-- 20260706120000_tsp_batch_reviews.sql: fn_tsp_batch_json += 'review' (читает
+-- уже сохранённое) + новый rpc_self_submit_mpk_review (пишет notes.mpk_review,
+-- тот же паттерн) + rpc_get_pool_matches += 'myRating'. Обе стороны — без
+-- double-blind (тот же уровень простоты, что у уже существующего rpc_submit_review).
+-- ============================================================
