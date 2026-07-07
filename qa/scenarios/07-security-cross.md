@@ -10,9 +10,10 @@
 ## SEC-GATE — гейты на бэкенде, не только в UI
 
 #### SEC-GATE-01 · UNHAPPY · Не-член вызывает RPC продажи напрямую
-`layer:rpc` `canon:MS6-Step0;K-01` `impl:d02_tsp.sql` `auto:candidate:sql` `status:blocked:SEC-GATE-MEMBERSHIP-01`
+`layer:rpc` `canon:MS6-Step0;K-01` `impl:d02_tsp.sql` `auto:candidate:sql` `status:active`
 - **Шаги:** deep-link/прямой вызов `rpc_create_batch`/publish от организации без активного членства.
 - **Ожидание:** RPC отклоняет (membership-гейт на бэкенде); обход UI невозможен.
+- **Деплой 2026-07-07:** SEC-GATE-MEMBERSHIP-01 задеплоен и верифицирован прямым запросом к БД (гейт `MEMBERSHIP_REQUIRED` подтверждён в теле self-serve `rpc_create_batch` и d07 AI-gateway пути).
 
 #### SEC-GATE-02 · UNHAPPY · Лимит партий на RPC-уровне
 `layer:rpc` `canon:MS6-4a-Step1` `impl:d02_tsp.sql` `auto:candidate:sql` `status:blocked:SEC-GATE-LIMIT-01`
@@ -31,8 +32,9 @@
 ## SEC-RLS — изоляция данных ферм
 
 #### SEC-RLS-01 · UNHAPPY · Фермер A читает/меняет партию фермера B
-`layer:rpc` `canon:CLAUDE.md-RLS;K-02` `impl:d02_tsp.sql RLS` `auto:candidate:sql` `status:blocked:SEC-RPC-ORGTRUST-01`
+`layer:rpc` `canon:CLAUDE.md-RLS;K-02` `impl:d02_tsp.sql RLS` `auto:candidate:sql` `status:active`
 - **Ожидание:** запрещено RLS (organization_id в каждом вызове); данные не возвращаются; мутации отклоняются. Прогонять на всех self-RPC: get_org_batches, withdraw, dispatch, price.
+- **Деплой 2026-07-07:** SEC-RPC-ORGTRUST-01 задеплоен — guard в теле подтверждён прямым запросом к БД (`pg_proc.prosrc` содержит `OWNERSHIP GUARD` во всех 5 функциях). Второй слой (`revoke ... from authenticated` на 3 d07-сигнатурах) оказался no-op — PUBLIC всё еще даёт execute (revoke от authenticated не перекрывает PUBLIC-грант); реальная защита — только guard в теле, он подтверждён рабочим.
 
 #### SEC-RLS-02 · UNHAPPY · МПК A видит заявки/офферы МПК B
 `layer:rpc` `canon:CLAUDE.md-RLS` `impl:d02_tsp.sql RLS` `auto:candidate:sql` `status:active`

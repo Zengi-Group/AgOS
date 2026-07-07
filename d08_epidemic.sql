@@ -443,6 +443,7 @@ comment on function public.fn_check_epidemic_thresholds_on_diagnosis() is
 
 -- Триггер 1: Региональный кластер (любые случаи, болезнь неизвестна)
 -- AFTER INSERT — кейс уже в таблице, считаем включая новый
+drop trigger if exists trg_vet_case_epidemic_check on public.vet_cases;
 create trigger trg_vet_case_epidemic_check
     after insert on public.vet_cases
     for each row
@@ -454,6 +455,7 @@ comment on function public.fn_check_epidemic_thresholds() is
      Дефолтный threshold (disease_id IS NULL).';
 
 -- Триггер 2: Болезне-специфичный сигнал (диагноз поставлен)
+drop trigger if exists trg_vet_diagnosis_epidemic_check on public.vet_diagnoses;
 create trigger trg_vet_diagnosis_epidemic_check
     after insert on public.vet_diagnoses
     for each row

@@ -4,7 +4,7 @@
 -- Consolidated: 2026-03-05 (pre-development baseline)
 --
 -- Veterinary module.
-Cases, Diagnoses, Treatments, Vaccinations, Epidemic Intelligence.
+-- Cases, Diagnoses, Treatments, Vaccinations, Epidemic Intelligence.
 --
 -- Depends on: d01_kernel.sql
 -- Consolidated from: 004_vet.sql
@@ -973,108 +973,108 @@ comment on table public.proactive_alerts is
 -- ============================================================
 
 -- vet_products
-create index idx_vp_type_status    on public.vet_products (product_type, status);
-create index idx_vp_active         on public.vet_products (status) where status = 'active';
-create index idx_vp_substance      on public.vet_products (active_substance);
+create index if not exists idx_vp_type_status    on public.vet_products (product_type, status);
+create index if not exists idx_vp_active         on public.vet_products (status) where status = 'active';
+create index if not exists idx_vp_substance      on public.vet_products (active_substance);
 
 -- diseases
-create index idx_dis_status        on public.diseases (status);
-create index idx_dis_active        on public.diseases (status) where status = 'active';
-create index idx_dis_category      on public.diseases (category);
-create index idx_dis_notifiable    on public.diseases (is_notifiable) where is_notifiable = true;
-create index idx_dis_knowledge     on public.diseases (knowledge_chunk_id) where knowledge_chunk_id is not null;
+create index if not exists idx_dis_status        on public.diseases (status);
+create index if not exists idx_dis_active        on public.diseases (status) where status = 'active';
+create index if not exists idx_dis_category      on public.diseases (category);
+create index if not exists idx_dis_notifiable    on public.diseases (is_notifiable) where is_notifiable = true;
+create index if not exists idx_dis_knowledge     on public.diseases (knowledge_chunk_id) where knowledge_chunk_id is not null;
 
 -- symptoms
-create index idx_sym_body_system   on public.symptoms (body_system);
-create index idx_sym_active        on public.symptoms (is_active) where is_active = true;
+create index if not exists idx_sym_body_system   on public.symptoms (body_system);
+create index if not exists idx_sym_active        on public.symptoms (is_active) where is_active = true;
 
 -- disease_symptoms
-create index idx_ds_disease        on public.disease_symptoms (disease_id);
-create index idx_ds_symptom        on public.disease_symptoms (symptom_id);
-create index idx_ds_pathognomonic  on public.disease_symptoms (disease_id, is_pathognomonic)
+create index if not exists idx_ds_disease        on public.disease_symptoms (disease_id);
+create index if not exists idx_ds_symptom        on public.disease_symptoms (symptom_id);
+create index if not exists idx_ds_pathognomonic  on public.disease_symptoms (disease_id, is_pathognomonic)
     where is_pathognomonic = true;
 
 -- treatments
-create index idx_trmt_disease      on public.treatments (disease_id);
-create index idx_trmt_product      on public.treatments (vet_product_id);
-create index idx_trmt_active       on public.treatments (status) where status = 'active';
+create index if not exists idx_trmt_disease      on public.treatments (disease_id);
+create index if not exists idx_trmt_product      on public.treatments (vet_product_id);
+create index if not exists idx_trmt_active       on public.treatments (status) where status = 'active';
 
 -- vaccination_protocols
-create index idx_vp_disease        on public.vaccination_protocols (disease_id);
-create index idx_vp_active_prot    on public.vaccination_protocols (status) where status = 'active';
-create index idx_vp_mandatory      on public.vaccination_protocols (is_mandatory_kz) where is_mandatory_kz = true;
+create index if not exists idx_vp_disease        on public.vaccination_protocols (disease_id);
+create index if not exists idx_vp_active_prot    on public.vaccination_protocols (status) where status = 'active';
+create index if not exists idx_vp_mandatory      on public.vaccination_protocols (is_mandatory_kz) where is_mandatory_kz = true;
 
 -- epidemic_thresholds
-create index idx_et_disease        on public.epidemic_thresholds (disease_id);
-create index idx_et_active         on public.epidemic_thresholds (is_active) where is_active = true;
+create index if not exists idx_et_disease        on public.epidemic_thresholds (disease_id);
+create index if not exists idx_et_active         on public.epidemic_thresholds (is_active) where is_active = true;
 
 -- vet_cases
-create index idx_vc_org_status     on public.vet_cases (organization_id, status);
-create index idx_vc_farm           on public.vet_cases (farm_id);
-create index idx_vc_herd_group     on public.vet_cases (herd_group_id) where herd_group_id is not null;
-create index idx_vc_severity       on public.vet_cases (severity) where severity = 'critical';
-create index idx_vc_status         on public.vet_cases (status);
-create index idx_vc_created_at     on public.vet_cases (created_at desc); -- epidemic signal aggregation
-create index idx_vc_region_disease on public.vet_cases (farm_id, created_at); -- epidemic queries
+create index if not exists idx_vc_org_status     on public.vet_cases (organization_id, status);
+create index if not exists idx_vc_farm           on public.vet_cases (farm_id);
+create index if not exists idx_vc_herd_group     on public.vet_cases (herd_group_id) where herd_group_id is not null;
+create index if not exists idx_vc_severity       on public.vet_cases (severity) where severity = 'critical';
+create index if not exists idx_vc_status         on public.vet_cases (status);
+create index if not exists idx_vc_created_at     on public.vet_cases (created_at desc); -- epidemic signal aggregation
+create index if not exists idx_vc_region_disease on public.vet_cases (farm_id, created_at); -- epidemic queries
 
 -- symptom_evidence
-create index idx_se_vet_case       on public.symptom_evidence (vet_case_id);
-create index idx_se_message        on public.symptom_evidence (ai_message_id) where ai_message_id is not null;
+create index if not exists idx_se_vet_case       on public.symptom_evidence (vet_case_id);
+create index if not exists idx_se_message        on public.symptom_evidence (ai_message_id) where ai_message_id is not null;
 
 -- vet_diagnoses
-create index idx_vd_case           on public.vet_diagnoses (vet_case_id);
-create index idx_vd_disease        on public.vet_diagnoses (disease_id) where disease_id is not null;
-create index idx_vd_final          on public.vet_diagnoses (vet_case_id, is_final) where is_final = true;
+create index if not exists idx_vd_case           on public.vet_diagnoses (vet_case_id);
+create index if not exists idx_vd_disease        on public.vet_diagnoses (disease_id) where disease_id is not null;
+create index if not exists idx_vd_final          on public.vet_diagnoses (vet_case_id, is_final) where is_final = true;
 
 -- vet_recommendations
-create index idx_vr_case           on public.vet_recommendations (vet_case_id);
-create index idx_vr_treatment      on public.vet_recommendations (treatment_id) where treatment_id is not null;
-create index idx_vr_pending        on public.vet_recommendations (vet_case_id, is_completed)
+create index if not exists idx_vr_case           on public.vet_recommendations (vet_case_id);
+create index if not exists idx_vr_treatment      on public.vet_recommendations (treatment_id) where treatment_id is not null;
+create index if not exists idx_vr_pending        on public.vet_recommendations (vet_case_id, is_completed)
     where is_completed = false;
 
 -- treatment_logs
-create index idx_tl_case           on public.treatment_logs (vet_case_id);
-create index idx_tl_org            on public.treatment_logs (organization_id);
-create index idx_tl_product        on public.treatment_logs (vet_product_id);
+create index if not exists idx_tl_case           on public.treatment_logs (vet_case_id);
+create index if not exists idx_tl_org            on public.treatment_logs (organization_id);
+create index if not exists idx_tl_product        on public.treatment_logs (vet_product_id);
 
 -- health_restrictions
-create index idx_hr_herd_active    on public.health_restrictions (herd_group_id, is_active);
+create index if not exists idx_hr_herd_active    on public.health_restrictions (herd_group_id, is_active);
 -- Главный индекс для TSP RPC: WHERE herd_group_id = $1 AND is_active = true
-create index idx_hr_org            on public.health_restrictions (organization_id);
-create index idx_hr_ends_at        on public.health_restrictions (ends_at);
+create index if not exists idx_hr_org            on public.health_restrictions (organization_id);
+create index if not exists idx_hr_ends_at        on public.health_restrictions (ends_at);
 
 -- vaccination_plans
-create index idx_vplan_org         on public.vaccination_plans (organization_id, status);
-create index idx_vplan_farm        on public.vaccination_plans (farm_id);
-create index idx_vplan_review      on public.vaccination_plans (status, is_ready_for_review)
+create index if not exists idx_vplan_org         on public.vaccination_plans (organization_id, status);
+create index if not exists idx_vplan_farm        on public.vaccination_plans (farm_id);
+create index if not exists idx_vplan_review      on public.vaccination_plans (status, is_ready_for_review)
     where status = 'pending_review' and is_ready_for_review = true; -- Expert Console queue
 
 -- vaccination_plan_items
-create index idx_vpi_plan          on public.vaccination_plan_items (vaccination_plan_id);
-create index idx_vpi_org           on public.vaccination_plan_items (organization_id);
-create index idx_vpi_herd          on public.vaccination_plan_items (herd_group_id);
-create index idx_vpi_scheduled     on public.vaccination_plan_items (scheduled_date, status)
+create index if not exists idx_vpi_plan          on public.vaccination_plan_items (vaccination_plan_id);
+create index if not exists idx_vpi_org           on public.vaccination_plan_items (organization_id);
+create index if not exists idx_vpi_herd          on public.vaccination_plan_items (herd_group_id);
+create index if not exists idx_vpi_scheduled     on public.vaccination_plan_items (scheduled_date, status)
     where status in ('scheduled', 'reminded'); -- cron reminder queries
-create index idx_vpi_overdue       on public.vaccination_plan_items (status)
+create index if not exists idx_vpi_overdue       on public.vaccination_plan_items (status)
     where status = 'overdue';
 
 -- vaccination_records
-create index idx_vrec_org          on public.vaccination_records (organization_id);
-create index idx_vrec_herd         on public.vaccination_records (herd_group_id);
-create index idx_vrec_item         on public.vaccination_records (vaccination_plan_item_id)
+create index if not exists idx_vrec_org          on public.vaccination_records (organization_id);
+create index if not exists idx_vrec_herd         on public.vaccination_records (herd_group_id);
+create index if not exists idx_vrec_item         on public.vaccination_records (vaccination_plan_item_id)
     where vaccination_plan_item_id is not null;
 
 -- epidemic_signals
-create index idx_es_region_status  on public.epidemic_signals (region_id, status);
-create index idx_es_disease        on public.epidemic_signals (disease_id) where disease_id is not null;
-create index idx_es_active         on public.epidemic_signals (status)
+create index if not exists idx_es_region_status  on public.epidemic_signals (region_id, status);
+create index if not exists idx_es_disease        on public.epidemic_signals (disease_id) where disease_id is not null;
+create index if not exists idx_es_active         on public.epidemic_signals (status)
     where status in ('detected', 'confirmed');
 
 -- proactive_alerts
-create index idx_pa_status         on public.proactive_alerts (status);
-create index idx_pa_pending        on public.proactive_alerts (status, requires_expert_approval)
+create index if not exists idx_pa_status         on public.proactive_alerts (status);
+create index if not exists idx_pa_pending        on public.proactive_alerts (status, requires_expert_approval)
     where status = 'draft' and requires_expert_approval = true; -- Expert Console approval queue
-create index idx_pa_region         on public.proactive_alerts (target_region_id)
+create index if not exists idx_pa_region         on public.proactive_alerts (target_region_id)
     where target_region_id is not null;
 
 -- ============================================================
@@ -1104,47 +1104,64 @@ alter table public.proactive_alerts         enable row level security;
 
 -- Reference tables: read = all authenticated; write = expert + admin
 -- D93: все могут читать active записи; эксперт видит draft/validated тоже
+drop policy if exists "vp_read_active" on public.vet_products;
 create policy "vp_read_active"         on public.vet_products          for select
     using (status = 'active' or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "vp_expert_write" on public.vet_products;
 create policy "vp_expert_write"        on public.vet_products          for all
     using (public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "dis_read_active" on public.diseases;
 create policy "dis_read_active"        on public.diseases              for select
     using (status = 'active' or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "dis_expert_write" on public.diseases;
 create policy "dis_expert_write"       on public.diseases              for all
     using (public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "sym_read_auth" on public.symptoms;
 create policy "sym_read_auth"          on public.symptoms              for select
     using (auth.uid() is not null);
+drop policy if exists "sym_expert_write" on public.symptoms;
 create policy "sym_expert_write"       on public.symptoms              for all
     using (public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "ds_read_auth" on public.disease_symptoms;
 create policy "ds_read_auth"           on public.disease_symptoms      for select
     using (auth.uid() is not null);
+drop policy if exists "ds_expert_write" on public.disease_symptoms;
 create policy "ds_expert_write"        on public.disease_symptoms      for all
     using (public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "trmt_read_active" on public.treatments;
 create policy "trmt_read_active"       on public.treatments            for select
     using (status = 'active' or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "trmt_expert_write" on public.treatments;
 create policy "trmt_expert_write"      on public.treatments            for all
     using (public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "vproto_read_active" on public.vaccination_protocols;
 create policy "vproto_read_active"     on public.vaccination_protocols for select
     using (status = 'active' or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "vproto_expert_write" on public.vaccination_protocols;
 create policy "vproto_expert_write"    on public.vaccination_protocols for all
     using (public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "et_read_auth" on public.epidemic_thresholds;
 create policy "et_read_auth"           on public.epidemic_thresholds   for select
     using (auth.uid() is not null);
+drop policy if exists "et_expert_write" on public.epidemic_thresholds;
 create policy "et_expert_write"        on public.epidemic_thresholds   for all
     using (public.fn_is_expert() or public.fn_is_admin());
 
 -- Operational: фермер видит только своё
+drop policy if exists "vc_read_own" on public.vet_cases;
 create policy "vc_read_own"            on public.vet_cases             for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "vc_write_own" on public.vet_cases;
 create policy "vc_write_own"           on public.vet_cases             for all
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "se_read_own" on public.symptom_evidence;
 create policy "se_read_own"            on public.symptom_evidence      for select
     using (
         vet_case_id in (
@@ -1152,9 +1169,11 @@ create policy "se_read_own"            on public.symptom_evidence      for selec
             where organization_id = any(public.fn_my_org_ids())
         ) or public.fn_is_expert() or public.fn_is_admin()
     );
+drop policy if exists "se_insert_own" on public.symptom_evidence;
 create policy "se_insert_own"          on public.symptom_evidence      for insert
     with check (public.fn_is_admin()); -- service_role через AI Gateway
 
+drop policy if exists "vd_read_own" on public.vet_diagnoses;
 create policy "vd_read_own"            on public.vet_diagnoses         for select
     using (
         vet_case_id in (
@@ -1162,6 +1181,7 @@ create policy "vd_read_own"            on public.vet_diagnoses         for selec
             where organization_id = any(public.fn_my_org_ids())
         ) or public.fn_is_expert() or public.fn_is_admin()
     );
+drop policy if exists "vd_write_own" on public.vet_diagnoses;
 create policy "vd_write_own"           on public.vet_diagnoses         for all
     using (
         vet_case_id in (
@@ -1170,6 +1190,7 @@ create policy "vd_write_own"           on public.vet_diagnoses         for all
         ) or public.fn_is_expert() or public.fn_is_admin()
     );
 
+drop policy if exists "vr_read_own" on public.vet_recommendations;
 create policy "vr_read_own"            on public.vet_recommendations   for select
     using (
         vet_case_id in (
@@ -1177,6 +1198,7 @@ create policy "vr_read_own"            on public.vet_recommendations   for selec
             where organization_id = any(public.fn_my_org_ids())
         ) or public.fn_is_expert() or public.fn_is_admin()
     );
+drop policy if exists "vr_write_own" on public.vet_recommendations;
 create policy "vr_write_own"           on public.vet_recommendations   for all
     using (
         vet_case_id in (
@@ -1185,38 +1207,51 @@ create policy "vr_write_own"           on public.vet_recommendations   for all
         ) or public.fn_is_expert() or public.fn_is_admin()
     );
 
+drop policy if exists "tl_read_own" on public.treatment_logs;
 create policy "tl_read_own"            on public.treatment_logs        for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "tl_insert_own" on public.treatment_logs;
 create policy "tl_insert_own"          on public.treatment_logs        for insert
     with check (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 
+drop policy if exists "hr_read_own" on public.health_restrictions;
 create policy "hr_read_own"            on public.health_restrictions   for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "hr_insert_system" on public.health_restrictions;
 create policy "hr_insert_system"       on public.health_restrictions   for insert
     with check (public.fn_is_admin()); -- только через RPC (service_role)
 
+drop policy if exists "vplan_read_own" on public.vaccination_plans;
 create policy "vplan_read_own"         on public.vaccination_plans     for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "vplan_write_own" on public.vaccination_plans;
 create policy "vplan_write_own"        on public.vaccination_plans     for all
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "vpi_read_own" on public.vaccination_plan_items;
 create policy "vpi_read_own"           on public.vaccination_plan_items for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "vpi_write_own" on public.vaccination_plan_items;
 create policy "vpi_write_own"          on public.vaccination_plan_items for all
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "vrec_read_own" on public.vaccination_records;
 create policy "vrec_read_own"          on public.vaccination_records   for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "vrec_insert_own" on public.vaccination_records;
 create policy "vrec_insert_own"        on public.vaccination_records   for insert
     with check (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 
 -- Epidemic signals: admin + expert view; no farmer access (aggregate data)
+drop policy if exists "es_read_expert" on public.epidemic_signals;
 create policy "es_read_expert"         on public.epidemic_signals      for select
     using (public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "es_write_system" on public.epidemic_signals;
 create policy "es_write_system"        on public.epidemic_signals      for all
     using (public.fn_is_admin()); -- только через RPC
 
 -- Proactive alerts: expert/admin manage; farmer reads sent only
+drop policy if exists "pa_read_sent" on public.proactive_alerts;
 create policy "pa_read_sent"           on public.proactive_alerts      for select
     using (
         (status = 'sent' and (
@@ -1226,6 +1261,7 @@ create policy "pa_read_sent"           on public.proactive_alerts      for selec
         or public.fn_is_expert()
         or public.fn_is_admin()
     );
+drop policy if exists "pa_write_expert" on public.proactive_alerts;
 create policy "pa_write_expert"        on public.proactive_alerts      for all
     using (public.fn_is_expert() or public.fn_is_admin());
 
@@ -1234,16 +1270,27 @@ create policy "pa_write_expert"        on public.proactive_alerts      for all
 -- ============================================================
 
 -- updated_at для mutable таблиц
+drop trigger if exists trg_vet_products_upd on public.vet_products;
 create trigger trg_vet_products_upd         before update on public.vet_products             for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_diseases_upd on public.diseases;
 create trigger trg_diseases_upd             before update on public.diseases                 for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_treatments_upd on public.treatments;
 create trigger trg_treatments_upd           before update on public.treatments               for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_vacc_protocols_upd on public.vaccination_protocols;
 create trigger trg_vacc_protocols_upd       before update on public.vaccination_protocols    for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_epidemic_thresh_upd on public.epidemic_thresholds;
 create trigger trg_epidemic_thresh_upd      before update on public.epidemic_thresholds      for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_vet_cases_upd on public.vet_cases;
 create trigger trg_vet_cases_upd            before update on public.vet_cases                for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_vet_recs_upd on public.vet_recommendations;
 create trigger trg_vet_recs_upd             before update on public.vet_recommendations      for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_epidemic_signals_upd on public.epidemic_signals;
 create trigger trg_epidemic_signals_upd     before update on public.epidemic_signals         for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_proactive_alerts_upd on public.proactive_alerts;
 create trigger trg_proactive_alerts_upd     before update on public.proactive_alerts         for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_vacc_plans_upd on public.vaccination_plans;
 create trigger trg_vacc_plans_upd           before update on public.vaccination_plans        for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_vacc_plan_items_upd on public.vaccination_plan_items;
 create trigger trg_vacc_plan_items_upd      before update on public.vaccination_plan_items   for each row execute function public.fn_set_updated_at();
 
 -- -------------------------------------------------------
@@ -1283,6 +1330,7 @@ comment on function public.fn_vet_case_auto_escalate() is
      Публикует vet.case.escalated (event #13).
      ConsultationRequest создаётся отдельным RPC в Dok 3 (не здесь — нужна бизнес-логика).';
 
+drop trigger if exists trg_vet_case_auto_escalate on public.vet_cases;
 create trigger trg_vet_case_auto_escalate
     before insert or update on public.vet_cases
     for each row execute function public.fn_vet_case_auto_escalate();
@@ -1358,6 +1406,7 @@ comment on function public.fn_disease_create_knowledge_chunk() is
      Этот триггер создаёт текстовый контент. Edge Function потом добавляет embedding.
      Один источник правды → два слоя: structured tables + RAG.';
 
+drop trigger if exists trg_disease_create_knowledge_chunk on public.diseases;
 create trigger trg_disease_create_knowledge_chunk
     before insert or update on public.diseases
     for each row execute function public.fn_disease_create_knowledge_chunk();
@@ -1421,6 +1470,7 @@ comment on function public.fn_create_health_restriction_from_rec() is
      TSP RPC create_batch проверит этот record до создания партии на продажу.
      ends_at = now() + withdrawal_period_days. is_active = GENERATED (expires automatically).';
 
+drop trigger if exists trg_health_restriction_from_rec on public.vet_recommendations;
 create trigger trg_health_restriction_from_rec
     after insert on public.vet_recommendations
     for each row execute function public.fn_create_health_restriction_from_rec();
@@ -1445,6 +1495,7 @@ comment on function public.fn_vaccination_record_complete_plan_item() is
      Также: если vaccination_protocol.withdrawal_period_days > 0, Edge Function
      создаёт health_restriction отдельным вызовом (сложная логика → Dok 3 RPC).';
 
+drop trigger if exists trg_vacc_record_complete_item on public.vaccination_records;
 create trigger trg_vacc_record_complete_item
     after insert on public.vaccination_records
     for each row execute function public.fn_vaccination_record_complete_plan_item();
@@ -1469,6 +1520,7 @@ comment on function public.fn_check_vaccination_plan_readiness() is
      Expert Console начинает показывать план ветеринару для проверки.
      Триггер на herd_groups INSERT.';
 
+drop trigger if exists trg_vacc_plan_readiness_on_herd on public.herd_groups;
 create trigger trg_vacc_plan_readiness_on_herd
     after insert on public.herd_groups
     for each row execute function public.fn_check_vaccination_plan_readiness();
@@ -1487,6 +1539,7 @@ begin
 end;
 $$;
 
+drop trigger if exists trg_vet_case_progress on public.vet_diagnoses;
 create trigger trg_vet_case_progress
     after insert on public.vet_diagnoses
     for each row execute function public.fn_vet_case_progress_on_diagnosis();
@@ -1505,6 +1558,7 @@ create trigger trg_vet_case_progress
 --       auto-transitions to 'in_progress' (existing trigger on vet_diagnoses INSERT).
 -- Event: vet.case.diagnosed
 -- -------------------------------------------------------
+drop function if exists public.rpc_add_vet_diagnosis(p_organization_id uuid, p_vet_case_id uuid, p_disease_id uuid, p_diagnosis_text text, p_confidence_pct integer, p_source text, p_is_final boolean, p_diagnosed_by uuid);
 create or replace function public.rpc_add_vet_diagnosis(
     p_organization_id   uuid,
     p_vet_case_id       uuid,
@@ -1614,6 +1668,7 @@ comment on function public.rpc_add_vet_diagnosis(uuid, uuid, uuid, text, int, te
 -- P-AI-4: dosage_note accepted as-is (compliance validation in AI layer).
 -- Event: vet.recommendation.added
 -- -------------------------------------------------------
+drop function if exists public.rpc_add_vet_recommendation(p_organization_id uuid, p_vet_case_id uuid, p_recommendation_type text, p_treatment_id uuid, p_vet_product_id uuid, p_dosage_note text, p_application_method text, p_duration_days integer, p_priority integer, p_notes text, p_source text, p_created_by uuid);
 create or replace function public.rpc_add_vet_recommendation(
     p_organization_id       uuid,
     p_vet_case_id           uuid,
@@ -2241,6 +2296,7 @@ on conflict (code) do nothing;
 -- FSM: in_progress|escalated → resolved. If death → rpc_log_herd_event.
 -- Events: vet.case.closed (Dok 4)
 -- ============================================================
+drop function if exists public.rpc_close_vet_case(p_organization_id uuid, p_vet_case_id uuid, p_outcome text, p_resolution_notes text, p_actor_id uuid);
 create or replace function public.rpc_close_vet_case(
     p_organization_id   uuid,
     p_vet_case_id       uuid,
@@ -2328,6 +2384,7 @@ comment on function public.rpc_close_vet_case(uuid, uuid, text, text, uuid) is
 -- D60: Protocol→Plan→Items. Status=pending_review (D97).
 -- Events: vet.vaccination.plan_created
 -- ============================================================
+drop function if exists public.rpc_create_vaccination_plan(p_organization_id uuid, p_farm_id uuid, p_vaccination_protocol_id uuid, p_plan_year integer, p_herd_group_id uuid, p_name text);
 create or replace function public.rpc_create_vaccination_plan(
     p_organization_id           uuid,
     p_farm_id                   uuid,
@@ -2425,6 +2482,7 @@ comment on function public.rpc_create_vaccination_plan(uuid, uuid, uuid, int, uu
 -- D101: Append-only. Triggers plan_item completion + health_restriction.
 -- Events: vet.vaccination.completed
 -- ============================================================
+drop function if exists public.rpc_record_vaccination(p_organization_id uuid, p_vaccination_plan_item_id uuid, p_vet_product_id uuid, p_actual_heads_vaccinated integer, p_vaccine_batch_number text, p_administered_by uuid, p_notes text);
 create or replace function public.rpc_record_vaccination(
     p_organization_id               uuid,
     p_vaccination_plan_item_id      uuid,
@@ -2529,6 +2587,7 @@ comment on function public.rpc_record_vaccination(uuid, uuid, uuid, int, text, u
 -- D59: Creates epidemic signal in detected status.
 -- Events: vet.signal.detected
 -- ============================================================
+drop function if exists public.rpc_report_epidemic_signal(p_organization_id uuid, p_region_id uuid, p_disease_id uuid, p_case_count integer, p_time_window_days integer, p_severity text, p_notes text);
 create or replace function public.rpc_report_epidemic_signal(
     p_organization_id   uuid,
     p_region_id         uuid,
