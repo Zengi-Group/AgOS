@@ -43,8 +43,9 @@
 - **Ожидание:** ответ `PENDING_EXISTS` трактуется как успех (документы обновлены) — без ошибки пользователю.
 
 #### MEM-SUB-05 · UNHAPPY · Заявка при активном членстве
-`layer:rpc` `canon:code` `impl:d01_kernel.sql:3502` `auto:candidate:sql` `status:blocked:MEMBERSHIP-07`
-- **Ожидание:** ошибка `ALREADY_ACTIVE` → toast «Членство уже активно» для ЛЮБОГО активного уровня, включая observer (на пилоте observer = активное членство). Дефект MEMBERSHIP-07: проверка ловит только declared_supplier+.
+`layer:rpc` `canon:code` `impl:d01_kernel.sql:3502` `auto:candidate:sql` `status:active`
+- **Ожидание:** ошибка `ALREADY_ACTIVE` → toast «Членство уже активно» для ЛЮБОГО активного уровня, включая observer (на пилоте observer = активное членство).
+- **Деплой 2026-07-07:** MEMBERSHIP-07 задеплоен — гейт сужен до `v_current_level <> 'registered'`, подтверждено прямым запросом к БД.
 
 #### MEM-SUB-06 · EDGE · До одобрения записи членства нет (канон)
 `layer:sql` `canon:MS2-T1` `impl:d01_kernel.sql` `auto:candidate:sql` `status:blocked:MEMBERSHIP-01`

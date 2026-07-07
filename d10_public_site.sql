@@ -57,19 +57,23 @@ create table if not exists public.registration_applications (
 alter table public.registration_applications enable row level security;
 
 -- anyone can submit (public form, no auth required)
+drop policy if exists "registration_applications_insert_anon" on public.registration_applications;
 create policy "registration_applications_insert_anon"
   on public.registration_applications for insert
   with check (true);
 
 -- admins can read and manage
+drop policy if exists "registration_applications_select_admin" on public.registration_applications;
 create policy "registration_applications_select_admin"
   on public.registration_applications for select
   using (public.fn_is_admin());
 
+drop policy if exists "registration_applications_update_admin" on public.registration_applications;
 create policy "registration_applications_update_admin"
   on public.registration_applications for update
   using (public.fn_is_admin());
 
+drop policy if exists "registration_applications_delete_admin" on public.registration_applications;
 create policy "registration_applications_delete_admin"
   on public.registration_applications for delete
   using (public.fn_is_admin());
@@ -82,10 +86,12 @@ create table if not exists public.app_counters (
 
 alter table public.app_counters enable row level security;
 
+drop policy if exists "app_counters_select_anon" on public.app_counters;
 create policy "app_counters_select_anon"
   on public.app_counters for select
   using (true);
 
+drop policy if exists "app_counters_update_admin" on public.app_counters;
 create policy "app_counters_update_admin"
   on public.app_counters for update
   using (public.fn_is_admin());
@@ -153,26 +159,31 @@ create trigger set_news_articles_updated_at
 
 alter table public.news_articles enable row level security;
 
+drop policy if exists "news_articles_select_published" on public.news_articles;
 create policy "news_articles_select_published"
   on public.news_articles for select
   using (is_published = true);
 
+drop policy if exists "news_articles_select_admin" on public.news_articles;
 create policy "news_articles_select_admin"
   on public.news_articles for select
   to authenticated
   using (public.fn_is_admin() or public.fn_is_expert());
 
+drop policy if exists "news_articles_insert_admin" on public.news_articles;
 create policy "news_articles_insert_admin"
   on public.news_articles for insert
   to authenticated
   with check (public.fn_is_admin() or public.fn_is_expert());
 
+drop policy if exists "news_articles_update_admin" on public.news_articles;
 create policy "news_articles_update_admin"
   on public.news_articles for update
   to authenticated
   using (public.fn_is_admin() or public.fn_is_expert())
   with check (public.fn_is_admin() or public.fn_is_expert());
 
+drop policy if exists "news_articles_delete_admin" on public.news_articles;
 create policy "news_articles_delete_admin"
   on public.news_articles for delete
   to authenticated
@@ -387,42 +398,51 @@ alter table public.startup_team_members enable row level security;
 alter table public.startup_use_of_funds enable row level security;
 
 -- public: read published only
+drop policy if exists "startups_select_published" on public.startups;
 create policy "startups_select_published"
   on public.startups for select
   using (is_published = true);
 
+drop policy if exists "startup_team_members_select_published" on public.startup_team_members;
 create policy "startup_team_members_select_published"
   on public.startup_team_members for select
   using (exists (select 1 from public.startups s where s.id = startup_id and s.is_published = true));
 
+drop policy if exists "startup_use_of_funds_select_published" on public.startup_use_of_funds;
 create policy "startup_use_of_funds_select_published"
   on public.startup_use_of_funds for select
   using (exists (select 1 from public.startups s where s.id = startup_id and s.is_published = true));
 
 -- public submission (creates unpublished row)
+drop policy if exists "startups_insert_anon" on public.startups;
 create policy "startups_insert_anon"
   on public.startups for insert
   with check (is_published = false);
 
+drop policy if exists "startup_team_members_insert_anon" on public.startup_team_members;
 create policy "startup_team_members_insert_anon"
   on public.startup_team_members for insert
   with check (true);
 
+drop policy if exists "startup_use_of_funds_insert_anon" on public.startup_use_of_funds;
 create policy "startup_use_of_funds_insert_anon"
   on public.startup_use_of_funds for insert
   with check (true);
 
 -- admin: full access
+drop policy if exists "startups_all_admin" on public.startups;
 create policy "startups_all_admin"
   on public.startups for all
   using (public.fn_is_admin() or public.fn_is_expert())
   with check (public.fn_is_admin() or public.fn_is_expert());
 
+drop policy if exists "startup_team_members_all_admin" on public.startup_team_members;
 create policy "startup_team_members_all_admin"
   on public.startup_team_members for all
   using (public.fn_is_admin() or public.fn_is_expert())
   with check (public.fn_is_admin() or public.fn_is_expert());
 
+drop policy if exists "startup_use_of_funds_all_admin" on public.startup_use_of_funds;
 create policy "startup_use_of_funds_all_admin"
   on public.startup_use_of_funds for all
   using (public.fn_is_admin() or public.fn_is_expert())
@@ -477,14 +497,17 @@ create table if not exists public.finance_programs (
 
 alter table public.finance_programs enable row level security;
 
+drop policy if exists "finance_programs_select_active" on public.finance_programs;
 create policy "finance_programs_select_active"
   on public.finance_programs for select
   using (is_active = true);
 
+drop policy if exists "finance_programs_select_admin" on public.finance_programs;
 create policy "finance_programs_select_admin"
   on public.finance_programs for select
   using (public.fn_is_admin() or public.fn_is_expert());
 
+drop policy if exists "finance_programs_write_admin" on public.finance_programs;
 create policy "finance_programs_write_admin"
   on public.finance_programs for all
   using (public.fn_is_admin())
@@ -500,10 +523,12 @@ create table if not exists public.finance_program_deps (
 
 alter table public.finance_program_deps enable row level security;
 
+drop policy if exists "finance_program_deps_select_all" on public.finance_program_deps;
 create policy "finance_program_deps_select_all"
   on public.finance_program_deps for select
   using (true);
 
+drop policy if exists "finance_program_deps_write_admin" on public.finance_program_deps;
 create policy "finance_program_deps_write_admin"
   on public.finance_program_deps for all
   using (public.fn_is_admin())
@@ -537,12 +562,14 @@ create trigger set_finance_projects_updated_at
 
 alter table public.finance_projects enable row level security;
 
+drop policy if exists "finance_projects_own" on public.finance_projects;
 create policy "finance_projects_own"
   on public.finance_projects for all
   to authenticated
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
+drop policy if exists "finance_projects_select_admin" on public.finance_projects;
 create policy "finance_projects_select_admin"
   on public.finance_projects for select
   using (public.fn_is_admin() or public.fn_is_expert());
@@ -566,12 +593,14 @@ create trigger set_finance_project_stages_updated_at
 
 alter table public.finance_project_stages enable row level security;
 
+drop policy if exists "finance_project_stages_own" on public.finance_project_stages;
 create policy "finance_project_stages_own"
   on public.finance_project_stages for all
   to authenticated
   using (exists (select 1 from public.finance_projects fp where fp.id = project_id and fp.user_id = auth.uid()))
   with check (exists (select 1 from public.finance_projects fp where fp.id = project_id and fp.user_id = auth.uid()));
 
+drop policy if exists "finance_project_stages_select_admin" on public.finance_project_stages;
 create policy "finance_project_stages_select_admin"
   on public.finance_project_stages for select
   using (public.fn_is_admin() or public.fn_is_expert());
@@ -591,10 +620,12 @@ create table if not exists public.finance_wizard_rules (
 
 alter table public.finance_wizard_rules enable row level security;
 
+drop policy if exists "finance_wizard_rules_select_all" on public.finance_wizard_rules;
 create policy "finance_wizard_rules_select_all"
   on public.finance_wizard_rules for select
   using (true);
 
+drop policy if exists "finance_wizard_rules_write_admin" on public.finance_wizard_rules;
 create policy "finance_wizard_rules_write_admin"
   on public.finance_wizard_rules for all
   using (public.fn_is_admin())
@@ -641,14 +672,17 @@ create index if not exists idx_subsidy_programs_active
 
 alter table public.subsidy_programs enable row level security;
 
+drop policy if exists "subsidy_programs_select_active" on public.subsidy_programs;
 create policy "subsidy_programs_select_active"
   on public.subsidy_programs for select
   using (is_active = true);
 
+drop policy if exists "subsidy_programs_select_admin" on public.subsidy_programs;
 create policy "subsidy_programs_select_admin"
   on public.subsidy_programs for select
   using (public.fn_is_admin() or public.fn_is_expert());
 
+drop policy if exists "subsidy_programs_write_admin" on public.subsidy_programs;
 create policy "subsidy_programs_write_admin"
   on public.subsidy_programs for all
   using (public.fn_is_admin())
@@ -674,14 +708,17 @@ create index if not exists idx_subsidy_rates_subsidy
 
 alter table public.subsidy_rates enable row level security;
 
+drop policy if exists "subsidy_rates_select_all" on public.subsidy_rates;
 create policy "subsidy_rates_select_all"
   on public.subsidy_rates for select
   using (exists (select 1 from public.subsidy_programs sp where sp.id = subsidy_id and sp.is_active = true));
 
+drop policy if exists "subsidy_rates_select_admin" on public.subsidy_rates;
 create policy "subsidy_rates_select_admin"
   on public.subsidy_rates for select
   using (public.fn_is_admin() or public.fn_is_expert());
 
+drop policy if exists "subsidy_rates_write_admin" on public.subsidy_rates;
 create policy "subsidy_rates_write_admin"
   on public.subsidy_rates for all
   using (public.fn_is_admin())
@@ -705,10 +742,12 @@ create index if not exists idx_investment_passports_subsidy
 
 alter table public.subsidy_investment_passports enable row level security;
 
+drop policy if exists "subsidy_investment_passports_select_all" on public.subsidy_investment_passports;
 create policy "subsidy_investment_passports_select_all"
   on public.subsidy_investment_passports for select
   using (true);
 
+drop policy if exists "subsidy_investment_passports_write_admin" on public.subsidy_investment_passports;
 create policy "subsidy_investment_passports_write_admin"
   on public.subsidy_investment_passports for all
   using (public.fn_is_admin())
@@ -735,10 +774,12 @@ create index if not exists idx_investment_items_passport
 
 alter table public.subsidy_investment_items enable row level security;
 
+drop policy if exists "subsidy_investment_items_select_all" on public.subsidy_investment_items;
 create policy "subsidy_investment_items_select_all"
   on public.subsidy_investment_items for select
   using (true);
 
+drop policy if exists "subsidy_investment_items_write_admin" on public.subsidy_investment_items;
 create policy "subsidy_investment_items_write_admin"
   on public.subsidy_investment_items for all
   using (public.fn_is_admin())
@@ -768,12 +809,14 @@ create trigger set_subsidy_project_matches_updated_at
 
 alter table public.subsidy_project_matches enable row level security;
 
+drop policy if exists "subsidy_project_matches_own" on public.subsidy_project_matches;
 create policy "subsidy_project_matches_own"
   on public.subsidy_project_matches for all
   to authenticated
   using (exists (select 1 from public.finance_projects fp where fp.id = project_id and fp.user_id = auth.uid()))
   with check (exists (select 1 from public.finance_projects fp where fp.id = project_id and fp.user_id = auth.uid()));
 
+drop policy if exists "subsidy_project_matches_select_admin" on public.subsidy_project_matches;
 create policy "subsidy_project_matches_select_admin"
   on public.subsidy_project_matches for select
   using (public.fn_is_admin() or public.fn_is_expert());
@@ -794,10 +837,12 @@ create table if not exists public.subsidy_glossary (
 
 alter table public.subsidy_glossary enable row level security;
 
+drop policy if exists "subsidy_glossary_select_all" on public.subsidy_glossary;
 create policy "subsidy_glossary_select_all"
   on public.subsidy_glossary for select
   using (true);
 
+drop policy if exists "subsidy_glossary_write_admin" on public.subsidy_glossary;
 create policy "subsidy_glossary_write_admin"
   on public.subsidy_glossary for all
   using (public.fn_is_admin())
@@ -817,10 +862,12 @@ create table if not exists public.subsidy_cross_conditions (
 
 alter table public.subsidy_cross_conditions enable row level security;
 
+drop policy if exists "subsidy_cross_conditions_select_all" on public.subsidy_cross_conditions;
 create policy "subsidy_cross_conditions_select_all"
   on public.subsidy_cross_conditions for select
   using (true);
 
+drop policy if exists "subsidy_cross_conditions_write_admin" on public.subsidy_cross_conditions;
 create policy "subsidy_cross_conditions_write_admin"
   on public.subsidy_cross_conditions for all
   using (public.fn_is_admin())
@@ -838,25 +885,30 @@ values
 on conflict (id) do nothing;
 
 -- news-covers: public read, authenticated write
+drop policy if exists "news_covers_select" on storage.objects;
 create policy "news_covers_select"
   on storage.objects for select
   using (bucket_id = 'news-covers');
 
+drop policy if exists "news_covers_insert" on storage.objects;
 create policy "news_covers_insert"
   on storage.objects for insert
   to authenticated
   with check (bucket_id = 'news-covers');
 
+drop policy if exists "news_covers_delete" on storage.objects;
 create policy "news_covers_delete"
   on storage.objects for delete
   to authenticated
   using (bucket_id = 'news-covers' and (public.fn_is_admin() or public.fn_is_expert()));
 
 -- startup-decks: public upload (submission flow), admin read
+drop policy if exists "startup_decks_insert" on storage.objects;
 create policy "startup_decks_insert"
   on storage.objects for insert
   with check (bucket_id = 'startup-decks');
 
+drop policy if exists "startup_decks_select_admin" on storage.objects;
 create policy "startup_decks_select_admin"
   on storage.objects for select
   to authenticated
@@ -892,6 +944,7 @@ create policy "membership_documents_insert_org"
     and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
   );
 
+drop policy if exists "membership_documents_select_org" on storage.objects;
 create policy "membership_documents_select_org"
   on storage.objects for select
   to authenticated
@@ -901,6 +954,7 @@ create policy "membership_documents_select_org"
   );
 
 -- upsert (used by cabinet + admin doc uploaders) does an UPDATE on replace — needs its own policy
+drop policy if exists "membership_documents_update_org" on storage.objects;
 create policy "membership_documents_update_org"
   on storage.objects for update
   to authenticated
@@ -913,6 +967,7 @@ create policy "membership_documents_update_org"
     and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
   );
 
+drop policy if exists "membership_documents_delete_admin" on storage.objects;
 create policy "membership_documents_delete_admin"
   on storage.objects for delete
   to authenticated

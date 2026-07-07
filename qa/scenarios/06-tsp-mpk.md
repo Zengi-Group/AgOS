@@ -101,8 +101,8 @@
 - **Ожидание:** приёмка подтверждается по каждому батчу независимо → delivered; после приёмки всех батчей пул → completed; открывается окно отзыва МПК о фермере.
 
 #### TSPM-CLOSE-05 · HAPPY · Отзыв МПК о фермере (D-M6-11)
-`layer:ui+rpc` `canon:MS6-§4c` `impl:review RPC` `auto:candidate:sql` `status:blocked:GAP-REVIEW-MOCK-01`
-- **Ожидание:** overall 1–5 + ключевая размерность «Соответствие скота заявленному» + текст опц.; double-blind (visible_at); неизменяем после подачи.
+`layer:ui+rpc` `canon:MS6-§4c` `impl:rpc_self_submit_mpk_review` `auto:candidate:sql` `status:active`
+- **Ожидание (упрощено против канона — задеплоенная реализация):** одна звёздная оценка (1–5), отправляется как overall и как ключевая размерность одновременно (раздельного ввода второй размерности/комментария в UI нет); хранится в `batches.notes.mpk_review`, персистится в `rpc_get_pool_matches.myRating`. **НЕ реализовано:** double-blind reveal (visible_at) и неизменяемость после подачи canon-модели (`deal_reviews`) — та система существует в схеме, но orphan (0 вызовов из фронта). Деплой 2026-07-07, миграция `20260706120000_tsp_batch_reviews.sql`.
 
 #### TSPM-CLOSE-06 · EDGE · Фермер отозвал партию после матча — уведомление МПК
 `layer:ui` `canon:MS6-§4f` `impl:MpkApp` `auto:none` `status:active`

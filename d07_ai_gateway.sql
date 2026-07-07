@@ -54,6 +54,7 @@ $$;
 -- 3. rpc_get_feeding_plan
 -- Dok 5 §6.1: get_feeding_plan → rpc.get_feeding_plan
 -- ============================================================
+drop function if exists public.rpc_get_feeding_plan(p_organization_id uuid, p_farm_id uuid, p_herd_group_id uuid);
 create or replace function public.rpc_get_feeding_plan(
     p_organization_id   uuid,
     p_farm_id           uuid,
@@ -125,6 +126,7 @@ comment on function public.rpc_get_feeding_plan(uuid, uuid, uuid) is
 -- 4. rpc_get_farm_tasks
 -- Dok 5 §6.1: get_farm_tasks → rpc.get_farm_tasks
 -- ============================================================
+drop function if exists public.rpc_get_farm_tasks(p_organization_id uuid, p_farm_id uuid, p_days_ahead integer, p_category text);
 create or replace function public.rpc_get_farm_tasks(
     p_organization_id   uuid,
     p_farm_id           uuid,
@@ -178,6 +180,7 @@ comment on function public.rpc_get_farm_tasks(uuid, uuid, int, text) is
 -- 5. rpc_complete_farm_task
 -- Dok 5 §6.1: complete_farm_task → rpc.complete_farm_task
 -- ============================================================
+drop function if exists public.rpc_complete_farm_task(p_organization_id uuid, p_task_id uuid, p_result_description text, p_result_data jsonb, p_actor_id uuid, p_ai_context jsonb);
 create or replace function public.rpc_complete_farm_task(
     p_organization_id       uuid,
     p_task_id               uuid,
@@ -253,6 +256,7 @@ comment on function public.rpc_complete_farm_task(uuid,uuid,text,jsonb,uuid,json
 -- 6. rpc_get_production_plan
 -- Dok 5 §6.1: get_production_plan → rpc.get_production_plan
 -- ============================================================
+drop function if exists public.rpc_get_production_plan(p_organization_id uuid, p_farm_id uuid, p_status text);
 create or replace function public.rpc_get_production_plan(
     p_organization_id   uuid,
     p_farm_id           uuid,
@@ -315,6 +319,7 @@ comment on function public.rpc_get_production_plan(uuid, uuid, text) is
 -- 7. rpc_create_vet_case
 -- Dok 5 §6.2: create_vet_case → rpc.create_vet_case
 -- ============================================================
+drop function if exists public.rpc_create_vet_case(p_organization_id uuid, p_farm_id uuid, p_symptoms_text text, p_severity text, p_herd_group_id uuid, p_affected_heads integer, p_created_via text, p_actor_id uuid, p_ai_context jsonb);
 create or replace function public.rpc_create_vet_case(
     p_organization_id   uuid,
     p_farm_id           uuid,
@@ -381,6 +386,7 @@ comment on function public.rpc_create_vet_case(uuid,uuid,text,text,uuid,int,text
 -- Dok 5 §6.2: add_symptoms → rpc.add_vet_symptoms
 -- Merges structured symptoms into vet_cases.symptoms_structured
 -- ============================================================
+drop function if exists public.rpc_add_vet_symptoms(p_organization_id uuid, p_vet_case_id uuid, p_symptoms_structured jsonb, p_actor_id uuid, p_ai_context jsonb);
 create or replace function public.rpc_add_vet_symptoms(
     p_organization_id       uuid,
     p_vet_case_id           uuid,
@@ -433,6 +439,7 @@ comment on function public.rpc_add_vet_symptoms(uuid,uuid,jsonb,uuid,jsonb) is
 -- Matches case symptoms against disease_symptoms matrix.
 -- Returns ranked disease candidates with confidence.
 -- ============================================================
+drop function if exists public.rpc_get_vet_diagnosis(p_organization_id uuid, p_vet_case_id uuid, p_limit integer);
 create or replace function public.rpc_get_vet_diagnosis(
     p_organization_id   uuid,
     p_vet_case_id       uuid,
@@ -531,6 +538,7 @@ comment on function public.rpc_get_vet_diagnosis(uuid, uuid, int) is
 -- Dok 5 §6.2: get_treatment_protocols → rpc.get_treatment_protocols
 -- P-AI-4: if empty result → AI must NOT generate dosages from own knowledge.
 -- ============================================================
+drop function if exists public.rpc_get_treatment_protocols(p_organization_id uuid, p_disease_id uuid, p_animal_category_code text);
 create or replace function public.rpc_get_treatment_protocols(
     p_organization_id   uuid,
     p_disease_id        uuid    default null,
@@ -592,6 +600,7 @@ comment on function public.rpc_get_treatment_protocols(uuid, uuid, text) is
 -- 11. rpc_get_vaccination_schedule
 -- Dok 5 §6.2: get_vaccination_schedule → rpc.get_vaccination_schedule
 -- ============================================================
+drop function if exists public.rpc_get_vaccination_schedule(p_organization_id uuid, p_farm_id uuid, p_days_ahead integer);
 create or replace function public.rpc_get_vaccination_schedule(
     p_organization_id   uuid,
     p_farm_id           uuid,
@@ -647,6 +656,7 @@ comment on function public.rpc_get_vaccination_schedule(uuid, uuid, int) is
 -- Dok 5 §6.2: confirm_vaccination → rpc.complete_vaccination_item
 -- Creates vaccination_record (APPEND-ONLY fact), updates plan item status.
 -- ============================================================
+drop function if exists public.rpc_complete_vaccination_item(p_organization_id uuid, p_item_id uuid, p_vet_product_id uuid, p_actual_heads integer, p_vaccine_batch text, p_notes text, p_actor_id uuid, p_ai_context jsonb);
 create or replace function public.rpc_complete_vaccination_item(
     p_organization_id       uuid,
     p_item_id               uuid,
@@ -736,6 +746,7 @@ comment on function public.rpc_complete_vaccination_item(uuid,uuid,uuid,int,text
 -- 13. rpc_create_consultation_request
 -- Dok 5 §6.2, §6.4: escalate_to_expert / create_consultation_request
 -- ============================================================
+drop function if exists public.rpc_create_consultation_request(p_organization_id uuid, p_specialization text, p_source text, p_description text, p_vet_case_id uuid, p_priority text, p_actor_id uuid, p_ai_context jsonb);
 create or replace function public.rpc_create_consultation_request(
     p_organization_id       uuid,
     p_specialization        text,       -- veterinarian | zootechnician | agronomist | etc.
@@ -805,6 +816,7 @@ comment on function public.rpc_create_consultation_request(uuid,text,text,text,u
 -- Dok 5 §6.1/§6.2/§6.4/§6.5: search_knowledge → rpc.search_knowledge_chunks
 -- Combined vector + text fallback search.
 -- ============================================================
+drop function if exists public.rpc_search_knowledge_chunks(p_organization_id uuid, p_query_text text, p_query_embedding vector, p_source_domain text, p_language text, p_limit integer);
 create or replace function public.rpc_search_knowledge_chunks(
     p_organization_id   uuid,           -- for audit/logging only (knowledge is shared)
     p_query_text        text,
@@ -920,6 +932,7 @@ comment on function public.rpc_get_membership_status(uuid) is
 -- Dok 5 §6.5: get_price_grid → rpc.get_price_grid
 -- Legal: returns only prices where legal_disclaimer_shown = true
 -- ============================================================
+drop function if exists public.rpc_get_price_grid(p_organization_id uuid, p_region_id uuid, p_target_month date);
 create or replace function public.rpc_get_price_grid(
     p_organization_id   uuid,
     p_region_id         uuid    default null,
@@ -979,6 +992,7 @@ comment on function public.rpc_get_price_grid(uuid, uuid, date) is
 -- Dok 5 §6.5: get_market_overview (supply side) → rpc.get_aggregated_supply
 -- Legal: anonymized, min 5 batches threshold (antitrust protection)
 -- ============================================================
+drop function if exists public.rpc_get_aggregated_supply(p_organization_id uuid, p_target_month date, p_region_id uuid, p_min_count integer);
 create or replace function public.rpc_get_aggregated_supply(
     p_organization_id   uuid,   -- caller org (for audit, NOT for filtering)
     p_target_month      date    default null,
@@ -1032,6 +1046,7 @@ comment on function public.rpc_get_aggregated_supply(uuid,date,uuid,int) is
 -- 18. rpc_get_aggregated_demand
 -- Dok 5 §6.5: get_market_overview (demand side) → rpc.get_aggregated_demand
 -- ============================================================
+drop function if exists public.rpc_get_aggregated_demand(p_organization_id uuid, p_target_month date, p_region_id uuid, p_min_count integer);
 create or replace function public.rpc_get_aggregated_demand(
     p_organization_id   uuid,
     p_target_month      date    default null,
@@ -1084,6 +1099,7 @@ comment on function public.rpc_get_aggregated_demand(uuid,date,uuid,int) is
 -- Dok 5 §6.5: get_active_batches → rpc.get_org_batches
 -- Returns organization''s own batches (not other orgs'' — RLS via org ownership check)
 -- ============================================================
+drop function if exists public.rpc_get_org_batches(p_organization_id uuid, p_status text);
 create or replace function public.rpc_get_org_batches(
     p_organization_id   uuid,
     p_status            text    default null   -- filter: 'draft' | 'published' | 'matched' | null=all
@@ -1270,6 +1286,7 @@ comment on function public.rpc_create_batch(uuid,uuid,uuid,int,numeric,date,uuid
 -- 21. rpc_publish_batch
 -- Dok 5 §6.5: publish_batch → rpc.publish_batch
 -- ============================================================
+drop function if exists public.rpc_publish_batch(p_organization_id uuid, p_batch_id uuid, p_actor_id uuid, p_ai_context jsonb);
 create or replace function public.rpc_publish_batch(
     p_organization_id   uuid,
     p_batch_id          uuid,
@@ -1549,6 +1566,7 @@ comment on function public.rpc_update_conversation_language(uuid, text, uuid) is
 --   Вызовы только с p_organization_id теперь корректны (p_farm_id = NULL → auto-resolve).
 -- ============================================================
 
+drop function if exists public.rpc_get_ai_farm_context(p_organization_id uuid, p_farm_id uuid);
 create or replace function public.rpc_get_ai_farm_context(
     p_organization_id   uuid,
     p_farm_id           uuid    default null   -- C-AUDIT-2b: nullable, auto-resolve если NULL
@@ -1834,6 +1852,7 @@ comment on function public.rpc_get_ai_farm_context(uuid, uuid) is
 --   где v_old_confidence читается в SELECT перед UPDATE.
 -- ============================================================
 
+drop function if exists public.rpc_upsert_herd_group(p_organization_id uuid, p_farm_id uuid, p_animal_category_code text, p_head_count integer, p_avg_weight_kg numeric, p_breed_id uuid, p_herd_group_id uuid, p_actor_id uuid, p_ai_context jsonb);
 create or replace function public.rpc_upsert_herd_group(
     p_organization_id       uuid,
     p_farm_id               uuid,
@@ -2307,6 +2326,7 @@ on conflict (sql_name) do update
 --   использовать прямой INSERT из PL/pgSQL (изнутри БД только).
 -- ============================================================
 
+drop function if exists public.publish_platform_event(p_event_type text, p_organization_id uuid, p_entity_id uuid, p_payload jsonb);
 create or replace function public.publish_platform_event(
     p_event_type        text,           -- 'domain.entity.action' — Dok 4 D66 convention
     p_organization_id   uuid,           -- ownership scope; NULL для global events
@@ -2595,6 +2615,7 @@ create trigger trg_knowledge_chunk_enqueue_embedding
 -- ── claim_embedding_batch ─────────────────────────────────────────────────────
 -- ⚠️  ЕДИНСТВЕННОЕ ОПРЕДЕЛЕНИЕ — НЕ ДУБЛИРОВАТЬ
 
+drop function if exists public.claim_embedding_batch(p_batch_size integer, p_worker_id text);
 create or replace function public.claim_embedding_batch(
     p_batch_size    int     default 10,     -- сколько заданий забрать за раз
     p_worker_id     text    default null    -- идентификатор воркера (hostname / UUID)
@@ -2707,6 +2728,7 @@ revoke execute on function public.complete_embedding_job(uuid, vector) from anon
 -- ── fail_embedding_job ────────────────────────────────────────────────────────
 -- ⚠️  ЕДИНСТВЕННОЕ ОПРЕДЕЛЕНИЕ — НЕ ДУБЛИРОВАТЬ
 
+drop function if exists public.fail_embedding_job(p_job_id uuid, p_error_message text);
 create or replace function public.fail_embedding_job(
     p_job_id        uuid,
     p_error_message text    default null
@@ -2941,13 +2963,14 @@ as $$
 declare
     v_phone text;
 begin
-    -- Verify user belongs to organization (via memberships)
+    -- Verify user belongs to organization (via user_organization_roles — BUG FIX
+    -- 2026-07-07: previously joined public.memberships on m.user_id/m.status, neither
+    -- column exists there; memberships is org-level, not a user↔org link table).
     select u.phone into v_phone
     from public.users u
-    join public.memberships m on m.user_id = u.id
+    join public.user_organization_roles uor on uor.user_id = u.id
     where u.id = p_user_id
-      and m.organization_id = p_organization_id
-      and m.status = 'active'
+      and uor.organization_id = p_organization_id
     limit 1;
 
     -- Note: null is acceptable — user may not have phone yet

@@ -129,7 +129,8 @@
 ## TSPF-RES — экран результата (SCR-03, варианты A/B/C/D)
 
 #### TSPF-RES-01 · HAPPY · Вариант A — автоматч (BT-01)
-`layer:ui` `canon:MS4-§2.2;D-TSP-5;D-M6-5` `impl:BatchWizard result` `auto:none` `status:blocked:BUG-PUBRESULT-VARIANT-01`
+`layer:ui` `canon:MS4-§2.2;D-TSP-5;D-M6-5` `impl:BatchWizard result` `auto:none` `status:active`
+- **Деплой:** BUG-PUBRESULT-VARIANT-01 смёржен в main (PR #36, фронтенд-only) — `variant = delayed ? 'D' : (batch.state==='matched' ? 'A' : 'B')`.
 - **Условие:** нашёлся пул с подходящей категорией/ценой/районом/окном.
 - **Ожидание:** «Покупатель найден!»; цена сделки ≥ цены фермера (если выше — бейдж «на N ₸/кг выше вашей цены», best execution D-TSP-5); покупатель НЕ раскрыт (только при confirmed, D-M6-5); статус matched.
 
@@ -223,9 +224,9 @@
 - **Ожидание:** МПК подтверждает приёмку → партия delivered (терминальный успех); открывается окно отзыва.
 
 #### TSPF-LIFE-16 · HAPPY · Отзыв о сделке (D-M6-11)
-`layer:ui+rpc` `canon:MS6-§4c;D-M6-11` `impl:rpc_self_review_due_batches` `auto:candidate:sql` `status:blocked:GAP-REVIEW-MOCK-01`
+`layer:ui+rpc` `canon:MS6-§4c;D-M6-11` `impl:rpc_submit_review` `auto:candidate:sql` `status:active`
 - **Предусловие:** delivered, отзыва нет.
-- **Ожидание:** один отзыв на батч на направление (overall 1–5 + ключевая размерность «Честное взвешивание» + текст опц.); после отправки «Ваш отзыв сохранён», кнопка исчезает; отзыв double-blind — виден контрагенту после взаимной подачи или истечения окна (visible_at); отзыв неизменяем после подачи.
+- **Ожидание (упрощено против канона — задеплоенная реализация):** overall (r1) + ключевая размерность «Честное взвешивание» (r2) + текст опц.; по одной строке `batch_reviews`-эквивалента на КАЖДОГО МПК с delivered-куском батча (Слайс 9: несколько покупателей одного батча); хранится в `batches.notes.review`, персистится через `fn_tsp_batch_json.review` — «Ваш отзыв сохранён» переживает reload. **НЕ реализовано:** double-blind (visible_at), неизменяемость строгого canon-режима — см. TSPM-CLOSE-05. Деплой 2026-07-07, миграция `20260706120000_tsp_batch_reviews.sql` (fn_tsp_batch_json += review; сам `rpc_submit_review` существовал с 2026-06-22, просто не был виден фронту).
 
 #### TSPF-LIFE-17 · HAPPY · Scheduled: авто-выход в продажу (BT-21)
 `layer:sql+ui` `canon:MS6-§3.2` `impl:d02_tsp.sql job` `auto:candidate:sql` `status:blocked:TSP-FLOW-02`

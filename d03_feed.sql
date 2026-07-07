@@ -4,7 +4,7 @@
 -- Consolidated: 2026-03-05 (pre-development baseline)
 --
 -- Feed & Nutrition module.
-Inventory, Rations, Feeding Plans, NASEM norms.
+-- Inventory, Rations, Feeding Plans, NASEM norms.
 --
 -- Depends on: d01_kernel.sql
 -- Consolidated from: 003_feed.sql
@@ -464,65 +464,65 @@ comment on table public.feeding_periods is
 -- ============================================================
 
 -- feed_categories
-create index idx_fc_active on public.feed_categories (is_active)
+create index if not exists idx_fc_active on public.feed_categories (is_active)
     where is_active = true;
 
 -- feed_items
-create index idx_fi_category    on public.feed_items (feed_category_id);
-create index idx_fi_active      on public.feed_items (is_active) where is_active = true;
-create index idx_fi_validated   on public.feed_items (is_validated);  -- Edge Function validation check
+create index if not exists idx_fi_category    on public.feed_items (feed_category_id);
+create index if not exists idx_fi_active      on public.feed_items (is_active) where is_active = true;
+create index if not exists idx_fi_validated   on public.feed_items (is_validated);  -- Edge Function validation check
 
 -- feed_prices
-create index idx_fp_item_active on public.feed_prices (feed_item_id, is_active)
+create index if not exists idx_fp_item_active on public.feed_prices (feed_item_id, is_active)
     where is_active = true;
-create index idx_fp_region      on public.feed_prices (region_id)
+create index if not exists idx_fp_region      on public.feed_prices (region_id)
     where region_id is not null;
 
 -- nutrient_requirements
-create index idx_nr_category    on public.nutrient_requirements (animal_category_id);
-create index idx_nr_period      on public.nutrient_requirements (period_type_id)
+create index if not exists idx_nr_category    on public.nutrient_requirements (animal_category_id);
+create index if not exists idx_nr_period      on public.nutrient_requirements (period_type_id)
     where period_type_id is not null;
-create index idx_nr_cat_period  on public.nutrient_requirements (animal_category_id, period_type_id);
+create index if not exists idx_nr_cat_period  on public.nutrient_requirements (animal_category_id, period_type_id);
 
 -- period_types
-create index idx_pt_code        on public.period_types (code);
+create index if not exists idx_pt_code        on public.period_types (code);
 
 -- farm_feed_inventory
-create index idx_ffi_farm       on public.farm_feed_inventory (farm_id);
-create index idx_ffi_org        on public.farm_feed_inventory (organization_id); -- RLS
-create index idx_ffi_item       on public.farm_feed_inventory (feed_item_id);
-create index idx_ffi_confidence on public.farm_feed_inventory (confidence);  -- Layered Truth queries
+create index if not exists idx_ffi_farm       on public.farm_feed_inventory (farm_id);
+create index if not exists idx_ffi_org        on public.farm_feed_inventory (organization_id); -- RLS
+create index if not exists idx_ffi_item       on public.farm_feed_inventory (feed_item_id);
+create index if not exists idx_ffi_confidence on public.farm_feed_inventory (confidence);  -- Layered Truth queries
 
 -- rations
-create index idx_rat_org_status on public.rations (organization_id, status)
+create index if not exists idx_rat_org_status on public.rations (organization_id, status)
     where organization_id is not null;
-create index idx_rat_farm       on public.rations (farm_id)
+create index if not exists idx_rat_farm       on public.rations (farm_id)
     where farm_id is not null;
-create index idx_rat_herd_group on public.rations (herd_group_id)
+create index if not exists idx_rat_herd_group on public.rations (herd_group_id)
     where herd_group_id is not null;
-create index idx_rat_category   on public.rations (animal_category_id);
-create index idx_rat_quick_mode on public.rations (is_quick_mode)
+create index if not exists idx_rat_category   on public.rations (animal_category_id);
+create index if not exists idx_rat_quick_mode on public.rations (is_quick_mode)
     where is_quick_mode = true;  -- AI Gateway quick-mode queries
 
 -- ration_versions
-create index idx_rv_ration_current  on public.ration_versions (ration_id, is_current)
+create index if not exists idx_rv_ration_current  on public.ration_versions (ration_id, is_current)
     where is_current = true;
-create index idx_rv_ration_version  on public.ration_versions (ration_id, version_number desc);
+create index if not exists idx_rv_ration_version  on public.ration_versions (ration_id, version_number desc);
 
 -- feeding_plans
-create index idx_fplan_org_status   on public.feeding_plans (organization_id, status);
-create index idx_fplan_farm         on public.feeding_plans (farm_id);
-create index idx_fplan_year         on public.feeding_plans (plan_year)
+create index if not exists idx_fplan_org_status   on public.feeding_plans (organization_id, status);
+create index if not exists idx_fplan_farm         on public.feeding_plans (farm_id);
+create index if not exists idx_fplan_year         on public.feeding_plans (plan_year)
     where plan_year is not null;
 
 -- feeding_periods
-create index idx_fperiod_plan       on public.feeding_periods (feeding_plan_id);
-create index idx_fperiod_org        on public.feeding_periods (organization_id); -- RLS
-create index idx_fperiod_herd       on public.feeding_periods (herd_group_id);
-create index idx_fperiod_dates      on public.feeding_periods (start_date, end_date); -- date overlap queries
-create index idx_fperiod_status     on public.feeding_periods (status)
+create index if not exists idx_fperiod_plan       on public.feeding_periods (feeding_plan_id);
+create index if not exists idx_fperiod_org        on public.feeding_periods (organization_id); -- RLS
+create index if not exists idx_fperiod_herd       on public.feeding_periods (herd_group_id);
+create index if not exists idx_fperiod_dates      on public.feeding_periods (start_date, end_date); -- date overlap queries
+create index if not exists idx_fperiod_status     on public.feeding_periods (status)
     where status = 'active';
-create index idx_fperiod_ration     on public.feeding_periods (ration_id)
+create index if not exists idx_fperiod_ration     on public.feeding_periods (ration_id)
     where ration_id is not null;
 
 -- ============================================================
@@ -545,25 +545,38 @@ alter table public.feeding_plans            enable row level security;
 alter table public.feeding_periods          enable row level security;
 
 -- Reference tables: read by all authenticated; write by admin; experts can update
+drop policy if exists "fc_read_auth" on public.feed_categories;
 create policy "fc_read_auth"        on public.feed_categories           for select using (auth.uid() is not null);
+drop policy if exists "fc_admin_write" on public.feed_categories;
 create policy "fc_admin_write"      on public.feed_categories           for all    using (public.fn_is_admin());
+drop policy if exists "fi_read_auth" on public.feed_items;
 create policy "fi_read_auth"        on public.feed_items                for select using (auth.uid() is not null);
+drop policy if exists "fi_admin_write" on public.feed_items;
 create policy "fi_admin_write"      on public.feed_items                for all    using (public.fn_is_admin() or public.fn_is_expert());
+drop policy if exists "fp_read_auth" on public.feed_prices;
 create policy "fp_read_auth"        on public.feed_prices               for select
     using (auth.uid() is not null and is_active = true or public.fn_is_admin());
+drop policy if exists "fp_admin_write" on public.feed_prices;
 create policy "fp_admin_write"      on public.feed_prices               for all    using (public.fn_is_admin());
+drop policy if exists "nr_read_auth" on public.nutrient_requirements;
 create policy "nr_read_auth"        on public.nutrient_requirements     for select using (auth.uid() is not null);
+drop policy if exists "nr_admin_write" on public.nutrient_requirements;
 create policy "nr_admin_write"      on public.nutrient_requirements     for all    using (public.fn_is_admin() or public.fn_is_expert());
+drop policy if exists "pt_read_auth" on public.period_types;
 create policy "pt_read_auth"        on public.period_types              for select using (auth.uid() is not null);
+drop policy if exists "pt_admin_write" on public.period_types;
 create policy "pt_admin_write"      on public.period_types              for all    using (public.fn_is_admin());
 
 -- Farm feed inventory: farmer sees own farm only
+drop policy if exists "ffi_read_own" on public.farm_feed_inventory;
 create policy "ffi_read_own"        on public.farm_feed_inventory       for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin() or public.fn_is_expert());
+drop policy if exists "ffi_write_own" on public.farm_feed_inventory;
 create policy "ffi_write_own"       on public.farm_feed_inventory       for all
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 
 -- Rations: farmer sees own; quick mode is_quick_mode=true visible to creator only
+drop policy if exists "rat_read_own" on public.rations;
 create policy "rat_read_own"        on public.rations                   for select
     using (
         (organization_id = any(public.fn_my_org_ids()))
@@ -571,6 +584,7 @@ create policy "rat_read_own"        on public.rations                   for sele
         or public.fn_is_admin()
         or public.fn_is_expert()
     );
+drop policy if exists "rat_write_own" on public.rations;
 create policy "rat_write_own"       on public.rations                   for all
     using (
         (organization_id = any(public.fn_my_org_ids()))
@@ -579,6 +593,7 @@ create policy "rat_write_own"       on public.rations                   for all
     );
 
 -- Ration versions: inherits access from parent ration
+drop policy if exists "rv_read_own" on public.ration_versions;
 create policy "rv_read_own"         on public.ration_versions           for select
     using (
         ration_id in (
@@ -589,18 +604,23 @@ create policy "rv_read_own"         on public.ration_versions           for sele
         or public.fn_is_admin()
         or public.fn_is_expert()
     );
+drop policy if exists "rv_insert_system" on public.ration_versions;
 create policy "rv_insert_system"    on public.ration_versions           for insert
     with check (public.fn_is_admin());  -- service_role (Edge Function) bypasses RLS
 
 -- Feeding plans: farmer sees own
+drop policy if exists "fplan_read_own" on public.feeding_plans;
 create policy "fplan_read_own"      on public.feeding_plans             for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin() or public.fn_is_expert());
+drop policy if exists "fplan_write_own" on public.feeding_plans;
 create policy "fplan_write_own"     on public.feeding_plans             for all
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 
 -- Feeding periods: farmer sees own
+drop policy if exists "fperiod_read_own" on public.feeding_periods;
 create policy "fperiod_read_own"    on public.feeding_periods           for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin() or public.fn_is_expert());
+drop policy if exists "fperiod_write_own" on public.feeding_periods;
 create policy "fperiod_write_own"   on public.feeding_periods           for all
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 
@@ -609,22 +629,27 @@ create policy "fperiod_write_own"   on public.feeding_periods           for all
 -- ============================================================
 
 -- updated_at triggers for mutable tables
+drop trigger if exists trg_feed_prices_updated_at on public.feed_prices;
 create trigger trg_feed_prices_updated_at
     before update on public.feed_prices
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_ffi_updated_at on public.farm_feed_inventory;
 create trigger trg_ffi_updated_at
     before update on public.farm_feed_inventory
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_rations_updated_at on public.rations;
 create trigger trg_rations_updated_at
     before update on public.rations
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_feeding_plans_updated_at on public.feeding_plans;
 create trigger trg_feeding_plans_updated_at
     before update on public.feeding_plans
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_feeding_periods_updated_at on public.feeding_periods;
 create trigger trg_feeding_periods_updated_at
     before update on public.feeding_periods
     for each row execute function public.fn_set_updated_at();
@@ -649,6 +674,7 @@ comment on function public.fn_ration_version_set_current() is
      Called after each RationVersion insert by Edge Function.
      Ensures ration_versions.is_current is consistent at all times.';
 
+drop trigger if exists trg_ration_version_set_current on public.ration_versions;
 create trigger trg_ration_version_set_current
     before insert on public.ration_versions
     for each row execute function public.fn_ration_version_set_current();
@@ -669,6 +695,7 @@ comment on function public.fn_ration_auto_activate() is
      first RationVersion is inserted by Edge Function calculate_ration.
      Prevents manual status management by AI Gateway or web UI.';
 
+drop trigger if exists trg_ration_auto_activate on public.ration_versions;
 create trigger trg_ration_auto_activate
     after insert on public.ration_versions
     for each row execute function public.fn_ration_auto_activate();
@@ -999,6 +1026,7 @@ on conflict do nothing;
 -- D45: Layered Truth — data_source determines confidence.
 -- Events: feed.inventory.updated (Dok 4 §3.4)
 -- ============================================================
+drop function if exists public.rpc_upsert_feed_inventory(p_organization_id uuid, p_farm_id uuid, p_feed_item_id uuid, p_quantity_kg numeric, p_price_per_kg numeric, p_data_source text);
 create or replace function public.rpc_upsert_feed_inventory(
     p_organization_id   uuid,
     p_farm_id           uuid,
@@ -1149,6 +1177,7 @@ comment on function public.rpc_upsert_feed_inventory(uuid, uuid, uuid, numeric, 
 -- Trigger fn_ration_auto_activate sets status=active on first version.
 -- Events: feed.ration.created (Dok 4 §3.4)
 -- ============================================================
+drop function if exists public.rpc_save_ration(p_organization_id uuid, p_farm_id uuid, p_herd_group_id uuid, p_animal_category_id uuid, p_breed_id uuid, p_period_type_id uuid, p_avg_weight_kg numeric, p_head_count integer, p_objective text, p_shelter_type text, p_target_daily_gain_kg numeric, p_ration_id uuid, p_items jsonb, p_results jsonb, p_calculated_by text, p_notes text);
 create or replace function public.rpc_save_ration(
     p_organization_id       uuid,
     p_farm_id               uuid,
@@ -1603,18 +1632,26 @@ comment on table public.feed_consumption_norms is
 
 create index if not exists idx_fcn_farm_cat_season
     on public.feed_consumption_norms (farm_type, animal_category_id, season);
+-- BUG FIX (deploy 2026-07-07): "valid_to > current_date" — current_date is not
+-- IMMUTABLE, invalid in an index predicate. Predicate narrowed to the stable
+-- (valid_to is null) case — the "still bounded but currently valid" rows just
+-- fall back to a normal scan on (valid_from, valid_to), acceptable for this
+-- reference-data table (not a hot-path query).
 create index if not exists idx_fcn_valid
     on public.feed_consumption_norms (valid_from, valid_to)
-    where valid_to is null or valid_to > current_date;
+    where valid_to is null;
 
 -- RLS
 alter table public.feed_consumption_norms enable row level security;
+drop policy if exists "fcn_read_auth" on public.feed_consumption_norms;
 create policy fcn_read_auth on public.feed_consumption_norms
     for select using (auth.role() = 'authenticated');
+drop policy if exists "fcn_admin_write" on public.feed_consumption_norms;
 create policy fcn_admin_write on public.feed_consumption_norms
     for all using (public.fn_is_admin());
 
 -- updated_at trigger
+drop trigger if exists trg_fcn_updated_at on public.feed_consumption_norms;
 create trigger trg_fcn_updated_at
     before update on public.feed_consumption_norms
     for each row execute function public.fn_set_updated_at();
@@ -1631,6 +1668,7 @@ drop function if exists public.rpc_list_animal_categories();
 -- DEF-027: rpc_list_feed_items — отсутствует в SQL,
 -- но вызывается из Calculator.tsx.
 -- -------------------------------------------------------
+drop function if exists public.rpc_list_feed_items(p_active_only boolean);
 create or replace function public.rpc_list_feed_items(
     p_active_only boolean default true
 )
@@ -1669,6 +1707,7 @@ comment on function public.rpc_list_feed_items(boolean) is
 -- -------------------------------------------------------
 -- RPC-F03: rpc_upsert_feed_item — Admin: создать/обновить корм
 -- -------------------------------------------------------
+drop function if exists public.rpc_upsert_feed_item(p_feed_item_id uuid, p_feed_category_code text, p_code text, p_name_ru text, p_name_en text, p_nutrient_composition jsonb, p_is_validated boolean, p_notes text);
 create or replace function public.rpc_upsert_feed_item(
     p_feed_item_id          uuid    default null,
     p_feed_category_code    text    default null,
@@ -1747,6 +1786,7 @@ comment on function public.rpc_upsert_feed_item(uuid, text, text, text, text, js
 -- -------------------------------------------------------
 -- RPC-F04: rpc_upsert_feed_price — Admin: установить/обновить цену
 -- -------------------------------------------------------
+drop function if exists public.rpc_upsert_feed_price(p_feed_item_id uuid, p_price_per_kg numeric, p_region_id uuid, p_valid_from date, p_valid_to date, p_currency text);
 create or replace function public.rpc_upsert_feed_price(
     p_feed_item_id  uuid,
     p_price_per_kg  numeric,
@@ -1850,6 +1890,7 @@ comment on function public.rpc_list_feed_prices() is
 -- -------------------------------------------------------
 -- RPC-F05: rpc_upsert_feed_consumption_norm — Admin: норма кормления
 -- -------------------------------------------------------
+drop function if exists public.rpc_upsert_feed_consumption_norm(p_norm_id uuid, p_farm_type text, p_animal_category_id uuid, p_season text, p_items jsonb, p_valid_from date, p_valid_to date, p_notes text);
 create or replace function public.rpc_upsert_feed_consumption_norm(
     p_norm_id               uuid    default null,
     p_farm_type             text    default null,
@@ -1954,6 +1995,7 @@ comment on function public.rpc_list_feed_categories() is
 -- -------------------------------------------------------
 -- rpc_list_feed_consumption_norms — список норм кормления для Admin UI
 -- -------------------------------------------------------
+drop function if exists public.rpc_list_feed_consumption_norms(p_farm_type text);
 create or replace function public.rpc_list_feed_consumption_norms(
     p_farm_type text default null
 )
@@ -2036,8 +2078,12 @@ alter table public.ration_versions
         references public.animal_categories(id);
 
 -- Шаг 4: CHECK — хотя бы один контекст должен быть задан
+-- BUG FIX (deploy 2026-07-07): "add constraint if not exists" — невалидный синтаксис
+-- PostgreSQL (в отличие от index/policy, у constraint нет такой клаузы). Идемпотентность
+-- через drop+add, как везде в файле.
+alter table public.ration_versions drop constraint if exists rv_context_check;
 alter table public.ration_versions
-    add constraint if not exists rv_context_check
+    add constraint rv_context_check
         check (ration_id is not null or consulting_project_id is not null);
 
 -- Шаг 5: INDEX для consulting context lookups

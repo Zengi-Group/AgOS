@@ -145,6 +145,7 @@ alter table public.consulting_project_versions enable row level security;
 alter table public.consulting_reference_data enable row level security;
 
 -- 3.1  consulting_projects: org members + admins read/write own
+drop policy if exists "cp_read_own" on public.consulting_projects;
 create policy "cp_read_own"
     on public.consulting_projects for select
     using (
@@ -152,6 +153,7 @@ create policy "cp_read_own"
         or public.fn_is_admin()
     );
 
+drop policy if exists "cp_write_own" on public.consulting_projects;
 create policy "cp_write_own"
     on public.consulting_projects for all
     using (
@@ -160,6 +162,7 @@ create policy "cp_write_own"
     );
 
 -- 3.2  consulting_project_versions: org members + admins
+drop policy if exists "cpv_read_own" on public.consulting_project_versions;
 create policy "cpv_read_own"
     on public.consulting_project_versions for select
     using (
@@ -167,6 +170,7 @@ create policy "cpv_read_own"
         or public.fn_is_admin()
     );
 
+drop policy if exists "cpv_write_own" on public.consulting_project_versions;
 create policy "cpv_write_own"
     on public.consulting_project_versions for all
     using (
@@ -175,10 +179,12 @@ create policy "cpv_write_own"
     );
 
 -- 3.3  consulting_reference_data: everyone reads, admin writes
+drop policy if exists "crd_read_all" on public.consulting_reference_data;
 create policy "crd_read_all"
     on public.consulting_reference_data for select
     using (true);
 
+drop policy if exists "crd_admin_write" on public.consulting_reference_data;
 create policy "crd_admin_write"
     on public.consulting_reference_data for all
     using (public.fn_is_admin());
@@ -189,6 +195,7 @@ create policy "crd_admin_write"
 -- ==========================
 
 -- ---- RPC-C01: Create consulting project ----
+drop function if exists public.rpc_create_consulting_project(p_organization_id uuid, p_name text, p_farm_type text);
 create or replace function public.rpc_create_consulting_project(
     p_organization_id   uuid,
     p_name              text,
@@ -352,6 +359,7 @@ comment on function public.rpc_get_consulting_project(uuid, uuid) is
 
 
 -- ---- RPC-C04: Update consulting project ----
+drop function if exists public.rpc_update_consulting_project(p_organization_id uuid, p_project_id uuid, p_name text, p_status text);
 create or replace function public.rpc_update_consulting_project(
     p_organization_id   uuid,
     p_project_id        uuid,
@@ -546,6 +554,7 @@ comment on function public.rpc_list_consulting_versions(uuid, uuid) is
 
 
 -- ---- RPC-C08: Upsert consulting reference data [ADMIN] ----
+drop function if exists public.rpc_upsert_consulting_reference(p_category text, p_code text, p_data jsonb, p_valid_from date);
 create or replace function public.rpc_upsert_consulting_reference(
     p_category      text,
     p_code          text,
@@ -610,6 +619,7 @@ on conflict (sql_name) do update
 -- Зависит от: Часть C-DB (ration_versions migration в d03_feed.sql)
 -- ============================================================
 
+drop function if exists public.rpc_save_consulting_ration(p_organization_id uuid, p_consulting_project_id uuid, p_animal_category_id uuid, p_items jsonb, p_results jsonb);
 create or replace function public.rpc_save_consulting_ration(
     p_organization_id           uuid,
     p_consulting_project_id     uuid,
@@ -782,6 +792,11 @@ on conflict (category, code, valid_from) do update
 -- Inline CREATE TABLE CHECK was already extended above; this ALTER ensures
 -- existing databases (where CREATE TABLE IF NOT EXISTS is a no-op) receive
 -- the two new categories. Additive — NEVER removes existing categories.
+-- BUG FIX (deploy 2026-07-07): this intermediate rebuild was missing
+-- 'livestock_prices' (added by a later ADR, see the second rebuild of this
+-- same constraint further down) — live data already has rows with that
+-- category, so this ADD CONSTRAINT failed on replay before ever reaching the
+-- later block that would have fixed it. Widened here too so both are consistent.
 alter table public.consulting_reference_data
     drop constraint if exists consulting_reference_data_category_check;
 alter table public.consulting_reference_data
@@ -795,7 +810,8 @@ alter table public.consulting_reference_data
         'regional_prices',
         'economic_parameters',
         'construction_materials',
-        'capex_surcharges'
+        'capex_surcharges',
+        'livestock_prices'
     ));
 
 
@@ -907,6 +923,7 @@ comment on function public.rpc_upsert_construction_material(text, text, numeric)
      Currency fixed to KZT in MVP (Q7: no regionalization).';
 
 
+drop function if exists public.rpc_upsert_infrastructure_norm(p_code text, p_data jsonb, p_block text);
 create or replace function public.rpc_upsert_infrastructure_norm(
     p_code  text,
     p_data  jsonb,
@@ -953,6 +970,7 @@ comment on function public.rpc_upsert_infrastructure_norm(text, jsonb, text) is
 
 -- ~~ 4. RPC — project-scoped override save ~~
 
+drop function if exists public.rpc_save_project_infra_override(p_organization_id uuid, p_project_id uuid, p_enclosed text, p_support text, p_overrides jsonb);
 create or replace function public.rpc_save_project_infra_override(
     p_organization_id uuid,
     p_project_id      uuid,
@@ -1244,6 +1262,7 @@ alter table public.consulting_reference_data
 
 -- ~~ 2. RPC — public reader ~~
 
+drop function if exists public.rpc_list_livestock_prices(p_organization_id uuid, p_as_of_date date);
 create or replace function public.rpc_list_livestock_prices(
     p_organization_id uuid default null,  -- reserved for future org-scoped overrides
     p_as_of_date      date default current_date
@@ -1290,6 +1309,7 @@ comment on function public.rpc_list_livestock_prices(uuid, date) is
 
 -- ~~ 3. RPC — admin upsert ~~
 
+drop function if exists public.rpc_upsert_livestock_price(p_code text, p_livestock_category text, p_year integer, p_price_per_kg numeric, p_region_id uuid, p_age_months integer, p_source text, p_valid_from date);
 create or replace function public.rpc_upsert_livestock_price(
     p_code               text,
     p_livestock_category text,       -- steer_own | heifer_breeding | cow_culled | bull_culled
