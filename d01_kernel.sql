@@ -3758,7 +3758,12 @@ begin
             where uor4.user_id = v_user_id
               and rr.lifted_at is null
               and (p_organization_id is null or rr.organization_id = p_organization_id)
-        ), '[]'::jsonb)
+        ), '[]'::jsonb),
+        -- Role flags for cabinet/admin UI gating (Sidebar, useAdminGuard, RequireExpert fast-path).
+        -- Frontend UserContext expects these (AuthContext.tsx). fn_is_admin/fn_is_expert resolve
+        -- to the JWT-aware d07 definitions at runtime (apply order d01→…→d07). Additive (P7).
+        'is_admin',  public.fn_is_admin(),
+        'is_expert', public.fn_is_expert()
     ) into v_result;
 
     return v_result;
@@ -3769,7 +3774,7 @@ comment on function public.rpc_get_my_context(uuid) is
     'RPC-04 | Dok 3 §2 | Slice 1
      Full user context for cabinet initialization (F01, F02, F10 page load).
      STABLE: no side effects, safe to cache per transaction.
-     Returns: { user_id, organizations[], farms[], memberships[], active_restrictions[] }
+     Returns: { user_id, organizations[], farms[], memberships[], active_restrictions[], is_admin, is_expert }
      p_organization_id optional — null returns all orgs, uuid filters to one.
      Used by both Web Cabinet and AI Gateway context loading.';
 
