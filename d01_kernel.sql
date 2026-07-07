@@ -1160,124 +1160,124 @@ comment on column public.knowledge_chunks.embedding is
 -- ============================================================
 
 -- regions
-create index idx_regions_parent       on public.regions (parent_id) where parent_id is not null;
-create index idx_regions_level_active on public.regions (level, is_active);
+create index if not exists idx_regions_parent       on public.regions (parent_id) where parent_id is not null;
+create index if not exists idx_regions_level_active on public.regions (level, is_active);
 
 -- productivity_directions (small table, full scan is fine — index for completeness)
-create index idx_prod_dir_code on public.productivity_directions (code);
+create index if not exists idx_prod_dir_code on public.productivity_directions (code);
 
 -- animal_categories
-create index idx_animal_cat_sex      on public.animal_categories (sex, is_active);
+create index if not exists idx_animal_cat_sex      on public.animal_categories (sex, is_active);
 
 -- breeds
-create index idx_breeds_direction    on public.breeds (productivity_direction_id, is_active);
+create index if not exists idx_breeds_direction    on public.breeds (productivity_direction_id, is_active);
 
 -- users
-create index idx_users_auth_id on public.users (auth_id);
-create index idx_users_phone   on public.users (phone)  where phone is not null;
-create index idx_users_email   on public.users (email)  where email is not null;
+create index if not exists idx_users_auth_id on public.users (auth_id);
+create index if not exists idx_users_phone   on public.users (phone)  where phone is not null;
+create index if not exists idx_users_email   on public.users (email)  where email is not null;
 
 -- organizations
-create index idx_orgs_bin_iin  on public.organizations (bin_iin)   where bin_iin is not null;
-create index idx_orgs_region   on public.organizations (region_id) where region_id is not null;
-create index idx_orgs_active   on public.organizations (is_active);
+create index if not exists idx_orgs_bin_iin  on public.organizations (bin_iin)   where bin_iin is not null;
+create index if not exists idx_orgs_region   on public.organizations (region_id) where region_id is not null;
+create index if not exists idx_orgs_active   on public.organizations (is_active);
 
 -- organization_type_assignments
-create index idx_org_type_org  on public.organization_type_assignments (organization_id);
-create index idx_org_type_type on public.organization_type_assignments (org_type);
+create index if not exists idx_org_type_org  on public.organization_type_assignments (organization_id);
+create index if not exists idx_org_type_type on public.organization_type_assignments (org_type);
 
 -- user_organization_roles
-create index idx_uor_user  on public.user_organization_roles (user_id);
-create index idx_uor_org   on public.user_organization_roles (organization_id);
+create index if not exists idx_uor_user  on public.user_organization_roles (user_id);
+create index if not exists idx_uor_org   on public.user_organization_roles (organization_id);
 
 -- memberships
-create index idx_memberships_org      on public.memberships (organization_id);
-create index idx_memberships_type_lvl on public.memberships (org_type, level);
+create index if not exists idx_memberships_org      on public.memberships (organization_id);
+create index if not exists idx_memberships_type_lvl on public.memberships (org_type, level);
 
 -- membership_applications
-create index idx_mem_apps_membership on public.membership_applications (membership_id);
-create index idx_mem_apps_org_status on public.membership_applications (organization_id, status);
+create index if not exists idx_mem_apps_membership on public.membership_applications (membership_id);
+create index if not exists idx_mem_apps_org_status on public.membership_applications (organization_id, status);
 
 -- verification_records
-create index idx_verif_membership on public.verification_records (membership_id);
-create index idx_verif_org        on public.verification_records (organization_id);
+create index if not exists idx_verif_membership on public.verification_records (membership_id);
+create index if not exists idx_verif_org        on public.verification_records (organization_id);
 
 -- restriction_records (fast "is this org restricted?" lookup)
-create index idx_restrictions_org_active
+create index if not exists idx_restrictions_org_active
     on public.restriction_records (organization_id)
     where lifted_at is null;   -- partial index: only active restrictions
 
 -- admin_roles
-create index idx_admin_roles_active on public.admin_roles (user_id, is_active);
+create index if not exists idx_admin_roles_active on public.admin_roles (user_id, is_active);
 
 -- expert_profiles
-create index idx_expert_spec_active on public.expert_profiles (specialization, is_active);
+create index if not exists idx_expert_spec_active on public.expert_profiles (specialization, is_active);
 
 -- consultation_requests
-create index idx_consult_org    on public.consultation_requests (organization_id, status);
-create index idx_consult_expert on public.consultation_requests (expert_profile_id)
+create index if not exists idx_consult_org    on public.consultation_requests (organization_id, status);
+create index if not exists idx_consult_expert on public.consultation_requests (expert_profile_id)
     where expert_profile_id is not null;
-create index idx_consult_status on public.consultation_requests (status, created_at desc);
+create index if not exists idx_consult_status on public.consultation_requests (status, created_at desc);
 
 -- external_system_links
-create index idx_ext_links_org on public.external_system_links (organization_id);
+create index if not exists idx_ext_links_org on public.external_system_links (organization_id);
 
 -- payments
-create index idx_payments_org    on public.payments (organization_id);
-create index idx_payments_status on public.payments (status, created_at desc);
+create index if not exists idx_payments_org    on public.payments (organization_id);
+create index if not exists idx_payments_status on public.payments (status, created_at desc);
 
 -- farms
-create index idx_farms_org    on public.farms (organization_id);
-create index idx_farms_region on public.farms (region_id) where region_id is not null;
-create index idx_farms_active on public.farms (organization_id, is_active) where is_active = true;
+create index if not exists idx_farms_org    on public.farms (organization_id);
+create index if not exists idx_farms_region on public.farms (region_id) where region_id is not null;
+create index if not exists idx_farms_active on public.farms (organization_id, is_active) where is_active = true;
 
 -- farm_activity_types
-create index idx_farm_activities_farm on public.farm_activity_types (farm_id);
+create index if not exists idx_farm_activities_farm on public.farm_activity_types (farm_id);
 
 -- herd_groups (critical — heavily queried)
-create index idx_herd_groups_farm     on public.herd_groups (farm_id);
-create index idx_herd_groups_org      on public.herd_groups (organization_id);   -- RLS
-create index idx_herd_groups_category on public.herd_groups (animal_category_id);
-create index idx_herd_groups_active   on public.herd_groups (farm_id, is_active)
+create index if not exists idx_herd_groups_farm     on public.herd_groups (farm_id);
+create index if not exists idx_herd_groups_org      on public.herd_groups (organization_id);   -- RLS
+create index if not exists idx_herd_groups_category on public.herd_groups (animal_category_id);
+create index if not exists idx_herd_groups_active   on public.herd_groups (farm_id, is_active)
     where is_active = true;
 
 -- herd_events (time-series — order matters)
-create index idx_herd_events_farm_date  on public.herd_events (farm_id, event_date desc);
-create index idx_herd_events_group_date on public.herd_events (herd_group_id, event_date desc)
+create index if not exists idx_herd_events_farm_date  on public.herd_events (farm_id, event_date desc);
+create index if not exists idx_herd_events_group_date on public.herd_events (herd_group_id, event_date desc)
     where herd_group_id is not null;
-create index idx_herd_events_org        on public.herd_events (organization_id);  -- RLS
-create index idx_herd_events_type_date  on public.herd_events (event_type, event_date desc);
+create index if not exists idx_herd_events_org        on public.herd_events (organization_id);  -- RLS
+create index if not exists idx_herd_events_type_date  on public.herd_events (event_type, event_date desc);
 
 -- ai_conversations
-create index idx_ai_conv_org    on public.ai_conversations (organization_id);
-create index idx_ai_conv_user   on public.ai_conversations (user_id);
-create index idx_ai_conv_active on public.ai_conversations (user_id, is_active)
+create index if not exists idx_ai_conv_org    on public.ai_conversations (organization_id);
+create index if not exists idx_ai_conv_user   on public.ai_conversations (user_id);
+create index if not exists idx_ai_conv_active on public.ai_conversations (user_id, is_active)
     where is_active = true;
 
 -- ai_messages
-create index idx_ai_msg_conv_seq on public.ai_messages (conversation_id, sequence_number);
+create index if not exists idx_ai_msg_conv_seq on public.ai_messages (conversation_id, sequence_number);
 
 -- platform_events (Event Bus polling — critical for Phase 1)
-create index idx_pe_type_created on public.platform_events (event_type, created_at desc);
-create index idx_pe_org_created  on public.platform_events (organization_id, created_at desc);
-create index idx_pe_entity       on public.platform_events (entity_type, entity_id);
+create index if not exists idx_pe_type_created on public.platform_events (event_type, created_at desc);
+create index if not exists idx_pe_org_created  on public.platform_events (organization_id, created_at desc);
+create index if not exists idx_pe_entity       on public.platform_events (entity_type, entity_id);
 
 -- notifications
-create index idx_notif_user_status on public.notifications (user_id, delivery_status);
-create index idx_notif_scheduled   on public.notifications (scheduled_for)
+create index if not exists idx_notif_user_status on public.notifications (user_id, delivery_status);
+create index if not exists idx_notif_scheduled   on public.notifications (scheduled_for)
     where delivery_status = 'pending' and scheduled_for is not null;
 
 -- audit_log
-create index idx_audit_entity  on public.audit_log (entity_type, entity_id);
-create index idx_audit_org     on public.audit_log (organization_id, created_at desc);
-create index idx_audit_action  on public.audit_log (action, created_at desc);
+create index if not exists idx_audit_entity  on public.audit_log (entity_type, entity_id);
+create index if not exists idx_audit_org     on public.audit_log (organization_id, created_at desc);
+create index if not exists idx_audit_action  on public.audit_log (action, created_at desc);
 
 -- knowledge_chunks (vector similarity search — HNSW is best for pgvector)
-create index idx_kc_embedding on public.knowledge_chunks
+create index if not exists idx_kc_embedding on public.knowledge_chunks
     using hnsw (embedding vector_cosine_ops)
     where embedding is not null and is_published = true;
-create index idx_kc_domain_published on public.knowledge_chunks (source_domain, is_published);
-create index idx_kc_review_due on public.knowledge_chunks (next_review_at)
+create index if not exists idx_kc_domain_published on public.knowledge_chunks (source_domain, is_published);
+create index if not exists idx_kc_review_due on public.knowledge_chunks (next_review_at)
     where is_published = true and next_review_at is not null;
 
 -- ============================================================
@@ -1376,23 +1376,31 @@ alter table public.knowledge_chunks             enable row level security;
 -- -------------------------------------------------------
 -- REFERENCE TABLES: readable by all authenticated users, writable by admin only
 -- -------------------------------------------------------
+drop policy if exists "regions_read_authenticated" on public.regions;
 create policy "regions_read_authenticated"
     on public.regions for select using (auth.uid() is not null);
+drop policy if exists "regions_admin_write" on public.regions;
 create policy "regions_admin_write"
     on public.regions for all using (public.fn_is_admin());
 
+drop policy if exists "productivity_dirs_read_authenticated" on public.productivity_directions;
 create policy "productivity_dirs_read_authenticated"
     on public.productivity_directions for select using (auth.uid() is not null);
+drop policy if exists "productivity_dirs_admin_write" on public.productivity_directions;
 create policy "productivity_dirs_admin_write"
     on public.productivity_directions for all using (public.fn_is_admin());
 
+drop policy if exists "animal_categories_read_authenticated" on public.animal_categories;
 create policy "animal_categories_read_authenticated"
     on public.animal_categories for select using (auth.uid() is not null);
+drop policy if exists "animal_categories_admin_write" on public.animal_categories;
 create policy "animal_categories_admin_write"
     on public.animal_categories for all using (public.fn_is_admin());
 
+drop policy if exists "breeds_read_authenticated" on public.breeds;
 create policy "breeds_read_authenticated"
     on public.breeds for select using (auth.uid() is not null);
+drop policy if exists "breeds_admin_expert_write" on public.breeds;
 create policy "breeds_admin_expert_write"
     on public.breeds for all using (public.fn_is_admin() or public.fn_is_expert());
 
@@ -1400,6 +1408,7 @@ create policy "breeds_admin_expert_write"
 -- -------------------------------------------------------
 -- ORGANIZATION TYPE ASSIGNMENTS
 -- -------------------------------------------------------
+drop policy if exists "org_type_read_own" on public.organization_type_assignments;
 create policy "org_type_read_own"
     on public.organization_type_assignments for select
     using (
@@ -1407,9 +1416,11 @@ create policy "org_type_read_own"
         or public.fn_is_admin()
         or public.fn_is_expert()
     );
+drop policy if exists "org_type_write_own" on public.organization_type_assignments;
 create policy "org_type_write_own"
     on public.organization_type_assignments for insert
     with check (organization_id = any(public.fn_my_org_ids()));
+drop policy if exists "org_type_admin_update" on public.organization_type_assignments;
 create policy "org_type_admin_update"
     on public.organization_type_assignments for update
     using (public.fn_is_admin());
@@ -1417,12 +1428,15 @@ create policy "org_type_admin_update"
 -- -------------------------------------------------------
 -- USERS
 -- -------------------------------------------------------
+drop policy if exists "users_read_own" on public.users;
 create policy "users_read_own"
     on public.users for select
     using (auth_id = auth.uid() or public.fn_is_admin() or public.fn_is_expert());
+drop policy if exists "users_insert_own" on public.users;
 create policy "users_insert_own"
     on public.users for insert
     with check (auth_id = auth.uid());
+drop policy if exists "users_update_own" on public.users;
 create policy "users_update_own"
     on public.users for update
     using (auth_id = auth.uid() or public.fn_is_admin());
@@ -1430,6 +1444,7 @@ create policy "users_update_own"
 -- -------------------------------------------------------
 -- ORGANIZATIONS
 -- -------------------------------------------------------
+drop policy if exists "orgs_read_own" on public.organizations;
 create policy "orgs_read_own"
     on public.organizations for select
     using (
@@ -1437,9 +1452,11 @@ create policy "orgs_read_own"
         or public.fn_is_admin()
         or public.fn_is_expert()
     );
+drop policy if exists "orgs_insert_authenticated" on public.organizations;
 create policy "orgs_insert_authenticated"
     on public.organizations for insert
     with check (auth.uid() is not null);
+drop policy if exists "orgs_update_own" on public.organizations;
 create policy "orgs_update_own"
     on public.organizations for update
     using (
@@ -1450,35 +1467,42 @@ create policy "orgs_update_own"
 -- -------------------------------------------------------
 -- MEMBERSHIPS & RELATED
 -- -------------------------------------------------------
+drop policy if exists "memberships_read_own" on public.memberships;
 create policy "memberships_read_own"
     on public.memberships for select
     using (
         organization_id = any(public.fn_my_org_ids())
         or public.fn_is_admin()
     );
+drop policy if exists "memberships_admin_write" on public.memberships;
 create policy "memberships_admin_write"
     on public.memberships for all
     using (public.fn_is_admin());
 
+drop policy if exists "mem_apps_read_own" on public.membership_applications;
 create policy "mem_apps_read_own"
     on public.membership_applications for select
     using (
         organization_id = any(public.fn_my_org_ids())
         or public.fn_is_admin()
     );
+drop policy if exists "mem_apps_farmer_insert" on public.membership_applications;
 create policy "mem_apps_farmer_insert"
     on public.membership_applications for insert
     with check (organization_id = any(public.fn_my_org_ids()));
+drop policy if exists "mem_apps_admin_update" on public.membership_applications;
 create policy "mem_apps_admin_update"
     on public.membership_applications for update
     using (public.fn_is_admin());
 
+drop policy if exists "verif_records_read_own" on public.verification_records;
 create policy "verif_records_read_own"
     on public.verification_records for select
     using (
         organization_id = any(public.fn_my_org_ids())
         or public.fn_is_admin()
     );
+drop policy if exists "verif_records_admin_write" on public.verification_records;
 create policy "verif_records_admin_write"
     on public.verification_records for insert
     with check (public.fn_is_admin() or public.fn_is_expert());
@@ -1486,22 +1510,26 @@ create policy "verif_records_admin_write"
 -- -------------------------------------------------------
 -- CONSENT & AGREEMENTS (user-private)
 -- -------------------------------------------------------
+drop policy if exists "consent_read_own" on public.consent_records;
 create policy "consent_read_own"
     on public.consent_records for select
     using (
         user_id = public.fn_current_user_id()
         or public.fn_is_admin()
     );
+drop policy if exists "consent_system_insert" on public.consent_records;
 create policy "consent_system_insert"
     on public.consent_records for insert
     with check (user_id = public.fn_current_user_id() or public.fn_is_admin());
 
+drop policy if exists "agreements_read_own" on public.agreement_acceptances;
 create policy "agreements_read_own"
     on public.agreement_acceptances for select
     using (
         organization_id = any(public.fn_my_org_ids())
         or public.fn_is_admin()
     );
+drop policy if exists "agreements_farmer_insert" on public.agreement_acceptances;
 create policy "agreements_farmer_insert"
     on public.agreement_acceptances for insert
     with check (organization_id = any(public.fn_my_org_ids()));
@@ -1509,6 +1537,7 @@ create policy "agreements_farmer_insert"
 -- -------------------------------------------------------
 -- RESTRICTIONS (admin only)
 -- -------------------------------------------------------
+drop policy if exists "restrictions_admin_all" on public.restriction_records;
 create policy "restrictions_admin_all"
     on public.restriction_records for all
     using (public.fn_is_admin());
@@ -1518,16 +1547,20 @@ create policy "restrictions_admin_all"
 -- -------------------------------------------------------
 -- ADMIN & EXPERT PROFILES
 -- -------------------------------------------------------
+drop policy if exists "admin_roles_super_admin" on public.admin_roles;
 create policy "admin_roles_super_admin"
     on public.admin_roles for all
     using (public.fn_is_admin());
 
+drop policy if exists "expert_profiles_read_authenticated" on public.expert_profiles;
 create policy "expert_profiles_read_authenticated"
     on public.expert_profiles for select
     using (auth.uid() is not null);  -- farmers can see expert list (for consultation requests)
+drop policy if exists "expert_profiles_admin_write" on public.expert_profiles;
 create policy "expert_profiles_admin_write"
     on public.expert_profiles for all
     using (public.fn_is_admin());
+drop policy if exists "expert_profiles_self_update" on public.expert_profiles;
 create policy "expert_profiles_self_update"
     on public.expert_profiles for update
     using (user_id = public.fn_current_user_id());
@@ -1535,6 +1568,7 @@ create policy "expert_profiles_self_update"
 -- -------------------------------------------------------
 -- CONSULTATION REQUESTS
 -- -------------------------------------------------------
+drop policy if exists "consult_read_own_or_expert" on public.consultation_requests;
 create policy "consult_read_own_or_expert"
     on public.consultation_requests for select
     using (
@@ -1542,9 +1576,11 @@ create policy "consult_read_own_or_expert"
         or public.fn_is_admin()
         or public.fn_is_expert()
     );
+drop policy if exists "consult_farmer_insert" on public.consultation_requests;
 create policy "consult_farmer_insert"
     on public.consultation_requests for insert
     with check (organization_id = any(public.fn_my_org_ids()));
+drop policy if exists "consult_admin_expert_update" on public.consultation_requests;
 create policy "consult_admin_expert_update"
     on public.consultation_requests for update
     using (public.fn_is_admin() or public.fn_is_expert());
@@ -1552,12 +1588,14 @@ create policy "consult_admin_expert_update"
 -- -------------------------------------------------------
 -- EXTERNAL SYSTEM LINKS & PAYMENTS
 -- -------------------------------------------------------
+drop policy if exists "ext_links_read_own" on public.external_system_links;
 create policy "ext_links_read_own"
     on public.external_system_links for select
     using (
         organization_id = any(public.fn_my_org_ids())
         or public.fn_is_admin()
     );
+drop policy if exists "ext_links_own_write" on public.external_system_links;
 create policy "ext_links_own_write"
     on public.external_system_links for all
     using (
@@ -1565,16 +1603,19 @@ create policy "ext_links_own_write"
         or public.fn_is_admin()
     );
 
+drop policy if exists "payments_read_own" on public.payments;
 create policy "payments_read_own"
     on public.payments for select
     using (
         organization_id = any(public.fn_my_org_ids())
         or public.fn_is_admin()
     );
+drop policy if exists "payments_admin_write" on public.payments;
 create policy "payments_admin_write"
     on public.payments for all
     using (public.fn_is_admin());
 
+drop policy if exists "purchased_products_read_own" on public.purchased_products;
 create policy "purchased_products_read_own"
     on public.purchased_products for select
     using (
@@ -1586,6 +1627,7 @@ create policy "purchased_products_read_own"
 -- FARMS & HERD DATA (core data isolation)
 -- Principle from Section 5.9: Farmer A NEVER sees Farmer B's data
 -- -------------------------------------------------------
+drop policy if exists "farms_read_own" on public.farms;
 create policy "farms_read_own"
     on public.farms for select
     using (
@@ -1593,6 +1635,7 @@ create policy "farms_read_own"
         or public.fn_is_admin()
         or public.fn_is_expert()  -- experts read for consultation
     );
+drop policy if exists "farms_write_own" on public.farms;
 create policy "farms_write_own"
     on public.farms for all
     using (
@@ -1600,6 +1643,7 @@ create policy "farms_write_own"
         or public.fn_is_admin()
     );
 
+drop policy if exists "farm_activities_read_own" on public.farm_activity_types;
 create policy "farm_activities_read_own"
     on public.farm_activity_types for select
     using (
@@ -1609,6 +1653,7 @@ create policy "farm_activities_read_own"
         )
         or public.fn_is_admin()
     );
+drop policy if exists "farm_activities_write_own" on public.farm_activity_types;
 create policy "farm_activities_write_own"
     on public.farm_activity_types for all
     using (
@@ -1619,6 +1664,7 @@ create policy "farm_activities_write_own"
         or public.fn_is_admin()
     );
 
+drop policy if exists "herd_groups_read_own" on public.herd_groups;
 create policy "herd_groups_read_own"
     on public.herd_groups for select
     using (
@@ -1626,6 +1672,7 @@ create policy "herd_groups_read_own"
         or public.fn_is_admin()
         or public.fn_is_expert()
     );
+drop policy if exists "herd_groups_write_own" on public.herd_groups;
 create policy "herd_groups_write_own"
     on public.herd_groups for all
     using (
@@ -1633,6 +1680,7 @@ create policy "herd_groups_write_own"
         or public.fn_is_admin()
     );
 
+drop policy if exists "herd_events_read_own" on public.herd_events;
 create policy "herd_events_read_own"
     on public.herd_events for select
     using (
@@ -1640,6 +1688,7 @@ create policy "herd_events_read_own"
         or public.fn_is_admin()
         or public.fn_is_expert()
     );
+drop policy if exists "herd_events_insert_own" on public.herd_events;
 create policy "herd_events_insert_own"
     on public.herd_events for insert
     with check (
@@ -1651,12 +1700,14 @@ create policy "herd_events_insert_own"
 -- -------------------------------------------------------
 -- AI CONVERSATIONS & MESSAGES (D7: private to User)
 -- -------------------------------------------------------
+drop policy if exists "ai_conv_read_own" on public.ai_conversations;
 create policy "ai_conv_read_own"
     on public.ai_conversations for select
     using (
         user_id = public.fn_current_user_id()
         or public.fn_is_admin()
     );
+drop policy if exists "ai_conv_write_own" on public.ai_conversations;
 create policy "ai_conv_write_own"
     on public.ai_conversations for all
     using (
@@ -1664,6 +1715,7 @@ create policy "ai_conv_write_own"
         or public.fn_is_admin()
     );
 
+drop policy if exists "ai_msg_read_own" on public.ai_messages;
 create policy "ai_msg_read_own"
     on public.ai_messages for select
     using (
@@ -1673,6 +1725,7 @@ create policy "ai_msg_read_own"
         )
         or public.fn_is_admin()
     );
+drop policy if exists "ai_msg_insert_own" on public.ai_messages;
 create policy "ai_msg_insert_own"
     on public.ai_messages for insert
     with check (
@@ -1685,6 +1738,7 @@ create policy "ai_msg_insert_own"
 -- -------------------------------------------------------
 -- PLATFORM EVENTS, NOTIFICATIONS, AUDIT
 -- -------------------------------------------------------
+drop policy if exists "platform_events_read_own" on public.platform_events;
 create policy "platform_events_read_own"
     on public.platform_events for select
     using (
@@ -1692,16 +1746,19 @@ create policy "platform_events_read_own"
         or public.fn_is_admin()
     );
 
+drop policy if exists "notifications_read_own" on public.notifications;
 create policy "notifications_read_own"
     on public.notifications for select
     using (
         user_id = public.fn_current_user_id()
         or public.fn_is_admin()
     );
+drop policy if exists "notifications_update_own" on public.notifications;
 create policy "notifications_update_own"
     on public.notifications for update
     using (user_id = public.fn_current_user_id());  -- allow marking as read
 
+drop policy if exists "audit_log_admin_only" on public.audit_log;
 create policy "audit_log_admin_only"
     on public.audit_log for select
     using (public.fn_is_admin());
@@ -1709,6 +1766,7 @@ create policy "audit_log_admin_only"
 -- -------------------------------------------------------
 -- KNOWLEDGE CHUNKS (published = all authenticated; full = expert/admin)
 -- -------------------------------------------------------
+drop policy if exists "knowledge_read_published" on public.knowledge_chunks;
 create policy "knowledge_read_published"
     on public.knowledge_chunks for select
     using (
@@ -1716,6 +1774,7 @@ create policy "knowledge_read_published"
         or public.fn_is_admin()
         or public.fn_is_expert()
     );
+drop policy if exists "knowledge_expert_write" on public.knowledge_chunks;
 create policy "knowledge_expert_write"
     on public.knowledge_chunks for all
     using (public.fn_is_admin() or public.fn_is_expert());
@@ -1734,58 +1793,72 @@ begin
 end;
 $$;
 
+drop trigger if exists trg_users_updated_at on public.users;
 create trigger trg_users_updated_at
     before update on public.users
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_organizations_updated_at on public.organizations;
 create trigger trg_organizations_updated_at
     before update on public.organizations
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_user_org_roles_updated_at on public.user_organization_roles;
 create trigger trg_user_org_roles_updated_at
     before update on public.user_organization_roles
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_memberships_updated_at on public.memberships;
 create trigger trg_memberships_updated_at
     before update on public.memberships
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_mem_apps_updated_at on public.membership_applications;
 create trigger trg_mem_apps_updated_at
     before update on public.membership_applications
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_expert_profiles_updated_at on public.expert_profiles;
 create trigger trg_expert_profiles_updated_at
     before update on public.expert_profiles
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_consultation_reqs_updated_at on public.consultation_requests;
 create trigger trg_consultation_reqs_updated_at
     before update on public.consultation_requests
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_ext_links_updated_at on public.external_system_links;
 create trigger trg_ext_links_updated_at
     before update on public.external_system_links
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_payments_updated_at on public.payments;
 create trigger trg_payments_updated_at
     before update on public.payments
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_farms_updated_at on public.farms;
 create trigger trg_farms_updated_at
     before update on public.farms
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_herd_groups_updated_at on public.herd_groups;
 create trigger trg_herd_groups_updated_at
     before update on public.herd_groups
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_ai_conversations_updated_at on public.ai_conversations;
 create trigger trg_ai_conversations_updated_at
     before update on public.ai_conversations
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_notifications_updated_at on public.notifications;
 create trigger trg_notifications_updated_at
     before update on public.notifications
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_knowledge_chunks_updated_at on public.knowledge_chunks;
 create trigger trg_knowledge_chunks_updated_at
     before update on public.knowledge_chunks
     for each row execute function public.fn_set_updated_at();
@@ -2312,6 +2385,7 @@ on conflict (role, version) do nothing;
 --   Lock снимается автоматически — release не нужен.
 -- ============================================================
 
+drop function if exists public.try_lock_conversation(p_lock_key bigint, p_context text);
 create or replace function public.try_lock_conversation(
     p_lock_key bigint,
     p_context  text default 'conversation'  -- D-3 fix: для логирования
@@ -2758,6 +2832,9 @@ comment on function public.mark_notification_failed(uuid, text) is
      Previous version had no cap → invalid phone numbers retried forever (L-NEW-4).';
 
 -- Update claim_pending_notifications to exclude failed_permanent
+-- drop first: live signature has param defaults this version doesn't (PG restriction —
+-- CREATE OR REPLACE cannot remove defaults, only DROP+CREATE can change them).
+drop function if exists public.claim_pending_notifications(int, text);
 create or replace function public.claim_pending_notifications(
     p_batch_size    int,
     p_worker_id     text
@@ -2894,6 +2971,7 @@ comment on constraint ai_messages_conv_seq_unique on public.ai_messages is
 --   After first commits: message_count=6. Second UPDATE reads 6, returns 7.
 --   Both callers get different sequence numbers. Zero probability of collision.
 
+drop function if exists public.insert_user_message_dedup(p_conversation_id uuid, p_content text, p_whatsapp_message_id text, p_content_type text, p_content_url text, p_model_used text, p_prompt_version text, p_latency_ms integer);
 create or replace function public.insert_user_message_dedup(
     p_conversation_id       uuid,
     p_content               text,
@@ -2994,6 +3072,7 @@ comment on function public.insert_user_message_dedup(uuid, text, text, text, tex
 -- Complement to insert_user_message_dedup for assistant messages.
 -- Uses same atomic counter pattern for consistent sequencing.
 -- ============================================================
+drop function if exists public.insert_ai_message(p_conversation_id uuid, p_role text, p_content_type text, p_content_text text, p_tool_calls jsonb, p_extracted_entities jsonb, p_model_used text, p_input_tokens integer, p_output_tokens integer, p_latency_ms integer, p_prompt_version text);
 create or replace function public.insert_ai_message(
     p_conversation_id   uuid,
     p_role              text,   -- 'assistant' | 'tool' | 'system'
@@ -3304,6 +3383,7 @@ comment on function public.fn_handle_new_auth_user() is
 -- CEO Decision D-F01-3: supports org_types from schema CHECK (farmer, mpk, supplier, consultant, other)
 -- CEO Decision D-F01-2: Auth is OTP; user already authenticated before this RPC
 -- ============================================================
+drop function if exists public.rpc_register_organization(p_organization_id uuid, p_org_type text, p_name text, p_bin text, p_region_id uuid, p_phone text, p_invited_by uuid, p_role_data jsonb);
 create or replace function public.rpc_register_organization(
     p_organization_id   uuid,       -- ignored for this RPC; included for P-AI-2 signature consistency
     p_org_type          text,
@@ -3464,6 +3544,7 @@ comment on function public.rpc_register_organization(uuid, text, text, text, uui
 -- Dok 3 §2.2 | Callers: [WEB] [AI]
 -- Creates MembershipApplication with status='submitted'
 -- ============================================================
+drop function if exists public.rpc_submit_membership_application(p_organization_id uuid, p_membership_type text, p_notes text);
 create or replace function public.rpc_submit_membership_application(
     p_organization_id   uuid,
     p_membership_type   text,
@@ -3587,6 +3668,7 @@ comment on function public.rpc_submit_membership_application(uuid, text, text) i
 -- Returns full user context for cabinet initialization
 -- STABLE read function — no side effects
 -- ============================================================
+drop function if exists public.rpc_get_my_context(p_organization_id uuid);
 create or replace function public.rpc_get_my_context(
     p_organization_id   uuid    default null     -- optional: specific org context; null = all
 )
@@ -3698,6 +3780,7 @@ comment on function public.rpc_get_my_context(uuid) is
 -- Creates or updates Farm record
 -- p_farm_id=null → INSERT, p_farm_id=uuid → UPDATE
 -- ============================================================
+drop function if exists public.rpc_upsert_farm(p_organization_id uuid, p_farm_id uuid, p_name text, p_region_id uuid, p_shelter_type text, p_calving_system text, p_total_area_ha numeric);
 create or replace function public.rpc_upsert_farm(
     p_organization_id   uuid,
     p_farm_id           uuid        default null,
@@ -4142,6 +4225,7 @@ on conflict (sql_name) do update
 -- D-S2-1: Dual mode — list (paginated) or detail (by application_id)
 -- Callers: [ADMIN] only
 -- ============================================================
+drop function if exists public.rpc_get_membership_queue(p_organization_id uuid, p_application_id uuid, p_status_filter text, p_page integer, p_page_size integer);
 create or replace function public.rpc_get_membership_queue(
     p_organization_id   uuid,           -- P-AI-2 convention; not used for filtering (admin sees all)
     p_application_id    uuid    default null,    -- null = list mode; non-null = detail mode
@@ -4308,6 +4392,7 @@ comment on function public.rpc_get_membership_queue(uuid, uuid, text, int, int) 
 -- Events: identity.membership_application.decided (на оба решения)
 -- D-S2-2: Inserts WhatsApp + in_app notifications
 -- ============================================================
+drop function if exists public.rpc_process_membership_application(p_organization_id uuid, p_application_id uuid, p_decision text, p_decision_notes text);
 create or replace function public.rpc_process_membership_application(
     p_organization_id   uuid,           -- P-AI-2 convention; the org whose application is being processed
     p_application_id    uuid,
@@ -4642,6 +4727,7 @@ on conflict (sql_name) do update
 -- Append-only INSERT into herd_events (D25).
 -- Events: farm.herd_event.logged (Dok 4)
 -- ============================================================
+drop function if exists public.rpc_log_herd_event(p_organization_id uuid, p_farm_id uuid, p_herd_group_id uuid, p_event_type text, p_value_before numeric, p_value_after numeric, p_data_source text, p_event_date date, p_notes text, p_metadata jsonb);
 create or replace function public.rpc_log_herd_event(
     p_organization_id   uuid,
     p_farm_id           uuid,
@@ -4930,6 +5016,7 @@ on conflict (sql_name) do update
 -- SLICE 6a: RPC-45 rpc_restrict_organization
 -- Admin: create health restriction on organization. D98 TSP safety gate.
 -- ============================================================
+drop function if exists public.rpc_restrict_organization(p_organization_id uuid, p_herd_group_id uuid, p_restriction_type text, p_reason text, p_valid_until timestamp with time zone, p_vet_case_id uuid);
 create or replace function public.rpc_restrict_organization(
     p_organization_id       uuid,
     p_herd_group_id         uuid,
@@ -5015,6 +5102,7 @@ create unique index if not exists idx_herd_groups_farm_category
 -- SLICE 6b: rpc_assign_role
 -- Admin assigns/revokes admin or expert roles.
 -- ============================================================
+drop function if exists public.rpc_assign_role(p_organization_id uuid, p_target_user_id uuid, p_role_type text, p_action text, p_specialization text);
 create or replace function public.rpc_assign_role(
     p_organization_id   uuid,
     p_target_user_id    uuid,
@@ -5347,6 +5435,7 @@ create index if not exists idx_ecm_source
 -- Returns active (or all if p_include_deprecated) L1 codes as of p_at_date.
 -- Pure lookup — no organization_id required.
 -- ------------------------------------------------------------
+drop function if exists public.rpc_list_animal_categories(p_at_date date, p_include_deprecated boolean);
 create or replace function public.rpc_list_animal_categories(
     p_at_date              date    default current_date,
     p_include_deprecated   boolean default false
@@ -5392,6 +5481,7 @@ comment on function public.rpc_list_animal_categories(date, boolean) is
 -- Resolve a single L1 code into its target taxonomy code at a given date.
 -- Returns NULL if no mapping is active on that date.
 -- ------------------------------------------------------------
+drop function if exists public.rpc_resolve_category(p_source_code text, p_target_taxonomy text, p_at_date date);
 create or replace function public.rpc_resolve_category(
     p_source_code      text,
     p_target_taxonomy  text,
@@ -5426,6 +5516,7 @@ comment on function public.rpc_resolve_category(text, text, date) is
 -- Return all mappings for a target taxonomy active as of p_at_date.
 -- Used by Python engine and TS UI to read ontology once per session.
 -- ------------------------------------------------------------
+drop function if exists public.rpc_get_category_mappings(p_target_taxonomy text, p_at_date date);
 create or replace function public.rpc_get_category_mappings(
     p_target_taxonomy  text,
     p_at_date          date default current_date
@@ -5461,6 +5552,7 @@ comment on function public.rpc_get_category_mappings(text, date) is
 -- I3 invariant: fails if p_required_mappings doesn't cover feeding_group + turnover_key + market_sex.
 -- Admin-only.
 -- ------------------------------------------------------------
+drop function if exists public.rpc_add_animal_category(p_code text, p_name_ru text, p_name_kk text, p_sex text, p_purpose text, p_physiological_state text, p_age_band text, p_required_mappings jsonb, p_description_ru text, p_sort_order integer);
 create or replace function public.rpc_add_animal_category(
     p_code                text,
     p_name_ru             text,
@@ -5544,6 +5636,7 @@ comment on function public.rpc_add_animal_category(text,text,text,text,text,text
 -- Mark a L1 code deprecated. Closes its L2 projections by setting valid_to.
 -- I1 invariant: code is NEVER deleted.
 -- ------------------------------------------------------------
+drop function if exists public.rpc_deprecate_animal_category(p_code text, p_replaced_by text[], p_valid_to date);
 create or replace function public.rpc_deprecate_animal_category(
     p_code              text,
     p_replaced_by       text[]  default '{}',
@@ -5601,6 +5694,7 @@ comment on function public.rpc_deprecate_animal_category(text, text[], date) is
 --   auto_remap        → update herd_groups.animal_category_id directly
 --   flag_farmer_task  → leave herd_groups unchanged, create FarmTask placeholders (if farm_tasks exists)
 -- ------------------------------------------------------------
+drop function if exists public.rpc_migrate_animal_category(p_from_code text, p_to_code text, p_strategy text);
 create or replace function public.rpc_migrate_animal_category(
     p_from_code   text,
     p_to_code     text,
@@ -5712,39 +5806,42 @@ create policy "ecm_read"
         or public.fn_is_admin()
         -- Org-scoped: only members of THAT organization (CRITICAL-TAXONOMY-02 fix:
         -- prior version had a tautological subquery making all org rows world-readable).
-        or exists (
-            select 1 from public.memberships m
-            where m.organization_id = external_category_mappings.organization_id
-              and m.user_id = public.fn_current_user_id()
-              and m.is_active = true
-        )
+        -- BUG FIX (deploy 2026-07-07): referenced public.memberships.user_id/.is_active —
+        -- neither column exists (memberships is org-level: organization_id/org_type/level,
+        -- not a user↔org link table). Org membership check = fn_my_org_ids(), established
+        -- pattern everywhere else in this codebase.
+        or organization_id = any (public.fn_my_org_ids())
     );
 
+drop policy if exists "ecm_write_global" on public.external_category_mappings;
 create policy "ecm_write_global"
     on public.external_category_mappings for all
     using (organization_id is null and public.fn_is_admin())
     with check (organization_id is null and public.fn_is_admin());
 
+drop policy if exists "ecm_write_org" on public.external_category_mappings;
+-- BUG FIX (deploy 2026-07-07): same fix as ecm_read — role check must use
+-- user_organization_roles (has user_id/role), not memberships (org-level, no
+-- user_id/is_active/role columns). Valid roles are owner/manager/employee/viewer —
+-- 'admin' is not a role value here; closest intent match is owner+manager.
 create policy "ecm_write_org"
     on public.external_category_mappings for all
     using (
         organization_id is not null
         and exists (
-            select 1 from public.memberships m
-            where m.organization_id = external_category_mappings.organization_id
-              and m.user_id = public.fn_current_user_id()
-              and m.is_active = true
-              and m.role in ('owner','admin')
+            select 1 from public.user_organization_roles uor
+            where uor.organization_id = external_category_mappings.organization_id
+              and uor.user_id = public.fn_current_user_id()
+              and uor.role in ('owner', 'manager')
         )
     )
     with check (
         organization_id is not null
         and exists (
-            select 1 from public.memberships m
-            where m.organization_id = external_category_mappings.organization_id
-              and m.user_id = public.fn_current_user_id()
-              and m.is_active = true
-              and m.role in ('owner','admin')
+            select 1 from public.user_organization_roles uor
+            where uor.organization_id = external_category_mappings.organization_id
+              and uor.user_id = public.fn_current_user_id()
+              and uor.role in ('owner', 'manager')
         )
     );
 
@@ -5799,6 +5896,7 @@ create trigger trg_audit_animal_category_mappings
     after insert or update or delete on public.animal_category_mappings
     for each row execute function public.fn_audit_animal_taxonomy();
 
+drop trigger if exists trg_audit_external_cat_mappings on public.external_category_mappings;
 create trigger trg_audit_external_cat_mappings
     after insert or update or delete on public.external_category_mappings
     for each row execute function public.fn_audit_animal_taxonomy();

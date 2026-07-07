@@ -9,7 +9,7 @@
 --              price-decision timer (see SECTION 9).
 --
 -- Market / TSP (Transparent Supply Pool) module.
-Batches, Pools, Matches, Delivery, Prices.
+-- Batches, Pools, Matches, Delivery, Prices.
 --
 -- Depends on: d01_kernel.sql
 -- Consolidated from: 002_tsp__1_.sql
@@ -595,64 +595,64 @@ comment on table public.price_index_values is
 -- ============================================================
 
 -- grade_standards
-create index idx_grade_code on public.grade_standards (code);
+create index if not exists idx_grade_code on public.grade_standards (code);
 
 -- tsp_skus (heavily queried for batch creation and pool matching)
-create index idx_tsp_skus_grade     on public.tsp_skus (grade_id);
-create index idx_tsp_skus_breed_sex on public.tsp_skus (breed_group, sex, age_group);
-create index idx_tsp_skus_active    on public.tsp_skus (is_active);
+create index if not exists idx_tsp_skus_grade     on public.tsp_skus (grade_id);
+create index if not exists idx_tsp_skus_breed_sex on public.tsp_skus (breed_group, sex, age_group);
+create index if not exists idx_tsp_skus_active    on public.tsp_skus (is_active);
 
 -- batches (critical — queried by status, org, target_month constantly)
-create index idx_batches_org_status     on public.batches (organization_id, status);
-create index idx_batches_status_month   on public.batches (status, target_month)
+create index if not exists idx_batches_org_status     on public.batches (organization_id, status);
+create index if not exists idx_batches_status_month   on public.batches (status, target_month)
     where status in ('published', 'matched');
-create index idx_batches_sku            on public.batches (tsp_sku_id)
+create index if not exists idx_batches_sku            on public.batches (tsp_sku_id)
     where tsp_sku_id is not null;
-create index idx_batches_herd_group     on public.batches (herd_group_id)
+create index if not exists idx_batches_herd_group     on public.batches (herd_group_id)
     where herd_group_id is not null;
-create index idx_batches_region_month   on public.batches (region_id, target_month)
+create index if not exists idx_batches_region_month   on public.batches (region_id, target_month)
     where status = 'published';
-create index idx_batches_expires        on public.batches (expires_at)
+create index if not exists idx_batches_expires        on public.batches (expires_at)
     where status = 'published';  -- cron expiry job
 
 -- pool_requests
-create index idx_pool_req_org_status    on public.pool_requests (organization_id, status);
-create index idx_pool_req_status_month  on public.pool_requests (status, target_month)
+create index if not exists idx_pool_req_org_status    on public.pool_requests (organization_id, status);
+create index if not exists idx_pool_req_status_month  on public.pool_requests (status, target_month)
     where status = 'active';
 
 -- pools
-create index idx_pools_request          on public.pools (pool_request_id);
-create index idx_pools_status           on public.pools (status);
+create index if not exists idx_pools_request          on public.pools (pool_request_id);
+create index if not exists idx_pools_status           on public.pools (status);
 
 -- pool_matches
-create index idx_pm_pool    on public.pool_matches (pool_id);
-create index idx_pm_batch   on public.pool_matches (batch_id);
+create index if not exists idx_pm_pool    on public.pool_matches (pool_id);
+create index if not exists idx_pm_batch   on public.pool_matches (batch_id);
 
 -- delivery_records
-create index idx_dr_match   on public.delivery_records (pool_match_id);
-create index idx_dr_org     on public.delivery_records (organization_id);
-create index idx_dr_status  on public.delivery_records (status);
+create index if not exists idx_dr_match   on public.delivery_records (pool_match_id);
+create index if not exists idx_dr_org     on public.delivery_records (organization_id);
+create index if not exists idx_dr_status  on public.delivery_records (status);
 
 -- pool_manifests
-create index idx_manifests_pool_current on public.pool_manifests (pool_id, is_current)
+create index if not exists idx_manifests_pool_current on public.pool_manifests (pool_id, is_current)
     where is_current = true;
 
 -- price_grids
-create index idx_pg_sku_active  on public.price_grids (tsp_sku_id, is_active)
+create index if not exists idx_pg_sku_active  on public.price_grids (tsp_sku_id, is_active)
     where is_active = true;
-create index idx_pg_region      on public.price_grids (region_id)
+create index if not exists idx_pg_region      on public.price_grids (region_id)
     where region_id is not null;
 
 -- price_grid_log
-create index idx_pgl_grid_time  on public.price_grid_log (price_grid_id, created_at desc);
+create index if not exists idx_pgl_grid_time  on public.price_grid_log (price_grid_id, created_at desc);
 
 -- price_indices
-create index idx_pi_sku         on public.price_indices (tsp_sku_id)
+create index if not exists idx_pi_sku         on public.price_indices (tsp_sku_id)
     where tsp_sku_id is not null;
 
 -- price_index_values
-create index idx_piv_index_date on public.price_index_values (index_id, period_date desc);
-create index idx_piv_published  on public.price_index_values (index_id, published)
+create index if not exists idx_piv_index_date on public.price_index_values (index_id, period_date desc);
+create index if not exists idx_piv_published  on public.price_index_values (index_id, published)
     where published = true;
 
 -- ============================================================
@@ -679,32 +679,47 @@ alter table public.price_indices            enable row level security;
 alter table public.price_index_values       enable row level security;
 
 -- Reference tables: readable by all authenticated users
+drop policy if exists "grade_standards_read_auth" on public.grade_standards;
 create policy "grade_standards_read_auth"       on public.grade_standards       for select using (auth.uid() is not null);
+drop policy if exists "grade_standards_admin_write" on public.grade_standards;
 create policy "grade_standards_admin_write"     on public.grade_standards       for all    using (public.fn_is_admin());
+drop policy if exists "tsp_skus_read_auth" on public.tsp_skus;
 create policy "tsp_skus_read_auth"              on public.tsp_skus              for select using (auth.uid() is not null);
+drop policy if exists "tsp_skus_admin_write" on public.tsp_skus;
 create policy "tsp_skus_admin_write"            on public.tsp_skus              for all    using (public.fn_is_admin());
+drop policy if exists "valid_combos_read_auth" on public.valid_sku_combinations;
 create policy "valid_combos_read_auth"          on public.valid_sku_combinations for select using (auth.uid() is not null);
+drop policy if exists "valid_combos_admin_write" on public.valid_sku_combinations;
 create policy "valid_combos_admin_write"        on public.valid_sku_combinations for all    using (public.fn_is_admin());
+drop policy if exists "weight_classes_read_auth" on public.weight_classes;
 create policy "weight_classes_read_auth"        on public.weight_classes        for select using (auth.uid() is not null);
+drop policy if exists "weight_classes_admin_write" on public.weight_classes;
 create policy "weight_classes_admin_write"      on public.weight_classes        for all    using (public.fn_is_admin());
+drop policy if exists "pim_read_auth" on public.price_index_methodologies;
 create policy "pim_read_auth"                   on public.price_index_methodologies for select using (auth.uid() is not null);
+drop policy if exists "pim_admin_write" on public.price_index_methodologies;
 create policy "pim_admin_write"                 on public.price_index_methodologies for all    using (public.fn_is_admin());
 
 -- Batches: farmer sees own; admin sees all
+drop policy if exists "batches_read_own" on public.batches;
 create policy "batches_read_own"    on public.batches for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+drop policy if exists "batches_write_own" on public.batches;
 create policy "batches_write_own"   on public.batches for all
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 
 -- Pool requests: MPK sees own; admin sees all
+drop policy if exists "pool_req_read_own" on public.pool_requests;
 create policy "pool_req_read_own"   on public.pool_requests for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+drop policy if exists "pool_req_write_own" on public.pool_requests;
 create policy "pool_req_write_own"  on public.pool_requests for all
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 
 -- Pools: MPK + matched farmers (only own); admin all
 -- D40: farmer sees pool only AFTER their batch is matched
 -- DEF-TSP-M4-OWNERSHIP (resolved): MPK ownership checked via pools.organization_id.
+drop policy if exists "pools_read" on public.pools;
 create policy "pools_read"          on public.pools for select
     using (
         public.fn_is_admin()
@@ -715,9 +730,11 @@ create policy "pools_read"          on public.pools for select
             where b.organization_id = any(public.fn_my_org_ids())
         )
     );
+drop policy if exists "pools_admin_write" on public.pools;
 create policy "pools_admin_write"   on public.pools for all using (public.fn_is_admin());
 
 -- Pool matches: farmer sees own batch matches; MPK sees own pool matches; admin all
+drop policy if exists "pool_matches_read" on public.pool_matches;
 create policy "pool_matches_read"   on public.pool_matches for select
     using (
         public.fn_is_admin()
@@ -730,16 +747,20 @@ create policy "pool_matches_read"   on public.pool_matches for select
             where organization_id = any(public.fn_my_org_ids())
         )
     );
+drop policy if exists "pool_matches_admin_write" on public.pool_matches;
 create policy "pool_matches_admin_write" on public.pool_matches for all using (public.fn_is_admin());
 
 -- Delivery records: farmer sees own; MPK sees own; admin all
+drop policy if exists "delivery_read_own" on public.delivery_records;
 create policy "delivery_read_own"   on public.delivery_records for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+drop policy if exists "delivery_mpk_write" on public.delivery_records;
 create policy "delivery_mpk_write"  on public.delivery_records for update
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 
 -- Pool manifests: D40 — only matched MPK + admin
 -- DEF-TSP-M4-OWNERSHIP (resolved): MPK ownership checked via pools.organization_id.
+drop policy if exists "manifests_read" on public.pool_manifests;
 create policy "manifests_read"      on public.pool_manifests for select
     using (
         public.fn_is_admin()
@@ -749,21 +770,29 @@ create policy "manifests_read"      on public.pool_manifests for select
               and status in ('executing','dispatched','delivered','executed')
         )
     );
+drop policy if exists "manifests_admin_write" on public.pool_manifests;
 create policy "manifests_admin_write" on public.pool_manifests for all using (public.fn_is_admin());
 
 -- Price grids: all authenticated read (with disclaimer); admin write
+drop policy if exists "price_grids_read_auth" on public.price_grids;
 create policy "price_grids_read_auth"   on public.price_grids for select
     using (auth.uid() is not null and legal_disclaimer_shown = true);
+drop policy if exists "price_grids_admin_write" on public.price_grids;
 create policy "price_grids_admin_write" on public.price_grids for all using (public.fn_is_admin());
 
 -- Price grid log: admin only
+drop policy if exists "pgl_admin_read" on public.price_grid_log;
 create policy "pgl_admin_read"  on public.price_grid_log for select using (public.fn_is_admin());
 
 -- Price indices and values: read authenticated; write admin
+drop policy if exists "pi_read_auth" on public.price_indices;
 create policy "pi_read_auth"    on public.price_indices       for select using (auth.uid() is not null);
+drop policy if exists "pi_admin_write" on public.price_indices;
 create policy "pi_admin_write"  on public.price_indices       for all    using (public.fn_is_admin());
+drop policy if exists "piv_read_published" on public.price_index_values;
 create policy "piv_read_published" on public.price_index_values for select
     using (published = true or public.fn_is_admin());
+drop policy if exists "piv_admin_write" on public.price_index_values;
 create policy "piv_admin_write" on public.price_index_values  for all    using (public.fn_is_admin());
 
 -- ============================================================
@@ -771,26 +800,32 @@ create policy "piv_admin_write" on public.price_index_values  for all    using (
 -- ============================================================
 
 -- updated_at triggers
+drop trigger if exists trg_batches_updated_at on public.batches;
 create trigger trg_batches_updated_at
     before update on public.batches
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_pool_requests_updated_at on public.pool_requests;
 create trigger trg_pool_requests_updated_at
     before update on public.pool_requests
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_pools_updated_at on public.pools;
 create trigger trg_pools_updated_at
     before update on public.pools
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_delivery_records_updated_at on public.delivery_records;
 create trigger trg_delivery_records_updated_at
     before update on public.delivery_records
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_price_grids_updated_at on public.price_grids;
 create trigger trg_price_grids_updated_at
     before update on public.price_grids
     for each row execute function public.fn_set_updated_at();
 
+drop trigger if exists trg_price_indices_updated_at on public.price_indices;
 create trigger trg_price_indices_updated_at
     before update on public.price_indices
     for each row execute function public.fn_set_updated_at();
@@ -817,6 +852,7 @@ begin
 end;
 $$;
 
+drop trigger if exists trg_price_grid_log on public.price_grids;
 create trigger trg_price_grid_log
     after update on public.price_grids
     for each row execute function public.fn_log_price_grid_change();
@@ -1753,6 +1789,7 @@ create policy skumap_admin_write
 -- FSM: draft|published → cancelled. Matched requires rollback first.
 -- Events: market.batch.cancelled
 -- ============================================================
+drop function if exists public.rpc_cancel_batch(p_organization_id uuid, p_batch_id uuid, p_reason text);
 create or replace function public.rpc_cancel_batch(
     p_organization_id   uuid,
     p_batch_id          uuid,
@@ -1839,6 +1876,7 @@ comment on function public.rpc_cancel_batch(uuid, uuid, text) is
 -- Dok 3 §4 | Callers: [WEB] [AI]
 -- Returns price + MANDATORY disclaimer_text (Article 171)
 -- ============================================================
+drop function if exists public.rpc_get_price_for_sku(p_organization_id uuid, p_sku_id uuid, p_region_id uuid);
 create or replace function public.rpc_get_price_for_sku(
     p_organization_id   uuid,
     p_sku_id            uuid,
@@ -1899,6 +1937,7 @@ comment on function public.rpc_get_price_for_sku(uuid, uuid, uuid) is
 -- Anonymous aggregates: supply by SKU, demand by category.
 -- MANDATORY disclaimer_text.
 -- ============================================================
+drop function if exists public.rpc_get_market_summary(p_organization_id uuid, p_region_id uuid, p_month date);
 create or replace function public.rpc_get_market_summary(
     p_organization_id   uuid,
     p_region_id         uuid        default null,
@@ -1981,6 +2020,7 @@ on conflict (sql_name) do update
 -- ============================================================
 
 -- RPC-12: rpc_create_pool_request
+drop function if exists public.rpc_create_pool_request(p_organization_id uuid, p_total_heads integer, p_target_month date, p_region_id uuid, p_accepted_categories jsonb);
 create or replace function public.rpc_create_pool_request(
     p_organization_id uuid, p_total_heads int, p_target_month date,
     p_region_id uuid default null, p_accepted_categories jsonb default '[]'
@@ -2022,6 +2062,7 @@ begin
 end; $$;
 
 -- RPC-14: rpc_match_batch_to_pool
+drop function if exists public.rpc_match_batch_to_pool(p_organization_id uuid, p_pool_id uuid, p_batch_id uuid, p_matched_heads integer, p_price_per_kg integer);
 create or replace function public.rpc_match_batch_to_pool(
     p_organization_id uuid, p_pool_id uuid, p_batch_id uuid,
     p_matched_heads int, p_price_per_kg int default null
@@ -2099,6 +2140,7 @@ begin
 end; $$;
 
 -- RPC-16: rpc_rollback_batch_match
+drop function if exists public.rpc_rollback_batch_match(p_organization_id uuid, p_pool_id uuid, p_batch_id uuid, p_reason text);
 create or replace function public.rpc_rollback_batch_match(
     p_organization_id uuid, p_pool_id uuid, p_batch_id uuid, p_reason text default null
 )
@@ -2124,6 +2166,7 @@ begin
 end; $$;
 
 -- RPC-19: rpc_set_price_grid
+drop function if exists public.rpc_set_price_grid(p_organization_id uuid, p_sku_id uuid, p_base_price_per_kg integer, p_premium_per_kg integer, p_region_id uuid);
 create or replace function public.rpc_set_price_grid(
     p_organization_id uuid, p_sku_id uuid, p_base_price_per_kg int,
     p_premium_per_kg int default 0, p_region_id uuid default null
@@ -3205,6 +3248,7 @@ comment on function public.rpc_lower_batch_price(uuid, uuid, int) is
 -- is invisible to rpc_retry_match_pool eligibility. Allowed from draft|published
 -- (terms lock once offering/matched). D-M6-6 invariant ready_to >= ready_from.
 -- ------------------------------------------------------------
+drop function if exists public.rpc_set_batch_terms(p_organization_id uuid, p_batch_id uuid, p_farmer_price_per_kg integer, p_ready_from date, p_ready_to date);
 create or replace function public.rpc_set_batch_terms(
     p_organization_id     uuid,
     p_batch_id            uuid,
@@ -3425,6 +3469,7 @@ comment on function public.rpc_confirm_delivery(uuid, uuid) is
 -- D-M6-12 double-blind: if the other side already submitted, set visible_at
 -- on BOTH reviews to now() in a single update.
 -- ------------------------------------------------------------
+drop function if exists public.rpc_submit_deal_review(p_organization_id uuid, p_batch_id uuid, p_overall_score integer, p_dimension_id uuid, p_dimension_score integer, p_comment text);
 create or replace function public.rpc_submit_deal_review(
     p_organization_id   uuid,
     p_batch_id          uuid,
@@ -3744,6 +3789,7 @@ comment on function public.rpc_pool_accept_partial(uuid, uuid) is
 -- (pool_line_id=NULL, deal_price=NULL), zero out pool_line volumes, mark pool.
 -- Idempotent: returns 0 if already cancelled.
 -- ------------------------------------------------------------
+drop function if exists public.rpc_cancel_pool(p_organization_id uuid, p_pool_id uuid, p_reason text);
 create or replace function public.rpc_cancel_pool(
     p_organization_id   uuid,
     p_pool_id           uuid,
@@ -3856,6 +3902,7 @@ comment on function public.rpc_cancel_pool(uuid, uuid, text) is
 -- RPC-M6-11: rpc_get_reference_price (M4 §1.1 / D-M6-12 reference)
 -- Caller: any. STABLE read. MANDATORY disclaimer_text in response (Art.171).
 -- ------------------------------------------------------------
+drop function if exists public.rpc_get_reference_price(p_organization_id uuid, p_category_id uuid, p_region_id uuid);
 create or replace function public.rpc_get_reference_price(
     p_organization_id   uuid,
     p_category_id       uuid,
@@ -3911,6 +3958,7 @@ comment on function public.rpc_get_reference_price(uuid, uuid, uuid) is
 -- RPC-M6-12: rpc_get_minimum_price (M4 §1.1 / D-M6-3 floor)
 -- Caller: any. STABLE read. MANDATORY disclaimer_text in response (Art.171).
 -- ------------------------------------------------------------
+drop function if exists public.rpc_get_minimum_price(p_organization_id uuid, p_category_id uuid, p_region_id uuid);
 create or replace function public.rpc_get_minimum_price(
     p_organization_id   uuid,
     p_category_id       uuid,
@@ -3972,6 +4020,7 @@ comment on function public.rpc_get_minimum_price(uuid, uuid, uuid) is
 -- ------------------------------------------------------------
 
 -- AC-1: rpc_admin_upsert_livestock_category
+drop function if exists public.rpc_admin_upsert_livestock_category(p_code text, p_name_ru text, p_description_ru text, p_sort_order integer);
 create or replace function public.rpc_admin_upsert_livestock_category(
     p_code              text,
     p_name_ru           text,
@@ -4054,6 +4103,7 @@ comment on function public.rpc_admin_deactivate_livestock_category(uuid) is
 
 
 -- AC-3: rpc_admin_set_category_rule
+drop function if exists public.rpc_admin_set_category_rule(p_category_id uuid, p_breed_group text, p_sex text, p_age_min integer, p_age_max integer, p_weight_min integer, p_weight_max integer, p_bcs_min numeric, p_bcs_max numeric, p_priority integer, p_version integer);
 create or replace function public.rpc_admin_set_category_rule(
     p_category_id   uuid,
     p_breed_group   text default null,
@@ -4221,6 +4271,7 @@ comment on function public.rpc_admin_map_sku_to_category(uuid, uuid) is
 
 
 -- AC-6: rpc_admin_set_minimum_price
+drop function if exists public.rpc_admin_set_minimum_price(p_category_id uuid, p_region_id uuid, p_price_per_kg integer, p_valid_from date, p_valid_to date);
 create or replace function public.rpc_admin_set_minimum_price(
     p_category_id   uuid,
     p_region_id     uuid,
@@ -4288,6 +4339,7 @@ comment on function public.rpc_admin_set_minimum_price(uuid, uuid, int, date, da
 
 
 -- AC-7: rpc_admin_set_reference_price
+drop function if exists public.rpc_admin_set_reference_price(p_category_id uuid, p_region_id uuid, p_price_per_kg integer, p_valid_from date, p_valid_to date);
 create or replace function public.rpc_admin_set_reference_price(
     p_category_id   uuid,
     p_region_id     uuid,

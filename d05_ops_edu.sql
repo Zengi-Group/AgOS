@@ -4,9 +4,9 @@
 -- Consolidated: 2026-03-05 (pre-development baseline)
 --
 -- Operations module (Production Plans, Phases, Tasks, KPIs)
-+ Education module (Courses, Modules, Lessons, Enrollments).
-CTK seed data for Kazakhstan Cow-Calf production cycle.
-Cascade date shift logic. fn_generate_production_plan.
+-- + Education module (Courses, Modules, Lessons, Enrollments).
+-- CTK seed data for Kazakhstan Cow-Calf production cycle.
+-- Cascade date shift logic. fn_generate_production_plan.
 --
 -- Depends on: d01_kernel.sql, d03_feed.sql, d04_vet.sql
 -- Consolidated from: 005_ops_edu.sql, 006_patch_ops.sql, 007_ctk_seed.sql, 008_patch_cascade__1_.sql, 010_fn_generate_production_plan__1_.sql, 012_patch_production_plan_auth.sql, 015_tech_debt.sql (ops parts)
@@ -393,7 +393,7 @@ comment on table public.farm_production_plans is
      Event #19: ops.plan.activated → Notification (farmer) + AI context update.';
 
 -- D82: только один active план на ферму
-create unique index idx_farm_plan_one_active
+create unique index if not exists idx_farm_plan_one_active
     on public.farm_production_plans (farm_id)
     where status = 'active';
 
@@ -824,83 +824,87 @@ comment on table public.course_instructors is
 -- ============================================================
 
 -- Operations: Reference tables
-create index idx_pct_type           on public.production_cycle_templates (farm_type);
-create index idx_pct_active         on public.production_cycle_templates (is_active) where is_active = true;
-create index idx_pt_cycle           on public.phase_templates (cycle_template_id, sort_order);
-create index idx_pt_sale_phase      on public.phase_templates (is_sale_phase) where is_sale_phase = true;
-create index idx_tt_phase           on public.task_templates (phase_template_id, sort_order);
-create index idx_tt_category        on public.task_templates (category);
-create index idx_tt_herd_event      on public.task_templates (creates_herd_event) where creates_herd_event = true;
-create index idx_sop_status         on public.sop_documents (status);
-create index idx_sop_published      on public.sop_documents (status) where status = 'published';
-create index idx_sop_knowledge      on public.sop_documents (knowledge_chunk_id) where knowledge_chunk_id is not null;
-create index idx_tts_task           on public.task_template_sops (task_template_id);
-create index idx_tts_sop            on public.task_template_sops (sop_document_id);
-create index idx_kpit_phase         on public.kpi_templates (phase_template_id);
-create index idx_kpit_type          on public.kpi_templates (kpi_type);
+create index if not exists idx_pct_type           on public.production_cycle_templates (farm_type);
+create index if not exists idx_pct_active         on public.production_cycle_templates (is_active) where is_active = true;
+create index if not exists idx_pt_cycle           on public.phase_templates (cycle_template_id, sort_order);
+create index if not exists idx_pt_sale_phase      on public.phase_templates (is_sale_phase) where is_sale_phase = true;
+create index if not exists idx_tt_phase           on public.task_templates (phase_template_id, sort_order);
+create index if not exists idx_tt_category        on public.task_templates (category);
+create index if not exists idx_tt_herd_event      on public.task_templates (creates_herd_event) where creates_herd_event = true;
+create index if not exists idx_sop_status         on public.sop_documents (status);
+create index if not exists idx_sop_published      on public.sop_documents (status) where status = 'published';
+create index if not exists idx_sop_knowledge      on public.sop_documents (knowledge_chunk_id) where knowledge_chunk_id is not null;
+create index if not exists idx_tts_task           on public.task_template_sops (task_template_id);
+create index if not exists idx_tts_sop            on public.task_template_sops (sop_document_id);
+create index if not exists idx_kpit_phase         on public.kpi_templates (phase_template_id);
+create index if not exists idx_kpit_type          on public.kpi_templates (kpi_type);
 
 -- Operations: Operational tables
-create index idx_fpp_org_status     on public.farm_production_plans (organization_id, status);
-create index idx_fpp_farm           on public.farm_production_plans (farm_id);
-create index idx_fpp_expert         on public.farm_production_plans (expert_profile_id) where expert_profile_id is not null;
-create index idx_fpp_active         on public.farm_production_plans (farm_id, status) where status = 'active';
+create index if not exists idx_fpp_org_status     on public.farm_production_plans (organization_id, status);
+create index if not exists idx_fpp_farm           on public.farm_production_plans (farm_id);
+create index if not exists idx_fpp_expert         on public.farm_production_plans (expert_profile_id) where expert_profile_id is not null;
+create index if not exists idx_fpp_active         on public.farm_production_plans (farm_id, status) where status = 'active';
 
-create index idx_fp_plan            on public.farm_phases (plan_id, sort_order);
-create index idx_fp_org             on public.farm_phases (organization_id, status);
-create index idx_fp_herd            on public.farm_phases (herd_group_id) where herd_group_id is not null;
-create index idx_fp_dates           on public.farm_phases (start_date, end_date);  -- D75: date overlap queries
-create index idx_fp_sale            on public.farm_phases (target_sale_month) where is_sale_phase = true;  -- D81
-create index idx_fp_active          on public.farm_phases (status) where status = 'active';
+-- BUG FIX (deploy 2026-07-07): farm_phases.sort_order used by the index below but
+-- never declared in the CREATE TABLE above — genuine gap in the canonical file,
+-- not just live/file drift. Additive column (P7), safe default preserves insert order.
+alter table public.farm_phases add column if not exists sort_order int not null default 0;
+create index if not exists idx_fp_plan            on public.farm_phases (plan_id, sort_order);
+create index if not exists idx_fp_org             on public.farm_phases (organization_id, status);
+create index if not exists idx_fp_herd            on public.farm_phases (herd_group_id) where herd_group_id is not null;
+create index if not exists idx_fp_dates           on public.farm_phases (start_date, end_date);  -- D75: date overlap queries
+create index if not exists idx_fp_sale            on public.farm_phases (target_sale_month) where is_sale_phase = true;  -- D81
+create index if not exists idx_fp_active          on public.farm_phases (status) where status = 'active';
 
-create index idx_ft_phase           on public.farm_tasks (farm_phase_id);
-create index idx_ft_org_status      on public.farm_tasks (organization_id, status);
-create index idx_ft_due_date        on public.farm_tasks (due_date, status)
+create index if not exists idx_ft_phase           on public.farm_tasks (farm_phase_id);
+create index if not exists idx_ft_org_status      on public.farm_tasks (organization_id, status);
+create index if not exists idx_ft_due_date        on public.farm_tasks (due_date, status)
     where status in ('scheduled', 'reminded');  -- cron reminder queries
-create index idx_ft_overdue         on public.farm_tasks (status) where status = 'overdue';
-create index idx_ft_erp             on public.farm_tasks (erp_sync, erp_synced_at)
+create index if not exists idx_ft_overdue         on public.farm_tasks (status) where status = 'overdue';
+create index if not exists idx_ft_erp             on public.farm_tasks (erp_sync, erp_synced_at)
     where erp_sync = true;
 
-create index idx_fk_phase           on public.farm_kpis (farm_phase_id);
-create index idx_fk_org             on public.farm_kpis (organization_id);
-create index idx_fk_missed          on public.farm_kpis (status) where status = 'missed';
-create index idx_fk_template        on public.farm_kpis (kpi_template_id);
+create index if not exists idx_fk_phase           on public.farm_kpis (farm_phase_id);
+create index if not exists idx_fk_org             on public.farm_kpis (organization_id);
+create index if not exists idx_fk_missed          on public.farm_kpis (status) where status = 'missed';
+create index if not exists idx_fk_template        on public.farm_kpis (kpi_template_id);
 
 -- Education
-create index idx_crs_status         on public.courses (status);
-create index idx_crs_published      on public.courses (status) where status = 'published';
-create index idx_crs_category       on public.courses (category);
-create index idx_crs_paid           on public.courses (is_paid);
-create index idx_crs_knowledge      on public.courses (knowledge_chunk_id) where knowledge_chunk_id is not null;
+create index if not exists idx_crs_status         on public.courses (status);
+create index if not exists idx_crs_published      on public.courses (status) where status = 'published';
+create index if not exists idx_crs_category       on public.courses (category);
+create index if not exists idx_crs_paid           on public.courses (is_paid);
+create index if not exists idx_crs_knowledge      on public.courses (knowledge_chunk_id) where knowledge_chunk_id is not null;
 
-create index idx_mod_course         on public.modules (course_id, sort_order);
-create index idx_les_module         on public.lessons (module_id, sort_order);
-create index idx_les_type           on public.lessons (lesson_type);
+create index if not exists idx_mod_course         on public.modules (course_id, sort_order);
+create index if not exists idx_les_module         on public.lessons (module_id, sort_order);
+create index if not exists idx_les_type           on public.lessons (lesson_type);
 
-create index idx_ce_user            on public.course_enrollments (user_id);
-create index idx_ce_course          on public.course_enrollments (course_id);
-create index idx_ce_status          on public.course_enrollments (status);
-create index idx_ce_in_progress     on public.course_enrollments (user_id, status)
+create index if not exists idx_ce_user            on public.course_enrollments (user_id);
+create index if not exists idx_ce_course          on public.course_enrollments (course_id);
+create index if not exists idx_ce_status          on public.course_enrollments (status);
+create index if not exists idx_ce_in_progress     on public.course_enrollments (user_id, status)
     where status = 'in_progress';
-create index idx_ce_expiry          on public.course_enrollments (expires_at)
+create index if not exists idx_ce_expiry          on public.course_enrollments (expires_at)
     where expires_at is not null;
 
-create index idx_up_user            on public.user_progress (user_id);
-create index idx_up_enrollment      on public.user_progress (enrollment_id);
-create index idx_up_lesson          on public.user_progress (lesson_id);
-create index idx_up_completed       on public.user_progress (enrollment_id, status)
+create index if not exists idx_up_user            on public.user_progress (user_id);
+create index if not exists idx_up_enrollment      on public.user_progress (enrollment_id);
+create index if not exists idx_up_lesson          on public.user_progress (lesson_id);
+create index if not exists idx_up_completed       on public.user_progress (enrollment_id, status)
     where status = 'completed';
 
-create index idx_cert_user          on public.certificates (user_id);
-create index idx_cert_course        on public.certificates (course_id);
-create index idx_cert_number        on public.certificates (certificate_number);  -- public verification
-create index idx_cert_valid         on public.certificates (is_valid) where is_valid = true;
+create index if not exists idx_cert_user          on public.certificates (user_id);
+create index if not exists idx_cert_course        on public.certificates (course_id);
+create index if not exists idx_cert_number        on public.certificates (certificate_number);  -- public verification
+create index if not exists idx_cert_valid         on public.certificates (is_valid) where is_valid = true;
 
-create index idx_prereg_course      on public.course_preregistrations (course_id);
-create index idx_prereg_unnotified  on public.course_preregistrations (course_id, notified_at)
+create index if not exists idx_prereg_course      on public.course_preregistrations (course_id);
+create index if not exists idx_prereg_unnotified  on public.course_preregistrations (course_id, notified_at)
     where notified_at is null;
 
-create index idx_ci_course          on public.course_instructors (course_id, sort_order);
-create index idx_ci_expert          on public.course_instructors (expert_profile_id);
+create index if not exists idx_ci_course          on public.course_instructors (course_id, sort_order);
+create index if not exists idx_ci_expert          on public.course_instructors (expert_profile_id);
 
 -- ============================================================
 -- SECTION 4: ROW LEVEL SECURITY
@@ -926,41 +930,64 @@ alter table public.course_preregistrations     enable row level security;
 alter table public.course_instructors          enable row level security;
 
 -- Operations: Reference tables (читают все, пишет только expert/admin)
+drop policy if exists "pct_read_all" on public.production_cycle_templates;
 create policy "pct_read_all"    on public.production_cycle_templates  for select using (auth.uid() is not null);
+drop policy if exists "pct_expert_write" on public.production_cycle_templates;
 create policy "pct_expert_write" on public.production_cycle_templates for all   using (public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "pt_read_all" on public.phase_templates;
 create policy "pt_read_all"     on public.phase_templates             for select using (auth.uid() is not null);
+drop policy if exists "pt_expert_write" on public.phase_templates;
 create policy "pt_expert_write" on public.phase_templates             for all   using (public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "tt_read_all" on public.task_templates;
 create policy "tt_read_all"     on public.task_templates              for select using (auth.uid() is not null);
+drop policy if exists "tt_expert_write" on public.task_templates;
 create policy "tt_expert_write" on public.task_templates              for all   using (public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "sop_read_published" on public.sop_documents;
 create policy "sop_read_published" on public.sop_documents            for select using (status = 'published' or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "sop_expert_write" on public.sop_documents;
 create policy "sop_expert_write"   on public.sop_documents            for all   using (public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "tts_read_all" on public.task_template_sops;
 create policy "tts_read_all"    on public.task_template_sops          for select using (auth.uid() is not null);
+drop policy if exists "tts_expert_write" on public.task_template_sops;
 create policy "tts_expert_write" on public.task_template_sops         for all   using (public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "kpit_read_all" on public.kpi_templates;
 create policy "kpit_read_all"   on public.kpi_templates               for select using (auth.uid() is not null);
+drop policy if exists "kpit_expert_write" on public.kpi_templates;
 create policy "kpit_expert_write" on public.kpi_templates             for all   using (public.fn_is_expert() or public.fn_is_admin());
 
 -- Operations: Operational (фермер видит только своё)
+drop policy if exists "fpp_read_own" on public.farm_production_plans;
 create policy "fpp_read_own"    on public.farm_production_plans  for select using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "fpp_write_own" on public.farm_production_plans;
 create policy "fpp_write_own"   on public.farm_production_plans  for all    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "fp_read_own" on public.farm_phases;
 create policy "fp_read_own"     on public.farm_phases            for select using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "fp_write_own" on public.farm_phases;
 create policy "fp_write_own"    on public.farm_phases            for all    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "ft_read_own" on public.farm_tasks;
 create policy "ft_read_own"     on public.farm_tasks             for select using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "ft_write_own" on public.farm_tasks;
 create policy "ft_write_own"    on public.farm_tasks             for all    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
 
+drop policy if exists "fk_read_own" on public.farm_kpis;
 create policy "fk_read_own"     on public.farm_kpis              for select using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
+drop policy if exists "fk_write_own" on public.farm_kpis;
 create policy "fk_write_own"    on public.farm_kpis              for all    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_expert() or public.fn_is_admin());
 
 -- Education: Курсы — читают все (D16). Контент защищён через enrollment.
+drop policy if exists "crs_read_published" on public.courses;
 create policy "crs_read_published" on public.courses          for select using (status = 'published' or status = 'coming_soon' or public.fn_is_admin());
+drop policy if exists "crs_admin_write" on public.courses;
 create policy "crs_admin_write"    on public.courses          for all    using (public.fn_is_admin());
 
+drop policy if exists "mod_read_enrolled" on public.modules;
 create policy "mod_read_enrolled"  on public.modules          for select
     using (
         course_id in (select course_id from public.course_enrollments where user_id = auth.uid())
@@ -968,8 +995,10 @@ create policy "mod_read_enrolled"  on public.modules          for select
         or public.fn_is_admin()
         or public.fn_is_expert()
     );
+drop policy if exists "mod_admin_write" on public.modules;
 create policy "mod_admin_write"    on public.modules          for all    using (public.fn_is_admin());
 
+drop policy if exists "les_read_enrolled" on public.lessons;
 create policy "les_read_enrolled"  on public.lessons          for select
     using (
         module_id in (
@@ -981,24 +1010,37 @@ create policy "les_read_enrolled"  on public.lessons          for select
         or public.fn_is_admin()
         or public.fn_is_expert()
     );
+drop policy if exists "les_admin_write" on public.lessons;
 create policy "les_admin_write"    on public.lessons          for all    using (public.fn_is_admin());
 
+drop policy if exists "ce_read_own" on public.course_enrollments;
 create policy "ce_read_own"        on public.course_enrollments for select using (user_id = auth.uid() or public.fn_is_admin());
+drop policy if exists "ce_insert_own" on public.course_enrollments;
 create policy "ce_insert_own"      on public.course_enrollments for insert with check (user_id = auth.uid() or public.fn_is_admin());
+drop policy if exists "ce_update_system" on public.course_enrollments;
 create policy "ce_update_system"   on public.course_enrollments for update using (public.fn_is_admin());  -- только system/admin обновляет статус
 
+drop policy if exists "up_read_own" on public.user_progress;
 create policy "up_read_own"        on public.user_progress    for select using (user_id = auth.uid() or public.fn_is_admin());
+drop policy if exists "up_write_own" on public.user_progress;
 create policy "up_write_own"       on public.user_progress    for all    using (user_id = auth.uid() or public.fn_is_admin());
 
+drop policy if exists "cert_read_own" on public.certificates;
 create policy "cert_read_own"      on public.certificates     for select using (user_id = auth.uid() or public.fn_is_admin());
+drop policy if exists "cert_admin_write" on public.certificates;
 create policy "cert_admin_write"   on public.certificates     for all    using (public.fn_is_admin());
 -- Публичная верификация по certificate_number — реализуется через Edge Function (без RLS)
 
+drop policy if exists "prereg_read_own" on public.course_preregistrations;
 create policy "prereg_read_own"    on public.course_preregistrations for select using (user_id = auth.uid() or public.fn_is_admin());
+drop policy if exists "prereg_insert" on public.course_preregistrations;
 create policy "prereg_insert"      on public.course_preregistrations for insert with check (true);  -- любой
+drop policy if exists "prereg_admin" on public.course_preregistrations;
 create policy "prereg_admin"       on public.course_preregistrations for update using (public.fn_is_admin());
 
+drop policy if exists "ci_read_all" on public.course_instructors;
 create policy "ci_read_all"        on public.course_instructors for select using (auth.uid() is not null);
+drop policy if exists "ci_admin_write" on public.course_instructors;
 create policy "ci_admin_write"     on public.course_instructors for all    using (public.fn_is_admin());
 
 -- ============================================================
@@ -1006,19 +1048,33 @@ create policy "ci_admin_write"     on public.course_instructors for all    using
 -- ============================================================
 
 -- updated_at
+drop trigger if exists trg_pct_upd on public.production_cycle_templates;
 create trigger trg_pct_upd          before update on public.production_cycle_templates for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_pt_upd on public.phase_templates;
 create trigger trg_pt_upd           before update on public.phase_templates            for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_tt_upd on public.task_templates;
 create trigger trg_tt_upd           before update on public.task_templates             for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_sop_upd on public.sop_documents;
 create trigger trg_sop_upd          before update on public.sop_documents              for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_kpit_upd on public.kpi_templates;
 create trigger trg_kpit_upd         before update on public.kpi_templates              for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_fpp_upd on public.farm_production_plans;
 create trigger trg_fpp_upd          before update on public.farm_production_plans      for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_fp_upd on public.farm_phases;
 create trigger trg_fp_upd           before update on public.farm_phases                for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_ft_upd on public.farm_tasks;
 create trigger trg_ft_upd           before update on public.farm_tasks                 for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_fk_upd on public.farm_kpis;
 create trigger trg_fk_upd           before update on public.farm_kpis                  for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_crs_upd on public.courses;
 create trigger trg_crs_upd          before update on public.courses                    for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_mod_upd on public.modules;
 create trigger trg_mod_upd          before update on public.modules                    for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_les_upd on public.lessons;
 create trigger trg_les_upd          before update on public.lessons                    for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_ce_upd on public.course_enrollments;
 create trigger trg_ce_upd           before update on public.course_enrollments         for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_up_upd on public.user_progress;
 create trigger trg_up_upd           before update on public.user_progress              for each row execute function public.fn_set_updated_at();
 
 -- -------------------------------------------------------
@@ -1075,6 +1131,7 @@ comment on function public.fn_sop_create_knowledge_chunk() is
      AI находит SOPs через pgvector semantic search.
      Embedding вычисляется Edge Function (отдельным вызовом после INSERT).';
 
+drop trigger if exists trg_sop_knowledge_chunk on public.sop_documents;
 create trigger trg_sop_knowledge_chunk
     before insert or update on public.sop_documents
     for each row execute function public.fn_sop_create_knowledge_chunk();
@@ -1127,6 +1184,7 @@ comment on function public.fn_course_create_knowledge_chunk() is
     'D17: Course status→published → KnowledgeChunk (source_domain=education).
      AI отвечает на "какие курсы есть по кормлению?" через pgvector RAG.';
 
+drop trigger if exists trg_course_knowledge_chunk on public.courses;
 create trigger trg_course_knowledge_chunk
     before insert or update on public.courses
     for each row execute function public.fn_course_create_knowledge_chunk();
@@ -1224,6 +1282,7 @@ comment on function public.fn_update_enrollment_progress() is
 -- Sequence для номеров сертификатов
 create sequence if not exists public.certificate_number_seq start with 1 increment by 1;
 
+drop trigger if exists trg_user_progress_enrollment on public.user_progress;
 create trigger trg_user_progress_enrollment
     after insert or update on public.user_progress
     for each row execute function public.fn_update_enrollment_progress();
@@ -1270,6 +1329,7 @@ comment on function public.fn_farm_task_completed_event() is
        if creates_herd_event=true → вызывает fn_create_herd_event_from_task(task_id).
      Триггер публикует событие, RPC выполняет бизнес-логику (D87: FSM в RPC).';
 
+drop trigger if exists trg_farm_task_completed on public.farm_tasks;
 create trigger trg_farm_task_completed
     after insert or update on public.farm_tasks
     for each row execute function public.fn_farm_task_completed_event();
@@ -1330,6 +1390,7 @@ comment on function public.fn_evaluate_farm_kpi() is
      higher_is_better=false (mortality_rate): tolerance работает в обратную сторону.
      Event #25: ops.kpi.missed → Notification эксперту + план к пересмотру.';
 
+drop trigger if exists trg_farm_kpi_evaluate on public.farm_kpis;
 create trigger trg_farm_kpi_evaluate
     before insert or update on public.farm_kpis
     for each row execute function public.fn_evaluate_farm_kpi();
@@ -1590,6 +1651,14 @@ on conflict (code) do update set
 -- D86: При status→published триггер создаёт KnowledgeChunk.
 -- ============================================================
 
+-- BUG FIX (deploy 2026-07-07): domain/source/sort_order used by the seed insert
+-- below but never declared in the CREATE TABLE above — genuine gap in the
+-- canonical file. Additive columns (P7); domain has no CHECK yet — only 'farm'
+-- observed so far, not enough vocabulary to constrain (P8: standards as data).
+alter table public.sop_documents add column if not exists domain     text;
+alter table public.sop_documents add column if not exists source     text;
+alter table public.sop_documents add column if not exists sort_order int not null default 0;
+
 insert into public.sop_documents
     (code, title_ru, category, domain, status, source, sort_order)
 values
@@ -1690,6 +1759,7 @@ values
      'оказание помощи при отёлах, биркование телят, внесение в ИСЖ.',
      1, 0, 65,
      array['COW', 'HEIFER_PREG'], false, 'calving')
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_calving;
 
 -- ФАЗА 2: ПОДСОСНЫЙ ПЕРИОД (0–240 дней)
@@ -1704,6 +1774,7 @@ values
      'Контроль состояния коров и молодняка. Формирование плана реализации.',
      2, 7, 210,
      array['COW', 'SUCKLING_CALF', 'YOUNG_CALF'], false, 'suckling')
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_suckling;
 
 -- ФАЗА 3: ПЕРЕВОД НА ПАСТБИЩЕ (120–150 дней от старта)
@@ -1718,6 +1789,7 @@ values
      'подготовка водопоя. Ветеринарная обработка перед выгоном.',
      3, 120, 30,
      array['COW', 'HEIFER_PREG', 'HEIFER_YOUNG', 'BULL_BREEDING', 'YOUNG_CALF'], false, 'pasture')
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_pasture_prep;
 
 -- ФАЗА 4: ЛЕТНИЙ ПАСТБИЩНЫЙ ПЕРИОД (150–330 дней)
@@ -1734,6 +1806,7 @@ values
      4, 150, 180,
      array['COW', 'HEIFER_PREG', 'HEIFER_YOUNG', 'BULL_BREEDING',
            'YOUNG_CALF', 'BULL_CALF', 'STEER'], false, 'pasture')
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_pasture;
 
 -- ФАЗА 5: ОТЪЁМ ТЕЛЯТ (240–285 дней)
@@ -1749,6 +1822,7 @@ values
      'в послеотъёмный период (40-45 дней) во избежание задержки роста.',
      5, 240, 45,
      array['COW', 'YOUNG_CALF', 'BULL_CALF', 'HEIFER_YOUNG'], false, 'weaning')
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_weaning;
 
 -- ФАЗА 6: БОНИТИРОВКА (270–330 дней)
@@ -1764,6 +1838,7 @@ values
      'ремонт стада, племпродажа, откорм/выбраковка.',
      6, 270, 45,
      array['COW', 'HEIFER_YOUNG', 'BULL_CALF', 'BULL_BREEDING'], false, null)
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_grading;
 
 -- ФАЗА 7: ВЫБРАКОВКА И ОТКОРМ (300–330 дней)
@@ -1778,6 +1853,7 @@ values
      'Формирование плана откорма. Контроль достижения плановой упитанности.',
      7, 300, 30,
      array['COW_CULL', 'BULL_CULL', 'HEIFER_YOUNG'], false, null)
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_culling;
 
 -- ФАЗА 8: РЕАЛИЗАЦИЯ (315–345 дней) — SALE PHASE
@@ -1793,6 +1869,7 @@ values
      'и племенного молодняка. Оформление договоров. Отчёт о движении скота.',
      8, 315, 30,
      array['COW_CULL', 'BULL_CULL', 'HEIFER_YOUNG', 'BULL_CALF', 'STEER'], true, null)
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_sale;
 
 -- ФАЗА 9: ПОДГОТОВКА К ЗИМОВКЕ (270–365 дней)
@@ -1808,6 +1885,7 @@ values
      'Формирование животноводческих бригад. Закупка добавок на зимний период.',
      9, 270, 90,
      array['COW', 'HEIFER_PREG', 'HEIFER_YOUNG', 'BULL_CALF', 'BULL_BREEDING'], false, 'stall')
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_winter_prep;
 
 -- ФАЗА 10: ЗИМНИЙ СТОЙЛОВЫЙ ПЕРИОД (330–540 дней / переходит в новый цикл)
@@ -1824,6 +1902,7 @@ values
      10, 330, 180,
      array['COW', 'HEIFER_PREG', 'HEIFER_YOUNG', 'BULL_CALF',
            'BULL_BREEDING', 'SUCKLING_CALF'], false, 'stall')
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_winter_stall;
 
 -- ФАЗА 11: ПОДГОТОВКА К СЛУЧНОЙ КАМПАНИИ (390–420 дней)
@@ -1839,6 +1918,7 @@ values
      'Наблюдение за половой активностью. Усиленное кормление быков.',
      11, 390, 30,
      array['COW', 'HEIFER_YOUNG'], false, null)
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_breed_prep;
 
 -- ФАЗА 12: ПОДБОР БЫКОВ-ПРОИЗВОДИТЕЛЕЙ (390–420 дней)
@@ -1854,6 +1934,7 @@ values
      'Составление плана подбора производителей и графика работы.',
      12, 390, 30,
      array['BULL_BREEDING'], false, null)
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_bull_select;
 
 -- ФАЗА 13: СЛУЧНАЯ КАМПАНИЯ (420–490 дней)
@@ -1869,6 +1950,7 @@ values
      'Ведение журнала осеменения и календаря отёлов.',
      13, 420, 65,
      array['COW', 'HEIFER_YOUNG', 'BULL_BREEDING'], false, null)
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_breeding;
 
 -- ФАЗА 14: ДИАГНОСТИКА СТЕЛЬНОСТИ (480–510 дней)
@@ -1884,6 +1966,7 @@ values
      'Выбраковка яловых и бесплодных животных.',
      14, 485, 30,
      array['COW', 'HEIFER_YOUNG'], false, null)
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_preg_check;
 
 -- ФАЗА 15: СУХОСТОЙ И ПОДГОТОВКА К ОТЁЛУ (630–695 дней)
@@ -1900,6 +1983,7 @@ values
      'Выбраковка яловых и бесплодных коров.',
      15, 630, 65,
      array['COW', 'HEIFER_PREG'], false, 'stall')
+on conflict (cycle_template_id, code) do update set name_ru = excluded.name_ru
 returning id into v_dry_period;
 
 -- ============================================================
@@ -1955,7 +2039,8 @@ values
      'в журналы. Сверка с данными ИСЖ.',
      'management', 7, true, true, 'head_count_change',
      'Сколько голов всего сейчас на ферме? Коровы, телята.',
-     '[{"field": "head_count", "unit": "heads", "entity": "herd_group"}]', 5);
+     '[{"field": "head_count", "unit": "heads", "entity": "herd_group"}]', 5)
+on conflict (phase_template_id, code) do nothing;
 
 -- ── ПОДСОСНЫЙ ПЕРИОД ─────────────────────────────────────────
 insert into public.task_templates
@@ -1994,7 +2079,8 @@ values
      'с учётом живой массы и назначения (ремонт, откорм, продажа).',
      'management', 150, false, false, null,
      'План продажи телят составлен?',
-     '[{"field": "done", "type": "boolean"}]', 4);
+     '[{"field": "done", "type": "boolean"}]', 4)
+on conflict (phase_template_id, code) do nothing;
 
 -- ── ОТЪЁМ ────────────────────────────────────────────────────
 insert into public.task_templates
@@ -2025,7 +2111,8 @@ values
      'после отъёма, чтобы телята не отстали в росте.',
      'zootechnical', 0, false, false, null,
      'Телята нормально едят после отъёма? Есть отставшие в росте?',
-     '[{"field": "underweight_count", "unit": "heads"}]', 3);
+     '[{"field": "underweight_count", "unit": "heads"}]', 3)
+on conflict (phase_template_id, code) do nothing;
 
 -- ── БОНИТИРОВКА ─────────────────────────────────────────────
 insert into public.task_templates
@@ -2049,7 +2136,8 @@ values
      'Обработка данных перед постановкой на стойловое содержание.',
      'zootechnical', 7, true, false, null,
      'Бонитировка проведена? Сколько животных 1 класса и выше?',
-     '[{"field": "class1_count", "unit": "heads"}, {"field": "total_graded", "unit": "heads"}]', 2);
+     '[{"field": "class1_count", "unit": "heads"}, {"field": "total_graded", "unit": "heads"}]', 2)
+on conflict (phase_template_id, code) do nothing;
 
 -- ── ВЫБРАКОВКА ───────────────────────────────────────────────
 insert into public.task_templates
@@ -2073,7 +2161,8 @@ values
      'Кормление по рациону откорма до достижения плановой упитанности.',
      'zootechnical', 15, false, true, 'weight_update',
      'Какой вес выбракованных коров на откорме?',
-     '[{"field": "avg_weight_kg", "unit": "kg", "entity": "herd_group"}]', 2);
+     '[{"field": "avg_weight_kg", "unit": "kg", "entity": "herd_group"}]', 2)
+on conflict (phase_template_id, code) do nothing;
 
 -- ── РЕАЛИЗАЦИЯ ───────────────────────────────────────────────
 insert into public.task_templates
@@ -2089,7 +2178,8 @@ values
      'и отчёта о движении скота.',
      'management', 0, false, true, 'sale',
      'Сколько голов продали и по какой цене за кг?',
-     '[{"field": "sold_count", "unit": "heads"}, {"field": "price_per_kg", "unit": "KZT"}]', 1);
+     '[{"field": "sold_count", "unit": "heads"}, {"field": "price_per_kg", "unit": "KZT"}]', 1)
+on conflict (phase_template_id, code) do nothing;
 
 -- ── ПОДГОТОВКА К ЗИМОВКЕ ─────────────────────────────────────
 insert into public.task_templates
@@ -2120,7 +2210,8 @@ values
      'и соле-минеральных добавок на стойловый период.',
      'management', 45, false, false, null,
      'Бригады укомплектованы? Добавки закуплены?',
-     '[{"field": "staff_ready", "type": "boolean"}]', 3);
+     '[{"field": "staff_ready", "type": "boolean"}]', 3)
+on conflict (phase_template_id, code) do nothing;
 
 -- ── ЗИМНИЙ СТОЙЛОВЫЙ ПЕРИОД ──────────────────────────────────
 insert into public.task_templates
@@ -2153,7 +2244,8 @@ values
      'и маститов. Обработка по плану ветеринарных мероприятий.',
      'veterinary', 0, false, false, null,
      'Есть больные животные? Симптомы?',
-     '[{"field": "sick_count", "unit": "heads"}, {"field": "symptoms", "type": "text"}]', 3);
+     '[{"field": "sick_count", "unit": "heads"}, {"field": "symptoms", "type": "text"}]', 3)
+on conflict (phase_template_id, code) do nothing;
 
 -- ── ПОДГОТОВКА К СЛУЧНОЙ КАМПАНИИ ────────────────────────────
 insert into public.task_templates
@@ -2178,7 +2270,8 @@ values
      'Усиленное кормление быков-производителей.',
      'zootechnical', -21, false, false, null,
      'Стимулирующий рацион введён? Сколько дней до начала случки?',
-     '[{"field": "days_to_breeding", "unit": "days"}]', 2);
+     '[{"field": "days_to_breeding", "unit": "days"}]', 2)
+on conflict (phase_template_id, code) do nothing;
 
 -- ── ПОДБОР БЫКОВ-ПРОИЗВОДИТЕЛЕЙ ──────────────────────────────
 insert into public.task_templates
@@ -2202,7 +2295,8 @@ values
      'График работы быков. Проверка племенных свидетельств.',
      'zootechnical', 7, false, false, null,
      'План подбора быков составлен?',
-     '[{"field": "done", "type": "boolean"}]', 2);
+     '[{"field": "done", "type": "boolean"}]', 2)
+on conflict (phase_template_id, code) do nothing;
 
 -- ── СЛУЧНАЯ КАМПАНИЯ ─────────────────────────────────────────
 insert into public.task_templates
@@ -2233,7 +2327,8 @@ values
      'Сводные данные: сколько осеменено, индекс выявления охоты.',
      'zootechnical', 65, false, false, null,
      'Случная кампания завершена? Сколько всего коров осеменено?',
-     '[{"field": "total_inseminated", "unit": "heads"}, {"field": "total_in_group", "unit": "heads"}]', 3);
+     '[{"field": "total_inseminated", "unit": "heads"}, {"field": "total_in_group", "unit": "heads"}]', 3)
+on conflict (phase_template_id, code) do nothing;
 
 -- ── ДИАГНОСТИКА СТЕЛЬНОСТИ ───────────────────────────────────
 insert into public.task_templates
@@ -2264,7 +2359,8 @@ values
      'Обновление данных по поголовью.',
      'zootechnical', 21, false, true, 'head_count_change',
      'Сколько яловых коров выбраковываете?',
-     '[{"field": "culled_barren_count", "unit": "heads"}]', 3);
+     '[{"field": "culled_barren_count", "unit": "heads"}]', 3)
+on conflict (phase_template_id, code) do nothing;
 
 -- ── СУХОСТОЙ И ПОДГОТОВКА К ОТЁЛУ ────────────────────────────
 insert into public.task_templates
@@ -2296,7 +2392,8 @@ values
      'Профилактика задержания последа. Контроль состояния стельных коров.',
      'veterinary', 0, false, false, null,
      'Стельные коровы в порядке? Ест ли профилактические препараты?',
-     '[{"field": "issues", "type": "text"}]', 3);
+     '[{"field": "issues", "type": "text"}]', 3)
+on conflict (phase_template_id, code) do nothing;
 
 -- ============================================================
 -- SECTION 5: KPI TEMPLATES — BEEF_COW_CALF_KZ
@@ -2385,7 +2482,8 @@ values
      'Индекс осеменения',
      'Среднее количество осеменений на одну стельность. '
      'Норматив ЦТК: 1.5-1.6.',
-     'custom_numeric', 'доз', 1.55, 5.0, false);
+     'custom_numeric', 'доз', 1.55, 5.0, false)
+on conflict (phase_template_id, code) do nothing;
 
 -- ============================================================
 -- SECTION 6: TASK TEMPLATE SOPs (связи задач с документами)
@@ -2926,7 +3024,11 @@ as $$
     -- L-7: Security check — актор должен иметь доступ к ферме этой фазы
     -- Выражено как CTE: если доступа нет — основной запрос вернёт 0 строк
     -- (не exception, чтобы не раскрывать существование объекта)
-    with access_check as (
+    -- BUG FIX (deploy 2026-07-07): cascade_preview ниже — рекурсивный CTE
+    -- (union all ссылается сам на себя), но объявлен без RECURSIVE — Postgres
+    -- отклонял forward-reference. RECURSIVE — модификатор всего WITH, не
+    -- отдельного CTE; access_check рекурсией не становится, просто идёт первым.
+    with recursive access_check as (
         select  fp.id
         from    public.farm_phases               fp
         join    public.farm_production_plans     pp on pp.id = fp.plan_id
@@ -3694,6 +3796,7 @@ on conflict (sql_name) do update
 -- SLICE 6a: RPC-44 rpc_add_knowledge_chunk
 -- Admin: add content to knowledge base for AI RAG.
 -- ============================================================
+drop function if exists public.rpc_add_knowledge_chunk(p_organization_id uuid, p_title text, p_content text, p_source_domain text, p_language text, p_metadata jsonb, p_source_url text, p_is_published boolean);
 create or replace function public.rpc_add_knowledge_chunk(
     p_organization_id   uuid,
     p_title             text,

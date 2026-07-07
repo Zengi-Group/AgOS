@@ -127,6 +127,7 @@ comment on function public.rpc_list_capex_coefficients() is
     'RPC-NORMS-5: список активных коэффициентов CAPEX (COEF-001..COEF-008).';
 
 -- RPC-NORMS-6: admin upsert (добавление/обновление норматива)
+drop function if exists public.rpc_upsert_farm_norm(p_category text, p_code text, p_data jsonb, p_valid_from date);
 create or replace function public.rpc_upsert_farm_norm(
     p_category  text,
     p_code      text,
@@ -152,15 +153,20 @@ comment on function public.rpc_upsert_farm_norm(text, text, jsonb, date) is
 -- SECTION 3 · RPC REGISTRY
 -- ==========================
 
-insert into public.rpc_name_registry (rpc_id, canonical_name, alias_of, source_file, description)
+-- BUG FIX (deploy 2026-07-07): rpc_name_registry has no rpc_id/canonical_name/
+-- alias_of/source_file/description columns — that's a pre-D-NEW-A shape. Live
+-- columns are sql_name/dok3_name/dok5_tool_name/created_in/notes (supabase_call
+-- is trigger-derived from sql_name, not client-supplied — matches the pattern
+-- used by every other rpc_name_registry insert in d02/d05/d09).
+insert into public.rpc_name_registry (sql_name, created_in, notes)
 values
-    ('rpc_list_facility_norms',         'rpc_list_facility_norms',         null, 'd11_norms.sql', 'RPC-NORMS-1: List active facility norms (FAC-*)'),
-    ('rpc_list_paddock_norms',          'rpc_list_paddock_norms',          null, 'd11_norms.sql', 'RPC-NORMS-2: List active paddock norms (PAD-*)'),
-    ('rpc_list_calving_scenarios',      'rpc_list_calving_scenarios',      null, 'd11_norms.sql', 'RPC-NORMS-3: List active calving scenarios (SCN-*)'),
-    ('rpc_list_regional_pasture_norms', 'rpc_list_regional_pasture_norms', null, 'd11_norms.sql', 'RPC-NORMS-4: List active regional pasture norms (REG-*)'),
-    ('rpc_list_capex_coefficients',     'rpc_list_capex_coefficients',     null, 'd11_norms.sql', 'RPC-NORMS-5: List active CAPEX coefficients (COEF-*)'),
-    ('rpc_upsert_farm_norm',            'rpc_upsert_farm_norm',            null, 'd11_norms.sql', 'RPC-NORMS-6: Admin upsert farm norm row')
-on conflict (rpc_id) do nothing;
+    ('rpc_list_facility_norms',         'd11_norms.sql', 'RPC-NORMS-1: List active facility norms (FAC-*)'),
+    ('rpc_list_paddock_norms',          'd11_norms.sql', 'RPC-NORMS-2: List active paddock norms (PAD-*)'),
+    ('rpc_list_calving_scenarios',      'd11_norms.sql', 'RPC-NORMS-3: List active calving scenarios (SCN-*)'),
+    ('rpc_list_regional_pasture_norms', 'd11_norms.sql', 'RPC-NORMS-4: List active regional pasture norms (REG-*)'),
+    ('rpc_list_capex_coefficients',     'd11_norms.sql', 'RPC-NORMS-5: List active CAPEX coefficients (COEF-*)'),
+    ('rpc_upsert_farm_norm',            'd11_norms.sql', 'RPC-NORMS-6: Admin upsert farm norm row')
+on conflict (sql_name) do update set notes = excluded.notes, created_in = excluded.created_in;
 
 
 -- ==========================
