@@ -3344,3 +3344,12 @@ What: (1) все 22 supabase/migrations/*.sql (кроме двух уже про
 Why: пользователь попросил доделать оставшиеся открытые пункты предыдущей сессии.
 Consequences: легко — оба открытых пункта закрыты, IMPL_DEBT обновлён с DEPLOYED+VERIFIED. Полный реплей всего адаптер-файла (устранение двух RPC-слоёв, Slice D) остаётся отдельной задачей — этот фикс не конвергирует слои, только доставляет 2 конкретные, ранее написанные, но не задеплоенные правки.
 Files: IMPL_DEBT.md.
+---
+
+### 2026-07-07: rpc_get_my_context отдаёт is_admin / is_expert (админ-навигация не показывалась)
+What: `rpc_get_my_context` (d01_kernel.sql) теперь возвращает в JSON два флага — `is_admin` (`public.fn_is_admin()`) и `is_expert` (`public.fn_is_expert()`). Аддитивно: 2 ключа добавлены после `active_restrictions`, сигнатура и остальные поля без изменений (P7). Обновлён `comment on function` (строка Returns). Правка только в каноне — deploy_sql.py применяет d-файлы, отдельные patch/миграции запрещены (CLAUDE.md Code Rules).
+Why (root cause, доказано на проде mwtbozflyldcadypherr): фронт берёт роль из `userContext.is_admin` (AuthContext.tsx UserContext объявляет оба флага), но задеплоенный RPC их НЕ отдавал → `useAuth().isAdmin` всегда false. Следствие: Sidebar.tsx:214 рисовал EXPERT_GROUPS вместо ADMIN_GROUPS (админ видел только Клинику/Аналитику — без Пользователи/Роли/Организации/Платформа/Справочники), а useAdminGuard.ts вышвыривал админа со страниц /admin/users|orgs|roles. Доступ в /admin работал только потому, что у RequireExpert.tsx есть живой fallback fn_is_admin()-RPC, которого у Sidebar/useAdminGuard нет. Фикс в контексте-RPC (P4, one source of truth) чинит всех потребителей разом, без пересборки фронта — прод-бандл уже читает userContext.is_admin.
+Триггер: заведён super_admin arshidin@agos.local (логин arshidin) через scripts/seed_admin.mjs на проде; вход работал, но админ-функции в навигации отсутствовали.
+Verification: на проде через anon-клиент — до фикса rpc_get_my_context возвращал {user_id, organizations, farms, memberships, active_restrictions}, is_admin=undefined; fn_is_admin()=true. cross_check.sh: 0 critical. После деплоя (deploy_sql.py) ожидается is_admin=true в контексте → ADMIN_GROUPS; проверка в браузере после apply + перелогина.
+Деплой: GitHub push НЕ применяет SQL на прод (в .github/workflows только graphify — CI-деплоя миграций нет). После мержа PR прод обновляется вручную: `python3 deploy_sql.py <DB_PASSWORD>` (реплеит d01→…→d11). Аккаунт админа на проде уже создан.
+Files: d01_kernel.sql (rpc_get_my_context + comment).
