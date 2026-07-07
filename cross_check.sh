@@ -180,6 +180,7 @@ rpc_list_construction_materials|rpc_list_infrastructure_norms|\
 rpc_upsert_construction_material|rpc_upsert_infrastructure_norm|\
 rpc_list_capex_surcharges|\
 rpc_list_livestock_prices|rpc_upsert_livestock_price|rpc_retire_livestock_price|\
+rpc_get_grade_formula|rpc_admin_upsert_grade_formula|\
 rpc_admin_upsert_livestock_category|rpc_admin_deactivate_livestock_category|\
 rpc_admin_set_category_rule|rpc_admin_activate_rule_version|\
 rpc_admin_map_sku_to_category|\
