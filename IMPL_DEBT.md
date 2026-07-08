@@ -209,3 +209,17 @@
 **Context:** (1) `public/.well-known/apple-app-site-association` `TEAMID` и `assetlinks.json` `REPLACE_WITH_SIGNING_CERT_SHA256` — плейсхолдеры до определения store-аккаунта (открытый вопрос: TURAN vs Zengi, Apple D-U-N-S). (2) iOS `pod install` + сборка + прогон на устройствах не выполнены в песочнице (нет CocoaPods/полного Xcode) — шаг acceptance на настроенной Mac-build-машине. (3) iOS Associated Domains capability и `google-services.json`/APNs (push, S5) заводятся вручную при первой настройке подписи.
 **Retire-when:** store-аккаунт определён → подставить Team ID + signing SHA256; прогон TestFlight/Internal testing зелёный (ARS-156 E2E push). См. `Docs/AGOS-NativeApp-S4-BuildAndAcceptance.md`.
 **Severity:** medium (блокирует финальный deep-link + публикацию, НЕ блокирует сборку). **Owner surface:** `public/.well-known/*`, `ios/`, `android/app/`. Связ.: ARS-156 (S5.4), C-серия push.
+
+## 🐄 Farm module (ARS-169 reconciliation, 2)
+
+> Найдены аудитом покрытия ARS-169 (2026-07-08), сверены с задеплоенным SQL. Полная карта: `Docs/AGOS-Farm-Module-CoverageMap-ARS169.md`. Оба — часть ЦТК-lifecycle (self-service петля F-D12); блокируют ARS-172.
+
+### FARM-01 — `rpc_get_production_plan` ссылается на несуществующие колонки (draft-читатель сломан)
+**Context:** `d07_ai_gateway.sql:280-283` — RPC селектит `fpp.plan_name` / `fpp.plan_start_date` / `fpp.plan_end_date`, но таблица `farm_production_plans` (`d05_ops_edu.sql:367-370`) имеет `name` / `cycle_start_date` / `cycle_end_date`. Runtime `column does not exist`. Это **единственный** RPC, читающий план любого статуса (в т.ч. `draft`); `rpc_get_active_plan` (d05:3637) отдаёт только `active`. Следствие: просмотр draft-плана перед активацией (F-D12) недоступен.
+**Retire-when:** переименовать 3 колонки в SELECT на канонические (`name`/`cycle_start_date`/`cycle_end_date`); аддитивно, сигнатура RPC не меняется (P7). Проверить `cross_check.sh` + фактический вызов на staging.
+**Severity:** medium (сломанный RPC, но текущий UI его не вызывает — `ProductionPlan.tsx` использует `rpc_get_active_plan`; всплывёт при постройке просмотра draft в ARS-172). **Owner surface:** `d07_ai_gateway.sql:260-290`.
+
+### FARM-02 — нет RPC перехода draft→active (петля активации ЦТК неполна)
+**Context:** `farm_production_plans.status` = draft/active/completed/cancelled (d05:372). Draft создаётся `rpc_start_production_plan` (d05:3159); активация в `active` происходит **только при создании** через `p_auto_activate:=true`. Отдельного `rpc_activate_production_plan` (draft→active после создания) НЕТ — существующие `rpc_activate_*` принадлежат другим доменам (d02 pool, d04 vaccination). Self-service петля F-D12 (фермер → draft → просмотр → активация) собрана только на 1/3.
+**Retire-when:** добавить аддитивный `rpc_activate_production_plan(p_organization_id, p_plan_id, …)` с проверкой `idx_farm_plan_one_active` (один active на ферму) + emit события. Реализовать в ARS-172.
+**Severity:** medium (блокирует self-service активацию из фермерского кабинета; сейчас активировать может только auto-путь при создании или эксперт вручную в консоли). **Owner surface:** `d05_ops_edu.sql` (RPC-слой ЦТК), `rpc_name_registry`.
