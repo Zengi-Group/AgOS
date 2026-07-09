@@ -123,8 +123,9 @@ export function MarketScreen({ membership, batches, loading, onNew, onApply, onP
 
             {nAll === 0 ? (
               <div className="mk-empty">
-                <div className="mk-empty-art"><PhIcon name="market" size={30} color="var(--fg3)" /></div>
-                <div className="mk-empty-t">Пока нет ни одной партии. Создайте первую — на это уйдёт пара минут.</div>
+                <div className="mk-empty-art"><PhIcon name="market" size={46} /></div>
+                <div className="mk-empty-h">Пока нет ни одной партии</div>
+                <div className="mk-empty-t">Создайте первую — на это уйдёт пара минут.</div>
                 {canSell && <button className="mk-cta primary" onClick={onNew}>Новая партия</button>}
               </div>
             ) : visible.length === 0 ? (

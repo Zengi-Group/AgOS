@@ -61,7 +61,9 @@ export function ListScreen({ batches, onBatch, onNew, onBack }: Props) {
         </div>
         {isEmpty ? (
           <div className="mk-empty">
-            <div className="mk-empty-t">{filter === 'done' ? 'Завершённых партий пока нет.' : 'Партий нет.'}</div>
+            <div className="mk-empty-art"><PhIcon name="package" size={46} /></div>
+            <div className="mk-empty-h">{filter === 'done' ? 'Завершённых партий пока нет' : 'Партий пока нет'}</div>
+            {filter !== 'done' && <div className="mk-empty-t">Создайте первую — она появится в этом списке.</div>}
             {filter !== 'done' && <button className="mk-cta primary" onClick={onNew}>Создать первую партию</button>}
           </div>
         ) : (
