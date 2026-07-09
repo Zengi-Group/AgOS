@@ -22,6 +22,7 @@
   --accent: #E8920B;   /* Turan star / акцент */
   --cta: #3d2b1f;      /* тёмная кнопка */
   --cta-fg: #fbfaf6;
+  --cta-h: #2c1e14;    /* hover тёмной кнопки (DS daylight) */
 
   /* Семантика (DS daylight) */
   --blue: #4571b8;
@@ -30,6 +31,12 @@
   --emerald: #2d8a6e;
   --amber: #b37a10;
   --red: #c0392b;
+
+  /* Семантика · «muted» подложки (DS daylight, для чипов/заливок) */
+  --blue-m: rgba(69,113,184,0.07);
+  --green-m: rgba(58,138,82,0.08);
+  --amber-m: rgba(179,122,16,0.08);
+  --red-m: rgba(192,57,43,0.08);
 
   /* Тени / скругления / spacing / тип / шрифт (DS) */
   --sh-sm: 0 1px 3px rgba(61,43,31,0.06), 0 0 0 1px rgba(61,43,31,0.04);

@@ -13,9 +13,12 @@ interface Props {
   noTabs?: boolean
   // Pull-to-refresh (spec §7): экраны с поллингом передают свой рефетч.
   onRefresh?: () => Promise<unknown>
+  // Док-футер прототипа (ShellFrame footer/footBare) — sticky CTA над таб-баром.
+  footer?: ReactNode
+  footBare?: boolean
 }
 
-export function IonShellFrame({ label, children, noTabs, onRefresh }: Props) {
+export function IonShellFrame({ label, children, noTabs, onRefresh, footer, footBare }: Props) {
   return (
     <IonPage data-screen-label={label || ''}>
       <OfflineBar />
@@ -32,6 +35,7 @@ export function IonShellFrame({ label, children, noTabs, onRefresh }: Props) {
         )}
         <div className="phone-scroll">{children}</div>
       </IonContent>
+      {footer && <div className={'sh-foot' + (footBare ? ' bare' : '')}>{footer}</div>}
       {!noTabs && <ShellTabBarIon />}
     </IonPage>
   )

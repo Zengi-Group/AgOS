@@ -14,10 +14,11 @@
 .agos-cabinet-stage .hh-row {
   position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 9px;
   margin: 0 calc(-1 * var(--px)); padding: 10px var(--px) 11px;
-  background: color-mix(in oklab, var(--bg) 88%, transparent);
-  -webkit-backdrop-filter: saturate(160%) blur(14px); backdrop-filter: saturate(160%) blur(14px);
+  /* Сплошной фон без backdrop-blur: blur внутри страницы, которую Ionic двигает
+     transform'ом при переходе, даёт артефакты (ре-сэмпл размытия). Нативный переход
+     важнее полупрозрачности. */
+  background: var(--bg);
   border-bottom: none;
-  box-shadow: 0 8px 20px -18px color-mix(in oklab, var(--fg) 40%, transparent);
 }
 .agos-cabinet-stage .askbar {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px;
@@ -28,11 +29,15 @@
 .agos-cabinet-stage .ask-ph { font-size: 14px; font-weight: 500; color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .agos-cabinet-stage .ask-mic2 { min-width: 36px; min-height: 36px; margin-right: -8px; border-radius: var(--r-full); background: none; border: none; flex-shrink: 0; color: var(--fg2); display: grid; place-items: center; cursor: pointer; }
 .agos-cabinet-stage .ask-mic2:hover { color: var(--fg); }
-.agos-cabinet-stage .avatar-btn {
-  position: relative; width: 44px; height: 44px; flex-shrink: 0; border-radius: var(--r-full); border: none;
-  background: var(--cta); color: var(--cta-fg); display: grid; place-items: center; font-size: 14px; font-weight: 600; letter-spacing: -.01em; cursor: pointer;
+/* Кнопка кабинета — тонкая минималистичная иконка (без тёмного кружка-аватара) */
+.agos-cabinet-stage .acct-btn {
+  position: relative; width: 40px; height: 40px; flex-shrink: 0; border-radius: var(--r-full); border: none;
+  background: none; color: var(--fg2); display: grid; place-items: center; cursor: pointer;
+  transition: color 120ms var(--ease), background 120ms var(--ease);
 }
-.agos-cabinet-stage .avatar-dot { position: absolute; top: 1px; right: 1px; width: 9px; height: 9px; border-radius: var(--r-full); background: var(--amber); border: 2px solid var(--bg); }
+.agos-cabinet-stage .acct-btn:hover { color: var(--fg); background: color-mix(in oklab, var(--fg) 5%, transparent); }
+.agos-cabinet-stage .acct-btn:active { transform: scale(.94); }
+.agos-cabinet-stage .acct-dot { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: var(--r-full); background: var(--amber); border: 2px solid var(--bg); }
 
 /* ─── layout ─── */
 .agos-cabinet-stage .home-stack { display: flex; flex-direction: column; gap: 22px; padding-top: 14px; }
@@ -98,6 +103,9 @@
 .agos-cabinet-stage .dec-act.primary { background: var(--cta); color: var(--cta-fg); }
 .agos-cabinet-stage .dec-act.alt { background: transparent; color: var(--fg); box-shadow: inset 0 0 0 1px var(--bd-h); }
 .agos-cabinet-stage .dec-act.alt:hover { background: var(--bg-m); }
+/* stack-вариант (порт turan-base.css) — вертикальная колонка действий (decision) */
+.agos-cabinet-stage .dec-row-actions.stack { flex-direction: column; align-items: stretch; gap: 10px; }
+.agos-cabinet-stage .dec-row-actions.stack > .dec-act { width: 100%; flex: none; }
 
 /* ─── work-farm (быстрый доступ) ─── */
 .agos-cabinet-stage .work-farm { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; background: var(--bg-c); border: none; border-radius: var(--r-xl); padding: 16px; min-height: 60px; box-shadow: var(--sh-sm); cursor: pointer; transition: box-shadow 60ms var(--ease); }
@@ -128,3 +136,52 @@
 .agos-cabinet-stage .agos-tabbar ion-tab-button.tab-selected .bn-t { font-weight: 600; }
 .agos-cabinet-stage .agos-tabbar .tb-dot { position: absolute; top: -2px; right: -5px; width: 6px; height: 6px; border-radius: var(--r-full); background: var(--amber); border: 1.5px solid var(--bg); }
 .agos-cabinet-stage .agos-tabbar .tb-badge { position: absolute; top: -4px; right: -8px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: var(--r-full); background: var(--red); color: #fff; font-family: var(--font-mono); font-size: 9px; font-weight: 500; display: grid; place-items: center; }
+
+/* ─── док-футер (порт shell.jsx .sh-foot) — sticky CTA над таб-баром/скроллом ─── */
+.agos-cabinet-stage .sh-foot {
+  flex-shrink: 0;
+  padding: 12px var(--px) calc(16px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--bd-s);
+  background: var(--bg);
+}
+.agos-cabinet-stage .sh-foot.bare { border-top: none; background: transparent; padding-top: 8px; }
+
+/* ─── универсальная шапка вкладок (TabHead: Рынок/Ферма/Сообщения) ─── */
+.agos-cabinet-stage .tab-head {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 0 calc(-1 * var(--px)); padding: 12px var(--px) 10px;
+  background: var(--bg);
+}
+.agos-cabinet-stage .tab-head-t {
+  font-family: var(--font-sans); font-size: 24px; font-weight: 700;
+  letter-spacing: -.03em; color: var(--fg); line-height: 1.1; margin: 0;
+}
+
+/* ─── шапка внутренних страниц (SubHead: Партия/Диалог/Отзыв/TURAN) ─── */
+.agos-cabinet-stage .sub-head {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 calc(-1 * var(--px)); padding: 9px var(--px) 10px;
+  background: var(--bg); border-bottom: 1px solid var(--bd-s);
+}
+.agos-cabinet-stage .sub-back {
+  display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0;
+  min-height: 34px; margin-left: -4px; padding: 0 4px 0 0;
+  border: none; background: none; color: var(--fg2); cursor: pointer;
+  font-family: var(--font-sans); transition: color 120ms var(--ease);
+}
+.agos-cabinet-stage .sub-back:hover { color: var(--fg); }
+.agos-cabinet-stage .sub-back:active { opacity: .6; }
+.agos-cabinet-stage .sub-back-l { font-size: 15px; font-weight: 500; letter-spacing: -.01em; }
+.agos-cabinet-stage .sub-av { width: 34px; height: 34px; border-radius: var(--r-full); flex-shrink: 0; display: grid; place-items: center; }
+.agos-cabinet-stage .sub-av-l { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.agos-cabinet-stage .sub-av.tone-accent  { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent); }
+.agos-cabinet-stage .sub-av.tone-amber   { background: color-mix(in srgb, var(--amber) 13%, transparent);  color: var(--amber); }
+.agos-cabinet-stage .sub-av.tone-green   { background: color-mix(in srgb, var(--green) 13%, transparent);  color: var(--green); }
+.agos-cabinet-stage .sub-av.tone-neutral { background: var(--bg-m); color: var(--fg2); }
+.agos-cabinet-stage .sub-av.tone-cta     { background: var(--cta); color: var(--cta-fg); }
+.agos-cabinet-stage .sub-head-t { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.agos-cabinet-stage .sub-head-t b { font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agos-cabinet-stage .sub-head-t span { font-size: 11.5px; color: var(--fg3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agos-cabinet-stage .sub-head-sp { flex: 1; min-width: 0; }

@@ -3,6 +3,7 @@
 
 import { useState } from 'react'
 import { IonShellFrame } from '../components/IonShellFrame'
+import { SubHead } from '../components/SubHead'
 import { Cta } from '../components/Cta'
 
 const TOPICS = [
@@ -35,10 +36,7 @@ export function TuranScreen({ onBack, toast, prefillTopic }: Props) {
 
   return (
     <IonShellFrame noTabs label="TURAN">
-      <div className="lst-head">
-        <button className="lst-back" onClick={onBack} aria-label="Назад">←</button>
-        <div className="lst-title">TURAN · Поддержка</div>
-      </div>
+      <SubHead onBack={onBack} star tone="accent" title="TURAN" sub="Поддержка ассоциации" />
 
       {sent ? (
         <div style={{ padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, textAlign: 'center' }}>

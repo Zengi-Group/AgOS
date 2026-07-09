@@ -5,6 +5,7 @@
 import { useShell } from '../context'
 import { PhIcon } from './icons/PhIcon'
 import { TuranStar } from './icons/TuranStar'
+import { AccountBtn } from './AccountBtn'
 
 export function HomeHead() {
   const ctx = useShell()
@@ -19,10 +20,7 @@ export function HomeHead() {
           <PhIcon name="mic" size={15} />
         </button>
       </div>
-      <button className="avatar-btn" title="Кабинет хозяйства" onClick={() => ctx.go({ name: 'cabinet' })}>
-        {ctx.avatarInitials ? ctx.avatarInitials : <PhIcon name="user" size={18} />}
-        {ctx.avatarDot && <i className="avatar-dot" />}
-      </button>
+      <AccountBtn />
     </div>
   )
 }
