@@ -1,10 +1,14 @@
-// AgOS · TSP-1 · SCR-03 · Результат публикации (p1/wizard.jsx PubResult). Варианты A/B/C/D.
+// AgOS · TSP-1 · SCR-03 · Результат публикации — реcкин под прототип (market-wizard.jsx PubResult).
+// Варианты A/B/C/D. Рендерится внутри внешнего <IonPage className="agos-flow-page">
+// (CabinetApp.renderMarket): IonContent (.mk-res) + док-футер .sh-foot.
 
 import type { ReactNode } from 'react'
+import { IonContent } from '@ionic/react'
 import type { Batch, PubVariant } from '../types/batch'
 import { NBSP } from '../data/tsp-dicts'
 import { fmtMoney } from '../data/tsp-utils'
-import { Cta } from '../../components/Cta'
+import { MkCta } from '../components/MkCta'
+import { PhIcon, type PhIconName } from '../../components/icons/PhIcon'
 
 interface PubResultProps {
   variant: PubVariant
@@ -16,42 +20,48 @@ interface PubResultProps {
 export function PubResult({ variant, batch, onToBatch, onToList }: PubResultProps) {
   const dealPrice = (batch.dealPrice ?? 0) as number
   const price = (batch.price ?? 0) as number
-  const variants: Record<PubVariant, { ic: string; tone: string; h: string; body: ReactNode }> = {
+  const variants: Record<PubVariant, { ic: PhIconName; tone: string; h: string; body: ReactNode }> = {
     A: {
-      ic: '✓', tone: 'ok', h: 'Покупатель найден!',
+      ic: 'checkCircle', tone: 'green', h: 'Покупатель найден',
       body: (
         <>
-          <div className="pr-price mono">Цена сделки: <b>{fmtMoney(dealPrice)}{NBSP}₸/кг</b></div>
-          {dealPrice > price && <div className="pr-badge">на {fmtMoney(dealPrice - price)}{NBSP}₸/кг выше вашей цены</div>}
+          <div className="mk-pr-price mk-mono">Цена сделки: <b>{fmtMoney(dealPrice)}{NBSP}₸/кг</b></div>
+          {dealPrice > price && <div className="mk-pr-badge">на {fmtMoney(dealPrice - price)}{NBSP}₸/кг выше вашей цены</div>}
           <p>Покупатель сейчас добирает полный заказ. Когда доберёт — сделка подтвердится, и мы покажем, кто покупатель. Обычно это занимает от нескольких часов до нескольких дней.</p>
         </>
       ),
     },
     B: {
-      ic: '→', tone: 'send', h: 'Партия отправлена покупателям',
+      ic: 'send', tone: 'amber', h: 'Партия отправлена покупателям',
       body: <p>Подходящие покупатели получили ваше предложение. Ответ придёт до <b>{String(batch.deadlineLabel ?? '')}</b>. Если никто не согласится — предложим, что делать дальше.</p>,
     },
     C: {
-      ic: '◷', tone: 'wait', h: 'Партия в продаже',
+      ic: 'clock', tone: 'blue', h: 'Партия в продаже',
       body: <p>Сейчас подходящего покупателя нет — это нормально, особенно в вашем районе предложение появляется волнами. Как только появится — партия попадёт к нему автоматически, мы сразу сообщим.</p>,
     },
     D: {
-      ic: '🗓', tone: 'plan', h: 'Запланировано',
+      ic: 'calendar', tone: 'blue', h: 'Запланировано',
       body: <p>Партия выйдет в продажу <b>{String(batch.publishAtLabel ?? '')}</b> — за неделю до готовности животных. Делать ничего не нужно.</p>,
     },
   }
   const v = variants[variant]
   return (
-    <div className="phone" data-screen-label={'SCR-03 · публикация · вариант ' + variant}>
-      <div className="phone-body wiz-container">
-        <div className="pub-res">
-          <div className={'pub-ic ' + v.tone}>{v.ic}</div>
-          <h2 className="step-h1 center">{v.h}</h2>
-          <div className="pub-body">{v.body}</div>
+    <>
+      <IonContent className="agos-ion-content">
+        <div className="phone-scroll">
+          <div className="mk" data-screen-label={'SCR-03 · публикация · вариант ' + variant}>
+            <div className="mk-res">
+              <div className={'mk-res-ic tone-' + v.tone}><PhIcon name={v.ic} size={30} /></div>
+              <h1 className="mk-res-h">{v.h}</h1>
+              <div className="mk-res-b">{v.body}</div>
+            </div>
+          </div>
         </div>
-        <Cta onClick={onToBatch}>К партии</Cta>
-        {onToList && <button className="link-skip" onClick={onToList}>К моим партиям</button>}
+      </IonContent>
+      <div className="sh-foot">
+        <MkCta onClick={onToBatch}>К партии</MkCta>
+        {onToList && <button className="mk-link" onClick={onToList}>К моим партиям</button>}
       </div>
-    </div>
+    </>
   )
 }
