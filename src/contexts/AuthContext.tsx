@@ -1,7 +1,8 @@
-import React, { createContext, useCallback, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useEffect, useRef, useState } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { useHost } from '@/platform/host/HostContext'
+import type { PushToken } from '@/platform/host/AgOSHost'
 
 export interface Organization {
   id: string
@@ -88,6 +89,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const [userContext, setUserContext] = useState<UserContext | null>(null)
   const [isContextLoading, setIsContextLoading] = useState(false)
+  // S5/ARS-154: последний зарегистрированный push-токен — нужен для отзыва при signOut,
+  // пока сессия ещё валидна (RLS push_token скоупит по user_id).
+  const activePushRef = useRef<{ token: string; organizationId: string | null } | null>(null)
 
   const loadContext = useCallback(async () => {
     setIsContextLoading(true)
@@ -106,6 +110,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsContextLoading(false)
     }
   }, [])
+
+  // S5/ARS-153: отправка device-токена в общий бэкенд (EngSpec §6). Один RPC для всех
+  // хостов; WebHost отдаёт null → no-op на web. Провайдер/платформа приходят от хоста.
+  const sendPushToken = useCallback(
+    async (pt: PushToken, organizationId: string | null) => {
+      try {
+        const { error } = await supabase.rpc('rpc_register_push_token', {
+          p_organization_id: organizationId,
+          p_token: pt.token,
+          p_provider: pt.provider,
+          p_platform: pt.platform,
+          p_device_id: null,
+        })
+        if (error) {
+          console.error('rpc_register_push_token failed:', error)
+          return
+        }
+        activePushRef.current = { token: pt.token, organizationId }
+      } catch (err) {
+        console.error('rpc_register_push_token error:', err)
+      }
+    },
+    [],
+  )
+
+  useEffect(() => {
+    // S5/ARS-153: после auth регистрируем push. organization_id = первичная орг фермера.
+    // §6 шаг 4: onPushToken перерегистрирует при ротации токена нативным слоем.
+    if (!session || !userContext) return
+    const organizationId = userContext.organizations[0]?.id ?? null
+    let cancelled = false
+    host.onPushToken((pt) => {
+      void sendPushToken(pt, organizationId)
+    })
+    void host.registerPushToken().then((pt) => {
+      if (!cancelled && pt) void sendPushToken(pt, organizationId)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [session, userContext, host, sendPushToken])
 
   useEffect(() => {
     let cancelled = false
@@ -149,6 +194,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loadContext, host])
 
   const signOut = useCallback(async () => {
+    // S5/ARS-154: деактивируем push-токен ДО выхода (сессия ещё валидна для RLS push_token).
+    const active = activePushRef.current
+    if (active) {
+      try {
+        await supabase.rpc('rpc_revoke_push_token', {
+          p_organization_id: active.organizationId,
+          p_token: active.token,
+        })
+      } catch (err) {
+        console.error('rpc_revoke_push_token error:', err)
+      }
+      activePushRef.current = null
+    }
     // Host Bridge: хост чистит своё хранилище (Preferences / мост) и зовёт supabase.signOut
     await host.signOut()
     setSession(null)

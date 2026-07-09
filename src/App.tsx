@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { HostProvider } from '@/platform/host/HostContext'
 import { RequireAuth } from '@/components/guards/RequireAuth'
+import { PushDeepLinkBridge } from '@/components/PushDeepLinkBridge'
 
 import { RequireExpert } from '@/components/guards/RequireExpert'
 import { PublicLanding } from '@/components/guards/PublicLanding'
@@ -146,6 +147,7 @@ function App() {
       <HostProvider>
       <AuthProvider>
         <BrowserRouter>
+          <PushDeepLinkBridge />
           <Routes>
             {/* Native: корень уводит в кабинет (RequireAuth отбросит на /login если нет сессии). */}
             <Route path="/" element={IS_NATIVE ? <Navigate to="/cabinet" replace /> : <PublicLanding />} />

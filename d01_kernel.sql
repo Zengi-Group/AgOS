@@ -697,6 +697,31 @@ comment on column public.consultation_requests.vet_case_id is
     'D58: References vet_cases.id. FK constraint intentionally deferred to 005_vet.sql
      to avoid circular dependency. Column is nullable (not all requests are vet-related).';
 
+-- -------------------------------------------------------
+-- push_token
+-- ARS-139 (S5/C1): device push token registry for native app (Host Bridge → C-series).
+-- Canon: AGOS-NativeApp-EngSpec-v0_1.md §6. Additive table sanctioned by EngSpec.
+-- Written by rpc_register_push_token (ARS-140); read by push edge/Notification Worker (ARS-141/142).
+-- Ownership Matrix: User C/U (own device tokens); Admin R.
+-- Dedup + revoke via is_active (P7 soft-delete); one row per token (unique).
+-- -------------------------------------------------------
+create table if not exists public.push_token (
+    id              uuid    primary key default gen_random_uuid(),
+    user_id         uuid    not null references public.users(id) on delete cascade,
+    organization_id uuid    references public.organizations(id) on delete set null,
+    provider        text    not null check (provider in ('fcm', 'apns')),
+    token           text    not null unique,
+    platform        text    not null check (platform in ('android', 'ios', 'web')),
+    device_id       text,   -- optional device fingerprint for multi-device management
+    is_active       boolean not null default true,
+    created_at      timestamptz not null default now(),
+    updated_at      timestamptz not null default now()
+);
+comment on table public.push_token is
+    'ARS-139 (S5): push notification tokens per device. EngSpec §6.
+     Client (CapacitorHost.registerPushToken) → rpc_register_push_token → this table.
+     provider: fcm (Android/web) | apns (iOS). Revoke on signOut via is_active=false (ARS-154).';
+
 -- ============================================================
 -- SECTION 2: FARM DOMAIN (7 entities)
 -- 3 reference tables already created above: animal_categories, breeds,
@@ -1045,9 +1070,11 @@ create table if not exists public.notifications (
     id                  uuid    primary key default gen_random_uuid(),
     user_id             uuid    not null references public.users(id) on delete cascade,
     organization_id     uuid    not null references public.organizations(id),  -- denorm for RLS
-    -- D68: Two channels only
+    -- D68: two transactional channels (whatsapp,in_app) + 'push' (EngSpec §6, ARS-142).
+    -- ARS-142 additively extends D68 to a third channel for native push (S5 / C-series);
+    -- whatsapp/in_app semantics unchanged. See DECISIONS_LOG D-PUSH-CHANNEL-01.
     channel             text    not null
-                                    check (channel in ('whatsapp','in_app')),
+                                    check (channel in ('whatsapp','in_app','push')),
     template_id         text    not null,   -- e.g. 'batch_matched', 'vaccination_reminder'
     params              jsonb,              -- template variable substitution
     delivery_status     text    not null default 'pending'
@@ -1070,10 +1097,42 @@ create table if not exists public.notifications (
     updated_at          timestamptz not null default now()
 );
 comment on table public.notifications is
-    'D68: WhatsApp + in-app only. No email, no SMS (final architectural decision).
+    'D68: WhatsApp + in-app; ARS-142 adds native ''push'' channel (EngSpec §6, S5/C-series).
+     No email, no SMS (final architectural decision).
      template_id + params: all notifications are template-based (no free-form messages from system).
      scheduled_for: used for proactive alerts (vaccination reminders, weather-triggered).
      platform_event_id: traceability — which event triggered this notification.';
+
+-- ARS-142 (C4): idempotent widening of the channel CHECK for already-deployed DBs.
+-- `create table if not exists` above never re-applies the inline CHECK on an existing
+-- table, so drop+re-add the auto-named constraint to include 'push' (EngSpec §6).
+-- Additive: whatsapp/in_app rows keep validating; only a new allowed value is added.
+alter table public.notifications drop constraint if exists notifications_channel_check;
+alter table public.notifications add constraint notifications_channel_check
+    check (channel in ('whatsapp','in_app','push'));
+
+-- -------------------------------------------------------
+-- user_notification_preferences  (Dok 4 §2.2, defect СР-5)
+-- Per-user per-channel opt-out for the Slice-4 event→notification dispatcher.
+-- ABSENCE of a row = channel ENABLED (default-on) — so NO seed is required;
+-- a row is written only when a user turns a channel OFF. The dispatcher LEFT
+-- JOINs this table and keeps a channel only when coalesce(is_enabled,true)=true.
+-- 'push' is included beyond Dok4 §2.2 to match the notifications.channel
+-- superset (ARS-142 C4 / D-PUSH-CHANNEL-01).
+-- -------------------------------------------------------
+create table if not exists public.user_notification_preferences (
+    id          uuid    primary key default gen_random_uuid(),
+    user_id     uuid    not null references public.users(id) on delete cascade,
+    channel     text    not null
+                            check (channel in ('whatsapp','in_app','push')),
+    is_enabled  boolean not null default true,
+    updated_at  timestamptz not null default now(),
+    unique (user_id, channel)
+);
+comment on table public.user_notification_preferences is
+    'Dok 4 §2.2 / СР-5: per-user per-channel opt-out. Absence of a row = enabled
+     (default-on); the Slice-4 dispatcher uses coalesce(is_enabled,true). ''push''
+     added beyond Dok4 §2.2 to match notifications.channel (ARS-142 C4).';
 
 -- -------------------------------------------------------
 -- audit_log
@@ -1176,6 +1235,10 @@ create index if not exists idx_breeds_direction    on public.breeds (productivit
 create index if not exists idx_users_auth_id on public.users (auth_id);
 create index if not exists idx_users_phone   on public.users (phone)  where phone is not null;
 create index if not exists idx_users_email   on public.users (email)  where email is not null;
+
+-- push_token (ARS-139)
+create index idx_push_token_user   on public.push_token (user_id);
+create index idx_push_token_active  on public.push_token (user_id) where is_active;
 
 -- organizations
 create index if not exists idx_orgs_bin_iin  on public.organizations (bin_iin)   where bin_iin is not null;
@@ -1354,6 +1417,7 @@ alter table public.memberships                  enable row level security;
 alter table public.membership_applications      enable row level security;
 alter table public.verification_records         enable row level security;
 alter table public.consent_records              enable row level security;
+alter table public.push_token                   enable row level security;
 alter table public.agreement_acceptances        enable row level security;
 alter table public.restriction_records          enable row level security;
 alter table public.admin_roles                  enable row level security;
@@ -1521,6 +1585,22 @@ drop policy if exists "consent_system_insert" on public.consent_records;
 create policy "consent_system_insert"
     on public.consent_records for insert
     with check (user_id = public.fn_current_user_id() or public.fn_is_admin());
+
+-- -------------------------------------------------------
+-- PUSH TOKENS (user-private, own device tokens) — ARS-139
+-- -------------------------------------------------------
+drop policy if exists "push_token_read_own" on public.push_token;
+create policy "push_token_read_own"
+    on public.push_token for select
+    using (user_id = public.fn_current_user_id() or public.fn_is_admin());
+drop policy if exists "push_token_insert_own" on public.push_token;
+create policy "push_token_insert_own"
+    on public.push_token for insert
+    with check (user_id = public.fn_current_user_id() or public.fn_is_admin());
+drop policy if exists "push_token_update_own" on public.push_token;
+create policy "push_token_update_own"
+    on public.push_token for update
+    using (user_id = public.fn_current_user_id() or public.fn_is_admin());
 
 drop policy if exists "agreements_read_own" on public.agreement_acceptances;
 create policy "agreements_read_own"
@@ -1796,6 +1876,11 @@ $$;
 drop trigger if exists trg_users_updated_at on public.users;
 create trigger trg_users_updated_at
     before update on public.users
+    for each row execute function public.fn_set_updated_at();
+
+drop trigger if exists trg_push_token_updated_at on public.push_token;
+create trigger trg_push_token_updated_at
+    before update on public.push_token
     for each row execute function public.fn_set_updated_at();
 
 drop trigger if exists trg_organizations_updated_at on public.organizations;
@@ -6100,6 +6185,125 @@ values
     ('rpc_upsert_consulting_reference', null, null,                         'd09_consulting.sql', 'Consulting: upsert reference data row'),
     ('rpc_upsert_infrastructure_norm', null, null,                          'd09_consulting.sql', 'Consulting/CAPEX: admin upsert infra norm'),
     ('rpc_upsert_livestock_price',    null, null,                           'd09_consulting.sql', 'Consulting: admin upsert livestock price')
+on conflict (sql_name) do update
+    set notes      = excluded.notes,
+        created_in = excluded.created_in;
+
+-- ============================================================
+-- SECTION ARS-140 (S5/C2): push token registration RPCs
+-- Canon: AGOS-NativeApp-EngSpec-v0_1.md §6. Callers: [WEB] [NATIVE via Host Bridge].
+-- Same RPC for all hosts (WebHost/CapacitorHost/WebViewHost) — one backend (EngSpec §6, §2.3).
+-- Writes public.push_token (ARS-139). Read side = edge FCM/APNs (ARS-141) + worker (ARS-142).
+-- ============================================================
+
+-- rpc_register_push_token: register or refresh a device push token (idempotent on token).
+-- Re-registration of the same token re-activates it and rebinds user/org/platform.
+create or replace function public.rpc_register_push_token(
+    p_organization_id   uuid,
+    p_token             text,
+    p_provider          text,
+    p_platform          text,
+    p_device_id         text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_user_id       uuid := public.fn_current_user_id();
+    v_push_token_id uuid;
+begin
+    if v_user_id is null then
+        raise exception 'NOT_AUTHENTICATED: no current user'
+            using errcode = 'P0001';
+    end if;
+    if p_token is null or length(trim(p_token)) = 0 then
+        raise exception 'TOKEN_REQUIRED: push token must not be empty'
+            using errcode = 'P0001';
+    end if;
+    if p_provider not in ('fcm', 'apns') then
+        raise exception 'INVALID_PROVIDER: % (expected fcm|apns)', p_provider
+            using errcode = 'P0001';
+    end if;
+    if p_platform not in ('android', 'ios', 'web') then
+        raise exception 'INVALID_PLATFORM: % (expected android|ios|web)', p_platform
+            using errcode = 'P0001';
+    end if;
+    -- P-AI-2 / RLS: org must be one the caller belongs to (when provided)
+    if p_organization_id is not null
+       and not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin()) then
+        raise exception 'ORG_FORBIDDEN: user % not a member of organization %', v_user_id, p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    insert into public.push_token (
+        user_id, organization_id, provider, token, platform, device_id, is_active
+    ) values (
+        v_user_id, p_organization_id, p_provider, p_token, p_platform, p_device_id, true
+    )
+    on conflict (token) do update
+        set user_id         = excluded.user_id,
+            organization_id = excluded.organization_id,
+            provider        = excluded.provider,
+            platform        = excluded.platform,
+            device_id       = coalesce(excluded.device_id, public.push_token.device_id),
+            is_active       = true,
+            updated_at      = now()
+    returning id into v_push_token_id;
+
+    return v_push_token_id;
+end;
+$$;
+
+comment on function public.rpc_register_push_token(uuid, text, text, text, text) is
+    'ARS-140 (S5/C2) | EngSpec §6 | Callers: [WEB] [NATIVE].
+     Register/refresh device push token. Idempotent on token (unique) — re-registration
+     re-activates and rebinds. provider: fcm|apns. platform: android|ios|web.
+     Org membership enforced when p_organization_id given (P-AI-2). Writes push_token (ARS-139).';
+
+-- rpc_revoke_push_token: soft-deactivate a token (called by client on signOut — ARS-154/S5.2).
+-- p_organization_id kept for P-AI-2 uniformity; scoping authority is user_id (token is user-owned).
+create or replace function public.rpc_revoke_push_token(
+    p_organization_id   uuid,
+    p_token             text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_user_id uuid := public.fn_current_user_id();
+    v_found   boolean;
+begin
+    if v_user_id is null then
+        raise exception 'NOT_AUTHENTICATED: no current user'
+            using errcode = 'P0001';
+    end if;
+
+    update public.push_token
+    set    is_active  = false,
+           updated_at = now()
+    where  token = p_token
+      and  user_id = v_user_id
+      and  is_active = true;
+
+    get diagnostics v_found = row_count;
+    return v_found > 0;
+end;
+$$;
+
+comment on function public.rpc_revoke_push_token(uuid, text) is
+    'ARS-140 (S5/C2) | EngSpec §6 | Callers: [WEB] [NATIVE].
+     Soft-deactivate own push token (is_active=false) on signOut (ARS-154/S5.2).
+     Scoped by user_id (token is user-owned); p_organization_id for P-AI-2 uniformity.
+     Returns true if a matching active token was deactivated.';
+
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes)
+values
+    ('rpc_register_push_token', null, null, 'd01_kernel.sql', 'ARS-140 (S5): register/refresh device push token (push_token, ARS-139). EngSpec §6.'),
+    ('rpc_revoke_push_token',   null, null, 'd01_kernel.sql', 'ARS-140 (S5): soft-deactivate own push token on signOut (ARS-154).')
 on conflict (sql_name) do update
     set notes      = excluded.notes,
         created_in = excluded.created_in;
