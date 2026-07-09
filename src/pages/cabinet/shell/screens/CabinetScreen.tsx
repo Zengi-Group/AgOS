@@ -111,7 +111,6 @@ export function CabinetScreen({ membership, profileIncomplete, newsOn, onNewsTog
           <div className="blk-h mono">О ПРИЛОЖЕНИИ</div>
           <div className="cab-card">
             <button className="cab-link" onClick={onTuran}>Обратиться в TURAN <span className="att-arr"><ShIc k="chev" size={13} /></span></button>
-            <button className="cab-link quiet" onClick={onLogout}>Выйти из аккаунта</button>
             <div className="cab-ver mono">AgOS · пилот · версия P1c</div>
             {/* Юр-гейт сторов (D-LEGAL-1, ст.171 ПК РК): TSP — координация, не торговая площадка. */}
             <div className="cab-legal">
@@ -119,6 +118,8 @@ export function CabinetScreen({ membership, profileIncomplete, newsOn, onNewsTog
               ассоциация не покупает, не продаёт и не устанавливает обязательных цен. Справочные цены —
               индикативные ориентиры (ст. 171 Предпринимательского кодекса РК). Участие добровольное.
             </div>
+            {/* Выход из аккаунта — заметная кнопка (разлогин → signOut) */}
+            <button className="cab-logout" onClick={onLogout}>Выход</button>
           </div>
         </div>
       </div>
