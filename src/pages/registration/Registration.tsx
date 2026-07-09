@@ -53,6 +53,12 @@ const STEP_LABELS: Record<Step, string> = {
   success: 'Готово',
 }
 
+// Шаги для счётчика/прогресса в шапке. expert_docs проходят только эксперты,
+// поэтому остальные роли видят 7 шагов (7/7 на Success), а эксперты — 8.
+function visibleSteps(role: RoleType | null): Step[] {
+  return role === 'expert' ? STEP_ORDER : STEP_ORDER.filter((s) => s !== 'expert_docs')
+}
+
 // Отображаемое название организации на экране Success (ONB-SUCCESS-ORPHAN-01) —
 // зеркалит выбор name в handleRegister, только для UI, не влияет на сабмит.
 function getDisplayName(role: RoleType | null, formData: RegistrationFormData): string {
@@ -376,7 +382,8 @@ export function Registration() {
   }
 
   const isSuccess = step === 'success'
-  const idx = STEP_ORDER.indexOf(step)
+  const steps = visibleSteps(formData.role)
+  const idx = steps.indexOf(step)
   const topLabel = step === 'contact' && formData.otp_sent ? 'Код' : STEP_LABELS[step]
   const topBack = () => {
     // На первом экране (номер, до отправки кода) назад = выход на лендинг.
@@ -389,7 +396,7 @@ export function Registration() {
 
   return (
     <AuthShell>
-      {!isSuccess && <TopBar label={topLabel} onBack={topBack} idx={idx} total={STEP_ORDER.length} />}
+      <TopBar label={topLabel} onBack={topBack} idx={idx} total={steps.length} hideBack={isSuccess} />
       <AuthBody>
         <div key={step}>{renderStep()}</div>
       </AuthBody>
