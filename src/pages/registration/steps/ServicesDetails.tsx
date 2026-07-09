@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { FloatingInput } from '../components/FloatingInput'
 import { ChipSelect } from '../components/ChipSelect'
+import { H1, Lede, StickyDock, CTA } from '@/lib/auth-ui/primitives'
 import { SERVICE_TYPES, REGIONS } from '../constants'
 import type { RegistrationFormData } from '../constants'
 
@@ -33,12 +34,9 @@ export function ServicesDetails({ formData, onChange, onNext }: ServicesDetailsP
   }
 
   return (
-    <div className="space-y-6">
-      <div className="text-center space-y-2">
-        <h2 className="text-xl font-semibold text-[#2B180A] font-serif">
-          О вашей компании
-        </h2>
-      </div>
+    <div>
+      <H1>О компании</H1>
+      <Lede>Данные для каталога сервисов TURAN. Изменить можно потом.</Lede>
 
       <div className="space-y-4">
         <FloatingInput
@@ -83,9 +81,9 @@ export function ServicesDetails({ formData, onChange, onNext }: ServicesDetailsP
         />
       </div>
 
-      <button onClick={handleSubmit} className="reg-btn-primary w-full">
-        Далее
-      </button>
+      <StickyDock>
+        <CTA onClick={handleSubmit}>Далее</CTA>
+      </StickyDock>
     </div>
   )
 }

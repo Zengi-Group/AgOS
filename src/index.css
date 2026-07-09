@@ -519,10 +519,11 @@
 .reg-btn-primary {
   height: 52px;
   border-radius: 12px;
-  background: #2B180A;
-  color: #FFFFFF;
+  background: #141312; /* auth-ui T.cta */
+  color: #fafaf7;      /* auth-ui T.ctaFg */
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   border: none;
   cursor: pointer;
   transition: opacity 0.2s;

@@ -1,19 +1,35 @@
-// AgOS · TSP-1 · Шаг 1 · Животные (p1/wizard.jsx WizStep1).
-// «Далее →» всегда активна; по нажатию — скролл к первому проблемному полю + янтарная подсветка.
+// AgOS · TSP-1 · Шаг 1 · Животные — реcкин под прототип (market-wizard.jsx WizStep1).
+// «Далее» всегда активна; по нажатию — скролл к первому проблемному полю + подсветка .mk-miss.
 
 import { useRef, useState } from 'react'
 import type { WizState } from '../types/batch'
 import { BREEDS, FATNESS } from '../data/tsp-dicts'
-import { WizShell } from './WizShell'
+import { WizShell, DraftNote } from './WizShell'
 import { StepperCtl } from '../components/StepperCtl'
+import { MkField } from '../components/MkField'
+import { MkSelect } from '../components/MkSelect'
+import { MkErr } from '../components/MkErr'
+import { MkCta } from '../components/MkCta'
 import { useShell } from '../../context'
 
+// Скролл к проблемному полю. Контент живёт в <ion-content> (shadow-скроллер),
+// поэтому используем его scrollToPoint; фоллбэк — обычный .phone-scroll.
 function wizScrollTo(el: HTMLElement | null) {
   if (!el) return
-  const sc = el.closest('.wiz-scroll') as HTMLElement | null
+  const content = el.closest('ion-content') as
+    | (HTMLElement & { getScrollElement?: () => Promise<HTMLElement>; scrollToPoint?: (x: number, y: number, dur: number) => void })
+    | null
+  if (content?.getScrollElement && content.scrollToPoint) {
+    content.getScrollElement().then((se) => {
+      const top = el.getBoundingClientRect().top - se.getBoundingClientRect().top + se.scrollTop - 12
+      content.scrollToPoint!(0, top, 300)
+    })
+    return
+  }
+  const sc = el.closest('.phone-scroll') as HTMLElement | null
   if (!sc) return
   sc.scrollTo({
-    top: el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 10,
+    top: el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 12,
     behavior: 'smooth',
   })
 }
@@ -32,7 +48,7 @@ export function WizStep1Animals({ w, sw, onNext, onBack, onExit }: Props) {
   const aErr = w.age < 3 || w.age > 120
   const hErr = w.heads < 1 || w.heads > 500
   const [miss, setMiss] = useState<{ breed?: boolean; fatness?: boolean }>({})
-  const breedRef = useRef<HTMLLabelElement>(null)
+  const breedRef = useRef<HTMLDivElement>(null)
   const headsRef = useRef<HTMLDivElement>(null)
   const numsRef = useRef<HTMLDivElement>(null)
   const fatRef = useRef<HTMLDivElement>(null)
@@ -48,58 +64,49 @@ export function WizStep1Animals({ w, sw, onNext, onBack, onExit }: Props) {
   return (
     <WizShell step={1} onBack={onBack} onExit={onExit} title="Животные"
       sub="Опишите партию — по этим данным определится категория"
-      cta="Далее →" onCta={tryNext}>
-      <div className="kind-row">
-        <span className="kr-k">вид</span>
-        <span className="fix-badge">КРС</span>
-        <span className="hint-inline">Пока продаём только крупный рогатый скот</span>
+      footer={<><MkCta onClick={tryNext}>Далее</MkCta><DraftNote /></>}>
+      <div className="mk-kindrow">
+        <span className="mk-lab" style={{ marginBottom: 0 }}>Вид</span>
+        <span className="mk-fixbadge">КРС</span>
+        <span className="mk-kindhint">Пока продаём только крупный рогатый скот</span>
       </div>
-      <label className={'field' + (miss.breed ? ' miss' : '')} ref={breedRef}>
-        <div className="lab">порода</div>
-        <span className="selwrap">
-          <select className="fselect" value={w.breed} onChange={(e) => { sw({ breed: e.target.value }); setMiss((m) => ({ ...m, breed: false })) }}>
-            <option value="">Выберите породу</option>
-            {BREEDS.map((b) => <option key={b}>{b}</option>)}
-          </select>
-        </span>
-      </label>
-      {miss.breed && <div className="field-err amber">Выберите породу</div>}
-      <div className={'field' + (hErr ? ' err' : '')} ref={headsRef}>
-        <div className="lab">количество голов</div>
-        <StepperCtl value={w.heads} onChange={(v) => sw({ heads: v })} min={1} max={500} />
+      <div ref={breedRef} className={miss.breed ? 'mk-miss' : ''}>
+        <MkSelect label="Порода" placeholder="Выберите породу" options={BREEDS} value={w.breed} miss={miss.breed}
+          onChange={(e) => { sw({ breed: e.target.value }); setMiss((m) => ({ ...m, breed: false })) }} />
       </div>
-      {hErr && <div className="field-err">Голов обычно от 1 до 500.</div>}
-      <div className="grid2" ref={numsRef}>
-        <label className={'field nomb' + (wErr ? ' err' : '')}>
-          <div className="lab">ср. вес головы, кг</div>
-          <input className="finput mono" inputMode="numeric" value={w.avgWeight}
+      {miss.breed && <MkErr amber>Выберите породу</MkErr>}
+      <div ref={headsRef}>
+        <MkField label="Количество голов" err={hErr}>
+          <StepperCtl value={w.heads} onChange={(v) => sw({ heads: v })} min={1} max={500} />
+        </MkField>
+      </div>
+      {hErr && <MkErr>Голов обычно от 1 до 500.</MkErr>}
+      <div className="mk-grid2" ref={numsRef}>
+        <MkField label="Ср. вес головы, кг" hint="примерно, по вашей оценке" err={wErr}>
+          <input className="mk-input mk-mono" inputMode="numeric" value={w.avgWeight}
             onChange={(e) => sw({ avgWeight: parseInt(e.target.value.replace(/\D/g, '') || '0', 10) })} />
-          <div className="hint">примерно, по вашей оценке</div>
-        </label>
-        <label className={'field nomb' + (aErr ? ' err' : '')}>
-          <div className="lab">возраст, месяцев</div>
-          <input className="finput mono" inputMode="numeric" value={w.age}
+        </MkField>
+        <MkField label="Возраст, месяцев" err={aErr}>
+          <input className="mk-input mk-mono" inputMode="numeric" value={w.age}
             onChange={(e) => sw({ age: parseInt(e.target.value.replace(/\D/g, '') || '0', 10) })} />
-        </label>
+        </MkField>
       </div>
-      {wErr && <div className="field-err">Вес обычно от 100 до 800 кг. Проверьте, не указали ли общий вес вместо среднего.</div>}
-      {aErr && <div className="field-err">Возраст — от 3 до 120 месяцев.</div>}
-      <div className="sep" />
-      <div className={'field' + (miss.fatness ? ' miss' : '')} ref={fatRef}>
-        <div className="lab">упитанность</div>
-        <div className="fat-row">
-          {FATNESS.map((f) => (
-            <button key={f} className={'fat-card' + (w.fatness === f ? ' sel' : '')} onClick={() => { sw({ fatness: f }); setMiss((m) => ({ ...m, fatness: false })) }}>{f}</button>
-          ))}
-        </div>
+      {wErr && <MkErr>Вес обычно от 100 до 800 кг. Проверьте, не указали ли общий вес вместо среднего.</MkErr>}
+      {aErr && <MkErr>Возраст — от 3 до 120 месяцев.</MkErr>}
+      <div ref={fatRef} className={miss.fatness ? 'mk-miss' : ''}>
+        <MkField label="Упитанность">
+          <div className="mk-fat">
+            {FATNESS.map((f) => (
+              <button key={f} className={'mk-fat-c' + (w.fatness === f ? ' sel' : '')} onClick={() => { sw({ fatness: f }); setMiss((m) => ({ ...m, fatness: false })) }}>{f}</button>
+            ))}
+          </div>
+        </MkField>
       </div>
-      {miss.fatness && <div className="field-err amber">Выберите упитанность</div>}
-      <div className="field nomb">
-        <div className="lab">регион</div>
-        <div className="kind-row" style={{ marginTop: 4 }}>
-          <span className="fix-badge">{farmRegion || 'из профиля хозяйства'}</span>
-        </div>
-        <div className="hint">берётся из данных регистрации хозяйства — менять не нужно</div>
+      {miss.fatness && <MkErr amber>Выберите упитанность</MkErr>}
+      {/* Регион НЕ выбирается фермером — берётся из профиля хозяйства (см. BatchWizard.handlePublish). */}
+      <div className="mk-kindrow" style={{ marginTop: 4 }}>
+        <span className="mk-lab" style={{ marginBottom: 0 }}>Регион</span>
+        <span className="mk-fixbadge">{farmRegion || 'из профиля хозяйства'}</span>
       </div>
     </WizShell>
   )

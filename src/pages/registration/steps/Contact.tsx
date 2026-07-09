@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
-import { FloatingInput } from '../components/FloatingInput'
-import { PhoneInput } from '../components/PhoneInput'
+import { T } from '@/lib/auth-ui/tokens'
+import { H1, Lede, Field, inputStyle, StickyDock, CTA } from '@/lib/auth-ui/primitives'
 import { OtpInput } from '../components/OtpInput'
+import { PhonePicker } from '@/components/PhonePicker'
+import { maskPhoneE164 } from '@/lib/phone'
+import { isValidPhoneNumber } from 'libphonenumber-js'
 import type { RegistrationFormData } from '../constants'
 
 interface ContactProps {
@@ -14,16 +16,18 @@ interface ContactProps {
   onNext: () => void
 }
 
+// formData.phone хранит международный номер в формате E.164 («+77001234567»).
+// Для KZ (страна по умолчанию в PhonePicker) значение == прежний контракт `+7`+10 цифр.
+
 export function Contact({ formData, onChange, onNext }: ContactProps) {
+  const navigate = useNavigate()
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSending, setIsSending] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
   const [otpValue, setOtpValue] = useState('')
   const [countdown, setCountdown] = useState(0)
 
-  const maskedPhone = formData.phone.length >= 7
-    ? `+7 (${formData.phone.slice(0, 3)}) ${formData.phone.slice(3, 6)}-••-••`
-    : `+7 ${formData.phone}`
+  const maskedPhone = maskPhoneE164(formData.phone)
 
   useEffect(() => {
     if (countdown <= 0) return
@@ -36,8 +40,8 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
     if (!formData.full_name.trim() || formData.full_name.trim().length < 2) {
       errs.full_name = 'Введите ваше имя'
     }
-    if (formData.phone.length < 10) {
-      errs.phone = 'Введите номер телефона'
+    if (!isValidPhoneNumber(formData.phone)) {
+      errs.phone = 'Введите номер телефона полностью'
     }
     setErrors(errs)
     return Object.keys(errs).length === 0
@@ -48,7 +52,7 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
     setIsSending(true)
     try {
       const { data, error } = await supabase.functions.invoke('bird-otp', {
-        body: { action: 'send', phone: `+7${formData.phone}` },
+        body: { action: 'send', phone: formData.phone },
       })
       if (error || data?.error) {
         toast.error(data?.error || error?.message || 'Ошибка отправки кода')
@@ -68,11 +72,7 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
     setIsVerifying(true)
     try {
       const { data, error } = await supabase.functions.invoke('bird-otp', {
-        body: {
-          action: 'check',
-          verificationId: formData.verification_id,
-          code: token,
-        },
+        body: { action: 'check', verificationId: formData.verification_id, code: token },
       })
       if (error || !data?.verified) {
         toast.error(data?.error || 'Неверный код — попробуйте ещё раз')
@@ -93,9 +93,12 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
     setIsSending(true)
     try {
       const { data, error } = await supabase.functions.invoke('bird-otp', {
-        body: { action: 'send', phone: `+7${formData.phone}` },
+        body: { action: 'send', phone: formData.phone },
       })
-      if (error || data?.error) { toast.error(data?.error || error?.message); return }
+      if (error || data?.error) {
+        toast.error(data?.error || error?.message)
+        return
+      }
       onChange({ verification_id: data.verificationId })
       setOtpValue('')
       setCountdown(60)
@@ -106,108 +109,95 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
     }
   }
 
-  // Phase 2: OTP verification
+  // ── Phase 2: OTP verification ──
   if (formData.otp_sent) {
     return (
-      <div className="space-y-6">
-        <div className="text-center space-y-2">
-          <h2 className="text-xl font-semibold text-[#2B180A] font-serif">
-            Код из SMS
-          </h2>
-          <p className="text-sm text-[#6b5744]">
-            Отправили на {maskedPhone}
-          </p>
-        </div>
+      <>
+        <H1>Код из SMS</H1>
+        <Lede>Отправили 6-значный код на {maskedPhone}. Введите его ниже.</Lede>
+        <OtpInput value={otpValue} onChange={setOtpValue} onComplete={handleVerifyOtp} disabled={isVerifying} />
 
-        <OtpInput
-          value={otpValue}
-          onChange={setOtpValue}
-          onComplete={handleVerifyOtp}
-          disabled={isVerifying}
-        />
-
-        <button
-          onClick={() => handleVerifyOtp(otpValue)}
-          disabled={otpValue.length < 6 || isVerifying}
-          className="reg-btn-primary w-full flex items-center justify-center gap-2"
-        >
-          {isVerifying && <Loader2 className="h-4 w-4 animate-spin" />}
-          {isVerifying ? 'Проверка…' : 'Подтвердить'}
-        </button>
-
-        <p className="text-center text-sm text-[#6b5744]">
-          Не пришло?{' '}
+        <div style={{ marginTop: 24, fontSize: 13, color: T.fg3, textAlign: 'center' }}>
           {countdown > 0 ? (
-            <span className="text-[#6b5744]/50">через {countdown} сек.</span>
+            <>Отправить снова через {countdown} c</>
           ) : (
             <button
               onClick={handleResend}
               disabled={isSending}
-              className="text-[hsl(24,73%,54%)] font-medium hover:underline"
+              style={{ background: 'none', border: 'none', color: T.fg, textDecoration: 'underline', cursor: 'pointer', fontFamily: T.font, fontSize: 14, minHeight: 44, padding: '10px 16px', WebkitTapHighlightColor: 'transparent' }}
             >
               {isSending ? 'Отправка…' : 'Отправить снова'}
             </button>
           )}
-        </p>
+        </div>
 
-        <button
-          onClick={() => { onChange({ otp_sent: false }); setOtpValue('') }}
-          className="w-full text-center text-sm text-[#6b5744]/50 hover:text-[#6b5744] transition-colors"
-        >
-          ← Изменить номер
-        </button>
-      </div>
+        <div style={{ textAlign: 'center' }}>
+          <button
+            onClick={() => {
+              onChange({ otp_sent: false })
+              setOtpValue('')
+            }}
+            style={{ background: 'transparent', border: 'none', padding: '12px 16px', minHeight: 44, color: T.fg3, fontFamily: T.font, fontSize: 14, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
+          >
+            ← Изменить номер
+          </button>
+        </div>
+
+        <StickyDock>
+          <CTA disabled={otpValue.length !== 6 || isVerifying} onClick={() => handleVerifyOtp(otpValue)}>
+            {isVerifying ? 'Проверка…' : 'Подтвердить'}
+          </CTA>
+        </StickyDock>
+      </>
     )
   }
 
-  // Phase 1: contact form
+  // ── Phase 1: contact form ──
   return (
-    <div className="space-y-6">
-      <div className="text-center space-y-2">
-        <h2 className="text-xl font-semibold text-[#2B180A] font-serif">
-          Как с вами связаться?
-        </h2>
-        <p className="text-sm text-[#6b5744]">
-          SMS-код придёт на указанный номер
-        </p>
-      </div>
+    <>
+      <H1>С чего начнём?</H1>
+      <Lede>Один номер — вход навсегда. Пароль не нужен, только SMS-код.</Lede>
 
-      <div className="space-y-4">
-        <FloatingInput
-          label="Ваше имя"
+      <Field label="Ваше имя">
+        <input
+          style={inputStyle}
           value={formData.full_name}
-          onChange={(v) => {
-            onChange({ full_name: v })
-            if (errors.full_name) setErrors((e) => ({ ...e, full_name: '' }))
+          onChange={(e) => {
+            onChange({ full_name: e.target.value })
+            if (errors.full_name) setErrors((prev) => ({ ...prev, full_name: '' }))
           }}
-          error={errors.full_name}
+          placeholder="Как к вам обращаться"
+          autoFocus
         />
+        {errors.full_name && <div style={{ fontSize: 12, color: T.red, marginTop: 6 }}>{errors.full_name}</div>}
+      </Field>
 
-        <PhoneInput
+      <Field label="Мобильный номер">
+        <PhonePicker
           value={formData.phone}
           onChange={(v) => {
             onChange({ phone: v })
-            if (errors.phone) setErrors((e) => ({ ...e, phone: '' }))
+            if (errors.phone) setErrors((prev) => ({ ...prev, phone: '' }))
           }}
-          error={errors.phone}
+          error={!!errors.phone}
         />
+        {errors.phone && <div style={{ fontSize: 12, color: T.red, marginTop: 6 }}>{errors.phone}</div>}
+      </Field>
+
+      <div style={{ marginTop: 24, textAlign: 'center' }}>
+        <button
+          onClick={() => navigate('/login')}
+          style={{ background: 'transparent', border: 'none', padding: '12px 16px', minHeight: 44, color: T.fg2, fontFamily: T.font, fontSize: 15, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
+        >
+          Есть аккаунт? <span style={{ color: T.accent, fontWeight: 500 }}>Войти ›</span>
+        </button>
       </div>
 
-      <button
-        onClick={handleSendOtp}
-        disabled={isSending}
-        className="reg-btn-primary w-full flex items-center justify-center gap-2"
-      >
-        {isSending && <Loader2 className="h-4 w-4 animate-spin" />}
-        {isSending ? 'Отправка…' : 'Получить код'}
-      </button>
-
-      <p className="text-center text-sm text-[#6b5744]">
-        Уже есть аккаунт?{' '}
-        <Link to="/login" className="text-[hsl(24,73%,54%)] font-medium hover:underline">
-          Войти
-        </Link>
-      </p>
-    </div>
+      <StickyDock>
+        <CTA disabled={isSending} onClick={handleSendOtp}>
+          {isSending ? 'Отправка…' : 'Получить код'}
+        </CTA>
+      </StickyDock>
+    </>
   )
 }

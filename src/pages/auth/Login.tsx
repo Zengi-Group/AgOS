@@ -1,40 +1,35 @@
-import { useState } from 'react'
-import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { Loader2, Phone } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { loadMyContext, pickShellPath } from '@/lib/account'
 import { toast } from 'sonner'
-import { PinInput } from '@/pages/registration/components/PinInput'
+import { T } from '@/lib/auth-ui/tokens'
+import { AuthShell, AuthBody, TopBar, H1, Lede, StickyDock, CTA, Field, PinCells } from '@/lib/auth-ui/primitives'
+import { PhonePicker } from '@/components/PhonePicker'
+import { maskPhoneE164 } from '@/lib/phone'
+import { isValidPhoneNumber } from 'libphonenumber-js'
+
+type Step = 'phone' | 'pin'
+
+const STEP_LABELS: Record<Step, string> = { phone: 'Номер', pin: 'PIN' }
 
 export function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [phone, setPhone] = useState('+7')
+  const [phone, setPhone] = useState('') // E.164 из PhonePicker
   const [pin, setPin] = useState('')
-  const [step, setStep] = useState<'phone' | 'pin'>('phone')
+  const [step, setStep] = useState<Step>('phone')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const pinRef = useRef<HTMLInputElement>(null)
 
-  const phoneDigits = phone.replace(/\D/g, '').slice(1)
-  const maskedPhone = phoneDigits.length >= 7
-    ? `+7 (${phoneDigits.slice(0, 3)}) ${phoneDigits.slice(3, 6)}-••-••`
-    : phone
-
-  const formatPhone = (value: string) => {
-    const digits = value.replace(/\D/g, '')
-    if (digits.length <= 1) return '+7'
-    const rest = digits.slice(1, 11)
-    let formatted = '+7'
-    if (rest.length > 0) formatted += ' (' + rest.slice(0, 3)
-    if (rest.length >= 3) formatted += ') ' + rest.slice(3, 6)
-    if (rest.length >= 6) formatted += '-' + rest.slice(6, 8)
-    if (rest.length >= 8) formatted += '-' + rest.slice(8, 10)
-    return formatted
-  }
+  // ── auth logic preserved from previous Login (Supabase phone+PIN) ──
+  // phone — E.164 («+77001234567»); для KZ идентично прежнему `+7`+10 цифр.
+  const maskedPhone = maskPhoneE164(phone)
+  const phoneValid = isValidPhoneNumber(phone)
 
   const handlePhoneSubmit = () => {
-    const digits = phone.replace(/\D/g, '')
-    if (digits.length !== 11) {
+    if (!phoneValid) {
       setError('Введите номер телефона полностью')
       return
     }
@@ -43,12 +38,12 @@ export function Login() {
   }
 
   const handlePinSubmit = async (value: string) => {
-    if (value.length < 6) return
+    if (value.length < 6 || isLoading) return
     setError(null)
     setIsLoading(true)
     try {
       const { error: authError } = await supabase.auth.signInWithPassword({
-        phone: `+7${phoneDigits}`,
+        phone,
         password: value,
       })
       if (authError) {
@@ -72,97 +67,121 @@ export function Login() {
     }
   }
 
+  // авто-submit при вводе 6 цифр PIN
+  useEffect(() => {
+    if (pin.length === 6) void handlePinSubmit(pin)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pin])
+
+  useEffect(() => {
+    if (step === 'pin') pinRef.current?.focus()
+  }, [step])
+
+  const back = () => {
+    if (step === 'pin') {
+      setStep('phone')
+      setPin('')
+      setError(null)
+      return
+    }
+    navigate('/')
+  }
+
   return (
-    <div className="min-h-screen bg-[#fdf6ee] flex items-center justify-center px-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-[#2B180A] font-serif">ТУРАН</h1>
-          <p className="text-sm text-[#6b5744] mt-1">Вход в личный кабинет</p>
-        </div>
-
+    <AuthShell>
+      <TopBar label={STEP_LABELS[step]} onBack={back} />
+      <AuthBody>
         {step === 'phone' ? (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-[#2B180A] mb-1.5">
-                Номер телефона
-              </label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6b5744]" />
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => { setPhone(formatPhone(e.target.value)); setError(null) }}
-                  onKeyDown={(e) => e.key === 'Enter' && handlePhoneSubmit()}
-                  placeholder="+7 (___) ___-__-__"
-                  className="w-full pl-10 pr-4 py-2.5 border border-[#e8ddd0] rounded-xl bg-white text-[#2B180A] focus:outline-none focus:ring-2 focus:ring-[hsl(24,73%,54%)]/30 focus:border-[hsl(24,73%,54%)]"
-                />
-              </div>
-            </div>
-
+          <>
+            <H1>Вход в кабинет</H1>
+            <Lede>Введите номер, который использовали при регистрации. Далее введёте PIN.</Lede>
+            <Field label="Мобильный номер">
+              <PhonePicker
+                value={phone}
+                autoFocus
+                error={!!error}
+                onChange={(v) => {
+                  setPhone(v)
+                  setError(null)
+                }}
+              />
+            </Field>
             {error && (
-              <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+              <div style={{ marginTop: 4, color: T.red, fontSize: 13 }}>{error}</div>
             )}
-
-            <button
-              onClick={handlePhoneSubmit}
-              className="w-full py-2.5 bg-[hsl(24,73%,54%)] text-white rounded-xl font-medium hover:bg-[hsl(24,73%,44%)] transition-colors"
-            >
-              Продолжить
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="text-center space-y-1">
-              <p className="text-sm font-medium text-[#2B180A]">Введите PIN-код</p>
-              <p className="text-sm text-[#6b5744]">{maskedPhone}</p>
-            </div>
-
-            <PinInput
-              value={pin}
-              onChange={setPin}
-              onComplete={handlePinSubmit}
-              label="Ваш 6-значный PIN"
-              disabled={isLoading}
-            />
-
-            <button
-              onClick={() => handlePinSubmit(pin)}
-              disabled={pin.length < 6 || isLoading}
-              className="w-full py-2.5 bg-[hsl(24,73%,54%)] text-white rounded-xl font-medium hover:bg-[hsl(24,73%,44%)] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-            >
-              {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isLoading ? 'Проверка…' : 'Войти'}
-            </button>
-
-            {error && (
-              <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
-            )}
-
-            <div className="flex justify-between text-sm">
+            <div style={{ marginTop: 24, textAlign: 'center' }}>
               <button
-                onClick={() => { setStep('phone'); setPin(''); setError(null) }}
-                className="text-[#6b5744]/50 hover:text-[#6b5744] transition-colors"
+                onClick={() => navigate('/register')}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  padding: '12px 16px',
+                  minHeight: 44,
+                  color: T.fg2,
+                  fontFamily: T.font,
+                  fontSize: 15,
+                  cursor: 'pointer',
+                  WebkitTapHighlightColor: 'transparent',
+                }}
               >
-                ← Изменить номер
+                Нет аккаунта? <span style={{ color: T.accent, fontWeight: 500 }}>Зарегистрироваться ›</span>
               </button>
-              <Link
-                to="/forgot-pin"
-                state={{ phone: `+7${phoneDigits}` }}
-                className="text-[hsl(24,73%,54%)] hover:underline"
-              >
-                Забыл PIN
-              </Link>
             </div>
+            <StickyDock>
+              <CTA disabled={!phoneValid} onClick={handlePhoneSubmit}>
+                Продолжить
+              </CTA>
+            </StickyDock>
+          </>
+        ) : (
+          <div onClick={() => pinRef.current?.focus()} style={{ display: 'flex', flexDirection: 'column', cursor: 'text' }}>
+            <H1>Введите PIN</H1>
+            <Lede>6 цифр для входа. Номер: {maskedPhone}</Lede>
+            <PinCells value={pin} error={!!error} />
+            <div style={{ minHeight: 20, marginTop: 14, color: T.red, fontSize: 13, textAlign: 'center' }}>
+              {error}
+            </div>
+            <div style={{ marginTop: 8, textAlign: 'center' }}>
+              <button
+                onClick={() => navigate('/forgot-pin', { state: { phone } })}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  padding: '12px 16px',
+                  minHeight: 44,
+                  color: T.accent,
+                  fontFamily: T.font,
+                  fontSize: 15,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  WebkitTapHighlightColor: 'transparent',
+                }}
+              >
+                Забыли PIN?
+              </button>
+            </div>
+            {isLoading && (
+              <div style={{ marginTop: 8, textAlign: 'center', fontSize: 13, color: T.fg3 }}>Проверка…</div>
+            )}
+            <input
+              ref={pinRef}
+              type="tel"
+              inputMode="numeric"
+              enterKeyHint="done"
+              pattern="[0-9]*"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={pin}
+              disabled={isLoading}
+              onChange={(e) => {
+                setPin(e.target.value.replace(/\D/g, '').slice(0, 6))
+                setError(null)
+              }}
+              style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1, border: 0, padding: 0, margin: 0 }}
+            />
           </div>
         )}
-
-        <p className="text-center text-sm text-[#6b5744]">
-          Нет аккаунта?{' '}
-          <Link to="/register" className="text-[hsl(24,73%,54%)] font-medium hover:underline">
-            Зарегистрироваться
-          </Link>
-        </p>
-      </div>
-    </div>
+      </AuthBody>
+    </AuthShell>
   )
 }

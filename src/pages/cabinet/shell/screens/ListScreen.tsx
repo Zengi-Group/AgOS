@@ -1,15 +1,14 @@
-// AgOS · TSP-2 · SCR-01 «Мои партии» — список с фильтрами и группировкой.
-// Все данные приходят пропсами из CabinetApp (мок, без Supabase).
+// AgOS · TSP-2 · SCR-01 «Мои партии» (p1list) — список с фильтрами и группировкой.
+// Реcкин под .mk-* прототипа (общий BatchCard). Данные приходят пропсами из CabinetApp.
+// Основной список теперь на табе «Рынок» (MarketScreen); этот экран — вторичный вход
+// (после публикации / back из карточки). Логика/пропсы не изменены.
 
 import { useState } from 'react'
 import type { Batch } from '../types'
-import { fmtMoney } from '../tsp/data/tsp-utils'
-import { NBSP } from '../tsp/data/tsp-dicts'
-import {
-  STATUS, catLabel, gradeLabel, filterBatches,
-  type ListFilter,
-} from '../data/status'
+import { filterBatches, DONE_STATES_SET, type ListFilter } from '../data/status'
 import { IonShellFrame } from '../components/IonShellFrame'
+import { BatchCard } from '../components/BatchListCard'
+import { PhIcon } from '../components/icons/PhIcon'
 
 interface Props {
   batches: Batch[]
@@ -24,95 +23,57 @@ const FILTERS: { k: ListFilter; t: string }[] = [
   { k: 'done', t: 'Завершённые' },
 ]
 
-function dotColor(state: string): string {
-  if (state === 'decision') return 'var(--amber)'
-  if (state === 'delivered') return 'var(--ok)'
-  if (state === 'cancelled') return 'var(--ink-3)'
-  return 'var(--primary)'
-}
-
-function BatchCard({ b, onClick }: { b: Batch; onClick: () => void }) {
-  const def = STATUS[b.state]
-  const price = b.dealPrice ?? b.price ?? 0
-  const isDecision = b.state === 'decision'
-  const grade = gradeLabel(b)
-  return (
-    <button className={'lst-card' + (isDecision ? ' decision' : '')} onClick={onClick}>
-      <span className="lst-card-r1">
-        {catLabel(b)}{grade ? ` · ${grade}` : ''} · {b.heads} гол. · ~{b.avgWeight} кг
-      </span>
-      <span className="lst-card-r2">
-        <span className="lst-dot" style={{ background: dotColor(b.state) }} />
-        {def?.chip ?? b.state} · {def ? def.fact(b) : ''}
-      </span>
-      <span className="lst-card-r3">
-        {b.dealPrice ? 'ЦЕНА СДЕЛКИ' : 'ВАША ЦЕНА'}: <span>{fmtMoney(price)}{NBSP}₸/кг</span>
-      </span>
-      {isDecision && <span className="lst-card-r4">Выбрать, что делать →</span>}
-    </button>
-  )
-}
-
 export function ListScreen({ batches, onBatch, onNew, onBack }: Props) {
   const [filter, setFilter] = useState<ListFilter>('all')
   const list = filterBatches(batches, filter)
-
-  const showGroups = filter === 'all' || filter === 'active'
-  const decisionList = showGroups ? list.filter((b) => b.state === 'decision') : []
-  const restList = showGroups ? list.filter((b) => b.state !== 'decision') : list
-
+  const dec = list.filter((b) => b.state === 'decision')
+  const act = list.filter((b) => b.state !== 'decision' && !DONE_STATES_SET.has(b.state))
+  const fin = list.filter((b) => DONE_STATES_SET.has(b.state))
   const isEmpty = list.length === 0
-  const canCreateFromEmpty = filter === 'all' || filter === 'active'
+
+  const group = (title: string, items: Batch[], urgent: boolean) => items.length > 0 && (
+    <div className={'mk-grp' + (urgent ? ' urgent' : '')} key={title}>
+      <div className="tier-h mk-grp-h">
+        <span className="tier-h-l"><span className={'tier-label' + (urgent ? ' urgent' : '')}>{title}</span></span>
+      </div>
+      <div className="mk-stack8">{items.map((b) => <BatchCard key={b.id} b={b} onOpen={() => onBatch(b.id)} />)}</div>
+    </div>
+  )
+
+  const footer = batches.length > 0
+    ? <button className="mk-cta primary" style={{ margin: 0 }} onClick={onNew}><PhIcon name="plus" size={16} />Новая партия</button>
+    : undefined
 
   return (
-    <IonShellFrame noTabs label="Мои партии">
+    <IonShellFrame noTabs label="Мои партии" footer={footer} footBare>
       <div className="lst-head">
-        <button className="lst-back" onClick={onBack} aria-label="Назад">←</button>
+        <button className="lst-back" onClick={onBack} aria-label="Назад"><PhIcon name="chevronLeft" size={18} /></button>
         <div className="lst-title">Мои партии</div>
-        <button className="lst-new" onClick={onNew}>+ Новая</button>
+        <span aria-hidden style={{ width: 34 }} />
       </div>
-
-      <div className="lst-filters">
-        {FILTERS.map((f) => (
-          <button
-            key={f.k}
-            className={'lst-tab' + (filter === f.k ? ' active' : '')}
-            onClick={() => setFilter(f.k)}
-          >
-            {f.t}
-          </button>
-        ))}
-      </div>
-
-      {isEmpty ? (
-        <div className="lst-empty">
-          <div>Нет партий</div>
-          {canCreateFromEmpty && (
-            <button className="ws-btn" onClick={onNew}>+ Создать первую партию</button>
-          )}
-        </div>
-      ) : (
-        <div className="stack8" style={{ padding: '12px 0' }}>
-          {showGroups && decisionList.length > 0 && (
-            <>
-              <div className="lst-section-head amber">Требуют решения</div>
-              {decisionList.map((b) => (
-                <BatchCard key={b.id} b={b} onClick={() => onBatch(b.id)} />
-              ))}
-            </>
-          )}
-          {showGroups && decisionList.length > 0 && restList.length > 0 && (
-            <div className="lst-section-head">В работе</div>
-          )}
-          {restList.map((b) => (
-            <BatchCard key={b.id} b={b} onClick={() => onBatch(b.id)} />
+      <div className="mk mk-pt">
+        <div className="mk-tabs">
+          {FILTERS.map((f) => (
+            <button key={f.k} className={'mk-tab' + (filter === f.k ? ' on' : '')} onClick={() => setFilter(f.k)}>
+              <span className="mk-tab-t">{f.t}</span>
+            </button>
           ))}
         </div>
-      )}
-
-      {batches.length > 0 && (
-        <button className="lst-fab" onClick={onNew}>+ Новая партия</button>
-      )}
+        {isEmpty ? (
+          <div className="mk-empty">
+            <div className="mk-empty-art"><PhIcon name="package" size={46} /></div>
+            <div className="mk-empty-h">{filter === 'done' ? 'Завершённых партий пока нет' : 'Партий пока нет'}</div>
+            {filter !== 'done' && <div className="mk-empty-t">Создайте первую — она появится в этом списке.</div>}
+            {filter !== 'done' && <button className="mk-cta primary" onClick={onNew}>Создать первую партию</button>}
+          </div>
+        ) : (
+          <div className="mk-listgroups">
+            {group('Требуют решения', dec, true)}
+            {group('В работе', act, false)}
+            {group('Завершённые', fin, false)}
+          </div>
+        )}
+      </div>
     </IonShellFrame>
   )
 }

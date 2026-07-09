@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
+import { H1, Lede, StickyDock, CTA } from '@/lib/auth-ui/primitives'
 import { PinInput } from '../components/PinInput'
 import type { RegistrationFormData } from '../constants'
 
@@ -18,7 +18,7 @@ export function CreatePin({ formData, onChange, onNext }: CreatePinProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const phone = `+7${formData.phone}`
+  const phone = formData.phone // E.164 из PhonePicker
 
   const handlePinEntered = (value: string) => {
     if (value.length < 6) return
@@ -49,10 +49,7 @@ export function CreatePin({ formData, onChange, onNext }: CreatePinProps) {
       }
 
       // Sign in immediately after account creation
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        phone,
-        password: value,
-      })
+      const { error: signInError } = await supabase.auth.signInWithPassword({ phone, password: value })
       if (signInError) {
         toast.error('Аккаунт создан — войдите через /login')
         return
@@ -68,55 +65,23 @@ export function CreatePin({ formData, onChange, onNext }: CreatePinProps) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="text-center space-y-2">
-        <h2 className="text-xl font-semibold text-[#2B180A] font-serif">
-          {step === 'enter' ? 'Придумайте PIN-код' : 'Повторите PIN-код'}
-        </h2>
-        <p className="text-sm text-[#6b5744]">
-          {step === 'enter'
-            ? '6 цифр — для быстрого входа в аккаунт'
-            : 'Введите PIN ещё раз для подтверждения'}
-        </p>
-      </div>
+    <>
+      <H1>{step === 'enter' ? 'Придумайте PIN' : 'Повторите PIN'}</H1>
+      <Lede>{step === 'enter' ? '6 цифр для быстрого входа в приложение.' : 'Введите те же 6 цифр ещё раз.'}</Lede>
 
       {step === 'enter' ? (
-        <PinInput
-          key="enter"
-          value={pin}
-          onChange={setPin}
-          onComplete={handlePinEntered}
-          label="Введите 6-значный PIN"
-          disabled={isLoading}
-        />
+        <PinInput key="enter" value={pin} onChange={setPin} onComplete={handlePinEntered} disabled={isLoading} error={error ?? undefined} />
       ) : (
-        <PinInput
-          key="confirm"
-          value={pinConfirm}
-          onChange={setPinConfirm}
-          onComplete={handleConfirm}
-          label="Повторите PIN"
-          disabled={isLoading}
-          error={error ?? undefined}
-        />
+        <PinInput key="confirm" value={pinConfirm} onChange={setPinConfirm} onComplete={handleConfirm} disabled={isLoading} error={error ?? undefined} />
       )}
 
       {step === 'confirm' && (
-        <button
-          onClick={() => handleConfirm(pinConfirm)}
-          disabled={pinConfirm.length < 6 || isLoading}
-          className="reg-btn-primary w-full flex items-center justify-center gap-2"
-        >
-          {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-          {isLoading ? 'Создание аккаунта…' : 'Подтвердить'}
-        </button>
+        <StickyDock>
+          <CTA disabled={pinConfirm.length < 6 || isLoading} onClick={() => handleConfirm(pinConfirm)}>
+            {isLoading ? 'Создание аккаунта…' : 'Подтвердить'}
+          </CTA>
+        </StickyDock>
       )}
-
-      {error && step === 'enter' && (
-        <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg text-center">
-          {error}
-        </p>
-      )}
-    </div>
+    </>
   )
 }

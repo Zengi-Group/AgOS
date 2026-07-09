@@ -38,8 +38,8 @@ export function buildDecisions({ batches, membership, h }: BuildArgs): DecisionC
     t: catName(b) + ' · ' + b.heads + ' голов',
     m: 'Покупатели не согласились по ' + fmtMoney(b.price as number) + NBSP + '₸/кг',
     actions: [
-      { t: 'Снизить до ' + fmtMoney((b.price as number) - 100) + NBSP + '₸/кг', kind: 'primary', fn: () => h.lower(b) },
-      { t: 'Другие варианты', kind: 'ghost', fn: () => h.open(b) },
+      { t: 'Снизить цену', kind: 'primary', fn: () => h.lower(b) },
+      { t: 'Варианты', kind: 'ghost', fn: () => h.open(b) },
     ],
   }))
   if (membership === 'approved') cards.push({

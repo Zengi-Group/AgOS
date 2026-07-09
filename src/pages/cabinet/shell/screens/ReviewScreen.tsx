@@ -1,10 +1,17 @@
-// AgOS · TSP-2 · SCR-08 «Отзыв о покупателе» — две оценки + комментарий (мок).
+// AgOS · TSP-2 · SCR-08 «Отзыв о покупателе» — реcкин под прототип (market-wizard.jsx ReviewScreen):
+// две оценки (Stars) + комментарий → onPatch({review}) → useBatches вызывает rpc_submit_review
+// (контракт review = { r1, r2, comment }). Экран благодарности — .mk-res + пояснение перекрёстной оценки.
 
 import { useState } from 'react'
 import type { Batch } from '../types'
-import { Cta } from '../components/Cta'
 import { IonShellFrame } from '../components/IonShellFrame'
+import { SubHead } from '../components/SubHead'
+import { PhIcon } from '../components/icons/PhIcon'
 import { catLabel } from '../data/status'
+import { MkCta } from '../tsp/components/MkCta'
+import { MkField } from '../tsp/components/MkField'
+import { Stars } from '../tsp/components/Stars'
+import { InfoNote } from '../tsp/components/InfoNote'
 
 interface Props {
   batch: Batch
@@ -13,68 +20,55 @@ interface Props {
   toast: (text: string) => void
 }
 
-function StarPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
-  return (
-    <div style={{ display: 'flex', gap: 6 }}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button
-          key={n}
-          onClick={() => onChange(n)}
-          style={{ fontSize: 24, color: n <= value ? 'var(--amber)' : 'var(--line)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-        >
-          ★
-        </button>
-      ))}
-    </div>
-  )
-}
-
 export function ReviewScreen({ batch, onBack, onPatch, toast }: Props) {
   const [rating1, setRating1] = useState(0)
   const [rating2, setRating2] = useState(0)
   const [comment, setComment] = useState('')
+  const [sent, setSent] = useState(false)
   const canSubmit = rating1 > 0 && rating2 > 0
 
-  const submit = () => {
-    if (!canSubmit) return
+  // Сохранение отзыва — rpc_submit_review через onPatch (форма {r1,r2,comment} = контракт useBatches).
+  const finish = () => {
     onPatch({ review: { r1: rating1, r2: rating2, comment, date: 'сегодня' } })
     toast('Отзыв сохранён · спасибо')
     onBack()
   }
 
+  if (sent) {
+    return (
+      <IonShellFrame noTabs label="Отзыв · отправлен" footer={<MkCta onClick={finish}>К партии</MkCta>}>
+        <SubHead onBack={onBack} backLabel="Партия" />
+        <div className="mk">
+          <div className="mk-res">
+            <div className="mk-res-ic tone-green"><PhIcon name="checkCircle" size={30} /></div>
+            <h1 className="mk-res-h">Спасибо! Ваш отзыв отправлен</h1>
+            <div className="mk-res-b">
+              <InfoNote title="Перекрёстная оценка">Отзыв покупателя о вас откроется, когда он оставит свой — или через 7 дней. Так отзывы остаются честными: никто не видит чужую оценку до своей.</InfoNote>
+            </div>
+          </div>
+        </div>
+      </IonShellFrame>
+    )
+  }
+
   return (
-    <IonShellFrame noTabs label="Отзыв">
-      <div className="rev-wrap">
-        <div className="bat-back-row" style={{ padding: 0 }}>
-        <button className="bat-back" onClick={onBack} aria-label="Назад">←</button>
-      </div>
-
-      <div>
-        <div className="rev-head">Покупатель принял вашу партию</div>
-        <div className="rev-sub">{catLabel(batch)} · {batch.heads} гол.</div>
-      </div>
-
-      <div>
-        <div className="rev-section-label">Общая оценка</div>
-        <StarPicker value={rating1} onChange={setRating1} />
-      </div>
-
-      <div>
-        <div className="rev-section-label">Честность взвешивания</div>
-        <StarPicker value={rating2} onChange={setRating2} />
-      </div>
-
-      <div>
-        <div className="rev-section-label">Комментарий (необязательно)</div>
-        <textarea
-          className="rev-textarea"
-          placeholder="Ваш опыт работы с покупателем..."
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-        />
-      </div>
-
-        <Cta onClick={submit} disabled={!canSubmit}>Отправить отзыв</Cta>
+    <IonShellFrame noTabs label="Отзыв" footer={<MkCta disabled={!canSubmit} onClick={() => setSent(true)}>Отправить отзыв</MkCta>}>
+      <SubHead onBack={onBack} backLabel="Партия" />
+      <div className="mk mk-pt">
+        <h1 className="mk-h1">Покупатель принял вашу партию</h1>
+        <p className="mk-sub">{catLabel(batch)} · {batch.heads} гол.</p>
+        <div className="mk-rev-q">
+          <div className="mk-rev-k">Общая оценка</div>
+          <Stars value={rating1} onChange={setRating1} size="lg" />
+        </div>
+        <div className="mk-rev-q">
+          <div className="mk-rev-k">Честность взвешивания</div>
+          <div className="mk-rev-sub">Совпал ли вес на приёмке с вашими ожиданиями, было ли взвешивание прозрачным</div>
+          <Stars value={rating2} onChange={setRating2} size="lg" />
+        </div>
+        <MkField label="Подробнее (необязательно)">
+          <textarea className="mk-input area" rows={3} value={comment} placeholder="Расскажите подробнее — что было хорошо, что нет" onChange={(e) => setComment(e.target.value)} />
+        </MkField>
       </div>
     </IonShellFrame>
   )

@@ -1,25 +1,27 @@
-// AgOS · S2 (ARS-148) · Нативный таб-бар ×5 на IonTabBar/IonTabButton.
-// Контент и бейджи — 1:1 из ShellTabBar.tsx (marketDot, msgBadge); ShellTabBar
-// сохраняется для оболочки МПК до S6 (ARS-152).
+// AgOS · Нижний таб-бар фермера — 4 таба как в прототипе (shell.jsx TABS):
+// Главная · Ферма · Рынок · Сообщения. Phosphor-иконки, акцент на активном.
+// Магазин доступен через грид сервисов Главной (не отдельным табом). Навигация — ctx.go.
 
 import { IonTabBar, IonTabButton } from '@ionic/react'
 import { useShell } from '../context'
-import { ShIc } from './icons/ShIc'
-import { SHELL_TABS } from './ShellTabBar'
+import { PhIcon, type PhIconName } from './icons/PhIcon'
+import type { RouteName } from '../types'
+
+const TABS: [RouteName, string, PhIconName][] = [
+  ['home', 'Главная', 'home'],
+  ['farm', 'Ферма', 'sprout'],
+  ['market', 'Рынок', 'market'],
+  ['messages', 'Сообщения', 'chat'],
+]
 
 export function ShellTabBarIon() {
   const ctx = useShell()
   return (
     <IonTabBar className="agos-tabbar">
-      {SHELL_TABS.map(([k, t, ic]) => (
-        <IonTabButton
-          key={k}
-          tab={k}
-          selected={ctx.tab === k}
-          onClick={() => ctx.go({ name: k })}
-        >
+      {TABS.map(([k, t, ic]) => (
+        <IonTabButton key={k} tab={k} selected={ctx.tab === k} onClick={() => ctx.go({ name: k })}>
           <span className="bn-ic">
-            <ShIc k={ic} />
+            <PhIcon name={ic} size={22} />
             {k === 'market' && ctx.marketDot && <i className="tb-dot" />}
             {k === 'messages' && ctx.msgBadge > 0 && <i className="tb-badge mono">{ctx.msgBadge}</i>}
           </span>

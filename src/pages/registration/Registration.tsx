@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
-import { ProgressBar } from './components/ProgressBar'
+import { AuthShell, AuthBody, TopBar } from '@/lib/auth-ui/primitives'
 import { RoleSelect } from './steps/RoleSelect'
 import { Contact } from './steps/Contact'
 import { BenefitScreen } from './steps/BenefitScreen'
@@ -41,6 +42,23 @@ const STEP_ORDER: Step[] = [
   'success',
 ]
 
+const STEP_LABELS: Record<Step, string> = {
+  contact: 'Номер',
+  create_pin: 'PIN',
+  role_select: 'Роль',
+  benefit_1: 'Возможности',
+  role_details: 'Данные',
+  expert_docs: 'Документы',
+  agreement: 'Согласия',
+  success: 'Готово',
+}
+
+// Шаги для счётчика/прогресса в шапке. expert_docs проходят только эксперты,
+// поэтому остальные роли видят 7 шагов (7/7 на Success), а эксперты — 8.
+function visibleSteps(role: RoleType | null): Step[] {
+  return role === 'expert' ? STEP_ORDER : STEP_ORDER.filter((s) => s !== 'expert_docs')
+}
+
 // Отображаемое название организации на экране Success (ONB-SUCCESS-ORPHAN-01) —
 // зеркалит выбор name в handleRegister, только для UI, не влияет на сабмит.
 function getDisplayName(role: RoleType | null, formData: RegistrationFormData): string {
@@ -60,8 +78,8 @@ function getDisplayName(role: RoleType | null, formData: RegistrationFormData): 
 
 export function Registration() {
   const { session } = useAuth()
+  const navigate = useNavigate()
   const [step, setStep] = useState<Step>('contact')
-  const [direction, setDirection] = useState<'forward' | 'backward'>('forward')
   const [formData, setFormData] = useState<RegistrationFormData>(() => {
     try {
       const saved = sessionStorage.getItem(STORAGE_KEY)
@@ -74,7 +92,6 @@ export function Registration() {
     return INITIAL_FORM_DATA
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const stepRef = useRef<HTMLDivElement>(null)
 
   // If already authenticated with context, redirect to cabinet
   useEffect(() => {
@@ -109,13 +126,10 @@ export function Registration() {
   }, [])
 
   const goTo = useCallback((nextStep: Step) => {
-    const curIdx = STEP_ORDER.indexOf(step)
-    const nextIdx = STEP_ORDER.indexOf(nextStep)
-    setDirection(nextIdx > curIdx ? 'forward' : 'backward')
     setStep(nextStep)
     // Scroll to top on step change
     window.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [step])
+  }, [])
 
   const goBack = useCallback(() => {
     if (step === 'contact' && formData.otp_sent) {
@@ -206,7 +220,7 @@ export function Registration() {
         p_name: name,
         p_bin: bin || null,
         p_region_id: formData.region_id || null,
-        p_phone: `+7${formData.phone}`,
+        p_phone: formData.phone,
         p_role_data: enrichedRoleData,
       })
 
@@ -367,40 +381,25 @@ export function Registration() {
     }
   }
 
-  const showBackButton = step !== 'contact' && step !== 'success'
-  const stepIndex = STEP_ORDER.indexOf(step) + 1
+  const isSuccess = step === 'success'
+  const steps = visibleSteps(formData.role)
+  const idx = steps.indexOf(step)
+  const topLabel = step === 'contact' && formData.otp_sent ? 'Код' : STEP_LABELS[step]
+  const topBack = () => {
+    // На первом экране (номер, до отправки кода) назад = выход на лендинг.
+    if (step === 'contact' && !formData.otp_sent) {
+      navigate('/')
+      return
+    }
+    goBack()
+  }
 
   return (
-    <div className="min-h-screen bg-[#fdf6ee] flex flex-col">
-      {/* Top bar */}
-      <div className="px-4 pt-4 pb-2 max-w-[480px] mx-auto w-full">
-        <div className="flex items-center gap-3 mb-4">
-          {showBackButton && (
-            <button
-              onClick={goBack}
-              className="p-1.5 -ml-1.5 text-[#6b5744] hover:text-[#2B180A] transition-colors"
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-          )}
-          <div className="flex-1">
-            <ProgressBar current={stepIndex} total={STEP_ORDER.length} />
-          </div>
-        </div>
-      </div>
-
-      {/* Step content */}
-      <div className="flex-1 px-4 pb-8 max-w-[480px] mx-auto w-full">
-        <div
-          ref={stepRef}
-          key={step}
-          className={direction === 'forward' ? 'reg-slide-forward' : 'reg-slide-backward'}
-        >
-          {renderStep()}
-        </div>
-      </div>
-    </div>
+    <AuthShell>
+      <TopBar label={topLabel} onBack={topBack} idx={idx} total={steps.length} hideBack={isSuccess} />
+      <AuthBody>
+        <div key={step}>{renderStep()}</div>
+      </AuthBody>
+    </AuthShell>
   )
 }
