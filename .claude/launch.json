@@ -14,6 +14,12 @@
       "port": 5199
     },
     {
+      "name": "Frontend (Vite, phone-field)",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5188", "--strictPort"],
+      "port": 5188
+    },
+    {
       "name": "Frontend dist (vite preview)",
       "runtimeExecutable": "/usr/local/bin/node",
       "runtimeArgs": ["node_modules/vite/bin/vite.js", "preview"],
