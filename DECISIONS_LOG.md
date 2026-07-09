@@ -3566,3 +3566,10 @@ Files: d01_kernel.sql (rpc_get_my_context + comment).
 **Verify**: `tsc -b --noEmit` = 0 ошибок. Preview E2E: `/cabinet/turan` (контакты/MkSelect/MkField → success), `/cabinet/review/:id` (Stars 5+4 → amber → success `.mk-res`+InfoNote). Console — только ожидаемые `Failed to fetch` (placeholder-бэк).
 
 **Files**: new `tsp/components/Stars.tsx`; edited `components/icons/PhIcon.tsx` (+phone), `screens/ReviewScreen.tsx`, `screens/TuranScreen.tsx`, docs. SQL не тронут. Ветка `claude/batch-wizard-impl-67ccab` (PR #47 → d5ff04).
+### 2026-07-09: Farmer-redesign shell-polish — Выход на профиле + Empty State для заглушек
+
+**What**: (1) **Выход.** На экране профиля (`CabinetScreen`, `/cabinet/account`, вход через иконку-аккаунт в шапке) тихая ссылка «Выйти из аккаунта» заменена на заметную кнопку «Выход» (`.cab-logout`, красная) — та же логика `onLogout`→`signOut` (не менял). Проверено: клик → редирект на `/login`. (2) **Empty State.** Новый компонент `components/EmptyState.tsx` (иконка в рамке `.es-art` + заголовок + подпись + опц. действие); `PlaceholderScreen` переведён со старого плоского `.ph-stub` на `EmptyState` с иконкой под секцию (Ферма→sprout, Сообщения→chat, Магазин→bag, Сервисы→grid, «партия не найдена»→ban). CSS `.es-*`/`.cab-logout` в `cabinet.css`.
+
+**Why**: Пользователь: добавить Выход (он существовал, но был незаметной ссылкой — сделал явным) + оформить пустые экраны. Empty State использует свои классы `.es-*`, а НЕ `.mk-empty`, потому что полиш ДС (`market-proto.css §9`) принудительно прячет арт-бокс `.mk-empty-art{display:none}` (у Рынка/Списка пустое состояние — текст-only); чтобы иконка была видимой и не ломать Рынок/Список, сделан отдельный `.es-*`. Логика (signOut, роуты, заголовки) не тронута (HS-5, аддитивно).
+
+**Files**: new `src/pages/cabinet/shell/components/EmptyState.tsx`; edited `screens/PlaceholderScreen.tsx`, `screens/CabinetScreen.tsx`, `CabinetApp.tsx` (иконки в 6 вызовах PlaceholderScreen), `cabinet.css` (`.es-*`, `.cab-logout`). SQL не тронут. Ветка `claude/farmer-redesign-shell-polish` (от d5ff04).
