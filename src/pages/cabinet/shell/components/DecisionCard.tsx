@@ -1,20 +1,33 @@
-// AgOS · Этап 2 · Карточка «Требует решения» (shell/ui.jsx DecisionCard) — содержание, не счётчик.
+// AgOS · Карточка «Требует решения» (прототип home.jsx DecisionCard): часы-иконка +
+// заголовок/мета + чипы действий. Рендерит реальную модель DecisionCardModel
+// (buildDecisions): продажа/членство/отгрузка — actions[0] primary, остальные alt.
 
+import { PhIcon } from './icons/PhIcon'
 import type { DecisionCardModel } from '../data/membership'
 
 export function DecisionCard({ d }: { d: DecisionCardModel }) {
+  // Клик по телу = вторичное действие (обычно «Открыть/Варианты»), иначе первое.
+  const headFn = (d.actions.find((a) => a.kind === 'ghost') || d.actions[0])?.fn
   return (
-    <div className="dec-card" data-screen-label="карточка решения">
-      <div className="dec-src mono">{d.src}{d.due ? ' · ' + d.due : ''}</div>
-      <div className="dec-t">{d.t}</div>
-      {d.m && <div className="dec-m">{d.m}</div>}
-      {d.actions && d.actions.length > 0 && (
-        <div className="dec-btns">
-          {d.actions.map((a) => (
-            <button key={a.t} className={'dec-btn ' + (a.kind || 'ghost')} onClick={a.fn}>{a.t}</button>
-          ))}
-        </div>
-      )}
+    <div className="dec-row" data-screen-label="карточка решения">
+      <span className="sh-row-ic dec-row-ic"><PhIcon name="clock" size={20} /></span>
+      <div className="dec-row-body">
+        <button className="dec-row-head" onClick={headFn}>
+          <span className="sh-row-tx">
+            <span className="sh-row-t">{d.t}</span>
+            {d.m && <span className="dec-row-m">{d.m}</span>}
+          </span>
+        </button>
+        {d.actions.length > 0 && (
+          <div className="dec-row-actions">
+            {d.actions.map((a) => (
+              <button key={a.t} className={'dec-act ' + (a.kind === 'primary' ? 'primary' : 'alt')} onClick={a.fn}>
+                {a.t}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

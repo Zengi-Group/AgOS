@@ -1,49 +1,97 @@
 /* AgOS · Этап 1 · Стили оболочки фермера. Тёплая палитра. Скоуп — .agos-cabinet-stage. */
 
+/* ── TURAN DS v12 · светлая тема «daylight» (из прототипа turan-tokens.css
+   [data-theme="light"]). Решение 2026-07-09: пока ТОЛЬКО светлая тема.
+   Легаси-имена (--ink/--line/--card/--primary/…) сохранены как алиасы на
+   DS-токены, чтобы ещё не переверстанные экраны кабинета работали в переходный
+   период. Тёмную «night» + переключатель добавим позже (values есть в DS). ── */
 .agos-cabinet-stage {
-  --bg: #f6efe4;
-  --card: #ffffff;
-  --ink: #2b180a;
-  --ink-2: #5a4631;
-  --ink-3: #6b5744;
-  --ink-4: #cdbfad;
-  --line: #e8ddd0;
-  --green: #2f9e63;
-  --green-d: #237a4c;
-  --amber: #e9a13b;
-  --ok: #2f9e63;
-  --red: #e26d5c;
+  /* DS daylight — поверхности / текст / границы */
+  --bg: #f6f3ed;
+  --bg-s: #ece7dd;
+  --bg-c: #fbfaf6;
+  --bg-m: #e4ddd0;
+  --fg: #3d2b1f;
+  --fg2: #6b6359;
+  --fg3: #9a9288;
+  --bd: #e0d9cc;
+  --bd-s: #ebe6dc;
+  --bd-h: #c7beac;
 
-  /* алиасы и доп-токены для Главной/шторки цен (Этап 2, из прототипа) */
+  /* Бренд */
+  --accent: #E8920B;   /* Turan star / акцент */
+  --cta: #3d2b1f;      /* тёмная кнопка */
+  --cta-fg: #fbfaf6;
+  --cta-h: #2c1e14;    /* hover тёмной кнопки (DS daylight) */
+
+  /* Семантика (DS daylight) */
+  --blue: #4571b8;
+  --green: #3a8a52;
+  --green-d: #2d6b41;
+  --emerald: #2d8a6e;
+  --amber: #b37a10;
+  --red: #c0392b;
+
+  /* Семантика · «muted» подложки (DS daylight, для чипов/заливок) */
+  --blue-m: rgba(69,113,184,0.07);
+  --green-m: rgba(58,138,82,0.08);
+  --amber-m: rgba(179,122,16,0.08);
+  --red-m: rgba(192,57,43,0.08);
+
+  /* Тени / скругления / spacing / тип / шрифт (DS) */
+  --sh-sm: 0 1px 3px rgba(61,43,31,0.06), 0 0 0 1px rgba(61,43,31,0.04);
+  --sh-md: 0 4px 12px rgba(61,43,31,0.08);
+  --sh-lg: 0 12px 28px rgba(61,43,31,0.10);
+  --sh-xl: 0 20px 40px -8px rgba(61,43,31,0.12);
+  --r-sm: 4px; --r-md: 6px; --r-lg: 8px; --r-xl: 12px; --r-full: 9999px;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+  /* ── Легаси-алиасы (не удалять до полной переверстки экранов) ── */
+  --card: var(--bg-c);
+  --ink: var(--fg);
+  --ink-2: var(--fg2);
+  --ink-3: var(--fg3);
+  --ink-4: var(--bd-h);
+  --line: var(--bd);
+  --line-soft: var(--bd-s);
+  --ok: var(--green);
   --warn: var(--amber);
-  --primary: var(--green);
-  --line-soft: var(--line);
-  --paper-2: #faf4ea;
-  --paper-3: #f0e7d8;
-  --gold-bg: #fbf3df;
-  --st-yellow: #e0a32a;
-  --st-green: #2f9e63;
+  --bad: var(--red);
+  --primary: var(--accent);
+  --paper: var(--bg);
+  --paper-2: var(--bg-s);
+  --paper-3: var(--bg-m);
+  --gold-bg: #fbf1de;
+  --st-yellow: #d99a10;
+  --st-green: var(--green);
   --st-sky: #3b9ed8;
   --st-violet: #8a6fd0;
-  --st-blue: #3f74c4;
-  --st-deepgreen: #237a4c;
-  --st-gray: #cdbfad;
-  --st-orange: #e07a3b;
-  --bad: var(--red);
-  --paper: var(--bg);
+  --st-blue: var(--blue);
+  --st-deepgreen: var(--green-d);
+  --st-gray: var(--bd-h);
+  --st-orange: var(--accent);
 
   position: fixed;
   inset: 0;
   background: var(--bg);
   color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
   display: flex;
   justify-content: center;
   overflow: hidden;
 }
 
+/* Кнопки/поля не наследуют font-family по умолчанию — иначе Geist не применяется. */
+.agos-cabinet-stage button,
+.agos-cabinet-stage input,
+.agos-cabinet-stage textarea,
+.agos-cabinet-stage select {
+  font-family: inherit;
+}
 .agos-cabinet-stage .mono {
-  font-family: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 /* ---------- каркас телефона ---------- */
@@ -88,7 +136,7 @@
   color: var(--ink-3);
   cursor: pointer;
 }
-.agos-cabinet-stage .bn-item.on { color: var(--green-d); }
+.agos-cabinet-stage .bn-item.on { color: var(--accent); }
 .agos-cabinet-stage .bn-ic { position: relative; line-height: 0; }
 .agos-cabinet-stage .bn-t { font-size: 11px; }
 .agos-cabinet-stage .tb-dot {
@@ -141,7 +189,7 @@
 }
 .agos-cabinet-stage .avatar-btn {
   position: relative; width: 42px; height: 42px; border-radius: 50%;
-  background: var(--green); color: #fff; border: none; cursor: pointer;
+  background: var(--accent); color: #fff; border: none; cursor: pointer;
   font-weight: 700; font-size: 14px;
 }
 .agos-cabinet-stage .avatar-dot {
@@ -367,8 +415,8 @@
 .agos-cabinet-stage .svc { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; border: 1px solid var(--line-soft); border-radius: 11px; background: var(--card); padding: 12px 2px 9px; color: var(--ink-2); cursor: pointer; }
 .agos-cabinet-stage .svc-ic { display: grid; place-items: center; }
 .agos-cabinet-stage .svc-t { font-size: 9.6px; font-weight: 700; color: var(--ink); white-space: nowrap; }
-.agos-cabinet-stage .svc.green { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 7%, var(--card)); }
-.agos-cabinet-stage .svc.green .svc-ic { color: var(--ok); }
+.agos-cabinet-stage .svc.green { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
+.agos-cabinet-stage .svc.green .svc-ic { color: var(--accent); }
 .agos-cabinet-stage .svc.soon { opacity: .55; cursor: default; }
 .agos-cabinet-stage .svc-soon { position: absolute; top: -7px; right: -3px; font-size: 8px; border: 1px solid var(--line-soft); background: var(--paper-2); border-radius: 99px; padding: 1px 6px; color: var(--ink-3); }
 

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { FloatingInput } from '../components/FloatingInput'
 import { BottomSheet } from '../components/BottomSheet'
 import { ChipSelect } from '../components/ChipSelect'
+import { H1, Lede, StickyDock, CTA } from '@/lib/auth-ui/primitives'
 import {
   COMPANY_TYPES,
   MONTHLY_VOLUMES,
@@ -47,12 +48,9 @@ export function MpkDetails({ formData, onChange, onNext }: MpkDetailsProps) {
     options.find((o) => o.value === value)?.label
 
   return (
-    <div className="space-y-6">
-      <div className="text-center space-y-2">
-        <h2 className="text-xl font-semibold text-[#2B180A] font-serif">
-          О вашей компании
-        </h2>
-      </div>
+    <div>
+      <H1>О предприятии</H1>
+      <Lede>Данные для доступа к закупкам и Рынку. Изменить можно потом.</Lede>
 
       <div className="space-y-4">
         <FloatingInput
@@ -143,9 +141,9 @@ export function MpkDetails({ formData, onChange, onNext }: MpkDetailsProps) {
         </button>
       </div>
 
-      <button onClick={handleSubmit} className="reg-btn-primary w-full">
-        Далее
-      </button>
+      <StickyDock>
+        <CTA onClick={handleSubmit}>Далее</CTA>
+      </StickyDock>
 
       <BottomSheet
         open={activeSheet === 'company_type'}

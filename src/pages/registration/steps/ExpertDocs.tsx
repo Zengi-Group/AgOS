@@ -1,3 +1,5 @@
+import { T } from '@/lib/auth-ui/tokens'
+import { H1, Lede, StickyDock, CTA } from '@/lib/auth-ui/primitives'
 import type { RegistrationFormData } from '../constants'
 
 interface ExpertDocsProps {
@@ -7,10 +9,10 @@ interface ExpertDocsProps {
 }
 
 const DOC_SLOTS = [
-  { key: 'id',      name: 'Удостоверение личности', hint: 'JPG / PDF', required: true },
-  { key: 'diploma', name: 'Диплом / свидетельство',  hint: 'PDF',       required: true },
-  { key: 'license', name: 'Лицензия',                hint: 'если есть', required: false },
-  { key: 'certs',   name: 'Сертификаты',             hint: 'если есть', required: false },
+  { key: 'id', name: 'Удостоверение личности', hint: 'JPG / PDF', required: true },
+  { key: 'diploma', name: 'Диплом / свидетельство', hint: 'PDF', required: true },
+  { key: 'license', name: 'Лицензия', hint: 'если есть', required: false },
+  { key: 'certs', name: 'Сертификаты', hint: 'если есть', required: false },
 ]
 
 export function ExpertDocs({ formData, onChange, onNext }: ExpertDocsProps) {
@@ -21,38 +23,43 @@ export function ExpertDocs({ formData, onChange, onNext }: ExpertDocsProps) {
   }
 
   const valid = !!docs['id'] && !!docs['diploma']
+  const mono: React.CSSProperties = { fontFamily: T.mono }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-[#2B180A] font-serif mb-1">
-          Документы
-        </h2>
-        <p className="text-sm text-[#6b5744]">
-          Подтвердим квалификацию
-        </p>
-      </div>
+    <div style={{ fontFamily: T.font }}>
+      <H1>Документы</H1>
+      <Lede>Подтвердим квалификацию. Формат JPG / PDF.</Lede>
 
-      <div className="space-y-2">
-        {DOC_SLOTS.map(slot => {
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {DOC_SLOTS.map((slot) => {
           const uploaded = !!docs[slot.key]
           return (
             <button
               key={slot.key}
               onClick={() => toggleDoc(slot.key)}
-              className={[
-                'w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border text-left transition-all',
-                uploaded
-                  ? 'border-[#2B180A] bg-[#2B180A] text-white'
-                  : 'border-[#e8ddd4] bg-white text-[#2B180A] hover:border-[#c4a882]',
-              ].join(' ')}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '14px 16px',
+                borderRadius: 14,
+                textAlign: 'left',
+                transition: 'all 120ms',
+                cursor: 'pointer',
+                fontFamily: T.font,
+                border: `1px solid ${uploaded ? T.accent : T.bd}`,
+                background: uploaded ? T.bgM : T.bgC,
+                color: T.fg,
+              }}
             >
-              <span className="text-lg flex-shrink-0">{uploaded ? '✓' : '⬆'}</span>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm">
-                  {slot.name}{slot.required ? ' *' : ''}
+              <span style={{ fontSize: 18, flexShrink: 0, color: uploaded ? T.accent : T.fg3 }}>{uploaded ? '✓' : '⬆'}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 500, fontSize: 14 }}>
+                  {slot.name}
+                  {slot.required ? ' *' : ''}
                 </div>
-                <div className={`text-xs mt-0.5 ${uploaded ? 'text-[#c4a882]' : 'text-[#9c856e]'}`}>
+                <div style={{ fontSize: 12, marginTop: 2, color: uploaded ? T.accent : T.fg3 }}>
                   {uploaded ? 'Загружено · нажмите чтобы убрать' : slot.hint}
                 </div>
               </div>
@@ -61,25 +68,18 @@ export function ExpertDocs({ formData, onChange, onNext }: ExpertDocsProps) {
         })}
       </div>
 
-      <div className="rounded-xl bg-[#faf7f3] border border-[#e8ddd4] px-4 py-3">
-        <div className="text-[10px] text-[#9c856e] font-mono uppercase tracking-wide mb-1">Модерация</div>
-        <p className="text-sm text-[#6b5744]">
+      <div style={{ borderRadius: 12, background: T.bgS, border: `1px solid ${T.bd}`, padding: '12px 16px', marginTop: 16 }}>
+        <div style={{ ...mono, fontSize: 10, color: T.fg3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Модерация</div>
+        <p style={{ fontSize: 14, color: T.fg2, lineHeight: 1.5, margin: 0 }}>
           Администратор AgOS проверит документы вручную. До одобрения вы не появляетесь в каталоге «Сервисы».
         </p>
       </div>
 
-      <button
-        onClick={onNext}
-        disabled={!valid}
-        className={[
-          'w-full py-3.5 rounded-xl font-medium text-sm transition-all',
-          valid
-            ? 'bg-[#2B180A] text-white hover:bg-[#3d2410] active:scale-[0.98]'
-            : 'bg-[#e8ddd4] text-[#9c856e] cursor-not-allowed',
-        ].join(' ')}
-      >
-        Отправить на проверку
-      </button>
+      <StickyDock>
+        <CTA disabled={!valid} onClick={onNext}>
+          Отправить на проверку
+        </CTA>
+      </StickyDock>
     </div>
   )
 }

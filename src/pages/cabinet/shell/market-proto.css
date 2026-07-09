@@ -1,0 +1,1771 @@
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   TURAN AgOS · порт CSS модуля «Рынок» прототипа (agos-farmer) — Phase 4.
+   Источник: public/agos/app/market-data.jsx (#turan-market-css — база)
+           + public/agos/ds/turan-market-polish.css (полиш, переопределяет базу).
+   Скоуп — .agos-cabinet-stage (вместо прототипных голых .mk-* и .sh-screen .mk-*).
+   Токены DS (daylight) заданы в cabinet.css. Импорт ПОСЛЕ shell-proto.css.
+   Порядок: БАЗА → ПОЛИШ (равная специфичность — порядок решает, полиш побеждает).
+   Генерируется скриптом build_market_css.py — но редактируется дальше вручную (Edit).
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* keyframes каркаса/модуля (глобальны, имён уникальны) */
+@keyframes sh-fade { from { opacity:0; } to { opacity:1; } }
+@keyframes sh-sheet-up { from { transform:translateY(14px); opacity:0; } to { transform:none; opacity:1; } }
+
+/* ══════ БАЗА (market-data.jsx) ══════ */
+.agos-cabinet-stage .mk { display:flex; flex-direction:column; }
+.agos-cabinet-stage .mk-pt { padding-top:10px; }
+.agos-cabinet-stage .mk-mono { font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.agos-cabinet-stage .mk-sec-label { font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--fg3); }
+.agos-cabinet-stage .mk-sec-label.urgent { color:var(--amber); }
+.agos-cabinet-stage .mk-stack8 { display:flex; flex-direction:column; gap:8px; }
+.agos-cabinet-stage .mk-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+/* — CTA — */
+.agos-cabinet-stage .mk-cta { width:100%; min-height:46px; display:inline-flex; align-items:center; justify-content:center; gap:7px;
+    padding:0 16px; border-radius:var(--r-md); font-size:14px; font-weight:600; letter-spacing:-.01em;
+    border:1px solid transparent; transition:all 60ms var(--ease); margin-top:8px; text-align:center; line-height:1.3; cursor:pointer; }
+.agos-cabinet-stage .mk-cta.primary { background:var(--cta); color:var(--cta-fg); border-color:var(--cta); }
+.agos-cabinet-stage .mk-cta.primary:hover { background:var(--cta-h); border-color:var(--cta-h); }
+.agos-cabinet-stage .mk-cta.green { background:var(--green); color:#fff; border-color:var(--green); }
+.agos-cabinet-stage .mk-cta.green:hover { filter:brightness(1.05); }
+.agos-cabinet-stage .mk-cta.ghost { background:var(--bg-c); color:var(--fg); border-color:var(--bd); }
+.agos-cabinet-stage .mk-cta.ghost:hover { background:var(--bg-m); border-color:var(--bd-h); }
+.agos-cabinet-stage .mk-cta.danger { background:var(--bg-c); color:var(--red); border-color:var(--red); }
+.agos-cabinet-stage .mk-cta.danger:hover { background:color-mix(in srgb, var(--red) 8%, var(--bg-c)); }
+.agos-cabinet-stage .mk-cta:disabled { background:var(--bg-m); color:var(--fg3); border-color:var(--bd); cursor:default; }
+.agos-cabinet-stage .mk-link { display:block; width:100%; text-align:center; padding:10px; font-size:12px; color:var(--fg3);
+    background:none; border:none; margin-top:4px; cursor:pointer; }
+.agos-cabinet-stage .mk-link:hover { color:var(--fg2); }
+/* — поля — */
+.agos-cabinet-stage .mk-field { display:block; margin-bottom:12px; }
+.agos-cabinet-stage .mk-lab { display:block; font-size:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--fg3); margin-bottom:5px; }
+.agos-cabinet-stage .mk-hint { display:block; font-size:11px; color:var(--fg3); margin-top:5px; line-height:1.4; }
+.agos-cabinet-stage .mk-input { width:100%; border:1px solid var(--bd); border-radius:var(--r-md); background:var(--bg-c);
+    font-family:inherit; font-size:16px; font-weight:500; color:var(--fg); padding:10px 12px; outline:none; transition:border-color 60ms var(--ease); }
+.agos-cabinet-stage .mk-input:focus { border-color:var(--bd-h); }
+.agos-cabinet-stage .mk-input.mono { font-family:var(--font-mono); font-size:15px; }
+.agos-cabinet-stage .mk-input.price { font-size:24px; font-weight:600; }
+.agos-cabinet-stage .mk-input.area { font-size:14px; font-weight:400; resize:none; line-height:1.5; }
+.agos-cabinet-stage .mk-input::placeholder { color:var(--fg3); font-weight:400; }
+.agos-cabinet-stage .mk-field.err .mk-input { border-color:var(--red); }
+.agos-cabinet-stage .mk-field.miss .mk-input,
+.agos-cabinet-stage .mk-miss .mk-seltrig,
+.agos-cabinet-stage .mk-field.miss .mk-seltrig { border-color:var(--amber); background:color-mix(in srgb, var(--amber) 6%, var(--bg-c)); }
+/* — селект: триггер + нижний пикер (паттерн дизайн-системы) — */
+.agos-cabinet-stage .mk-seltrig { width:100%; display:flex; align-items:center; gap:8px; min-height:46px; padding:10px 12px;
+    border:1px solid var(--bd); border-radius:var(--r-md); background:var(--bg-c); cursor:pointer;
+    font-family:inherit; font-size:16px; font-weight:500; color:var(--fg); text-align:left;
+    transition:border-color 60ms var(--ease), box-shadow 60ms var(--ease); }
+.agos-cabinet-stage .mk-seltrig:hover { border-color:var(--bd-h); }
+.agos-cabinet-stage .mk-seltrig.open { border-color:var(--fg); box-shadow:0 0 0 3px color-mix(in srgb, var(--fg) 6%, transparent); }
+.agos-cabinet-stage .mk-seltrig.is-ph .mk-seltrig-v { color:var(--fg3); font-weight:400; }
+.agos-cabinet-stage .mk-seltrig-v { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.agos-cabinet-stage .mk-seltrig-ch { color:var(--fg3); flex-shrink:0; display:grid; place-items:center; transition:transform 80ms var(--ease); }
+.agos-cabinet-stage .mk-seltrig.open .mk-seltrig-ch { transform:rotate(180deg); }
+.agos-cabinet-stage .mk-pick-scrim { position:absolute; inset:0; z-index:30; background:rgba(0,0,0,.38);
+    display:flex; align-items:flex-end; animation:sh-fade 150ms var(--ease); }
+.agos-cabinet-stage .mk-pick { width:100%; background:var(--bg-c); border-radius:18px 18px 0 0; padding:8px 12px 16px;
+    box-shadow:var(--sh-xl); animation:sh-sheet-up 220ms var(--ease); display:flex; flex-direction:column; min-height:0; max-height:78%; }
+.agos-cabinet-stage .mk-pick-grip { width:36px; height:4px; border-radius:var(--r-full); background:var(--bd-h); margin:4px auto 10px; flex-shrink:0; }
+.agos-cabinet-stage .mk-pick-h { font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--fg3);
+    padding:0 6px 8px; flex-shrink:0; }
+/* строка поиска по справочнику — на уровень темнее карточки пикера (правило DS) */
+.agos-cabinet-stage .mk-pick-search { flex-shrink:0; display:flex; align-items:center; gap:8px; margin:0 0 8px;
+    padding:0 10px; height:42px; background:var(--bg-s); border:1px solid var(--bd);
+    border-radius:var(--r-md); transition:border-color 60ms var(--ease), box-shadow 60ms var(--ease); }
+.agos-cabinet-stage .mk-pick-search:focus-within { border-color:var(--fg); box-shadow:0 0 0 3px color-mix(in srgb, var(--fg) 6%, transparent); }
+.agos-cabinet-stage .mk-pick-search-ic { color:var(--fg3); flex-shrink:0; display:grid; place-items:center; }
+.agos-cabinet-stage .mk-pick-search-in { flex:1; min-width:0; border:none; outline:none; background:none;
+    font-family:inherit; font-size:15px; font-weight:400; color:var(--fg); }
+.agos-cabinet-stage .mk-pick-search-in::placeholder { color:var(--fg3); }
+.agos-cabinet-stage .mk-pick-search-x { flex-shrink:0; width:24px; height:24px; margin-right:-4px; border:none; background:none;
+    color:var(--fg3); display:grid; place-items:center; cursor:pointer; border-radius:var(--r-sm);
+    transition:color 60ms var(--ease), background 60ms var(--ease); }
+.agos-cabinet-stage .mk-pick-search-x:hover { color:var(--fg); background:var(--bg-m); }
+.agos-cabinet-stage .mk-pick-empty { padding:26px 12px; text-align:center; font-size:13px; color:var(--fg3); line-height:1.5; }
+.agos-cabinet-stage .mk-pick-list { overflow-y:auto; display:flex; flex-direction:column; gap:1px; min-height:0; }
+.agos-cabinet-stage .mk-pick-list::-webkit-scrollbar { width:0; }
+.agos-cabinet-stage .mk-pick-opt { width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px;
+    min-height:48px; padding:11px 12px; border:none; border-radius:var(--r-md); background:none; cursor:pointer;
+    font-family:inherit; font-size:15px; font-weight:400; color:var(--fg); text-align:left;
+    transition:background 60ms var(--ease); }
+.agos-cabinet-stage .mk-pick-opt + .mk-pick-opt { border-top:1px solid var(--bd-s); border-radius:0; }
+.agos-cabinet-stage .mk-pick-opt:hover,
+.agos-cabinet-stage .mk-pick-opt:active { background:var(--bg-m); }
+.agos-cabinet-stage .mk-pick-opt.on { font-weight:600; }
+.agos-cabinet-stage .mk-pick-opt-l { flex:1; min-width:0; }
+.agos-cabinet-stage .mk-err { font-size:11.5px; color:var(--red); margin:-6px 0 10px; line-height:1.4; }
+.agos-cabinet-stage .mk-err.amber { color:var(--amber); }
+.agos-cabinet-stage .mk-miss > .mk-big-radio,
+.agos-cabinet-stage .mk-miss > .mk-fat { border-color:var(--amber); }
+.agos-cabinet-stage .mk-kindrow { display:flex; align-items:center; gap:9px; margin-bottom:14px; flex-wrap:wrap; }
+.agos-cabinet-stage .mk-fixbadge { display:inline-block; border:1px solid var(--bd); border-radius:var(--r-sm); padding:3px 9px; font-weight:600; font-size:12px; background:var(--bg-c); }
+.agos-cabinet-stage .mk-kindhint { font-size:11px; color:var(--fg3); }
+.agos-cabinet-stage .mk-stp { display:grid; grid-template-columns:48px minmax(0,1fr) 48px; gap:6px; }
+.agos-cabinet-stage .mk-stp-b { height:46px; border:1px solid var(--bd); border-radius:var(--r-md); background:var(--bg-c); color:var(--fg); display:grid; place-items:center; cursor:pointer; transition:all 60ms var(--ease); }
+.agos-cabinet-stage .mk-stp-b:hover { background:var(--bg-m); border-color:var(--bd-h); }
+.agos-cabinet-stage .mk-stp-i { min-width:0; border:1px solid var(--bd); border-radius:var(--r-md); text-align:center; font-size:18px; font-weight:600; background:var(--bg-c); color:var(--fg); outline:none; }
+.agos-cabinet-stage .mk-fat { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.agos-cabinet-stage .mk-fat-c { border:1px solid var(--bd); border-radius:var(--r-md); background:var(--bg-c); padding:13px 4px; font-size:12px; font-weight:600; color:var(--fg); cursor:pointer; transition:all 60ms var(--ease); }
+.agos-cabinet-stage .mk-fat-c:hover { border-color:var(--bd-h); }
+.agos-cabinet-stage .mk-fat-c.sel { border-color:var(--green); background:color-mix(in srgb, var(--green) 12%, transparent); box-shadow:inset 0 0 0 1px var(--green); }
+.agos-cabinet-stage .mk-big-radio { display:flex; gap:11px; align-items:center; width:100%; text-align:left; border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); padding:12px 13px; cursor:pointer; transition:all 60ms var(--ease); }
+.agos-cabinet-stage .mk-big-radio:hover { border-color:var(--bd-h); }
+.agos-cabinet-stage .mk-big-radio.sel { border-color:var(--green); background:color-mix(in srgb, var(--green) 12%, transparent); box-shadow:inset 0 0 0 1px var(--green); }
+.agos-cabinet-stage .mk-br-dot { width:20px; height:20px; border-radius:var(--r-full); border:1.5px solid var(--bd-h); flex-shrink:0; background:var(--bg); display:grid; place-items:center; }
+.agos-cabinet-stage .mk-br-dot.on { border-color:var(--green); background:var(--green); }
+.agos-cabinet-stage .mk-br-body { display:flex; flex-direction:column; gap:1px; min-width:0; }
+.agos-cabinet-stage .mk-br-t { font-weight:600; font-size:14px; }
+.agos-cabinet-stage .mk-br-s { font-size:11px; color:var(--fg3); }
+.agos-cabinet-stage .mk-cb { width:100%; text-align:left; display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1px solid var(--bd); border-radius:var(--r-md); background:var(--bg-c); margin-top:8px; font-size:12.5px; color:var(--fg); line-height:1.4; cursor:pointer; }
+.agos-cabinet-stage .mk-cb.warn { border-color:var(--amber); }
+.agos-cabinet-stage .mk-cb-box { width:18px; height:18px; border:1.5px solid var(--green); border-radius:var(--r-sm); background:var(--bg); display:grid; place-items:center; flex-shrink:0; margin-top:1px; }
+.agos-cabinet-stage .mk-cb-box.ch { background:var(--green); border-color:var(--green); }
+/* — статус-чип — */
+.agos-cabinet-stage .mk-chip { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font-size:11px; font-weight:600; color:var(--tone); }
+.agos-cabinet-stage .mk-dot { width:6px; height:6px; border-radius:var(--r-full); background:var(--tone); flex-shrink:0; }
+.agos-cabinet-stage .mk-pulse { width:6px; height:6px; border-radius:var(--r-full); background:var(--tone); flex-shrink:0; }
+
+  @media (prefers-reduced-motion: no-preference) {
+.agos-cabinet-stage .mk-pulse { animation:mk-pulse 2.4s var(--ease) infinite; }
+ }
+
+  @keyframes mk-pulse { 0%,100%{opacity:1;} 50%{opacity:.5;} }
+.agos-cabinet-stage .mk-strike { text-decoration:line-through; }
+/* — трекер пути · вертикальный Option list (DS · 01), монохромно-коричневый UI — */
+.agos-cabinet-stage .mk-trk { display:flex; flex-direction:column; }
+.agos-cabinet-stage .mk-trk-i { display:grid; grid-template-columns:20px 1fr; gap:14px; align-items:start; padding:11px 0; position:relative; }
+.agos-cabinet-stage .mk-trk-i::after { content:""; position:absolute; left:9.5px; top:28px; bottom:-11px; width:1px; background:var(--bd); }
+.agos-cabinet-stage .mk-trk-i:last-child::after { display:none; }
+.agos-cabinet-stage .mk-trk-bul { width:20px; height:20px; border-radius:7.5px; display:grid; place-items:center; font-size:10px; margin-top:1px; position:relative; z-index:1; }
+.agos-cabinet-stage .mk-trk-i.done .mk-trk-bul { background:var(--cta); color:var(--cta-fg); }
+.agos-cabinet-stage .mk-trk-i.now .mk-trk-bul { background:var(--bg-c); color:var(--cta); box-shadow:inset 0 0 0 1.5px var(--cta); }
+.agos-cabinet-stage .mk-trk-i.now .mk-trk-bul::after { content:""; position:absolute; inset:-4px; border-radius:11.5px; border:1px solid var(--cta); opacity:.16; }
+
+  @media (prefers-reduced-motion: no-preference) {
+.agos-cabinet-stage .mk-trk-i.now .mk-trk-bul::after { animation:mk-bp-ring 2.6s var(--ease) infinite; }
+ }
+
+  @keyframes mk-bp-ring { 0%{ transform:scale(.85); opacity:.2; } 70%{ transform:scale(1.5); opacity:0; } 100%{ transform:scale(1.5); opacity:0; } }
+.agos-cabinet-stage .mk-trk-i.todo .mk-trk-bul { background:transparent; color:var(--fg3); box-shadow:inset 0 0 0 1px var(--bd); }
+.agos-cabinet-stage .mk-trk-bd { min-width:0; padding-top:1px; }
+.agos-cabinet-stage .mk-trk-t { font-size:13px; font-weight:500; letter-spacing:-.005em; line-height:1.4; color:var(--fg); text-wrap:pretty; }
+.agos-cabinet-stage .mk-trk-i.done .mk-trk-t,
+.agos-cabinet-stage .mk-trk-i.todo .mk-trk-t { color:var(--fg2); }
+.agos-cabinet-stage .mk-trk-meta { display:inline-block; margin-top:4px; font-size:11px; color:var(--fg3); letter-spacing:.01em; white-space:nowrap; }
+/* — wizard — */
+.agos-cabinet-stage .mk-wiz-prog { display:flex; gap:4px; padding:2px 0 12px; }
+.agos-cabinet-stage .mk-wiz-prog > div { flex:1; height:3px; border-radius:var(--r-full); background:var(--bd-h); }
+.agos-cabinet-stage .mk-wiz-prog > .done { background:var(--green); }
+.agos-cabinet-stage .mk-wiz-prog > .cur { background:var(--green); opacity:.5; }
+.agos-cabinet-stage .mk-wiz-step { font-size:10px; color:var(--fg3); }
+.agos-cabinet-stage .mk-wiz-exit { display:inline-flex; align-items:center; gap:3px; background:none; border:none; font-size:11px; color:var(--fg3); cursor:pointer; }
+.agos-cabinet-stage .mk-wiz-exit:hover { color:var(--fg2); }
+.agos-cabinet-stage .mk-h1 { font-size:20px; font-weight:700; letter-spacing:-.02em; line-height:1.2; margin:2px 0 6px; }
+.agos-cabinet-stage .mk-sub { font-size:12.5px; color:var(--fg3); margin-bottom:14px; line-height:1.4; }
+.agos-cabinet-stage .mk-note { font-size:10px; color:var(--fg3); text-align:center; margin-top:8px; }
+.agos-cabinet-stage .mk-winsum { border:1px solid var(--bd); border-radius:var(--r-lg); padding:11px 13px; margin-top:10px; background:var(--bg-c); }
+.agos-cabinet-stage .mk-ws-big { font-weight:600; font-size:14px; }
+.agos-cabinet-stage .mk-ws-edit { font-size:12px; color:var(--fg2); margin-top:5px; }
+.agos-cabinet-stage .mk-ws-hint { font-size:10.5px; color:var(--fg3); margin-top:1px; }
+.agos-cabinet-stage .mk-loader { display:flex; flex-direction:column; align-items:center; gap:14px; padding:54px 20px; font-size:13px; color:var(--fg2); text-align:center; }
+.agos-cabinet-stage .mk-spin { width:34px; height:34px; border-radius:var(--r-full); border:3px solid var(--green); border-top-color:transparent; animation:mk-spin 1.1s linear infinite; }
+
+  @keyframes mk-spin { to { transform:rotate(360deg); } }
+.agos-cabinet-stage .mk-catcard { border-radius:var(--r-lg); padding:13px 14px; }
+.agos-cabinet-stage .mk-catcard.ok { border:1px solid var(--green); background:color-mix(in srgb, var(--green) 9%, transparent); }
+.agos-cabinet-stage .mk-catcard.unknown { border:1px solid var(--bd); background:var(--bg-c); }
+.agos-cabinet-stage .mk-cc-k { font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--fg3); }
+.agos-cabinet-stage .mk-cc-name { font-weight:700; font-size:18px; letter-spacing:-.01em; margin:3px 0 7px; }
+.agos-cabinet-stage .mk-cc-h { font-weight:600; font-size:15px; margin-bottom:6px; }
+.agos-cabinet-stage .mk-cc-b { font-size:12.5px; color:var(--fg2); line-height:1.5; }
+.agos-cabinet-stage .mk-cc-note { font-size:12.5px; color:var(--fg2); line-height:1.5; margin:6px 0 8px; }
+.agos-cabinet-stage .mk-ref { border:1px solid var(--bd); border-radius:var(--r-lg); padding:11px 13px; background:var(--bg-c); margin-bottom:12px; }
+.agos-cabinet-stage .mk-ref-t { font-size:13px; line-height:1.45; }
+.agos-cabinet-stage .mk-ref-d { font-size:10.5px; color:var(--fg3); margin-top:5px; line-height:1.4; }
+.agos-cabinet-stage .mk-calc { font-size:12px; color:var(--fg2); margin:-4px 0 10px; line-height:1.45; }
+.agos-cabinet-stage .mk-calc b { font-size:14px; color:var(--fg); }
+.agos-cabinet-stage .mk-calc-n { color:var(--fg3); font-size:10.5px; }
+.agos-cabinet-stage .mk-warn { border:1px solid var(--amber); border-radius:var(--r-lg); background:color-mix(in srgb, var(--amber) 9%, transparent); padding:11px 13px; margin:4px 0 10px; }
+.agos-cabinet-stage .mk-warn-t { font-weight:600; font-size:12.5px; }
+.agos-cabinet-stage .mk-warn-b { font-size:11.5px; color:var(--fg2); margin-top:4px; line-height:1.45; }
+.agos-cabinet-stage .mk-sumcard { border:1px solid var(--bd); border-radius:var(--r-lg); padding:4px 13px; background:var(--bg-c); }
+.agos-cabinet-stage .mk-pubwhen { font-size:13px; margin:12px 2px; color:var(--fg2); }
+.agos-cabinet-stage .mk-pubwhen b { color:var(--fg); font-weight:600; }
+.agos-cabinet-stage .mk-kv { display:flex; align-items:baseline; gap:10px; padding:9px 0; border-top:1px solid var(--bd-s); }
+.agos-cabinet-stage .mk-kv:first-child { border-top:none; }
+.agos-cabinet-stage .mk-kv-k { width:104px; flex-shrink:0; font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--fg3); }
+.agos-cabinet-stage .mk-kv-v { flex:1; font-size:13px; }
+.agos-cabinet-stage .mk-kv-edit { background:none; border:none; color:var(--fg3); padding:0 2px; display:grid; place-items:center; cursor:pointer; }
+.agos-cabinet-stage .mk-kv-edit:hover { color:var(--fg); }
+.agos-cabinet-stage .mk-kv-hint { font-size:11px; color:var(--fg3); }
+/* — результат публикации / центрированные состояния — */
+.agos-cabinet-stage .mk-res { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; text-align:center; padding:24px 6px; min-height:60vh; }
+.agos-cabinet-stage .mk-res-ic { width:60px; height:60px; border-radius:var(--r-full); border:1.5px solid var(--tone); color:var(--tone); display:grid; place-items:center; background:var(--tone-m); }
+.agos-cabinet-stage .mk-res-h { font-size:20px; font-weight:700; letter-spacing:-.02em; line-height:1.2; }
+.agos-cabinet-stage .mk-res-b { font-size:13px; color:var(--fg2); line-height:1.55; max-width:300px; }
+.agos-cabinet-stage .mk-res-b p { margin:8px 0; }
+.agos-cabinet-stage .mk-pr-price { font-size:14px; }
+.agos-cabinet-stage .mk-pr-price b { font-size:18px; }
+.agos-cabinet-stage .mk-pr-badge { display:inline-block; border:1px solid var(--green); color:var(--green); border-radius:var(--r-full); font-size:11px; font-weight:600; padding:3px 11px; margin:2px 0; background:color-mix(in srgb, var(--green) 9%, transparent); }
+/* — карточка партии (зоны) — */
+.agos-cabinet-stage .mk-bz-title { font-size:20px; font-weight:700; letter-spacing:-.02em; line-height:1.15; margin:2px 0 3px; }
+.agos-cabinet-stage .mk-bz-meta { font-size:12px; color:var(--fg3); margin-bottom:8px; }
+.agos-cabinet-stage .mk-hero { border-radius:var(--r-lg); padding:14px 15px 15px; margin:6px 0 4px; }
+.agos-cabinet-stage .mk-trkwrap { margin:8px 0 6px; }
+.agos-cabinet-stage .mk-hero-cancel { margin:8px 0 6px; }
+.agos-cabinet-stage .mk-hero.tint-neutral { background:var(--bg-c); }
+.agos-cabinet-stage .mk-hero.tint-amber { background:color-mix(in srgb, var(--amber) 11%, var(--bg-c)); }
+.agos-cabinet-stage .mk-hero.tint-green { background:color-mix(in srgb, var(--green) 11%, var(--bg-c)); }
+.agos-cabinet-stage .mk-phrase { display:flex; align-items:flex-start; gap:9px; font-size:15px; font-weight:600; line-height:1.35; letter-spacing:-.01em; color:var(--fg); }
+.agos-cabinet-stage .mk-phrase-dot { width:7px; height:7px; border-radius:var(--r-full); flex-shrink:0; margin-top:5px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+.agos-cabinet-stage .mk-phrase-dot.pulse { animation:mk-pulse 2.4s var(--ease) infinite; }
+ }
+.agos-cabinet-stage .mk-next { font-size:12.5px; color:var(--fg2); margin-top:5px; margin-left:16px; line-height:1.45; }
+.agos-cabinet-stage .mk-money { padding:10px 2px; }
+.agos-cabinet-stage .mk-money-k { font-size:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--fg3); display:flex; align-items:center; gap:8px; }
+.agos-cabinet-stage .mk-lockchip { display:inline-flex; align-items:center; gap:3px; border:1px solid var(--green); color:var(--green); border-radius:var(--r-full); font-size:9px; padding:2px 8px; letter-spacing:0; text-transform:none; }
+.agos-cabinet-stage .mk-money-v { font-size:30px; font-weight:700; line-height:1.2; letter-spacing:-.02em; margin-top:3px; }
+.agos-cabinet-stage .mk-money-s { font-size:12.5px; color:var(--fg2); margin-top:2px; }
+.agos-cabinet-stage .mk-buyer { border:1px solid var(--bd); border-radius:var(--r-lg); padding:11px 13px; margin:0 0 8px; background:var(--bg-c); }
+.agos-cabinet-stage .mk-buyer-k { font-size:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--fg3); }
+.agos-cabinet-stage .mk-buyer-n { font-weight:600; font-size:15px; margin-top:3px; }
+.agos-cabinet-stage .mk-buyer-m { font-size:11.5px; color:var(--fg2); margin-top:2px; }
+.agos-cabinet-stage .mk-actions { display:flex; flex-direction:column; margin:2px 0; }
+.agos-cabinet-stage .mk-actions:empty { display:none; }
+.agos-cabinet-stage .mk-caption { font-size:12px; color:var(--fg3); margin:4px 0; line-height:1.45; }
+.agos-cabinet-stage .mk-caption.center { text-align:center; }
+.agos-cabinet-stage .mk-stopline { font-size:12px; color:var(--fg2); background:var(--bg-c); border:1px solid var(--bd); border-radius:var(--r-md); padding:9px 11px; margin:4px 0; line-height:1.45; }
+/* — карточка решения (decision): цена → рекомендация → действие — */
+.agos-cabinet-stage .mk-dec { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); box-shadow:var(--sh-sm); padding:14px 15px; margin:4px 0; }
+.agos-cabinet-stage .mk-dec-lead { font-size:12.5px; color:var(--fg2); line-height:1.5; text-wrap:pretty; margin-bottom:13px; }
+.agos-cabinet-stage .mk-dec-prices { display:flex; flex-direction:column; gap:7px; }
+.agos-cabinet-stage .mk-dec-prow { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+.agos-cabinet-stage .mk-dec-plab { font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--fg3); flex-shrink:0; white-space:nowrap; }
+.agos-cabinet-stage .mk-dec-pright { display:flex; align-items:baseline; gap:8px; white-space:nowrap; }
+.agos-cabinet-stage .mk-dec-pval { font-size:15px; font-weight:600; color:var(--fg2); white-space:nowrap; }
+.agos-cabinet-stage .mk-dec-prow.rec .mk-dec-pval { color:var(--fg); font-size:19px; letter-spacing:-.01em; }
+.agos-cabinet-stage .mk-dec-delta { font-size:11px; font-weight:600; color:var(--amber); }
+.agos-cabinet-stage .mk-dec-impact { font-size:12px; color:var(--fg3); margin-top:11px; padding-top:11px; border-top:1px solid var(--bd-s); line-height:1.5; }
+.agos-cabinet-stage .mk-dec-impact b { color:var(--fg); font-weight:600; }
+.agos-cabinet-stage .mk-dec-alts { display:flex; gap:8px; margin-top:8px; }
+.agos-cabinet-stage .mk-dec-alt { flex:1; min-height:40px; padding:0 12px; border-radius:var(--r-md); background:transparent; border:1px solid var(--bd); font-family:inherit; font-size:12.5px; font-weight:500; color:var(--fg2); cursor:pointer; transition:background 60ms var(--ease), border-color 60ms var(--ease), color 60ms var(--ease); }
+.agos-cabinet-stage .mk-dec-alt:hover { background:var(--bg-m); border-color:var(--bd-h); color:var(--fg); }
+.agos-cabinet-stage .mk-dec-custom { margin-top:10px; }
+.agos-cabinet-stage .mk-dec-cancel { display:block; width:100%; text-align:center; padding:9px; margin-top:6px; background:none; border:none; font-family:inherit; font-size:12.5px; color:var(--fg3); cursor:pointer; }
+.agos-cabinet-stage .mk-dec-cancel:hover { color:var(--fg); }
+/* — деструктивная зона (Снять с продажи — тихая ссылка с разделителем) — */
+.agos-cabinet-stage .mk-danger-zone { margin-top:18px; padding-top:14px; border-top:1px solid var(--bd-s); display:flex; justify-content:center; }
+.agos-cabinet-stage .mk-danger-link { display:inline-flex; align-items:center; gap:7px; min-height:40px; padding:8px 18px; border-radius:var(--r-md); background:none; border:none; font-family:inherit; font-size:13px; font-weight:500; cursor:pointer; transition:color 80ms var(--ease), background 80ms var(--ease); line-height:1.35; text-align:center; }
+.agos-cabinet-stage .mk-danger-link.danger { color:var(--fg2); }
+.agos-cabinet-stage .mk-danger-link.danger:hover { color:var(--red); background:var(--red-m); }
+.agos-cabinet-stage .mk-danger-link.help { color:var(--fg3); }
+.agos-cabinet-stage .mk-danger-link.help:hover { color:var(--fg2); background:var(--bg-m); }
+.agos-cabinet-stage .mk-sheet-id { font-size:11.5px; color:var(--fg3); margin:0 0 10px; }
+/* — аккордеон · Данные / История (DS Card-separated) — */
+.agos-cabinet-stage .mk-acc { display:flex; flex-direction:column; gap:8px; margin:14px 0 4px; }
+.agos-cabinet-stage .mk-acc-item { border:1px solid var(--bd); border-radius:var(--r-lg); overflow:hidden; background:var(--bg-c); box-shadow:var(--sh-sm); transition:box-shadow 80ms var(--ease); }
+.agos-cabinet-stage .mk-acc-item.open { box-shadow:var(--sh-md); }
+.agos-cabinet-stage .mk-acc-head { width:100%; display:flex; align-items:center; gap:10px; text-align:left; background:none; border:none; padding:13px 14px; cursor:pointer; transition:background 80ms var(--ease); }
+.agos-cabinet-stage .mk-acc-head:hover { background:var(--bg-m); }
+.agos-cabinet-stage .mk-acc-item.open .mk-acc-head { background:var(--bg-m); border-bottom:1px solid var(--bd); }
+.agos-cabinet-stage .mk-acc-ic { width:20px; height:20px; flex-shrink:0; display:grid; place-items:center; color:var(--fg2); }
+.agos-cabinet-stage .mk-acc-t { flex:1; font-size:13px; font-weight:500; color:var(--fg); letter-spacing:-.005em; }
+.agos-cabinet-stage .mk-acc-item.open .mk-acc-t { font-weight:600; }
+.agos-cabinet-stage .mk-acc-chev { color:var(--fg3); display:grid; place-items:center; }
+.agos-cabinet-stage .mk-acc-body { overflow:hidden; max-height:0; transition:max-height 250ms var(--ease); }
+.agos-cabinet-stage .mk-acc-item.open .mk-acc-body { max-height:640px; }
+.agos-cabinet-stage .mk-acc-inner { padding:12px 14px 14px; }
+.agos-cabinet-stage .mk-acc-row { display:flex; gap:10px; padding:9px 0; border-top:1px solid var(--bd-s); align-items:baseline; }
+.agos-cabinet-stage .mk-acc-row:first-child { border-top:none; padding-top:0; }
+.agos-cabinet-stage .mk-acc-k { width:116px; flex-shrink:0; font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--fg3); }
+.agos-cabinet-stage .mk-acc-v { font-size:13px; flex:1; color:var(--fg); }
+/* — история · вертикальный степпер (DS Option list · ordered steps) — */
+.agos-cabinet-stage .mk-olist { display:flex; flex-direction:column; }
+.agos-cabinet-stage .mk-oi { display:grid; grid-template-columns:20px 1fr; gap:13px; align-items:start; padding:6px 0; position:relative; }
+.agos-cabinet-stage .mk-oi::after { content:""; position:absolute; left:9.5px; top:25px; bottom:-7px; width:1px; background:var(--bd-h); }
+.agos-cabinet-stage .mk-oi:last-child::after { display:none; }
+.agos-cabinet-stage .mk-oi-bul { width:20px; height:20px; border-radius:7px; display:grid; place-items:center; position:relative; z-index:1; margin-top:1px; }
+.agos-cabinet-stage .mk-oi.done .mk-oi-bul { background:var(--cta); }
+.agos-cabinet-stage .mk-oi.now .mk-oi-bul { background:var(--bg-c); box-shadow:inset 0 0 0 1.5px var(--cta); }
+.agos-cabinet-stage .mk-oi.now .mk-oi-bul::after { content:""; width:6px; height:6px; border-radius:var(--r-full); background:var(--cta); }
+.agos-cabinet-stage .mk-oi-t { font-size:13px; font-weight:500; color:var(--fg); letter-spacing:-.005em; line-height:1.4; text-wrap:pretty; }
+.agos-cabinet-stage .mk-oi.done .mk-oi-t { color:var(--fg2); }
+.agos-cabinet-stage .mk-oi-m { font-size:10.5px; color:var(--fg3); margin-top:3px; letter-spacing:.02em; }
+.agos-cabinet-stage .mk-olist-more { display:block; background:none; border:none; padding:6px 0 8px 33px; font-size:11.5px; color:var(--fg3); text-align:left; cursor:pointer; }
+.agos-cabinet-stage .mk-olist-more:hover { color:var(--fg2); text-decoration:underline; }
+/* — kebab в хедере + лист действий — */
+.agos-cabinet-stage .mk-kebab { display:grid; place-items:center; width:34px; height:34px; margin-right:-6px; border:none; background:none; border-radius:var(--r-md); color:var(--fg2); cursor:pointer; transition:background 60ms var(--ease), color 60ms var(--ease); }
+.agos-cabinet-stage .mk-kebab:hover { background:var(--bg-m); color:var(--fg); }
+.agos-cabinet-stage .mk-kebab:active { background:var(--bg-m); }
+.agos-cabinet-stage .mk-menu { display:flex; flex-direction:column; gap:2px; margin-top:2px; }
+.agos-cabinet-stage .mk-menu-item { display:flex; align-items:center; gap:13px; width:100%; min-height:48px; text-align:left; background:none; border:none; padding:12px 8px; border-radius:var(--r-md); font-family:inherit; font-size:14px; font-weight:500; color:var(--fg); cursor:pointer; transition:background 80ms var(--ease); }
+.agos-cabinet-stage .mk-menu-item:hover { background:var(--bg-m); }
+.agos-cabinet-stage .mk-menu-ic { width:20px; flex-shrink:0; display:grid; place-items:center; color:var(--fg2); }
+.agos-cabinet-stage .mk-menu-item.danger { color:var(--red); }
+.agos-cabinet-stage .mk-menu-item.danger .mk-menu-ic { color:var(--red); }
+.agos-cabinet-stage .mk-menu-item.help { color:var(--fg2); }
+/* — поголовная детализация (ИНЖ по головам) — */
+.agos-cabinet-stage .mk-heads { display:flex; flex-direction:column; gap:11px; }
+.agos-cabinet-stage .mk-heads-prog { font-size:12px; color:var(--fg2); }
+.agos-cabinet-stage .mk-heads-prog b { color:var(--fg); font-weight:600; }
+.agos-cabinet-stage .mk-heads-list { display:flex; flex-direction:column; }
+.agos-cabinet-stage .mk-head-row { display:flex; align-items:center; gap:12px; padding:8px 0; border-top:1px solid var(--bd-s); }
+.agos-cabinet-stage .mk-head-row:first-child { border-top:none; padding-top:0; }
+.agos-cabinet-stage .mk-head-n { width:22px; flex-shrink:0; font-size:11px; color:var(--fg3); }
+.agos-cabinet-stage .mk-head-inj { flex:1; font-size:13px; color:var(--fg); letter-spacing:.02em; }
+.agos-cabinet-stage .mk-head-del { width:28px; height:28px; flex-shrink:0; display:grid; place-items:center; border:none; background:none; color:var(--fg3); border-radius:var(--r-sm); cursor:pointer; transition:color 60ms var(--ease), background 60ms var(--ease); }
+.agos-cabinet-stage .mk-head-del:hover { color:var(--red); background:var(--red-m); }
+.agos-cabinet-stage .mk-head-add { display:flex; gap:8px; }
+.agos-cabinet-stage .mk-head-add .mk-input { flex:1; font-size:14px; padding:9px 12px; }
+.agos-cabinet-stage .mk-head-addb { width:44px; flex-shrink:0; border:1px solid var(--cta); background:var(--cta); color:var(--cta-fg); border-radius:var(--r-md); display:grid; place-items:center; cursor:pointer; transition:all 60ms var(--ease); }
+.agos-cabinet-stage .mk-head-addb:hover:not(:disabled) { background:var(--cta-h); border-color:var(--cta-h); }
+.agos-cabinet-stage .mk-head-addb:disabled { background:var(--bg-m); color:var(--fg3); border-color:var(--bd); cursor:default; }
+/* — поголовье: сводка на экране «Поголовье» — */
+.agos-cabinet-stage .mk-headsum { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); padding:12px 14px; margin-top:6px; }
+.agos-cabinet-stage .mk-headsum-top { display:flex; align-items:baseline; justify-content:space-between; font-size:12px; color:var(--fg2); margin-bottom:9px; }
+.agos-cabinet-stage .mk-headbar { height:5px; border-radius:var(--r-full); background:var(--bg-m); overflow:hidden; }
+.agos-cabinet-stage .mk-headbar i { display:block; height:100%; border-radius:var(--r-full); background:var(--cta); transition:width 250ms var(--ease); }
+/* — поголовье: строка-навигация, ритм секций аккордеона — */
+.agos-cabinet-stage .mk-acc-nav { display:flex; align-items:center; gap:10px; width:100%; text-align:left; cursor:pointer; padding:13px 14px; }
+.agos-cabinet-stage .mk-acc-nav:hover { background:var(--bg-m); box-shadow:var(--sh-md); }
+.agos-cabinet-stage .mk-acc-meta { font-size:12px; color:var(--fg3); white-space:nowrap; }
+.agos-cabinet-stage .mk-acc-meta b { color:var(--fg2); font-weight:600; }
+/* — галерея: горизонтальная полоса + лайтбокс — */
+.agos-cabinet-stage .mk-mediasec { margin:14px 0 4px; }
+.agos-cabinet-stage .mk-mediasec-h { display:flex; align-items:center; gap:7px; margin-bottom:8px; }
+.agos-cabinet-stage .mk-mediasec-n { font-size:10.5px; color:var(--fg3); }
+.agos-cabinet-stage .mk-strip { display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
+.agos-cabinet-stage .mk-strip::-webkit-scrollbar { height:0; }
+.agos-cabinet-stage .mk-strip-cell { position:relative; width:96px; height:96px; flex-shrink:0; border-radius:var(--r-md); overflow:hidden; background:var(--bg-m); cursor:pointer; }
+.agos-cabinet-stage .mk-strip-img { width:100%; height:100%; object-fit:cover; display:block; }
+.agos-cabinet-stage .mk-strip-play { position:absolute; inset:0; display:grid; place-items:center; pointer-events:none; filter:drop-shadow(0 1px 3px rgba(0,0,0,.5)); }
+.agos-cabinet-stage .mk-strip-del { position:absolute; top:4px; right:4px; width:21px; height:21px; border-radius:var(--r-full); border:none; background:rgba(20,19,18,.6); color:#fff; display:grid; place-items:center; cursor:pointer; padding:0; }
+.agos-cabinet-stage .mk-strip-del:hover { background:rgba(20,19,18,.85); }
+.agos-cabinet-stage .mk-strip-add { width:96px; height:96px; flex-shrink:0; border:1px dashed var(--bd-h); border-radius:var(--r-md); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; background:var(--bg-c); color:var(--fg3); font-size:11px; font-weight:500; cursor:pointer; transition:all 60ms var(--ease); }
+.agos-cabinet-stage .mk-strip-add:hover { border-color:var(--cta); color:var(--fg2); background:var(--bg-m); }
+.agos-cabinet-stage .mk-lightbox { position:absolute; inset:0; z-index:40; background:rgba(10,9,8,.92); display:flex; align-items:center; justify-content:center; padding:22px; animation:sh-fade 150ms var(--ease); }
+.agos-cabinet-stage .mk-lightbox-m { max-width:100%; max-height:100%; border-radius:var(--r-md); display:block; }
+.agos-cabinet-stage .mk-lightbox-x { position:absolute; top:14px; right:14px; width:36px; height:36px; border-radius:var(--r-full); border:none; background:rgba(255,255,255,.14); color:#fff; display:grid; place-items:center; cursor:pointer; }
+.agos-cabinet-stage .mk-lightbox-x:hover { background:rgba(255,255,255,.24); }
+.agos-cabinet-stage .mk-rev { margin:12px 0 4px; }
+.agos-cabinet-stage .mk-rev-card { border:1px solid var(--bd); border-radius:var(--r-lg); padding:10px 12px; margin-top:6px; background:var(--bg-c); }
+.agos-cabinet-stage .mk-rev-card.open { border-color:var(--green); }
+.agos-cabinet-stage .mk-rev-k { font-size:13px; font-weight:600; }
+.agos-cabinet-stage .mk-rev-k2 { font-size:11.5px; color:var(--fg2); margin-top:7px; }
+.agos-cabinet-stage .mk-rev-sub { font-size:11px; color:var(--fg3); margin-top:2px; line-height:1.4; }
+.agos-cabinet-stage .mk-rev-text { font-size:12px; color:var(--fg2); margin-top:5px; font-style:italic; }
+.agos-cabinet-stage .mk-rev-locked { border:1px dashed var(--bd-h); border-radius:var(--r-lg); padding:10px 12px; margin-top:6px; }
+.agos-cabinet-stage .mk-rev-locked-h { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--fg2); }
+.agos-cabinet-stage .mk-rev-locked-s { font-size:10.5px; color:var(--fg3); margin-top:3px; line-height:1.4; }
+.agos-cabinet-stage .mk-rev-q { margin:12px 0; }
+/* — история — */
+.agos-cabinet-stage .mk-hist { margin:12px 0 4px; }
+.agos-cabinet-stage .mk-hist-row { display:flex; align-items:baseline; gap:10px; padding:4px 0; }
+.agos-cabinet-stage .mk-hist-dot { width:6px; height:6px; border-radius:var(--r-full); background:var(--bd-h); flex-shrink:0; align-self:center; }
+.agos-cabinet-stage .mk-hist-t { flex:1; font-size:12px; color:var(--fg2); }
+.agos-cabinet-stage .mk-hist-d { font-size:10.5px; color:var(--fg3); white-space:nowrap; }
+.agos-cabinet-stage .mk-hist-more { display:block; background:none; border:none; padding:4px 0; font-size:11.5px; color:var(--fg3); text-align:left; cursor:pointer; }
+.agos-cabinet-stage .mk-hist-more:hover { color:var(--fg2); text-decoration:underline; }
+/* — звёзды (UI-контрол, янтарный; НЕ бренд-звезда) — */
+.agos-cabinet-stage .mk-stars { display:flex; gap:3px; margin-top:5px; }
+.agos-cabinet-stage .mk-star { background:none; border:none; padding:1px; display:grid; place-items:center; line-height:0; cursor:pointer; }
+.agos-cabinet-stage .mk-star:disabled { cursor:default; }
+/* — note — */
+.agos-cabinet-stage .mk-infonote { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); padding:11px 13px; margin-top:10px; text-align:left; }
+.agos-cabinet-stage .mk-infonote-t { font-size:10px; font-weight:600; color:var(--fg); letter-spacing:.05em; text-transform:uppercase; margin-bottom:4px; }
+.agos-cabinet-stage .mk-infonote-b { font-size:12px; color:var(--fg2); line-height:1.5; }
+/* — список «Мои партии» — */
+.agos-cabinet-stage .mk-listgroups { display:flex; flex-direction:column; gap:16px; padding-top:6px; }
+.agos-cabinet-stage .mk-grp { display:flex; flex-direction:column; gap:9px; }
+.agos-cabinet-stage .mk-card { display:flex; flex-direction:column; gap:6px; width:100%; text-align:left; border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); padding:12px 13px; box-shadow:var(--sh-sm); cursor:pointer; transition:all 60ms var(--ease); }
+.agos-cabinet-stage .mk-card:hover { box-shadow:var(--sh-md); }
+.agos-cabinet-stage .mk-card.urgent { background:color-mix(in srgb, var(--amber) 8%, transparent); border-color:color-mix(in srgb, var(--amber) 40%, var(--bd)); }
+.agos-cabinet-stage .mk-card-top { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.agos-cabinet-stage .mk-card-name { font-weight:600; font-size:14px; letter-spacing:-.01em; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.agos-cabinet-stage .mk-card-meta { font-size:10.5px; color:var(--fg3); white-space:nowrap; }
+.agos-cabinet-stage .mk-card-state { display:flex; align-items:center; gap:7px; font-size:12px; color:var(--fg2); min-width:0; }
+.agos-cabinet-stage .mk-card-fact { color:var(--fg2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.agos-cabinet-stage .mk-card-price { font-size:12px; color:var(--fg2); }
+.agos-cabinet-stage .mk-card-price b { color:var(--fg); }
+.agos-cabinet-stage .mk-card-act { display:flex; align-items:center; justify-content:center; gap:5px; margin-top:3px; border:1px solid var(--amber); background:var(--bg-c); color:var(--fg); border-radius:var(--r-md); padding:9px; font-weight:600; font-size:12.5px; }
+/* табы-фильтр — underline (дизайн-система: primary tab pattern) */
+.agos-cabinet-stage .mk-tabs { display:flex; align-items:center; gap:0; margin:6px 0 14px; box-shadow:inset 0 -1px 0 var(--bd); }
+.agos-cabinet-stage .mk-tab { position:relative; display:inline-flex; align-items:center; gap:6px; height:40px; padding:0 11px;
+    white-space:nowrap; font-size:13px; font-weight:500; letter-spacing:-.005em; color:var(--fg3); background:none; border:none;
+    cursor:pointer; font-family:inherit; transition:color 120ms var(--ease); }
+.agos-cabinet-stage .mk-tab:hover { color:var(--fg2); }
+.agos-cabinet-stage .mk-tab.on { color:var(--fg); }
+.agos-cabinet-stage .mk-tab.on::after { content:""; position:absolute; left:10px; right:10px; bottom:-1px; height:2px;
+    background:var(--cta); border-radius:2px 2px 0 0; }
+.agos-cabinet-stage .mk-tab-n { display:inline-grid; place-items:center; min-width:18px; height:18px; padding:0 5px;
+    background:var(--bg-m); border-radius:var(--r-full); font-size:10.5px; font-weight:500; color:var(--fg2);
+    transition:all 120ms var(--ease); }
+.agos-cabinet-stage .mk-tab.on .mk-tab-n { background:var(--cta); color:var(--cta-fg); }
+.agos-cabinet-stage .mk-grace { display:flex; flex-direction:column; gap:7px; align-items:flex-start; border:1px solid var(--amber); background:color-mix(in srgb, var(--amber) 9%, transparent); border-radius:var(--r-lg); padding:11px 13px; margin-bottom:12px; }
+.agos-cabinet-stage .mk-grace .badge { display:inline-flex; align-items:center; gap:5px; padding:3px 9px 3px 7px; border-radius:var(--r-full); font-size:11px; font-weight:600; background:color-mix(in srgb, var(--amber) 16%, transparent); color:var(--amber); }
+.agos-cabinet-stage .mk-grace .badge i { width:5px; height:5px; border-radius:var(--r-full); background:currentColor; }
+.agos-cabinet-stage .mk-grace-t { font-size:12px; color:var(--fg2); line-height:1.45; }
+.agos-cabinet-stage .mk-grace-b { align-self:stretch; border:1px solid var(--amber); background:var(--bg-c); border-radius:var(--r-md); padding:9px; font-size:12.5px; font-weight:600; color:var(--fg); cursor:pointer; }
+.agos-cabinet-stage .mk-empty { text-align:center; padding:48px 14px; display:flex; flex-direction:column; gap:13px; align-items:center; }
+.agos-cabinet-stage .mk-empty-art { width:64px; height:64px; border:1px solid var(--bd); border-radius:var(--r-lg); display:grid; place-items:center; background:var(--bg-c); }
+.agos-cabinet-stage .mk-empty-t { font-size:13px; color:var(--fg2); max-width:240px; line-height:1.5; }
+.agos-cabinet-stage .mk-empty .mk-cta { max-width:200px; }
+.agos-cabinet-stage .mk-tonebox { padding:0; }
+.agos-cabinet-stage .tone-neutral { --tone:var(--fg3); --tone-m:var(--bg-m); }
+.agos-cabinet-stage .tone-blue { --tone:var(--blue); --tone-m:color-mix(in srgb, var(--blue) 12%, transparent); }
+.agos-cabinet-stage .tone-amber { --tone:var(--amber); --tone-m:color-mix(in srgb, var(--amber) 12%, transparent); }
+.agos-cabinet-stage .tone-green { --tone:var(--green); --tone-m:color-mix(in srgb, var(--green) 12%, transparent); }
+.agos-cabinet-stage .tone-emerald { --tone:var(--emerald); --tone-m:color-mix(in srgb, var(--emerald) 12%, transparent); }
+
+  
+/* ══════ ПОЛИШ (turan-market-polish.css) ══════ */
+/* ─── 0. Базовый ритм ──────────────────────────────────────────────────── */
+.agos-cabinet-stage .mk { gap:0; padding:0; }
+.agos-cabinet-stage .mk-pt { padding-top:4px; }
+/* ─── 1. Заголовки — наследуют шкалу главной (sh-title 22 / .big 26) ──── */
+.agos-cabinet-stage .mk-bz-title {
+  font-size:22px;
+  font-weight:700;
+  letter-spacing:-.025em;
+  line-height:1.15;
+  margin:6px 0 4px;
+}
+.agos-cabinet-stage .mk-h1 {
+  font-size:20px;
+  font-weight:700;
+  letter-spacing:-.022em;
+  line-height:1.2;
+  margin:8px 0 14px;
+}
+/* Шаги-вопросы мастера — на тон крупнее, как реплика */
+.agos-cabinet-stage .mk-h1.q {
+  font-size:24px;
+  letter-spacing:-.028em;
+  line-height:1.18;
+  margin:14px 0 10px;
+  max-width:18ch;
+}
+.agos-cabinet-stage .mk-bz-meta {
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:0;
+  font-size:13px;
+  line-height:1.3;
+  color:var(--fg2);
+  letter-spacing:0;
+  margin:2px 0 10px;
+}
+.agos-cabinet-stage .mk-bz-meta__item {
+  display:inline-flex;
+  align-items:baseline;
+  gap:4px;
+  white-space:nowrap;
+}
+.agos-cabinet-stage .mk-bz-meta__item b {
+  font-weight:700;
+  color:var(--fg);
+  font-size:14px;
+}
+.agos-cabinet-stage .mk-bz-meta__unit {
+  font-size:12px;
+  font-weight:500;
+  opacity:.8;
+}
+.agos-cabinet-stage .mk-bz-meta__pre {
+  font-size:10px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  opacity:.55;
+  align-self:center;
+}
+.agos-cabinet-stage .mk-bz-meta__sep {
+  display:inline-block;
+  width:1px;
+  height:11px;
+  background:var(--bd, rgba(0,0,0,.18));
+  margin:0 10px;
+  opacity:.7;
+}
+.agos-cabinet-stage .mk-bz-meta__place {
+  font-size:13px;
+  font-weight:500;
+  opacity:.85;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.agos-cabinet-stage .mk-sub {
+  font-size:13px;
+  color:var(--fg2);
+  line-height:1.5;
+  margin:0 0 22px;
+  max-width:32ch;
+}
+/* ─── 2. Eyebrow — как tier-label на главной (.06em) ───────────────────── */
+.agos-cabinet-stage .mk-sec-label {
+  font-size:10.5px;
+  font-weight:600;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--fg2);
+}
+.agos-cabinet-stage .mk-sec-label.urgent { color:var(--amber); }
+/* ─── 4. Табы — page-level nav, pill-badges, underline под текстом ──────── */
+.agos-cabinet-stage .mk-tabs {
+  margin:14px 0 0;
+  padding:0;
+  gap:24px;
+  border-bottom:1px solid var(--bd-s);
+}
+.agos-cabinet-stage .mk-tab {
+  position:relative;
+  height:38px;
+  padding:0 0 10px;
+  background:transparent !important;
+  border:0 !important;
+  border-radius:0 !important;
+  font-size:14px;
+  font-weight:500;
+  color:var(--fg3);
+  gap:6px;
+  display:inline-flex;
+  align-items:center;
+}
+.agos-cabinet-stage .mk-tab.on { color:var(--fg); font-weight:600; }
+.agos-cabinet-stage .mk-tab-t { position:relative; display:inline-flex; align-items:center; }
+.agos-cabinet-stage .mk-tab.on::after {
+  content:""; position:absolute;
+  left:0; right:0; bottom:-1px;
+  height:2px; background:var(--fg);
+  border-radius:1px;
+}
+.agos-cabinet-stage .mk-tab-n {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:20px; height:20px;
+  padding:0 6px;
+  border-radius:9999px;
+  font-size:11px; font-weight:600;
+  background:var(--bg-c) !important;
+  color:var(--fg2) !important;
+  letter-spacing:0;
+  line-height:1;
+}
+.agos-cabinet-stage .mk-tab.on .mk-tab-n {
+  background:var(--fg) !important;
+  color:var(--bg) !important;
+}
+/* ─── 5. Группы партий — заголовки в ритме главной (tier-h) ────────────── */
+.agos-cabinet-stage .mk-listgroups { gap:4px; padding-top:6px; }
+.agos-cabinet-stage .mk-grp { gap:0; }
+.agos-cabinet-stage .mk-grp > .tier-h {
+  padding:22px 0 8px;
+  margin-bottom:0;
+}
+.agos-cabinet-stage .mk-stack8 { gap:0; }
+/* ─── 6. Карточка партии · ledger-row ──────────────────────────────────── */
+.agos-cabinet-stage .mk-card {
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) auto;
+  grid-template-areas:
+    "name  price"
+    "state state";
+  column-gap:14px;
+  row-gap:4px;
+  padding:18px 0;
+  border-radius:0;
+  border:0 !important;
+  border-bottom:1px solid var(--bd-s) !important;
+  background:transparent !important;
+  box-shadow:none !important;
+  text-align:left;
+  transition:background 120ms var(--ease);
+}
+.agos-cabinet-stage .mk-card:last-child { border-bottom:0 !important; }
+.agos-cabinet-stage .mk-card:hover,
+.agos-cabinet-stage .mk-card:active { background:var(--bg-m) !important; }
+.agos-cabinet-stage .mk-card-top {
+  grid-area:name;
+  display:flex; flex-direction:column; align-items:flex-start;
+  gap:3px; min-width:0;
+}
+.agos-cabinet-stage .mk-card-name {
+  font-size:14px;
+  font-weight:600;
+  letter-spacing:-.01em;
+  color:var(--fg);
+}
+.agos-cabinet-stage .mk-card-meta {
+  font-size:12px;
+  color:var(--fg2);
+  letter-spacing:0;
+}
+.agos-cabinet-stage .mk-card-price {
+  grid-area:price;
+  align-self:start;
+  font-size:11px;
+  color:var(--fg2);
+  text-align:right;
+  display:flex; flex-direction:column; align-items:flex-end;
+  gap:2px;
+  line-height:1.15;
+}
+.agos-cabinet-stage .mk-card-price b {
+  font-size:16.5px;
+  font-weight:700;
+  letter-spacing:-.018em;
+  color:var(--fg);
+}
+.agos-cabinet-stage .mk-card-price .mk-kv-hint { font-size:11px; color:var(--fg3); }
+.agos-cabinet-stage .mk-card-state {
+  grid-area:state;
+  display:flex; align-items:center;
+  gap:8px;
+  font-size:12px;
+  color:var(--fg2);
+  margin-top:8px;
+}
+.agos-cabinet-stage .mk-card-fact { color:var(--fg2); }
+/* ─── 7. «Требует решения» — та же ledger-row, CTA вместо цены ───────── */
+.agos-cabinet-stage .mk-card.urgent .mk-card-cta {
+  display:inline-flex; align-items:center; gap:2px;
+  font-size:14px;
+  font-weight:600;
+  letter-spacing:-.008em;
+  color:var(--amber);
+}
+
+@keyframes mk-rise {
+  from { opacity:0; transform:translateY(6px); }
+  to   { opacity:1; transform:none; }
+}
+/* ─── 8. CTA ───────────────────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-cta {
+  min-height:52px;
+  font-size:15px;
+  border-radius:14px;
+  font-weight:600;
+  letter-spacing:-.012em;
+}
+.agos-cabinet-stage .mk-cta + .mk-cta { margin-top:8px; }
+/* ─── 9. Empty ─────────────────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-empty { padding:84px 14px 56px; gap:20px; }
+.agos-cabinet-stage .mk-empty-art {
+  width:0; height:0; border:0; background:transparent;
+  display:none;
+}
+.agos-cabinet-stage .mk-empty-t {
+  font-size:17px; color:var(--fg);
+  font-weight:500;
+  letter-spacing:-.014em;
+  line-height:1.45;
+  max-width:280px;
+}
+/* ─── 10. Льготный режим ───────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-grace {
+  display:flex; align-items:center; gap:14px;
+  border:0; border-bottom:1px solid var(--bd-s);
+  background:transparent;
+  border-radius:0;
+  padding:14px 0;
+  margin:0 0 2px;
+}
+.agos-cabinet-stage .mk-grace::before { content:none; }
+.agos-cabinet-stage .mk-grace .badge {
+  background:transparent; padding:0;
+  font-size:10px; font-weight:700;
+  letter-spacing:.14em; text-transform:uppercase;
+  color:var(--amber);
+  flex-shrink:0;
+}
+.agos-cabinet-stage .mk-grace-t {
+  font-size:12.5px; color:var(--fg2);
+  line-height:1.45; flex:1;
+}
+.agos-cabinet-stage .mk-grace-b {
+  background:transparent; border:0; padding:6px 0;
+  font-size:12.5px; color:var(--fg); font-weight:600;
+  text-decoration:underline; text-underline-offset:3px;
+  text-decoration-thickness:1px;
+  text-decoration-color:var(--bd-h);
+  flex-shrink:0;
+}
+.agos-cabinet-stage .mk-grace-b:hover { text-decoration-color:var(--fg); }
+/* ─── 11. Горизонтальный трекер пути — card surface, как work-farm ────── */
+.agos-cabinet-stage .mk-bz-head { padding:14px 0 4px; }
+.agos-cabinet-stage .mk-bz-stack { padding-top:10px; }
+.agos-cabinet-stage .mk-bz-stack > .blk > .tier-h { margin-bottom:8px; }
+.agos-cabinet-stage .mk-trkwrap {
+  margin:0;
+  padding:18px 16px;
+  border:0;
+  background:var(--bg-c);
+  border-radius:var(--r-lg);
+  box-shadow:var(--sh-sm);
+}
+.agos-cabinet-stage .mk-trkh-row {
+  display:flex; align-items:center;
+  gap:6px;
+  margin-bottom:14px;
+}
+.agos-cabinet-stage .mk-trkh-d {
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+.agos-cabinet-stage .mk-trkh-bul {
+  width:20px; height:20px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:7px;
+  border:0;
+  background:var(--bg);
+  font-size:10.5px; font-weight:600;
+  color:var(--fg3);
+  box-shadow:inset 0 0 0 1px var(--bd-h);
+  transition:all 200ms var(--ease);
+  position:relative;
+}
+.agos-cabinet-stage .mk-trkh-d.done .mk-trkh-bul {
+  background:var(--fg); box-shadow:none;
+  color:var(--bg-c);
+}
+.agos-cabinet-stage .mk-trkh-d.now .mk-trkh-bul {
+  width:20px; height:20px;
+  border-radius:7px;
+  background:var(--bg);
+  color:var(--fg);
+  font-weight:600;
+  box-shadow:inset 0 0 0 2px var(--fg);
+}
+.agos-cabinet-stage .mk-trkh-d.now .mk-trkh-bul::before {
+  content:none;
+}
+
+@keyframes mk-pulse {
+  0% { transform:scale(.9); opacity:.6; }
+  100% { transform:scale(1.5); opacity:0; }
+}
+.agos-cabinet-stage .mk-trkh-line {
+  flex:1; height:1.5px;
+  background:var(--bd-s);
+  border-radius:1px;
+}
+.agos-cabinet-stage .mk-trkh-line.done { background:var(--fg); }
+.agos-cabinet-stage .mk-trkh-cap { padding:0; }
+.agos-cabinet-stage .mk-trkh-stage {
+  font-size:10px; font-weight:600;
+  letter-spacing:.06em; text-transform:uppercase;
+  color:var(--fg3);
+}
+.agos-cabinet-stage .mk-trkh-now {
+  font-size:13.5px; font-weight:600;
+  color:var(--fg);
+  letter-spacing:-.008em;
+  line-height:1.35;
+  margin-top:4px;
+}
+.agos-cabinet-stage .mk-trkh-meta {
+  font-size:11.5px; color:var(--fg3);
+  margin-top:3px;
+}
+/* Вертикальный stepper: все маркеры одного размера — 20×20 r=7.
+   done — заливка + белая галочка; now — тот же размер, выделен только цветом линий. */
+.agos-cabinet-stage .mk-trk { display:flex; flex-direction:column; }
+.agos-cabinet-stage .mk-trk-i {
+  display:grid; grid-template-columns:28px 1fr;
+  column-gap:14px;
+  align-items:start;
+  padding:0 0 20px 0;
+  position:relative;
+  /* Плавное раскрытие: высота, отступы и прозрачность одной кривой —
+     это удерживает линию-коннектор синхронно с маркерами без рывков. */
+  max-height:240px; opacity:1;
+  transition:
+    max-height .38s cubic-bezier(.22,.61,.36,1),
+    padding .38s cubic-bezier(.22,.61,.36,1),
+    opacity .22s ease;
+  overflow:hidden;
+}
+.agos-cabinet-stage .mk-trk-i.cap { padding-bottom:0; }
+.agos-cabinet-stage .mk-trk-i::after {
+  content:""; position:absolute;
+  left:13.5px; top:20px; bottom:0;
+  width:1px; background:var(--bd-s);
+  transition:opacity .22s ease;
+}
+.agos-cabinet-stage .mk-trk-i.cap::after { opacity:0; }
+.agos-cabinet-stage .mk-trk-i.hidden {
+  max-height:0; padding-top:0; padding-bottom:0;
+  opacity:0; pointer-events:none;
+}
+.agos-cabinet-stage .mk-trk-bul {
+  width:20px; height:20px;
+  justify-self:center;
+  border-radius:7px;
+  display:grid; place-items:center;
+  font-family:var(--font-mono);
+  font-size:11px; font-weight:500;
+  line-height:1;
+  font-variant-numeric:tabular-nums;
+  background:var(--bg);
+  border:0;
+  box-shadow:inset 0 0 0 1px var(--bd-h);
+  color:var(--fg3);
+  box-sizing:border-box;
+  position:relative; z-index:1;
+}
+.agos-cabinet-stage .mk-trk-i.done .mk-trk-bul {
+  background:var(--fg);
+  color:var(--bg-c);
+  box-shadow:none;
+}
+.agos-cabinet-stage .mk-trk-i.now .mk-trk-bul {
+  width:20px; height:20px;
+  border-radius:7px;
+  background:var(--bg);
+  color:var(--fg);
+  font-weight:600;
+  box-shadow:inset 0 0 0 2px var(--fg);
+}
+.agos-cabinet-stage .mk-trk-i.todo .mk-trk-bul {
+  background:var(--bg);
+  color:var(--fg3);
+  box-shadow:inset 0 0 0 1px var(--bd-h);
+}
+.agos-cabinet-stage .mk-trk-bd { min-width:0; padding-top:2px; }
+.agos-cabinet-stage .mk-trk-t {
+  font-size:14px; line-height:1.3;
+  font-weight:600; color:var(--fg);
+  letter-spacing:-.005em;
+  transition:font-size .25s ease, font-weight .25s ease, color .2s ease;
+}
+.agos-cabinet-stage .mk-trk-i.todo .mk-trk-t { color:var(--fg2); font-weight:500; }
+.agos-cabinet-stage .mk-trk-d {
+  margin-top:4px;
+  font-size:13px; line-height:1.4;
+  color:var(--fg2);
+  letter-spacing:-.003em;
+  max-height:120px; opacity:1; overflow:hidden;
+  transition:
+    max-height .32s cubic-bezier(.22,.61,.36,1),
+    opacity .22s ease,
+    margin-top .25s ease;
+}
+.agos-cabinet-stage .mk-trk-i.todo .mk-trk-d { color:var(--fg3); }
+.agos-cabinet-stage .mk-trk-meta {
+  display:block; margin-top:10px;
+  font-size:11px; color:var(--fg3);
+  letter-spacing:.04em;
+  max-height:40px; opacity:1; overflow:hidden;
+  transition:
+    max-height .32s cubic-bezier(.22,.61,.36,1),
+    opacity .22s ease,
+    margin-top .25s ease;
+}
+.agos-cabinet-stage .mk-trk-dot { opacity:.5; margin:0 6px; }
+/* Focus + peek: соседние шаги — компактная строка (только заголовок) */
+.agos-cabinet-stage .mk-trk-i.peek { padding-bottom:12px; }
+.agos-cabinet-stage .mk-trk-i.peek .mk-trk-bd { padding-top:3px; }
+.agos-cabinet-stage .mk-trk-i.peek .mk-trk-t {
+  font-size:13px; font-weight:500; color:var(--fg2);
+  letter-spacing:-.003em;
+}
+.agos-cabinet-stage .mk-trk-i.done.peek .mk-trk-t { color:var(--fg2); }
+.agos-cabinet-stage .mk-trk-i.todo.peek .mk-trk-t { color:var(--fg3); }
+/* В peek-режиме описание и мета сворачиваются, но остаются в DOM —
+   плавный переход высоты при раскрытии всего трекера. */
+.agos-cabinet-stage .mk-trk-i.peek .mk-trk-d,
+.agos-cabinet-stage .mk-trk-i.peek .mk-trk-meta {
+  max-height:0; opacity:0; margin-top:0;
+}
+/* Свёрнутая группа: тихая текстовая ссылка под колонкой текста. */
+.agos-cabinet-stage .mk-trk-more {
+  all:unset; cursor:pointer;
+  display:inline-flex; align-items:center; gap:6px;
+  padding:2px 0 14px 42px;
+  font-size:11px; color:var(--fg3);
+  letter-spacing:.04em;
+  max-height:40px; overflow:hidden;
+  transition:
+    color .15s ease,
+    max-height .32s cubic-bezier(.22,.61,.36,1),
+    padding .32s cubic-bezier(.22,.61,.36,1),
+    opacity .22s ease;
+}
+.agos-cabinet-stage .mk-trk-more.top { padding:0 0 12px 42px; margin-top:-2px; }
+.agos-cabinet-stage .mk-trk-more:hover { color:var(--fg); }
+.agos-cabinet-stage .mk-trk-more.hidden {
+  max-height:0; padding-top:0; padding-bottom:0;
+  opacity:0; pointer-events:none;
+}
+.agos-cabinet-stage .mk-trk-more-arr {
+  display:inline-flex; align-items:center; justify-content:center;
+  transform:rotate(90deg); transform-origin:center;
+  color:var(--fg3); opacity:.85;
+  transition:transform .2s ease, color .15s ease;
+}
+.agos-cabinet-stage .mk-trk-more:hover .mk-trk-more-arr { color:var(--fg); transform:rotate(90deg) translateX(1px); }
+.agos-cabinet-stage .mk-trk-collapse {
+  all:unset; cursor:pointer;
+  margin-top:4px; padding:6px 0 0 42px;
+  font-size:11px; color:var(--fg3);
+  letter-spacing:.04em;
+  max-height:40px; overflow:hidden;
+  transition:
+    color .15s ease,
+    max-height .32s cubic-bezier(.22,.61,.36,1),
+    padding .32s cubic-bezier(.22,.61,.36,1),
+    opacity .22s ease;
+}
+.agos-cabinet-stage .mk-trk-collapse:hover { color:var(--fg2); }
+.agos-cabinet-stage .mk-trk-collapse.hidden {
+  max-height:0; padding-top:0; margin-top:0;
+  opacity:0; pointer-events:none;
+}
+/* ─── 12. Money zone — card surface, mono hero ─────────────────────────── */
+.agos-cabinet-stage .mk-money {
+  padding:18px 16px;
+  border:0;
+  background:var(--bg-c) !important;
+  border-radius:var(--r-lg);
+  box-shadow:var(--sh-sm);
+  margin:0;
+  position:relative;
+  overflow:hidden;
+}
+.agos-cabinet-stage .mk-money-k {
+  font-size:10px; font-weight:600;
+  letter-spacing:.06em; text-transform:uppercase;
+  color:var(--fg3);
+  display:flex; align-items:center; gap:10px;
+}
+.agos-cabinet-stage .mk-money-v {
+  font-size:34px;
+  font-weight:700;
+  letter-spacing:-.028em;
+  line-height:1.05;
+  margin-top:6px;
+  color:var(--fg);
+  font-variant-numeric:tabular-nums;
+  font-family:var(--font-mono);
+}
+.agos-cabinet-stage .mk-money-s {
+  font-size:12.5px;
+  color:var(--fg3);
+  margin-top:6px;
+  letter-spacing:0;
+}
+.agos-cabinet-stage .mk-money .mk-lockchip {
+  font-size:9.5px;
+  background:var(--green-m);
+  border:0;
+  border-radius:var(--r-full);
+  padding:2px 8px;
+  color:var(--green);
+  text-transform:none;
+  letter-spacing:.02em;
+  font-weight:600;
+  display:inline-flex; align-items:center; gap:4px;
+}
+.agos-cabinet-stage .mk-money.tone-amber .mk-money-v,
+.agos-cabinet-stage .mk-money.tone-green .mk-money-v { color:var(--fg); }
+.agos-cabinet-stage .mk-money.tone-amber::before,
+.agos-cabinet-stage .mk-money.tone-green::before { content:none; }
+.agos-cabinet-stage .mk-money.tone-amber,
+.agos-cabinet-stage .mk-money.tone-green { box-shadow:var(--sh-sm); }
+/* ─── 13. Покупатель — card surface ────────────────────────────────────── */
+.agos-cabinet-stage .mk-buyer {
+  padding:14px 16px;
+  border:0;
+  background:var(--bg-c);
+  border-radius:var(--r-lg);
+  box-shadow:var(--sh-sm);
+  margin:0;
+}
+.agos-cabinet-stage .mk-buyer-k { display:none; }
+.agos-cabinet-stage .mk-buyer-n {
+  font-size:15px; font-weight:600;
+  letter-spacing:-.012em;
+}
+.agos-cabinet-stage .mk-buyer-m { font-size:12px; color:var(--fg2); margin-top:3px; }
+/* ─── 14. Action zone ──────────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-actions { padding:20px 0 6px; gap:10px; }
+.agos-cabinet-stage .mk-caption { font-size:13px; color:var(--fg2); line-height:1.5; }
+/* ─── 15. Decision composition (stepper → recommendation → actions) ──── */
+/* Канон: BatchPath (vertical) + .mk-rec (flat hero) + .dec-row-actions.stack */
+.agos-cabinet-stage .mk-dec-blk { padding:0; background:transparent; box-shadow:none; }
+.agos-cabinet-stage .mk-dec-blk .dec-row { padding:0; background:transparent; box-shadow:none; border-radius:0; }
+.agos-cabinet-stage .mk-dec-blk .mk-money { padding:4px 0 6px; background:transparent !important; box-shadow:none; border-radius:0; }
+.agos-cabinet-stage .mk-dec-blk .mk-money-k { letter-spacing:.14em; }
+.agos-cabinet-stage .mk-rec { padding:4px 0 8px; }
+.agos-cabinet-stage .mk-rec-k {
+  font-size:10px; font-weight:600;
+  letter-spacing:.14em; text-transform:uppercase;
+  color:var(--amber);
+}
+.agos-cabinet-stage .mk-rec-v {
+  font-size:34px; font-weight:700;
+  letter-spacing:-.028em; line-height:1.05;
+  margin-top:6px; color:var(--fg);
+  font-variant-numeric:tabular-nums;
+  font-family:var(--font-mono);
+}
+.agos-cabinet-stage .mk-rec-s {
+  font-size:12.5px; color:var(--fg3);
+  margin-top:8px; line-height:1.4;
+}
+.agos-cabinet-stage .mk-dec-blk .dec-row-actions { padding:14px 0 6px; }
+/* CTA канон DS внутри composition — перебиваем компакт-чип из upgrades-v2 */
+.agos-cabinet-stage .mk-dec-blk .dec-row-actions .dec-act {
+  height:44px; min-height:44px; padding:0 18px;
+  font:600 14px/1 var(--font-sans);
+  border-radius:var(--r-md);
+  letter-spacing:-.01em;
+  flex:none;
+}
+.agos-cabinet-stage .mk-dec-blk .dec-row-actions .dec-act.primary {
+  background:var(--cta); color:var(--cta-fg);
+  box-shadow:none;
+}
+.agos-cabinet-stage .mk-dec-blk .dec-row-actions .dec-act.primary:hover {
+  background:var(--cta-h); color:var(--cta-fg);
+}
+.agos-cabinet-stage .mk-dec-blk .dec-row-actions .dec-act.primary:disabled {
+  opacity:.36; cursor:not-allowed;
+}
+.agos-cabinet-stage .mk-dec-blk .dec-row-actions .dec-act.alt {
+  background:transparent;
+  box-shadow:inset 0 0 0 1px var(--bd-h);
+  color:var(--fg);
+}
+.agos-cabinet-stage .mk-dec-blk .dec-row-actions .dec-act.alt:hover {
+  background:var(--bg-m);
+  box-shadow:inset 0 0 0 1px var(--bd-h);
+  color:var(--fg);
+}
+.agos-cabinet-stage .mk-dec-blk .dec-row-actions .dec-act.link {
+  height:40px; min-height:40px;
+  background:transparent; box-shadow:none;
+  color:var(--fg3); font-weight:500;
+}
+.agos-cabinet-stage .mk-dec-blk .dec-row-actions .dec-act.link:hover {
+  color:var(--fg); background:transparent;
+}
+/* ─── 16. Аккордеоны Данные / История — card surface ─────────────────── */
+.agos-cabinet-stage .mk-acc {
+  gap:0;
+  margin:0;
+  padding:0 16px;
+  background:var(--bg-c);
+  border-radius:var(--r-lg);
+  box-shadow:var(--sh-sm);
+}
+.agos-cabinet-stage .mk-acc-item {
+  border:0;
+  border-top:1px solid var(--bd-s);
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+}
+.agos-cabinet-stage .mk-acc-item:first-child { border-top:0; }
+.agos-cabinet-stage .mk-acc-item.open { box-shadow:none; }
+.agos-cabinet-stage .mk-acc-head {
+  padding:14px 0;
+  background:transparent !important;
+}
+.agos-cabinet-stage .mk-acc-head:hover { background:transparent !important; }
+.agos-cabinet-stage .mk-acc-item.open .mk-acc-head {
+  background:transparent !important;
+  border-bottom:0;
+  padding-bottom:6px;
+}
+.agos-cabinet-stage .mk-acc-ic { color:var(--fg2); }
+.agos-cabinet-stage .mk-acc-t {
+  font-size:13.5px; font-weight:600;
+  letter-spacing:-.005em;
+}
+.agos-cabinet-stage .mk-acc-inner { padding:2px 0 14px; }
+.agos-cabinet-stage .mk-acc-row {
+  display:flex; justify-content:space-between; align-items:baseline;
+  padding:10px 0;
+  border-top:1px solid var(--bd-s);
+  border-bottom:0;
+}
+.agos-cabinet-stage .mk-acc-row:first-child { border-top:0; padding-top:4px; }
+.agos-cabinet-stage .mk-acc-k {
+  width:auto; flex:0 0 auto;
+  font-size:12px; color:var(--fg3);
+  letter-spacing:0; text-transform:none;
+  font-weight:400;
+}
+.agos-cabinet-stage .mk-acc-v {
+  font-size:13.5px; color:var(--fg);
+  font-weight:500; text-align:right;
+}
+.agos-cabinet-stage .mk-acc-nav {
+  padding:14px 0;
+  display:flex; align-items:center; gap:12px;
+}
+.agos-cabinet-stage .mk-acc-meta {
+  margin-left:auto;
+  font-size:12.5px; color:var(--fg2);
+}
+.agos-cabinet-stage .mk-acc-chev { color:var(--fg3); }
+/* ─── 17. История ──────────────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-oi { padding:8px 0; gap:12px; }
+.agos-cabinet-stage .mk-oi-bul {
+  width:16px; height:16px;
+  border:1px solid var(--bd-h);
+  background:transparent;
+}
+.agos-cabinet-stage .mk-oi.done .mk-oi-bul { background:var(--fg2); border-color:var(--fg2); }
+.agos-cabinet-stage .mk-oi.now .mk-oi-bul { background:var(--amber); border-color:var(--amber); }
+.agos-cabinet-stage .mk-oi-t { font-size:13px; color:var(--fg); letter-spacing:-.005em; }
+.agos-cabinet-stage .mk-oi-m { font-size:11px; color:var(--fg3); }
+.agos-cabinet-stage .mk-olist-more {
+  font-size:12.5px; color:var(--fg2);
+  background:transparent; border:0;
+  padding:8px 0; text-decoration:underline;
+  text-underline-offset:3px;
+  text-decoration-color:var(--bd-h);
+}
+/* ─── 18. Медиа — card surface ─────────────────────────────────────────── */
+.agos-cabinet-stage .mk-mediasec {
+  margin:0;
+  padding:14px 16px;
+  background:var(--bg-c);
+  border-radius:var(--r-lg);
+  box-shadow:var(--sh-sm);
+  border:0;
+}
+.agos-cabinet-stage .mk-mediasec-h { display:none; }
+.agos-cabinet-stage .mk-mediasec-n { font-size:11px; color:var(--fg3); }
+.agos-cabinet-stage .mk-strip { gap:8px; margin:0 -16px; padding:0 16px; }
+.agos-cabinet-stage .mk-strip-cell,
+.agos-cabinet-stage .mk-strip-add {
+  width:96px; height:96px;
+  border-radius:var(--r-lg);
+}
+.agos-cabinet-stage .mk-strip-add {
+  border:1px dashed var(--bd-h);
+  background:transparent;
+  color:var(--fg2);
+  font-size:11.5px;
+}
+/* ─── 19. Мастер · прогресс-полоса ─────────────────────────────────────── */
+.agos-cabinet-stage .mk-wiz-bar {
+  display:flex; align-items:center;
+  gap:12px;
+  margin:6px -4px 8px;
+}
+.agos-cabinet-stage .mk-wiz-back,
+.agos-cabinet-stage .mk-wiz-exit {
+  width:36px; height:36px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  background:transparent; border:0;
+  border-radius:50%;
+  color:var(--fg2);
+  padding:0;
+}
+.agos-cabinet-stage .mk-wiz-back:hover,
+.agos-cabinet-stage .mk-wiz-exit:hover { background:var(--bg-m); color:var(--fg); }
+.agos-cabinet-stage .mk-wiz-prog {
+  flex:1;
+  display:flex; gap:4px;
+  padding:0;
+}
+.agos-cabinet-stage .mk-wiz-prog > div {
+  flex:1; height:2px; border-radius:1px;
+  background:var(--bd-s);
+  transition:background 200ms var(--ease);
+}
+.agos-cabinet-stage .mk-wiz-prog > .done { background:var(--fg); }
+.agos-cabinet-stage .mk-wiz-prog > .cur { background:var(--amber); }
+.agos-cabinet-stage .mk-wiz-step {
+  font-size:10px; color:var(--fg3);
+  letter-spacing:.14em; text-transform:uppercase;
+  font-weight:600;
+  margin:4px 0 0;
+}
+/* ─── 20. Поля формы ───────────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-field { margin-bottom:20px; }
+.agos-cabinet-stage .mk-lab {
+  font-size:10px; font-weight:600;
+  letter-spacing:.14em; text-transform:uppercase;
+  color:var(--fg3);
+  margin-bottom:10px;
+}
+.agos-cabinet-stage .mk-input {
+  min-height:52px;
+  font-size:16px;
+  border-radius:12px;
+  padding:12px 14px;
+  border:1px solid var(--bd);
+  background:var(--bg-c);
+  transition:border-color 120ms var(--ease);
+}
+.agos-cabinet-stage .mk-input:focus {
+  border-color:var(--fg2);
+  outline:0;
+}
+/* Шаг 4 · цена — визуальная доминанта */
+.agos-cabinet-stage .mk-input.price {
+  font-size:48px;
+  font-weight:700;
+  letter-spacing:-.04em;
+  padding:18px 16px;
+  min-height:88px;
+  text-align:left;
+  font-variant-numeric:tabular-nums;
+  background:transparent;
+  border:0;
+  border-bottom:1.5px solid var(--bd-h);
+  border-radius:0;
+}
+.agos-cabinet-stage .mk-input.price:focus {
+  border-bottom-color:var(--fg);
+}
+.agos-cabinet-stage .mk-input.area { min-height:104px; }
+.agos-cabinet-stage .mk-hint { font-size:11.5px; color:var(--fg3); margin-top:6px; }
+/* ─── 21. Степпер ──────────────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-stp { grid-template-columns:52px minmax(0,1fr) 52px; gap:8px; }
+.agos-cabinet-stage .mk-stp-b {
+  height:52px; border-radius:12px;
+  background:var(--bg-c);
+  border:1px solid var(--bd);
+}
+.agos-cabinet-stage .mk-stp-b:hover { background:var(--bg-m); }
+.agos-cabinet-stage .mk-stp-i {
+  height:52px; border-radius:12px;
+  font-size:20px; font-weight:600;
+  text-align:center;
+}
+/* ─── 22. Карточки выбора ──────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-fat-c {
+  padding:14px 4px;
+  border-radius:12px;
+  font-size:13.5px;
+  min-height:52px;
+  border:1px solid var(--bd);
+  background:var(--bg-c);
+  font-weight:500;
+}
+.agos-cabinet-stage .mk-fat-c.sel {
+  border-color:var(--fg);
+  background:var(--bg-m);
+  font-weight:600;
+}
+.agos-cabinet-stage .mk-radio-list { display:flex; flex-direction:column; gap:10px; }
+.agos-cabinet-stage .mk-radio-list + .mk-grid2 { margin-top:10px; }
+.agos-cabinet-stage .mk-big-radio {
+  padding:14px;
+  border-radius:14px;
+  gap:14px;
+  border:1px solid var(--bd);
+  background:var(--bg-c);
+  transition:all 140ms var(--ease);
+}
+.agos-cabinet-stage .mk-big-radio.sel {
+  border-color:var(--fg);
+  background:var(--bg-c);
+  box-shadow:0 0 0 1px var(--fg) inset;
+}
+.agos-cabinet-stage .mk-br-dot {
+  width:20px; height:20px; border-radius:50%;
+  border:1px solid var(--bd-h);
+}
+.agos-cabinet-stage .mk-br-dot.on { background:var(--fg); border-color:var(--fg); }
+.agos-cabinet-stage .mk-br-t { font-size:15px; font-weight:600; letter-spacing:-.012em; }
+.agos-cabinet-stage .mk-br-s { font-size:12px; color:var(--fg3); margin-top:2px; }
+/* ─── 23. Триггер селекта ──────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-seltrig {
+  min-height:52px; border-radius:12px;
+  padding:12px 14px;
+  font-size:15px;
+  border:1px solid var(--bd);
+  background:var(--bg-c);
+}
+.agos-cabinet-stage .mk-seltrig.is-ph { color:var(--fg3); }
+/* ─── 24. Категория ────────────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-catcard {
+  padding:24px;
+  border-radius:16px;
+  border:1px solid var(--bd);
+  background:var(--bg-c);
+}
+.agos-cabinet-stage .mk-cc-k {
+  font-size:10px; font-weight:600;
+  letter-spacing:.14em; text-transform:uppercase;
+  color:var(--fg3);
+  margin-bottom:8px;
+}
+.agos-cabinet-stage .mk-cc-name {
+  font-size:28px; font-weight:700;
+  letter-spacing:-.03em;
+  line-height:1.1;
+}
+.agos-cabinet-stage .mk-cc-b { font-size:13px; color:var(--fg2); line-height:1.55; margin-top:14px; }
+/* минималистичный список данных под заголовком категории */
+.agos-cabinet-stage .mk-cat-rows { margin-top:18px; }
+.agos-cabinet-stage .mk-cat-row {
+  display:flex; align-items:baseline; justify-content:space-between;
+  gap:16px; padding:14px 0;
+  border-top:1px solid var(--bd-s);
+}
+.agos-cabinet-stage .mk-cat-row:first-child { border-top:0; }
+.agos-cabinet-stage .mk-cat-row-k {
+  font-size:13px; color:var(--fg3);
+}
+.agos-cabinet-stage .mk-cat-row-v {
+  font-size:14px; font-weight:600; color:var(--fg);
+  letter-spacing:-.01em; text-align:right;
+}
+/* ─── 25. Цена · референс / расчёт / warn ──────────────────────────────── */
+.agos-cabinet-stage .mk-ref {
+  border:0;
+  border-radius:0;
+  padding:0 0 0 14px;
+  background:transparent;
+  margin:0 0 12px;
+  border-left:2px solid color-mix(in srgb, var(--amber) 50%, var(--bd-h));
+}
+.agos-cabinet-stage .mk-ref-t { font-size:13.5px; color:var(--fg); line-height:1.45; }
+.agos-cabinet-stage .mk-ref-d { font-size:11.5px; color:var(--fg3); margin-top:4px; line-height:1.45; }
+/* живой расчёт под полем цены — крупно */
+.agos-cabinet-stage .mk-calc {
+  font-size:13px; color:var(--fg3);
+  line-height:1.55; margin:4px 0 16px;
+  padding:14px 0 0;
+}
+.agos-cabinet-stage .mk-calc b {
+  font-size:24px; font-weight:700;
+  letter-spacing:-.025em;
+  color:var(--fg);
+  display:block;
+  margin-top:6px;
+}
+.agos-cabinet-stage .mk-calc-n { color:var(--fg3); font-size:11.5px; }
+.agos-cabinet-stage .mk-warn {
+  border:0;
+  border-radius:0;
+  padding:14px 0 0;
+  margin-top:14px;
+  border-top:1px solid color-mix(in srgb, var(--amber) 30%, var(--bd-s));
+  background:transparent;
+}
+.agos-cabinet-stage .mk-warn-t {
+  font-size:13px; font-weight:600; color:var(--amber);
+  letter-spacing:-.005em;
+}
+.agos-cabinet-stage .mk-warn-b { font-size:12.5px; line-height:1.55; color:var(--fg2); margin-top:6px; }
+.agos-cabinet-stage .mk-warn .mk-cb { margin-top:10px; }
+/* ─── 26. Чек-роу ──────────────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-cb {
+  padding:14px;
+  border-radius:12px;
+  font-size:13px;
+  min-height:52px;
+  align-items:center;
+  border:1px solid var(--bd);
+  background:var(--bg-c);
+}
+.agos-cabinet-stage .mk-cb-box {
+  width:20px; height:20px; border-radius:6px;
+  border:1px solid var(--bd-h);
+}
+.agos-cabinet-stage .mk-cb-box.ch { background:var(--fg); border-color:var(--fg); }
+/* ─── 27. Шаг 5 · prose-summary ────────────────────────────────────────── */
+.agos-cabinet-stage .mk-prose {
+  margin:8px 0 18px;
+  padding:0;
+  border:0;
+}
+.agos-cabinet-stage .mk-prose p {
+  font-size:17px;
+  line-height:1.6;
+  color:var(--fg);
+  margin:0 0 14px;
+  letter-spacing:-.012em;
+}
+.agos-cabinet-stage .mk-prose p:last-child { margin-bottom:0; }
+.agos-cabinet-stage .mk-prose-edit {
+  display:inline-flex; align-items:baseline; gap:4px;
+  background:transparent; border:0; padding:0;
+  font:inherit;
+  color:var(--fg);
+  font-weight:600;
+  text-decoration:underline;
+  text-underline-offset:4px;
+  text-decoration-thickness:1px;
+  text-decoration-color:color-mix(in srgb, var(--amber) 50%, var(--bd-h));
+  transition:text-decoration-color 120ms var(--ease);
+}
+.agos-cabinet-stage .mk-prose-edit:hover { text-decoration-color:var(--amber); color:var(--amber); }
+.agos-cabinet-stage .mk-prose-edit > svg { color:var(--fg3); transform:translateY(1px); }
+.agos-cabinet-stage .mk-prose-edit:hover > svg { color:var(--amber); }
+.agos-cabinet-stage .mk-prose-fix {
+  font-weight:600; color:var(--fg2);
+}
+.agos-cabinet-stage .mk-pubwhen {
+  margin:24px 0 6px;
+  padding:16px 0 0;
+  border-top:1px solid var(--bd-s);
+  font-size:14px; color:var(--fg);
+  display:flex; flex-direction:column; gap:6px;
+}
+.agos-cabinet-stage .mk-pubwhen .mk-sec-label { margin:0; }
+.agos-cabinet-stage .mk-pubwhen b { font-weight:700; letter-spacing:-.005em; }
+/* старая sumcard оставлена тонкой на случай возврата */
+.agos-cabinet-stage .mk-sumcard {
+  border:1px solid var(--bd);
+  border-radius:16px;
+  padding:8px 16px;
+  background:var(--bg-c);
+}
+.agos-cabinet-stage .mk-kv {
+  display:flex; justify-content:space-between; align-items:baseline;
+  padding:12px 0;
+  border-bottom:1px dashed var(--bd-s);
+}
+.agos-cabinet-stage .mk-kv:last-child { border-bottom:0; }
+.agos-cabinet-stage .mk-kv-k {
+  width:auto; flex:0 0 auto;
+  font-size:12px; color:var(--fg3);
+  letter-spacing:0; text-transform:none; font-weight:400;
+}
+.agos-cabinet-stage .mk-kv-v { font-size:14px; color:var(--fg); font-weight:500; text-align:right; }
+/* ─── 28. Результат публикации ─────────────────────────────────────────── */
+.agos-cabinet-stage .mk-res { gap:18px; padding:56px 16px 32px; }
+.agos-cabinet-stage .mk-res-ic {
+  width:64px; height:64px; border-width:1.5px;
+}
+.agos-cabinet-stage .mk-res-h {
+  font-size:28px; font-weight:700;
+  letter-spacing:-.032em; line-height:1.12;
+}
+.agos-cabinet-stage .mk-res-b {
+  font-size:14.5px; line-height:1.55;
+  max-width:320px; color:var(--fg2);
+}
+.agos-cabinet-stage .mk-pr-price { font-size:13px; color:var(--fg2); }
+.agos-cabinet-stage .mk-pr-price b { font-size:24px; font-weight:700; letter-spacing:-.028em; color:var(--fg); }
+/* ─── 29. Sheet ────────────────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-sheet-id { font-size:12px; color:var(--fg3); margin:0 0 12px; }
+/* ─── 30. Поголовье ────────────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-headsum {
+  border:0;
+  border-top:1px solid var(--bd-s);
+  border-bottom:1px solid var(--bd-s);
+  border-radius:0;
+  padding:14px 0;
+  background:transparent;
+}
+.agos-cabinet-stage .mk-headbar { height:3px; border-radius:2px; background:var(--bd-s); }
+.agos-cabinet-stage .mk-headbar i { background:var(--fg); border-radius:2px; }
+.agos-cabinet-stage .mk-head-add .mk-input { min-height:52px; }
+.agos-cabinet-stage .mk-head-addb { width:52px; height:52px; border-radius:12px; background:var(--fg); color:var(--bg); border:0; }
+/* ─── 31. Kebab ────────────────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-kebab {
+  width:40px; height:40px;
+  background:transparent; border:0;
+  color:var(--fg2);
+}
+.agos-cabinet-stage .mk-kebab:hover { color:var(--fg); }
+/* ─── 32. Menu items ───────────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-menu-item {
+  min-height:56px; padding:14px 0;
+  font-size:15px;
+  border-radius:0;
+  border-bottom:1px solid var(--bd-s);
+  background:transparent;
+  gap:14px;
+}
+.agos-cabinet-stage .mk-menu-item:last-child { border-bottom:0; }
+.agos-cabinet-stage .mk-menu-item:hover { background:var(--bg-m); padding-left:8px; padding-right:8px; }
+.agos-cabinet-stage .mk-menu-ic { color:var(--fg3); }
+.agos-cabinet-stage .mk-menu-item.danger { color:var(--red); }
+.agos-cabinet-stage .mk-menu-item.danger .mk-menu-ic { color:var(--red); }
+/* ─── 33. Статус-чип ───────────────────────────────────────────────────── */
+.agos-cabinet-stage .mk-card-state .mk-chip {
+  padding:0;
+  background:transparent !important;
+  border:0 !important;
+  font-size:12.5px;
+  font-weight:500;
+  color:var(--fg2);
+  gap:6px;
+}
+.agos-cabinet-stage .mk-card-state .mk-dot,
+.agos-cabinet-stage .mk-card-state .mk-pulse {
+  width:6px; height:6px;
+}
+.agos-cabinet-stage .mk-card.urgent .mk-card-state .mk-chip {
+  font-weight:600; color:var(--fg);
+}
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   TURAN AgOS — Мастер новой партии · v2 native polish
+   Задача: единый, «нативно-мобильный» язык. iOS grouped-list вдохновение:
+   тактильные тапы, сегментированные контролы, спокойные линии, чёткий фокус.
+   Только переопределения существующих селекторов + safe-area в футере.
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* — прогресс-бар: пилюли вместо тонких полос, плавный переход — */
+.agos-cabinet-stage .mk-wiz-bar {
+  margin:2px -4px 6px;
+  gap:14px;
+}
+.agos-cabinet-stage .mk-wiz-prog { gap:5px; }
+.agos-cabinet-stage .mk-wiz-prog > div {
+  height:3px; border-radius:2px;
+  background:color-mix(in srgb, var(--fg) 8%, transparent);
+  transition:background 240ms var(--ease), transform 240ms var(--ease);
+}
+.agos-cabinet-stage .mk-wiz-prog > .done { background:var(--fg); }
+.agos-cabinet-stage .mk-wiz-prog > .cur {
+  background:var(--amber);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 18%, transparent);
+}
+.agos-cabinet-stage .mk-wiz-back,
+.agos-cabinet-stage .mk-wiz-exit {
+  width:40px; height:40px;
+  color:var(--fg);
+}
+.agos-cabinet-stage .mk-wiz-back:active,
+.agos-cabinet-stage .mk-wiz-exit:active { background:var(--bg-m); transform:scale(.96); }
+/* — заголовок шага: чуть плотнее к прогрессу — */
+.agos-cabinet-stage .mk-wiz-step { margin:6px 0 2px; }
+.agos-cabinet-stage .mk-h1 { margin:6px 0 10px; }
+.agos-cabinet-stage .mk-sub { margin:0 0 20px; }
+/* — «Вид · КРС» — статичная строка-факт, аккуратно, без квадратного бейджа — */
+.agos-cabinet-stage .mk-kindrow {
+  display:flex; align-items:center; gap:10px;
+  padding:12px 0;
+  margin:0 0 4px;
+  border-bottom:1px solid var(--bd-s);
+}
+.agos-cabinet-stage .mk-kindrow .mk-lab { margin:0; }
+.agos-cabinet-stage .mk-fixbadge {
+  display:inline-flex; align-items:center;
+  height:26px; padding:0 10px;
+  border-radius:8px;
+  background:var(--bg-m);
+  border:0;
+  font-size:12px; font-weight:600;
+  letter-spacing:-.01em;
+  color:var(--fg);
+}
+.agos-cabinet-stage .mk-kindhint {
+  font-size:12px; color:var(--fg3);
+  flex:1; min-width:0;
+  line-height:1.35;
+}
+/* — единый лейбл: тише, компактнее — */
+.agos-cabinet-stage .mk-lab {
+  font-size:10.5px;
+  letter-spacing:.12em;
+  color:var(--fg3);
+  margin-bottom:8px;
+}
+/* — инпуты: мягче фон, тактильный фокус амбером — */
+.agos-cabinet-stage .mk-input,
+.agos-cabinet-stage .mk-seltrig,
+.agos-cabinet-stage .mk-stp-b,
+.agos-cabinet-stage .mk-stp-i,
+.agos-cabinet-stage .mk-cb {
+  background:var(--bg-m);
+  border:1px solid transparent;
+  transition:border-color 140ms var(--ease), background 140ms var(--ease), box-shadow 140ms var(--ease);
+}
+.agos-cabinet-stage .mk-input:focus,
+.agos-cabinet-stage .mk-seltrig:focus-visible {
+  background:var(--bg-c);
+  border-color:var(--amber);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 20%, transparent);
+  outline:0;
+}
+.agos-cabinet-stage .mk-input.price {
+  background:transparent;
+  border:0; border-bottom:1.5px solid var(--bd-h);
+  box-shadow:none !important;
+}
+.agos-cabinet-stage .mk-input.price:focus {
+  border-bottom-color:var(--amber);
+  box-shadow:none;
+}
+/* — степпер: единый визуальный «трек», кнопки внутри — */
+.agos-cabinet-stage .mk-stp {
+  display:grid !important;
+  grid-template-columns:56px minmax(0,1fr) 56px;
+  gap:6px;
+  background:var(--bg-m);
+  border-radius:14px;
+  padding:5px;
+}
+.agos-cabinet-stage .mk-stp-b {
+  height:46px; border-radius:10px;
+  background:var(--bg-c);
+  border:0;
+  color:var(--fg);
+  font-size:20px;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 1px 2px color-mix(in srgb, var(--fg) 6%, transparent);
+}
+.agos-cabinet-stage .mk-stp-b:active { transform:scale(.94); }
+.agos-cabinet-stage .mk-stp-i {
+  height:46px; border-radius:10px;
+  background:transparent;
+  border:0;
+  font-size:22px; font-weight:700;
+  color:var(--fg);
+  letter-spacing:-.01em;
+}
+.agos-cabinet-stage .mk-stp-i:focus {
+  background:var(--bg-c);
+  box-shadow:none;
+  outline:0;
+}
+/* — Упитанность → сегментированный контрол в едином треке — */
+.agos-cabinet-stage .mk-fat {
+  display:grid; grid-template-columns:repeat(3, 1fr);
+  gap:0;
+  background:var(--bg-m);
+  border-radius:12px;
+  padding:4px;
+  position:relative;
+}
+.agos-cabinet-stage .mk-fat-c {
+  border:0 !important;
+  background:transparent !important;
+  border-radius:9px;
+  padding:11px 4px;
+  min-height:44px;
+  font-size:13.5px;
+  font-weight:500;
+  color:var(--fg2);
+  transition:background 160ms var(--ease), color 160ms var(--ease), transform 120ms var(--ease);
+}
+.agos-cabinet-stage .mk-fat-c:active { transform:scale(.97); }
+.agos-cabinet-stage .mk-fat-c.sel {
+  background:var(--bg-c) !important;
+  color:var(--fg);
+  font-weight:600;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--fg) 8%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--fg) 6%, transparent);
+}
+/* — селект-триггер: спокойнее, шеврон крупнее — */
+.agos-cabinet-stage .mk-seltrig {
+  border-radius:12px;
+  padding:14px 14px;
+  min-height:54px;
+  font-weight:500;
+}
+.agos-cabinet-stage .mk-seltrig-ch { color:var(--fg3); }
+.agos-cabinet-stage .mk-seltrig.open {
+  background:var(--bg-c);
+  border-color:var(--fg);
+}
+/* — BigRadio → iOS list-row: галочка справа, тап-фидбек — */
+.agos-cabinet-stage .mk-big-radio {
+  padding:16px 16px;
+  border-radius:14px;
+  gap:12px;
+  background:var(--bg-c);
+  border:1px solid transparent;
+  position:relative;
+  align-items:center;
+}
+.agos-cabinet-stage .mk-big-radio:active { transform:scale(.995); }
+.agos-cabinet-stage .mk-big-radio.sel {
+  border-color:transparent;
+  background:color-mix(in srgb, var(--amber) 10%, var(--bg-c));
+  box-shadow:0 0 0 1.5px var(--amber) inset;
+}
+.agos-cabinet-stage .mk-br-dot {
+  order:2;
+  margin-left:auto;
+  width:22px; height:22px;
+  border:1.5px solid var(--bd-h);
+  background:transparent;
+}
+.agos-cabinet-stage .mk-big-radio.sel .mk-br-dot,
+.agos-cabinet-stage .mk-br-dot.on {
+  background:var(--amber);
+  border-color:var(--amber);
+}
+.agos-cabinet-stage .mk-br-body { order:1; }
+.agos-cabinet-stage .mk-br-t { font-size:15.5px; }
+.agos-cabinet-stage .mk-br-s { color:var(--fg2); }
+/* — чек-роу (защитная цена) в едином языке — */
+.agos-cabinet-stage .mk-cb {
+  border-radius:12px;
+  background:var(--bg-m);
+  border:0;
+}
+.agos-cabinet-stage .mk-cb.warn {
+  background:color-mix(in srgb, var(--amber) 10%, var(--bg-m));
+}
+.agos-cabinet-stage .mk-cb-box {
+  width:22px; height:22px; border-radius:7px;
+  border:1.5px solid var(--bd-h);
+}
+.agos-cabinet-stage .mk-cb-box.ch { background:var(--amber); border-color:var(--amber); }
+/* — CTA · sticky-friendly, safe-area, тактильно — */
+.agos-cabinet-stage .mk-cta {
+  min-height:54px;
+  border-radius:16px;
+  letter-spacing:-.014em;
+  transition:transform 120ms var(--ease), background 160ms var(--ease);
+}
+.agos-cabinet-stage .mk-cta:active { transform:scale(.985); }
+/* footer wizard: увеличенный safe-area (шторка home на iOS) */
+.agos-cabinet-stage .sh-foot { padding-bottom:calc(14px + env(safe-area-inset-bottom, 0px)); }
+/* — draft-note: приглушить, центр — */
+.agos-cabinet-stage .mk-note {
+  text-align:center;
+  color:var(--fg3);
+  font-size:10.5px;
+  letter-spacing:.08em;
+  margin-top:10px;
+}
+/* — ошибка ниже поля: чуть плотнее к инпуту — */
+.agos-cabinet-stage .mk-err { margin-top:-14px; margin-bottom:14px; font-size:12.5px; }
+/* — окно готовности (шаг 2) — карточка-факт — */
+.agos-cabinet-stage .mk-winsum {
+  margin-top:14px;
+  padding:16px;
+  border-radius:14px;
+  background:var(--bg-m);
+  border:0;
+}
+.agos-cabinet-stage .mk-ws-big { font-size:15px; font-weight:600; color:var(--fg); letter-spacing:-.012em; }
+.agos-cabinet-stage .mk-ws-edit { font-size:13px; color:var(--fg2); margin-top:6px; }
+.agos-cabinet-stage .mk-ws-hint { font-size:12px; color:var(--fg3); margin-top:2px; }
+/* — infonote спокойнее — */
+.agos-cabinet-stage .mk-infonote {
+  margin-top:14px;
+  padding:14px 16px;
+  border-radius:12px;
+  background:color-mix(in srgb, var(--amber) 10%, var(--bg-c));
+  border:0;
+}
+.agos-cabinet-stage .mk-infonote-t {
+  font-size:11px; font-weight:600;
+  letter-spacing:.08em; text-transform:uppercase;
+  color:var(--amber);
+  margin-bottom:4px;
+}
+.agos-cabinet-stage .mk-infonote-b { font-size:13px; line-height:1.5; color:var(--fg); }
+/* — сетка из двух полей: единый ритм — */
+.agos-cabinet-stage .mk-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.agos-cabinet-stage .mk-grid2 > .mk-field { margin-bottom:20px; }
+
+
+/* ══════ app-local: топ-бар пушевых экранов (back + kebab), не из прототипа ══════ */
+.agos-cabinet-stage .mk-topbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:2px -6px 2px; min-height:40px; }
+.agos-cabinet-stage .mk-topbar .mk-wiz-back { margin-left:-4px; }

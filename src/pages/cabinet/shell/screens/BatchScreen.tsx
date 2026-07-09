@@ -1,14 +1,21 @@
-// AgOS · TSP-2 · SCR-04 «Карточка партии» — 4 зоны (герой / цена / действие / тихая).
-// Все мутации через onPatch (мок). Шторки управляются локальным стейтом.
+// AgOS · TSP-2 · SCR-04 «Карточка партии» — реcкин под прототип (market.jsx BatchDetail):
+// заголовок + верт. трекер .mk-trk + .mk-money + .mk-buyer + .mk-dec-blk (decision) +
+// .mk-acc аккордеоны (данные/история) + kebab-меню вторичных действий.
+// Вся логика сохранена: onPatch-сигналы (_withdraw/_dispatchReady), prot-валидация,
+// SplitPanel (Слайс 9), deal-doc, 3 шторки (Withdraw/Dispatch/BatchPrice), haptics.
 
 import { useState } from 'react'
+import type { CSSProperties } from 'react'
 import type { Batch } from '../types'
-import { Cta } from '../components/Cta'
 import { IonShellFrame } from '../components/IonShellFrame'
+import { SubHead } from '../components/SubHead'
+import { Sheet } from '../components/Sheet'
+import { PhIcon, type PhIconName } from '../components/icons/PhIcon'
 import { WithdrawSheet } from '../components/sheets/WithdrawSheet'
 import { DispatchSheet } from '../components/sheets/DispatchSheet'
 import { BatchPriceSheet } from '../components/sheets/BatchPriceSheet'
 import { STATUS, protPrice, catLabel, gradeLabel } from '../data/status'
+import { catName } from '../data/batches'
 import { fmtMoney, batchSum } from '../tsp/data/tsp-utils'
 import { NBSP } from '../tsp/data/tsp-dicts'
 import { printDealDoc, fmtDealDate, type DealDocData } from '../data/deal-doc'
@@ -26,6 +33,7 @@ interface Props {
   batch: Batch
   account?: FarmerAccount | null
   onBack: () => void
+  backLabel?: string
   onPatch: (patch: Partial<Batch>) => void
   onNew: () => void
   onReview: () => void
@@ -33,8 +41,12 @@ interface Props {
   toast: (text: string) => void
 }
 
-// Слайс 9 (S4): сборка документа сделки со стороны ФЕРМЕРА (продавец).
-// Куски = allocations (каждый — покупатель/пул). Даты берём из *AtIso партии.
+function strField(b: Batch, key: string): string | undefined {
+  const v = (b as Record<string, unknown>)[key]
+  return typeof v === 'string' ? v : undefined
+}
+
+// ── deal-doc (Слайс 9 S4) — сборка со стороны фермера (продавец) ─────────────
 function buildFarmerDealDoc(batch: Batch, account?: FarmerAccount | null): DealDocData {
   const allocs = Array.isArray(batch.allocations) ? batch.allocations : []
   const iso = (k: string): string | undefined => {
@@ -91,7 +103,6 @@ function buildFarmerDealDoc(batch: Batch, account?: FarmerAccount | null): DealD
   }
 }
 
-// Документ доступен, когда сделка состоялась (есть цена сделки и подобран покупатель).
 const DEAL_STATES = new Set(['matched', 'confirmed', 'dispatched', 'delivered', 'partial'])
 function hasDeal(batch: Batch): boolean {
   return DEAL_STATES.has(batch.state)
@@ -99,104 +110,6 @@ function hasDeal(batch: Batch): boolean {
         || (Array.isArray(batch.allocations) && batch.allocations.length > 0))
 }
 
-type LocalSheet = null | 'withdraw' | 'dispatch' | 'price'
-
-const PATH_STEPS = ['Подготовка', 'Продажа', 'Покупатель', 'Доставка', 'Готово']
-
-function pathIndex(state: string): number {
-  if (state === 'draft' || state === 'scheduled') return 0
-  // partial — часть продана, остаток ещё на рынке → держим шаг «Продажа»
-  if (state === 'published' || state === 'offering' || state === 'decision' || state === 'partial') return 1
-  if (state === 'matched' || state === 'confirmed') return 2
-  if (state === 'dispatched') return 3
-  if (state === 'delivered') return 4
-  return -1 // cancelled
-}
-
-function strField(b: Batch, key: string): string | undefined {
-  const v = (b as Record<string, unknown>)[key]
-  return typeof v === 'string' ? v : undefined
-}
-
-// ── Степпер жизненного цикла ───────────────────────────────────────────────
-function BatchPath({ state }: { state: string }) {
-  const cur = pathIndex(state)
-  return (
-    <div className="bpath">
-      {PATH_STEPS.map((s, i) => (
-        <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <span className={'bpath-step' + (i === cur ? ' active' : '')}>{s}</span>
-          {i < PATH_STEPS.length - 1 && <span className="bpath-sep">→</span>}
-        </span>
-      ))}
-    </div>
-  )
-}
-
-// ── DecisionActions (только для state=decision) ─────────────────────────────
-function DecisionActions({ batch, onPatch, toast }: {
-  batch: Batch; onPatch: (p: Partial<Batch>) => void; toast: (t: string) => void
-}) {
-  const [customOn, setCustomOn] = useState(false)
-  const [custom, setCustom] = useState('')
-  const prot = protPrice(batch)
-  const cur = batch.price ?? 0
-  const lowered = cur - 100
-  const lowerBlocked = prot != null && lowered < prot
-
-  const applyPrice = (newPrice: number) => {
-    onPatch({ state: 'offering', price: newPrice, deadlineLabel: 'завтра, 14:30' })
-    toast('Предложение отправлено покупателям по новой цене')
-  }
-
-  const customNum = parseInt(custom, 10)
-  const customValid = !Number.isNaN(customNum) && customNum > 0 && (prot == null || customNum >= prot)
-
-  return (
-    <div className="dec-actions">
-      <div className="dec-actions-note">
-        Так бывает — цена выше, чем покупатели сейчас готовы платить.
-      </div>
-
-      <Cta onClick={() => !lowerBlocked && applyPrice(lowered)} disabled={lowerBlocked}>
-        Снизить до {fmtMoney(lowered)}{NBSP}₸/кг и предложить снова
-      </Cta>
-      {lowerBlocked && (
-        <div className="dec-actions-note">Цена уже у защитного уровня</div>
-      )}
-
-      {!customOn ? (
-        <Cta variant="ghost" onClick={() => setCustomOn(true)}>Назначить свою цену</Cta>
-      ) : (
-        <>
-          <input
-            className="dec-price-input"
-            type="number"
-            min={1}
-            value={custom}
-            placeholder="Своя цена ₸/кг"
-            onChange={(e) => setCustom(e.target.value)}
-          />
-          {prot != null && (
-            <div className="dec-actions-note">Защитная цена: {fmtMoney(prot)}{NBSP}₸/кг</div>
-          )}
-          <Cta onClick={() => customValid && applyPrice(customNum)} disabled={!customValid}>
-            Предложить новую цену
-          </Cta>
-        </>
-      )}
-
-      <Cta variant="ghost" onClick={() => toast('Партия остаётся в продаже. TURAN оповестит, когда появится подходящий покупатель')}>
-        Оставить цену и ждать
-      </Cta>
-    </div>
-  )
-}
-
-// ── Панель частичной продажи (state=partial или несколько кусков) ───────────
-// Показывает прогресс «продано X / Y, осталось Z» + список кусков с покупателями.
-// Контакт покупателя раскрыт только после закрытия его пула (иначе «скрыт до сделки»).
-// Слайс 9 S3: человекочитаемый статус куска в панели частичной продажи.
 function chunkStatusLabel(s: string): string {
   switch (s) {
     case 'matched':    return 'ждёт заполнения пула'
@@ -207,6 +120,138 @@ function chunkStatusLabel(s: string): string {
   }
 }
 
+// ── Вертикальный трекер жизненного цикла (порт market-ui.jsx BatchPath, focus+peek) ──
+const PATH_STAGES = [
+  { t: 'Подготовка', d: 'Объём, качество, цена и сроки готовности к отгрузке.' },
+  { t: 'Поиск покупателя', d: 'Лот в ленте у проверенных покупателей региона.' },
+  { t: 'Сделка', d: 'Согласование условий, договор и реквизиты.' },
+  { t: 'Отгрузка', d: 'Передача груза перевозчику и движение по маршруту.' },
+  { t: 'Завершено', d: 'Приёмка, расчёт и закрывающие документы.' },
+]
+function stageIndex(state: string): number {
+  if (state === 'draft' || state === 'scheduled') return 0
+  if (state === 'published' || state === 'offering' || state === 'decision' || state === 'partial') return 1
+  if (state === 'matched' || state === 'confirmed') return 2
+  if (state === 'dispatched') return 3
+  if (state === 'delivered') return 4
+  return -1
+}
+
+function BatchPath({ batch }: { batch: Batch }) {
+  const [expanded, setExpanded] = useState(false)
+  if (batch.state === 'cancelled') return null
+  const cur = stageIndex(batch.state)
+  const nowPhrase = STATUS[batch.state]?.phrase ?? ''
+  const deadline = strField(batch, 'deadlineLabel')
+  const updated = strField(batch, 'updatedLabel')
+  const N = PATH_STAGES.length
+  const peekFrom = Math.max(0, cur - 1)
+  const peekTo = Math.min(N - 1, cur + 1)
+  const beforeN = peekFrom
+  const afterN = N - 1 - peekTo
+  const lastVisibleIdx = expanded ? N - 1 : peekTo
+
+  const renderRow = (stg: { t: string; d: string }, i: number) => {
+    const st = i < cur ? 'done' : i === cur ? 'now' : 'todo'
+    const isHidden = !expanded && (i < peekFrom || i > peekTo)
+    const isPeek = !expanded && !isHidden && i !== cur
+    const isCap = i === lastVisibleIdx
+    const desc = st === 'now' ? nowPhrase : stg.d
+    let meta: React.ReactNode = null
+    if (st === 'now') {
+      meta = batch.state === 'offering' && deadline
+        ? <>Сейчас <span className="mk-trk-dot">·</span> до {deadline}</>
+        : <>Сейчас</>
+    } else if (st === 'done' && i === cur - 1 && updated) {
+      meta = updated
+    }
+    const cls = ['mk-trk-i', st]
+    if (isHidden) cls.push('hidden')
+    if (isPeek) cls.push('peek')
+    if (isCap) cls.push('cap')
+    return (
+      <div key={stg.t} className={cls.join(' ')}>
+        <span className="mk-trk-bul">
+          {st === 'done' ? <PhIcon name="check" size={13} color="var(--bg-c)" /> : <span className="mk-mono">{i + 1}</span>}
+        </span>
+        <div className="mk-trk-bd">
+          <div className="mk-trk-t">{stg.t}</div>
+          <div className="mk-trk-d">{desc}</div>
+          {meta && <div className="mk-trk-meta mk-mono">{meta}</div>}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={'mk-trk ' + (expanded ? 'ex' : 'co')}>
+      <button type="button" className={'mk-trk-more top mk-mono' + (expanded || beforeN === 0 ? ' hidden' : '')}
+        onClick={() => setExpanded(true)} tabIndex={expanded || beforeN === 0 ? -1 : 0}>
+        +{beforeN} пройдено
+      </button>
+      {PATH_STAGES.map((stg, i) => renderRow(stg, i))}
+      <button type="button" className={'mk-trk-more bot mk-mono' + (expanded || afterN === 0 ? ' hidden' : '')}
+        onClick={() => setExpanded(true)} tabIndex={expanded || afterN === 0 ? -1 : 0}>
+        ещё {afterN}
+        <span className="mk-trk-more-arr" aria-hidden><PhIcon name="chevronRight" size={12} /></span>
+      </button>
+      {N > 3 && (
+        <button type="button" className={'mk-trk-collapse mk-mono' + (expanded ? '' : ' hidden')}
+          onClick={() => setExpanded(false)} tabIndex={expanded ? 0 : -1}>
+          свернуть
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── Зоны ────────────────────────────────────────────────────────────────────
+const HERO_TONE: Record<string, string> = {
+  draft: 'neutral', scheduled: 'neutral', published: 'neutral', dispatched: 'neutral', cancelled: 'neutral',
+  offering: 'amber', decision: 'amber', partial: 'neutral', matched: 'green', confirmed: 'green', delivered: 'green',
+}
+
+function TierH({ label, count }: { label: string; count?: number }) {
+  return (
+    <div className="tier-h">
+      <span className="tier-h-l">
+        <span className="tier-label">{label}</span>
+        {count != null && <span className="tier-count mk-mono">{count}</span>}
+      </span>
+    </div>
+  )
+}
+
+function ZoneMoney({ batch }: { batch: Batch }) {
+  const deal = batch.dealPrice != null
+  const p = deal ? batch.dealPrice! : (batch.price ?? 0)
+  if (!p) return null
+  return (
+    <div className={'mk-money tone-' + (HERO_TONE[batch.state] ?? 'neutral')}>
+      <div className="mk-money-k">
+        {deal ? 'Цена сделки' : 'Ваша цена'}
+        {deal && <span className="mk-lockchip"><PhIcon name="lock" size={10} />зафиксирована</span>}
+      </div>
+      <div className="mk-money-v mk-mono">{fmtMoney(p)}{NBSP}₸/кг</div>
+      <div className="mk-money-s">≈ {fmtMoney(batchSum(batch))}{NBSP}₸ за партию</div>
+    </div>
+  )
+}
+
+function BuyerCard({ batch }: { batch: Batch }) {
+  const name = strField(batch, 'buyer')
+  const phone = strField(batch, 'buyerPhone')
+  if (!name) return null
+  return (
+    <div className="mk-buyer">
+      <div className="mk-buyer-k">Покупатель</div>
+      <div className="mk-buyer-n">{name}</div>
+      {phone && <div className="mk-buyer-m mk-mono">{phone}</div>}
+    </div>
+  )
+}
+
+// Слайс 9 — прогресс частичной продажи + покупатели по кускам.
 function SplitPanel({ batch }: { batch: Batch }) {
   const allocs = Array.isArray(batch.allocations) ? batch.allocations : []
   const total = typeof batch.heads === 'number' ? batch.heads : 0
@@ -215,35 +260,25 @@ function SplitPanel({ batch }: { batch: Batch }) {
     ? batch.remainingHeads
     : Math.max(total - matched, 0)
   if (allocs.length === 0 && matched === 0) return null
-
   const pct = total > 0 ? Math.min(Math.round((matched / total) * 100), 100) : 0
-  // Остаток снят: батч ушёл из matchable-набора (matched/confirmed), но продан не весь.
-  // В обычном потоке matched достигается только при matched==total, поэтому расхождение = снятый остаток.
   const withdrawn = remaining > 0 && (batch.state === 'matched' || batch.state === 'confirmed')
-
   return (
-    <div className="bat-split" style={{ padding: '0 16px 8px' }}>
-      <div className="bat-split-head" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span className="bat-kv-k">Продано {matched} из {total} гол.</span>
-        {remaining > 0 && (
-          <span className="bat-kv-v">{withdrawn ? `остаток снят (${remaining})` : `на рынке ещё ${remaining}`}</span>
-        )}
+    <div className="mk-headsum">
+      <div className="mk-headsum-top">
+        <span>Продано {matched} из {total} гол.</span>
+        {remaining > 0 && <span className="mk-mono">{withdrawn ? `остаток снят (${remaining})` : `на рынке ещё ${remaining}`}</span>}
       </div>
-      <div className="bat-split-bar" style={{ height: 6, borderRadius: 3, background: 'rgba(0,0,0,0.08)', overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: 'var(--green, #2e9c5a)' }} />
-      </div>
+      <div className="mk-headbar"><i style={{ width: `${pct}%` }} /></div>
       {allocs.length > 0 && (
         <div style={{ marginTop: 10 }}>
           {allocs.map((a, i) => (
-            <div className="bat-kv-row" key={i}>
-              <span className="bat-kv-k">
+            <div className="mk-acc-row" key={i}>
+              <span className="mk-acc-k">
                 {a.heads} гол. · {fmtMoney(a.price)}{NBSP}₸/кг
                 {chunkStatusLabel(a.status) ? ` · ${chunkStatusLabel(a.status)}` : ''}
               </span>
-              <span className="bat-kv-v">
-                {a.buyer
-                  ? `${a.buyer}${a.buyerPhone ? ` · ${a.buyerPhone}` : ''}`
-                  : 'Покупатель · скрыт до закрытия сделки'}
+              <span className="mk-acc-v">
+                {a.buyer ? `${a.buyer}${a.buyerPhone ? ` · ${a.buyerPhone}` : ''}` : 'скрыт до закрытия сделки'}
               </span>
             </div>
           ))}
@@ -253,250 +288,318 @@ function SplitPanel({ batch }: { batch: Batch }) {
   )
 }
 
-// ── Зона 3: действия по состоянию ───────────────────────────────────────────
-function Actions({ batch, onPatch, onNew, onReview, onTuran, toast, openSheet }: {
-  batch: Batch
-  onPatch: (p: Partial<Batch>) => void
-  onNew: () => void
-  onReview: () => void
-  onTuran: () => void
-  toast: (t: string) => void
-  openSheet: (s: LocalSheet) => void
+// ── DecisionActions (state=decision) — .mk-rec + .dec-act. Логика/prot сохранены ──
+function DecisionActions({ batch, onPatch, toast }: {
+  batch: Batch; onPatch: (p: Partial<Batch>) => void; toast: (t: string) => void
 }) {
-  const s = batch.state
-  switch (s) {
-    case 'draft':
-      return (
-        <>
-          <Cta onClick={() => toast('Заполнение черновика откроется в следующем обновлении')}>Продолжить заполнение</Cta>
-          <Cta variant="danger" onClick={() => { onPatch({ state: 'cancelled' }); toast('Черновик удалён') }}>Удалить черновик</Cta>
-        </>
-      )
-    case 'scheduled':
-      return (
-        <>
-          <Cta variant="ghost" onClick={() => toast('Редактирование откроется в следующем обновлении')}>Изменить партию</Cta>
-          <Cta variant="danger" onClick={() => openSheet('withdraw')}>Снять с продажи</Cta>
-        </>
-      )
-    case 'published':
-      return (
-        <>
-          <Cta variant="ghost" onClick={() => openSheet('price')}>Изменить цену</Cta>
-          <Cta variant="danger" onClick={() => openSheet('withdraw')}>Снять с продажи</Cta>
-        </>
-      )
-    case 'offering':
-      return <Cta variant="danger" onClick={() => openSheet('withdraw')}>Снять с продажи</Cta>
-    case 'partial': {
-      // Часть партии уже продана (matched/подтверждённые куски). Снятие идёт через
-      // rpc_self_withdraw_batch (Слайс 9 S1b): остаток — безплатно, matched-куски —
-      // за штраф, подтверждённые — нельзя. Сценарии выбираются в WithdrawSheet.
-      // Слайс 9 S3: куски со статусом confirmed (их пул заполнился) можно ОТГРУЗИТЬ,
-      // не дожидаясь распродажи остатка — по-кусковая отгрузка (rpc_self_dispatch_ready).
-      const allocs = Array.isArray(batch.allocations) ? batch.allocations : []
-      const readyHeads = allocs.filter((a) => a.status === 'confirmed').reduce((s, a) => s + a.heads, 0)
-      return (
-        <>
-          <div className="bat-warn-note">Часть партии уже продана. Остаток продолжает продаваться автоматически.</div>
-          {readyHeads > 0 && (
-            <Cta variant="primary-green" onClick={() => openSheet('dispatch')}>
-              Отгрузить готовое ({readyHeads} гол.)
-            </Cta>
-          )}
-          <Cta variant="danger" onClick={() => openSheet('withdraw')}>Снять с продажи</Cta>
-        </>
-      )
-    }
-    case 'decision':
-      return (
-        <>
-          <DecisionActions batch={batch} onPatch={onPatch} toast={toast} />
-          <Cta variant="danger" onClick={() => openSheet('withdraw')}>Снять с продажи</Cta>
-        </>
-      )
-    case 'matched':
-      return (
-        <>
-          <div className="bat-warn-note">Покупатель уже найден. Снятие может привести к штрафу.</div>
-          <Cta variant="danger" onClick={() => openSheet('withdraw')}>Снять с продажи</Cta>
-        </>
-      )
-    case 'confirmed':
-      return (
-        <>
-          <Cta variant="primary-green" onClick={() => openSheet('dispatch')}>Партия отгружена</Cta>
-          <Cta variant="danger" onClick={onTuran}>Нужно отменить? Обратитесь в TURAN</Cta>
-        </>
-      )
-    case 'dispatched':
-      return <Cta variant="danger" onClick={onTuran}>Возникла проблема? Обратитесь в TURAN</Cta>
-    case 'delivered':
-      return batch.review ? null : <Cta onClick={onReview}>Оставить отзыв</Cta>
-    case 'cancelled':
-      return <Cta variant="ghost" onClick={onNew}>Создать похожую партию</Cta>
-    default:
-      return null
+  const [customOn, setCustomOn] = useState(false)
+  const [custom, setCustom] = useState('')
+  const prot = protPrice(batch)
+  const cur = batch.price ?? 0
+  const lowered = cur - 100
+  const lowerBlocked = prot != null && lowered < prot
+  const applyPrice = (newPrice: number) => {
+    onPatch({ state: 'offering', price: newPrice, deadlineLabel: 'завтра, 14:30' })
+    toast('Предложение отправлено покупателям по новой цене')
   }
+  const customNum = parseInt(custom, 10)
+  const customValid = !Number.isNaN(customNum) && customNum > 0 && (prot == null || customNum >= prot)
+  const recPrice = lowerBlocked ? prot! : lowered
+
+  if (customOn) {
+    return (
+      <div className="dec-row"><div className="dec-row-body">
+        <label className="mk-field">
+          <span className="mk-lab">Своя цена, ₸/кг</span>
+          <input className="mk-input mk-mono price" inputMode="numeric" value={custom} autoFocus
+            onChange={(e) => setCustom(e.target.value.replace(/\D/g, '').slice(0, 5))} />
+        </label>
+        {prot != null && (
+          <div className="mk-hint">Защитная цена ассоциации — {fmtMoney(prot)}{NBSP}₸/кг. Ниже назначить нельзя.</div>
+        )}
+        <div className="dec-row-actions stack">
+          <button className="dec-act primary" disabled={!customValid} onClick={() => customValid && applyPrice(customNum)}>
+            Предложить по {custom ? fmtMoney(customNum) : '—'}{NBSP}₸/кг
+          </button>
+          <button className="dec-act link" onClick={() => { setCustomOn(false); setCustom('') }}>Отмена</button>
+        </div>
+      </div></div>
+    )
+  }
+  return (
+    <div className="dec-row"><div className="dec-row-body">
+      <div className="mk-rec">
+        <div className="mk-rec-k">Рекомендуем</div>
+        <div className="mk-rec-v mk-mono">{fmtMoney(recPrice)}{NBSP}₸/кг</div>
+        <div className="mk-rec-s">
+          было <span className="mk-mono">{fmtMoney(cur)}{NBSP}₸/кг</span>
+          {!lowerBlocked && <> · ≈ <span className="mk-mono">{fmtMoney(lowered * (batch.heads ?? 0) * (batch.avgWeight ?? 0))}{NBSP}₸</span> за партию</>}
+        </div>
+      </div>
+      <div className="dec-row-actions stack">
+        {!lowerBlocked && (
+          <button className="dec-act primary" onClick={() => applyPrice(lowered)}>Снизить и предложить снова</button>
+        )}
+        <button className="dec-act alt" onClick={() => setCustomOn(true)}>Назначить свою цену</button>
+        <button className="dec-act link" onClick={() => toast('Партия остаётся в продаже. TURAN оповестит, когда появится подходящий покупатель')}>
+          Оставить цену и ждать
+        </button>
+      </div>
+    </div></div>
+  )
 }
 
-// ── Зона 4: данные + история + отзыв ────────────────────────────────────────
-function QuietZone({ batch }: { batch: Batch }) {
-  const [showDetails, setShowDetails] = useState(false)
-  const [showAllHist, setShowAllHist] = useState(false)
-  const history = batch.history ?? []
-  const shownHist = showAllHist ? history : history.slice(0, 2)
-  const grade = gradeLabel(batch)
-  const details: [string, string | number | undefined][] = [
-    ['Сорт', grade ?? undefined],
-    ['Порода', batch.breed],
-    ['Средний вес', batch.avgWeight != null ? `${batch.avgWeight} кг` : undefined],
-    ['Всего голов', batch.heads],
-    ['Упитанность', batch.fatness],
-    ['Возраст', batch.age != null ? `${batch.age} мес.` : undefined],
-    ['Район', batch.district],
-    ['Окно готовности', strField(batch, 'windowLabel')],
-  ]
-
+// ── Аккордеон (порт market.jsx AccItem) ─────────────────────────────────────
+const chevronStyle = (open: boolean): CSSProperties => ({
+  transform: open ? 'rotate(-90deg)' : 'rotate(90deg)', transition: 'transform 200ms var(--ease)',
+})
+function AccItem({ icon, title, defaultOpen, children }: {
+  icon: PhIconName; title: string; defaultOpen?: boolean; children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(!!defaultOpen)
   return (
-    <div className="bat-z4">
-      <div>
-        <button className="bat-details-toggle" onClick={() => setShowDetails((v) => !v)}>
-          {showDetails ? 'Скрыть детали' : 'Показать детали'}
-        </button>
-        {showDetails && (
-          <div style={{ marginTop: 8 }}>
-            {details.filter(([, v]) => v != null && v !== '').map(([k, v]) => (
-              <div className="bat-kv-row" key={k}>
-                <span className="bat-kv-k">{k}</span>
-                <span className="bat-kv-v">{v}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {history.length > 0 && (
-        <div>
-          {shownHist.map((h, i) => (
-            <div className="bat-hist-item" key={i}>
-              <span className="bat-hist-t">{h.t}</span>
-              <span className="bat-hist-d">{h.d}</span>
-            </div>
-          ))}
-          {history.length > 2 && (
-            <button className="bat-show-all" onClick={() => setShowAllHist((v) => !v)}>
-              {showAllHist ? 'Свернуть' : 'Показать всё'}
-            </button>
-          )}
-        </div>
-      )}
-
-      {batch.state === 'delivered' && (
-        <div className="bat-next">
-          {batch.review ? 'Ваш отзыв сохранён' : 'Оцените покупателя — это помогает другим фермерам'}
-        </div>
-      )}
+    <div className={'mk-acc-item' + (open ? ' open' : '')}>
+      <button className="mk-acc-head" onClick={() => setOpen((o) => !o)}>
+        <span className="mk-acc-ic"><PhIcon name={icon} size={16} /></span>
+        <span className="mk-acc-t">{title}</span>
+        <span className="mk-acc-chev"><PhIcon name="chevronRight" size={15} style={chevronStyle(open)} /></span>
+      </button>
+      <div className="mk-acc-body"><div className="mk-acc-inner">{children}</div></div>
     </div>
   )
 }
 
-export function BatchScreen({ batch, account, onBack, onPatch, onNew, onReview, onTuran, toast }: Props) {
+function HistoryTimeline({ items }: { items: { t: string; d: string }[] }) {
+  const [open, setOpen] = useState(false)
+  const collapsed = !open && items.length > 5
+  const shown = collapsed ? items.slice(-4) : items
+  const last = items[items.length - 1]
+  return (
+    <div className="mk-olist">
+      {collapsed && <button className="mk-olist-more" onClick={() => setOpen(true)}>Показать всю историю · {items.length}</button>}
+      {shown.map((h, i) => {
+        const now = h === last
+        return (
+          <div className={'mk-oi' + (now ? ' now' : ' done')} key={i}>
+            <span className="mk-oi-bul">{!now && <PhIcon name="check" size={11} color="var(--cta-fg)" />}</span>
+            <div className="mk-oi-bd"><div className="mk-oi-t">{h.t}</div><div className="mk-oi-m mk-mono">{h.d}</div></div>
+          </div>
+        )
+      })}
+      {open && items.length > 5 && <button className="mk-olist-more" onClick={() => setOpen(false)}>Свернуть</button>}
+    </div>
+  )
+}
+
+// ── Kebab-меню вторичных действий (порт market.jsx ActionSheet) ─────────────
+interface MenuAction { t: string; fn: () => void; icon?: PhIconName; danger?: boolean; help?: boolean }
+function ActionMenu({ open, onClose, items }: { open: boolean; onClose: () => void; items: MenuAction[] }) {
+  return (
+    <Sheet open={open} onClose={onClose}>
+      <div className="sh-t">Действия с партией</div>
+      <div className="mk-menu">
+        {items.map((a) => (
+          <button key={a.t} className={'mk-menu-item' + (a.danger ? ' danger' : a.help ? ' help' : '')}
+            onClick={() => { onClose(); a.fn() }}>
+            {a.icon && <span className="mk-menu-ic"><PhIcon name={a.icon} size={17} /></span>}
+            <span className="mk-menu-t">{a.t}</span>
+          </button>
+        ))}
+      </div>
+    </Sheet>
+  )
+}
+
+type LocalSheet = null | 'withdraw' | 'dispatch' | 'price'
+
+export function BatchScreen({ batch, account, onBack, backLabel = 'Мои партии', onPatch, onNew, onReview, onTuran, toast }: Props) {
   const [sheet, setSheet] = useState<LocalSheet>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
   const host = useHost()   // S2.1: тактильный отклик на отгрузке (web no-op)
-  const def = STATUS[batch.state]
+  const st = batch.state
+  const grade = gradeLabel(batch)
 
   const downloadDoc = () => {
     const ok = printDealDoc(buildFarmerDealDoc(batch, account))
     if (!ok) toast('Разрешите всплывающие окна, чтобы скачать документ')
   }
 
-  const nextText = batch.state === 'offering'
-    ? (strField(batch, 'deadlineLabel') ? `Ответ до ${strField(batch, 'deadlineLabel')}` : 'Ждём ответа')
-    : (def?.next ?? '')
+  // Композиция действий по состоянию (порт market.jsx BatchDetail: caption/primary/menu).
+  let caption: string | null = null
+  let primary: { t: string; fn: () => void; green?: boolean } | null = null
+  const menu: MenuAction[] = []
+  if (st === 'draft') {
+    caption = 'Продолжите заполнение, чтобы выставить партию на продажу.'
+    primary = { t: 'Продолжить заполнение', fn: () => toast('Заполнение черновика откроется в следующем обновлении') }
+    menu.push({ t: 'Удалить черновик', icon: 'trash', danger: true, fn: () => { onPatch({ state: 'cancelled' }); toast('Черновик удалён') } })
+  } else if (st === 'scheduled') {
+    caption = 'Изменить данные можно до выхода в продажу.'
+    menu.push({ t: 'Изменить партию', icon: 'pencil', fn: () => toast('Редактирование откроется в следующем обновлении') })
+    menu.push({ t: 'Снять с продажи', icon: 'ban', danger: true, fn: () => setSheet('withdraw') })
+  } else if (st === 'published') {
+    menu.push({ t: 'Изменить цену', icon: 'tag', fn: () => setSheet('price') })
+    menu.push({ t: 'Изменить партию', icon: 'pencil', fn: () => toast('Редактирование откроется в следующем обновлении') })
+    menu.push({ t: 'Снять с продажи', icon: 'ban', danger: true, fn: () => setSheet('withdraw') })
+  } else if (st === 'offering') {
+    menu.push({ t: 'Снять с продажи', icon: 'ban', danger: true, fn: () => setSheet('withdraw') })
+  } else if (st === 'partial') {
+    caption = 'Часть партии уже продана. Остаток продолжает продаваться автоматически.'
+    const allocs = Array.isArray(batch.allocations) ? batch.allocations : []
+    const readyHeads = allocs.filter((a) => a.status === 'confirmed').reduce((s, a) => s + a.heads, 0)
+    if (readyHeads > 0) primary = { t: `Отгрузить готовое (${readyHeads} гол.)`, green: true, fn: () => setSheet('dispatch') }
+    menu.push({ t: 'Снять с продажи', icon: 'ban', danger: true, fn: () => setSheet('withdraw') })
+  } else if (st === 'matched') {
+    caption = 'Покупатель уже найден. Снятие может привести к штрафу.'
+    menu.push({ t: 'Снять с продажи', icon: 'ban', danger: true, fn: () => setSheet('withdraw') })
+  } else if (st === 'confirmed') {
+    caption = 'Когда отгрузите партию — отметьте здесь.'
+    primary = { t: 'Партия отгружена', green: true, fn: () => setSheet('dispatch') }
+    menu.push({ t: 'Нужно отменить сделку? Обратитесь в TURAN', icon: 'chat', help: true, fn: onTuran })
+  } else if (st === 'dispatched') {
+    caption = `Отгружена${strField(batch, 'dispatchedLabel') ? ' ' + strField(batch, 'dispatchedLabel') : ''}. Покупатель подтвердит приёмку — обычно в день доставки.`
+    menu.push({ t: 'Возникла проблема? Обратитесь в TURAN', icon: 'chat', help: true, fn: onTuran })
+  } else if (st === 'delivered') {
+    if (!batch.review) primary = { t: 'Оставить отзыв', fn: onReview }
+  } else if (st === 'cancelled') {
+    primary = { t: 'Создать похожую партию', fn: onNew }
+  }
 
+  const showStage = st !== 'cancelled' && st !== 'draft'
   const hasPrice = batch.price != null || batch.dealPrice != null
-  const bigPrice = batch.dealPrice ?? batch.price ?? 0
+  const moneyLabel = batch.dealPrice != null ? 'ЦЕНА СДЕЛКИ' : 'ВАША ЦЕНА'
+  const showBuyer = ['confirmed', 'dispatched', 'delivered'].includes(st) && !!strField(batch, 'buyer')
+  const showSplit = st === 'partial'
+    || (Array.isArray(batch.allocations) && batch.allocations.length > 1)
+    || ((st === 'matched' || st === 'confirmed') && typeof batch.matchedHeads === 'number'
+        && typeof batch.heads === 'number' && batch.matchedHeads < batch.heads)
+
+  const details: [string, string | number | undefined][] = [
+    ['Сорт', grade ?? undefined],
+    ['Порода', batch.breed],
+    ['Возраст', batch.age != null ? `${batch.age} мес` : undefined],
+    ['Упитанность', batch.fatness],
+    ['Средний вес', batch.avgWeight != null ? `${batch.avgWeight} кг` : undefined],
+    ['Всего голов', batch.heads],
+    ['Район', batch.district],
+    ['Окно готовности', strField(batch, 'windowLabel')],
+  ]
+  const detailRows = details.filter(([, v]) => v != null && v !== '')
+  const history = batch.history ?? []
 
   return (
-    <IonShellFrame noTabs label={`Партия · ${batch.state}`}>
-      <div className="bat-wrap">
-        <div className="bat-back-row">
-          <button className="bat-back" onClick={onBack} aria-label="Назад">←</button>
-        </div>
+    <IonShellFrame noTabs label={`Партия · ${st}`}>
+      <div className="mk">
+        <SubHead
+          onBack={onBack}
+          backLabel={backLabel}
+          right={menu.length > 0 ? (
+            <button className="mk-kebab" aria-label="Действия с партией" onClick={() => setMenuOpen(true)}><PhIcon name="more" size={20} /></button>
+          ) : undefined}
+        />
 
-        {/* Зона 1 — Герой */}
-        <BatchPath state={batch.state} />
-        <div className="bat-z1">
-          <div className="bat-phrase">{def?.phrase ?? batch.state}</div>
-          <div className="bat-next">{nextText}</div>
-        </div>
+        <header className="mk-bz-head">
+          <h1 className="mk-bz-title">{catName(batch)}</h1>
+          <div className="mk-bz-meta">
+            <span className="mk-bz-meta__item"><b>{batch.heads}</b><span className="mk-bz-meta__unit">голов</span></span>
+            <span className="mk-bz-meta__sep" aria-hidden="true" />
+            <span className="mk-bz-meta__item"><span className="mk-bz-meta__pre">ср.</span><b>{batch.avgWeight} кг</b></span>
+            {batch.district && <><span className="mk-bz-meta__sep" aria-hidden="true" /><span className="mk-bz-meta__place">{batch.district}</span></>}
+          </div>
+        </header>
 
-        {/* Зона 2 — Число */}
-        {hasPrice && (
-          <div className="bat-z2">
-            <div className="bat-price-label">{batch.dealPrice ? 'Цена сделки' : 'Ваша цена'}</div>
-            <div className="bat-price-big">{fmtMoney(bigPrice)} <span style={{ fontSize: 14 }}>₸/кг</span></div>
-            <div className="bat-price-sum">
-              ≈ {batch.heads} × {batch.avgWeight} кг = {fmtMoney(batchSum(batch))}{NBSP}₸
+        <div className="home-stack mk-bz-stack">
+          {st === 'cancelled' && (
+            <div className="mk-hero-cancel">
+              <div className="mk-phrase"><span className="mk-phrase-dot" style={{ background: 'var(--fg3)' }} /><span>{STATUS[st]?.phrase ?? 'Партия снята'}</span></div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Покупатель — раскрывается фермеру при confirmed (D-M6-5) */}
-        {strField(batch, 'buyer') && (
-          <div className="bat-kv-row" style={{ padding: '0 16px 8px' }}>
-            <span className="bat-kv-k">Покупатель</span>
-            <span className="bat-kv-v">
-              {strField(batch, 'buyer')}
-              {strField(batch, 'buyerPhone') ? ` · ${strField(batch, 'buyerPhone')}` : ''}
-            </span>
-          </div>
-        )}
+          {showStage && (
+            <div className="blk mk-dec-blk"><BatchPath batch={batch} /></div>
+          )}
 
-        {/* Слайс 9 — прогресс частичной продажи + покупатели по кускам. Показываем при
-            partial, при нескольких кусках, либо когда остаток снят (matched/confirmed, но
-            продан не весь) — иначе дублирует блок «Покупатель». */}
-        {(batch.state === 'partial'
-          || (Array.isArray(batch.allocations) && batch.allocations.length > 1)
-          || ((batch.state === 'matched' || batch.state === 'confirmed')
-              && typeof batch.matchedHeads === 'number' && typeof batch.heads === 'number'
-              && batch.matchedHeads < batch.heads)) && (
-          <SplitPanel batch={batch} />
-        )}
+          {st !== 'draft' && st !== 'decision' && hasPrice && (
+            <div className="blk">
+              <TierH label={moneyLabel} />
+              <ZoneMoney batch={batch} />
+            </div>
+          )}
 
-        {/* Слайс 9 (S4) — документ сделки (печать → PDF). Доступен, когда сделка состоялась. */}
-        {hasDeal(batch) && (
-          <div style={{ padding: '0 16px 8px' }}>
-            <Cta variant="ghost" onClick={downloadDoc}>Скачать документ сделки</Cta>
-          </div>
-        )}
+          {showBuyer && (
+            <div className="blk">
+              <TierH label="ПОКУПАТЕЛЬ" />
+              <BuyerCard batch={batch} />
+            </div>
+          )}
 
-        {/* Зона 3 — Действие */}
-        <div className="bat-z3">
-          <Actions
-            batch={batch}
-            onPatch={onPatch}
-            onNew={onNew}
-            onReview={onReview}
-            onTuran={onTuran}
-            toast={toast}
-            openSheet={setSheet}
-          />
+          {showSplit && (
+            <div className="blk">
+              <TierH label="ПРОДАЖА ЧАСТЯМИ" />
+              <SplitPanel batch={batch} />
+            </div>
+          )}
+
+          {(caption || primary) && (
+            <div className="mk-actions">
+              {caption && <div className="mk-caption">{caption}</div>}
+              {primary && (
+                <button className={'mk-cta ' + (primary.green ? 'green' : st === 'draft' || st === 'cancelled' ? 'primary' : 'green')} onClick={primary.fn}>
+                  {primary.t}
+                </button>
+              )}
+            </div>
+          )}
+
+          {st === 'decision' && (
+            <div className="blk mk-dec-blk"><DecisionActions batch={batch} onPatch={onPatch} toast={toast} /></div>
+          )}
+
+          {hasDeal(batch) && (
+            <div className="blk">
+              <button className="mk-cta ghost" onClick={downloadDoc}>Скачать документ сделки</button>
+            </div>
+          )}
+
+          {batch.state === 'delivered' && batch.review != null && (
+            <div className="blk">
+              <TierH label="ОТЗЫВ" />
+              <div className="mk-infonote"><div className="mk-infonote-b">Ваш отзыв сохранён. Спасибо — это помогает другим фермерам.</div></div>
+            </div>
+          )}
+
+          {st !== 'draft' && detailRows.length > 0 && (
+            <div className="blk">
+              <TierH label="ДАННЫЕ ПАРТИИ" />
+              <div className="mk-acc">
+                <AccItem icon="list" title="Данные партии" defaultOpen>
+                  {detailRows.map(([k, v]) => (
+                    <div className="mk-acc-row" key={k}><span className="mk-acc-k">{k}</span><span className="mk-acc-v">{v}</span></div>
+                  ))}
+                </AccItem>
+              </div>
+            </div>
+          )}
+
+          {history.length > 0 && (
+            <div className="blk">
+              <TierH label="ИСТОРИЯ" />
+              <div className="mk-acc">
+                <AccItem icon="history" title="История партии" defaultOpen={st === 'draft'}>
+                  <HistoryTimeline items={history} />
+                </AccItem>
+              </div>
+            </div>
+          )}
         </div>
-
-        {/* Зона 4 — Тихая */}
-        <QuietZone batch={batch} />
       </div>
 
-      {/* Шторки — вне bat-wrap чтобы перекрывали весь ShellFrame */}
+      {/* kebab-меню + шторки — вне .mk чтобы перекрывали весь экран */}
+      <ActionMenu open={menuOpen} onClose={() => setMenuOpen(false)} items={menu} />
       <WithdrawSheet
         batch={batch}
         open={sheet === 'withdraw'}
         onClose={() => setSheet((s) => (s === 'withdraw' ? null : s))}
         onConfirm={(includeMatched) => {
-          // partial/matched → rpc_self_withdraw_batch (сигнал _withdraw); остальные
-          // состояния тоже безопасно проходят через тот же RPC (matched_heads=0 → cancelled).
           const hasSold = (typeof batch.matchedHeads === 'number' ? batch.matchedHeads : 0) > 0
           onPatch({ _withdraw: includeMatched ? 'matched' : 'remainder' })
           toast(
@@ -512,9 +615,6 @@ export function BatchScreen({ batch, account, onBack, onPatch, onNew, onReview, 
         open={sheet === 'dispatch'}
         onClose={() => setSheet((s) => (s === 'dispatch' ? null : s))}
         onConfirm={() => {
-          // Слайс 9 S3: по-кусковая отгрузка через rpc_self_dispatch_ready (сигнал
-          // _dispatchReady). Отгружает все готовые (confirmed) куски; для цельного
-          // confirmed-батча без кусков — легаси-фолбэк (confirmed→dispatched).
           onPatch({ _dispatchReady: true, dispatchedLabel: 'сегодня' })
           host.haptics('medium')   // S2.1: отгрузка — ключевое действие
           toast('Покупатель уведомлён об отгрузке')

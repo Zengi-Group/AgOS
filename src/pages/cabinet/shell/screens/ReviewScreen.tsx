@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { Batch } from '../types'
 import { Cta } from '../components/Cta'
 import { IonShellFrame } from '../components/IonShellFrame'
+import { SubHead } from '../components/SubHead'
 import { catLabel } from '../data/status'
 
 interface Props {
@@ -44,11 +45,8 @@ export function ReviewScreen({ batch, onBack, onPatch, toast }: Props) {
 
   return (
     <IonShellFrame noTabs label="Отзыв">
+      <SubHead onBack={onBack} backLabel="Партия" />
       <div className="rev-wrap">
-        <div className="bat-back-row" style={{ padding: 0 }}>
-        <button className="bat-back" onClick={onBack} aria-label="Назад">←</button>
-      </div>
-
       <div>
         <div className="rev-head">Покупатель принял вашу партию</div>
         <div className="rev-sub">{catLabel(batch)} · {batch.heads} гол.</div>
