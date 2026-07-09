@@ -129,7 +129,7 @@ export function TopBar({
         >
           {label}
         </div>
-        {hasProgress && showCounter && !hideBack && (
+        {hasProgress && showCounter && (
           <div style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: T.fg3, fontFamily: T.mono, letterSpacing: '.02em' }}>
             {idx! + 1}/{total}
           </div>
