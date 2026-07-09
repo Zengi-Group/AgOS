@@ -1,12 +1,15 @@
-// AgOS · TSP-1 · Шаг 3 · Категория (p1/wizard.jsx WizStep3) — загрузка → unknown → ok.
+// AgOS · TSP-1 · Шаг 3 · Категория — реcкин под прототип (market-wizard.jsx WizStep3):
+// загрузка (.mk-loader) → unknown (.mk-catcard) → ok (.mk-catcard + карточка сорта МПК).
+// Определение категории — мок-таймаут 1400мс (не RPC). Сохранены useGradeFormula,
+// deriveCategory/deriveMpkGrade и карточка сорта для покупателя (богаче прототипа).
 
 import { useEffect } from 'react'
 import type { WizState } from '../types/batch'
 import { CATS } from '../data/tsp-dicts'
 import { deriveCategory, deriveMpkGrade, mpkSortLabel } from '../data/tsp-utils'
 import { useGradeFormula } from '@/hooks/useGradeFormula'
-import { WizShell } from './WizShell'
-import { Cta } from '../../components/Cta'
+import { WizShell, DraftNote } from './WizShell'
+import { MkCta } from '../components/MkCta'
 
 interface Props {
   w: WizState
@@ -39,8 +42,8 @@ export function WizStep3Category({ w, sw, onNext, onBack, onExit, onTuran }: Pro
   if (w.catLoading || (!w.catKey && !w.catUnknown)) {
     return (
       <WizShell step={3} onBack={onBack} onExit={onExit} title="Категория">
-        <div className="cat-loader">
-          <div className="spin" />
+        <div className="mk-loader">
+          <div className="mk-spin" />
           <div>Определяем категорию по вашим данным…</div>
         </div>
       </WizShell>
@@ -50,17 +53,16 @@ export function WizStep3Category({ w, sw, onNext, onBack, onExit, onTuran }: Pro
   if (w.catUnknown) {
     return (
       <WizShell step={3} onBack={onBack} onExit={onExit} title="Категория">
-        <div className="cat-card unknown">
-          <div className="cc-h">Не получилось определить категорию</div>
-          <div className="cc-b">По указанным данным партия не подходит ни под одну категорию справочника. Такое бывает с редкими породами и нестандартными партиями.</div>
+        <div className="mk-catcard unknown">
+          <div className="mk-cc-h">Не получилось определить категорию</div>
+          <div className="mk-cc-b">По указанным данным партия не подходит ни под одну категорию справочника. Такое бывает с редкими породами и нестандартными партиями.</div>
         </div>
-        <div className="sep" />
-        <div className="cc-what mono">ЧТО ДЕЛАТЬ</div>
-        <div className="cc-b" style={{ margin: '4px 2px 8px' }}>Проверьте вес и возраст — возможно, опечатка.</div>
-        <Cta variant="ghost" onClick={() => { sw({ catKey: null, catUnknown: false }); onBack() }}>Вернуться к данным</Cta>
-        <div className="cc-b" style={{ margin: '10px 2px 8px' }}>Если данные верны — напишите в TURAN, мы добавим категорию.</div>
-        <Cta variant="ghost" onClick={onTuran}>Написать в TURAN</Cta>
-        <div className="footnote mono">черновик сохранён · публикация недоступна</div>
+        <div className="mk-sec-label" style={{ marginTop: 16 }}>Что делать</div>
+        <p className="mk-cc-note">Проверьте вес и возраст — возможно, опечатка.</p>
+        <MkCta variant="ghost" onClick={() => { sw({ catKey: null, catUnknown: false }); onBack() }}>Вернуться к данным</MkCta>
+        <p className="mk-cc-note" style={{ marginTop: 14 }}>Если данные верны — напишите в TURAN, мы добавим категорию.</p>
+        <MkCta variant="ghost" onClick={onTuran}>Написать в TURAN</MkCta>
+        <div className="mk-note mk-mono" style={{ marginTop: 10 }}>черновик сохранён · публикация недоступна</div>
       </WizShell>
     )
   }
@@ -69,17 +71,17 @@ export function WizStep3Category({ w, sw, onNext, onBack, onExit, onTuran }: Pro
   const mpkSort = deriveMpkGrade(w)
   return (
     <WizShell step={3} onBack={onBack} onExit={onExit} title="Категория"
-      cta="Далее →" onCta={onNext}>
-      <div className="cat-card ok">
-        <div className="cc-k mono">КАТЕГОРИЯ</div>
-        <div className="cc-name">{cat.name}</div>
-        <div className="cc-b">Определяется автоматически по породе, весу, возрасту и упитанности. Категорию нельзя выбрать вручную — так все партии оцениваются одинаково.</div>
+      footer={<><MkCta onClick={onNext}>Далее</MkCta><DraftNote /></>}>
+      <div className="mk-catcard">
+        <div className="mk-cc-k">КАТЕГОРИЯ</div>
+        <div className="mk-cc-name">{cat.name}</div>
+        <div className="mk-cc-b">Определяется автоматически по породе, весу, возрасту и упитанности. Категорию нельзя выбрать вручную — так все партии оцениваются одинаково.</div>
       </div>
       {mpkSort && (
-        <div className="cat-card ok" style={{ marginTop: 10 }}>
-          <div className="cc-k mono">СОРТ ДЛЯ ПОКУПАТЕЛЯ</div>
-          <div className="cc-name">{mpkSortLabel(mpkSort)}</div>
-          <div className="cc-b">По упитанности «{w.fatness}» мясокомбинаты видят вашу партию как сорт «{mpkSortLabel(mpkSort)}» и могут закупить именно эту категорию.</div>
+        <div className="mk-catcard" style={{ marginTop: 10 }}>
+          <div className="mk-cc-k">СОРТ ДЛЯ ПОКУПАТЕЛЯ</div>
+          <div className="mk-cc-name">{mpkSortLabel(mpkSort)}</div>
+          <div className="mk-cc-b">По упитанности «{w.fatness}» мясокомбинаты видят вашу партию как сорт «{mpkSortLabel(mpkSort)}» и могут закупить именно эту категорию.</div>
         </div>
       )}
     </WizShell>
