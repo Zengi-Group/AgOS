@@ -103,6 +103,20 @@ export function PoolQueue() {
 
   return (
     <div className="page space-y-6">
+      {/* ARS-200: экран использует устаревшие pre-M6 RPC и старую D40-семантику раскрытия
+          контактов (на executing вместо confirmed, D-M6-5/12). Управление ТСП перенесено
+          в «Торговую площадку» (/admin/marketplace, M6-канон). Экран сохранён (HS-2). */}
+      <div className="rounded-[10px] border border-[var(--amber)] bg-[var(--amber-bg,transparent)] p-4 text-sm">
+        <div className="font-medium">Устаревший экран</div>
+        <div className="mt-1 text-[var(--fg2)]">
+          Управление торговыми пулами и батчами перенесено в «Торговую площадку» (канон M6).
+          Этот экран работает на прежнем pre-M6 потоке и оставлен только для справки.
+        </div>
+        <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate('/admin/marketplace')}>
+          Перейти в «Торговую площадку»
+        </Button>
+      </div>
+
       <div className="flex items-center justify-between">
         <Button onClick={() => setShowCreate(true)}>
           <Plus className="mr-2 h-4 w-4" />

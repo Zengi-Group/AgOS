@@ -5189,3 +5189,956 @@ alter table public.batch_allocations add  constraint batch_allocations_status_ch
 -- тот же паттерн) + rpc_get_pool_matches += 'myRating'. Обе стороны — без
 -- double-blind (тот же уровень простоты, что у уже существующего rpc_submit_review).
 -- ============================================================
+
+
+-- ============================================================
+-- SECTION 11: ADMIN TSP WRITE RPCs (ARS-194 / фича: админ-управление TSP)
+-- Оператор-администратор пишет над батчем/пулом ЛЮБОЙ организации.
+-- Гейт — ТОЛЬКО public.fn_is_admin() (без p_organization_id: админ действует
+-- над чужой сущностью). Зеркалит read-паттерн rpc_admin_tsp_* (миграция
+-- 20260702220000). Аддитивно (P7): НЕ трогает org-scoped сигнатуры
+-- rpc_cancel_batch / rpc_set_batch_terms. Идемпотентно.
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- RPC-ADM-01: rpc_admin_cancel_batch (ARS-195)
+-- FSM: draft|published → cancelled (зеркало канона RPC-11). Published требует
+-- отсутствия pool_matches (сначала unmatch — см. ARS-197). Идемпотентно.
+-- Ограничение: offering НЕ отменяем здесь (остались бы висящие офферы —
+-- снятие относится к unmatch-семантике). Событие: market.batch.cancelled
+-- (actor_type=admin, is_audit=true).
+-- ------------------------------------------------------------
+drop function if exists public.rpc_admin_cancel_batch(uuid, text);
+create or replace function public.rpc_admin_cancel_batch(
+    p_batch_id  uuid,
+    p_reason    text default null
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_batch record;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = 'P0001';
+    end if;
+
+    select * into v_batch from public.batches where id = p_batch_id for update;
+    if not found then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    if v_batch.status = 'cancelled' then
+        return true;  -- idempotent
+    end if;
+
+    if v_batch.status not in ('draft', 'published') then
+        raise exception
+            'INVALID_STATUS: cannot cancel batch in status % (matched+ requires unmatch first)',
+            v_batch.status using errcode = 'P0001';
+    end if;
+
+    if v_batch.status = 'published'
+       and exists (select 1 from public.pool_matches where batch_id = p_batch_id) then
+        raise exception 'HAS_MATCHES: batch has pool matches, unmatch first'
+            using errcode = 'P0001';
+    end if;
+
+    update public.batches
+    set status          = 'cancelled',
+        cancelled_at    = now(),
+        rollback_reason = p_reason,
+        updated_at      = now()
+    where id = p_batch_id;
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.batch.cancelled', 'batches', p_batch_id, v_batch.organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object('batch_id', p_batch_id, 'reason', p_reason,
+            'previous_status', v_batch.status, 'via', 'admin'),
+        true
+    );
+
+    return true;
+end;
+$$;
+comment on function public.rpc_admin_cancel_batch(uuid, text) is
+    'ARS-195 | Admin operator cancel of ANY org batch. Gate: fn_is_admin().
+     FSM: draft|published → cancelled (mirrors RPC-11); published needs no matches.
+     Idempotent. Events: market.batch.cancelled (actor=admin). Additive (P7).';
+
+-- ------------------------------------------------------------
+-- RPC-ADM-02: rpc_admin_set_batch_terms (ARS-195)
+-- Зеркало TSP-FLOW-03 rpc_set_batch_terms, но admin-гейт и без org-фильтра.
+-- Разрешено из draft|published. Инвариант D-M6-6: ready_to >= ready_from.
+-- ------------------------------------------------------------
+drop function if exists public.rpc_admin_set_batch_terms(uuid, int, date, date);
+create or replace function public.rpc_admin_set_batch_terms(
+    p_batch_id            uuid,
+    p_farmer_price_per_kg int  default null,
+    p_ready_from          date default null,
+    p_ready_to            date default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_batch record;
+    v_price int;
+    v_from  date;
+    v_to    date;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = 'P0001';
+    end if;
+
+    select * into v_batch from public.batches where id = p_batch_id for update;
+    if not found then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    if v_batch.status not in ('draft', 'published') then
+        raise exception
+            'INVALID_STATUS: batch terms can be set only from draft|published (current %)',
+            v_batch.status using errcode = 'P0001';
+    end if;
+
+    v_price := coalesce(p_farmer_price_per_kg, v_batch.farmer_price_per_kg);
+    v_from  := coalesce(p_ready_from, v_batch.ready_from);
+    v_to    := coalesce(p_ready_to,   v_batch.ready_to);
+
+    if v_price is not null and v_price <= 0 then
+        raise exception 'INVALID_INPUT: farmer_price_per_kg must be > 0'
+            using errcode = 'P0001';
+    end if;
+    if v_from is not null and v_to is not null and v_to < v_from then
+        raise exception 'INVALID_INPUT: ready_to (%) must be >= ready_from (%)', v_to, v_from
+            using errcode = 'P0001';
+    end if;
+
+    update public.batches
+    set farmer_price_per_kg = v_price,
+        ready_from          = v_from,
+        ready_to            = v_to,
+        updated_at          = now()
+    where id = p_batch_id;
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (p_batch_id, 'terms_set',
+        jsonb_build_object('farmer_price_per_kg', v_price, 'ready_from', v_from,
+            'ready_to', v_to, 'via', 'admin'),
+        public.fn_current_user_id());
+
+    return jsonb_build_object(
+        'batch_id',            p_batch_id,
+        'farmer_price_per_kg', v_price,
+        'ready_from',          v_from,
+        'ready_to',            v_to,
+        'status',              v_batch.status
+    );
+end;
+$$;
+comment on function public.rpc_admin_set_batch_terms(uuid, int, date, date) is
+    'ARS-195 | Admin operator edit of ANY org batch terms (price + ready window).
+     Gate: fn_is_admin(). draft|published only. D-M6-6 ready_to >= ready_from.
+     Additive (P7): mirrors rpc_set_batch_terms without org-scope.';
+
+-- ------------------------------------------------------------
+-- RPC-ADM-03: rpc_admin_cancel_pool (ARS-196)
+-- Зеркало RPC-M6-13 rpc_cancel_pool, но admin-гейт и без org-фильтра.
+-- FSM pools: draft|filling → cancelled. Атомарно: снимает pending-офферы
+-- (market.offer.withdrawn reason=pool_cancelled), возвращает подобранные
+-- батчи → published (pool_line_id=NULL, deal_price=NULL), обнуляет объёмы
+-- pool_lines, помечает пул cancelled. Идемпотентно (already cancelled → 0).
+-- ------------------------------------------------------------
+drop function if exists public.rpc_admin_cancel_pool(uuid, text);
+create or replace function public.rpc_admin_cancel_pool(
+    p_pool_id   uuid,
+    p_reason    text default null
+)
+returns int
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_pool      record;
+    v_count     int := 0;
+    v_batch_id  uuid;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = 'P0001';
+    end if;
+
+    select p.* into v_pool from public.pools p where p.id = p_pool_id for update;
+    if not found then
+        raise exception 'POOL_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    if v_pool.status = 'cancelled' then
+        return 0;  -- idempotent
+    end if;
+    if v_pool.status not in ('draft', 'filling') then
+        raise exception
+            'INVALID_STATUS: admin cancel allowed only from draft|filling (current %)',
+            v_pool.status using errcode = 'P0001';
+    end if;
+
+    -- Withdraw pending offers for matched batches BEFORE resetting pool_line_id
+    -- + emit market.offer.withdrawn (reason=pool_cancelled), mirrors RPC-M6-13.
+    with w as (
+        update public.offers o
+        set status = 'withdrawn', responded_at = now()
+        from public.batches b
+        join public.pool_lines pl on pl.id = b.pool_line_id
+        where pl.pool_id = p_pool_id
+          and b.id = o.batch_id
+          and o.status = 'pending'
+        returning o.id as offer_id, o.batch_id, o.mpk_org_id
+    )
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    )
+    select 'market.offer.withdrawn', 'offers', w.offer_id, w.mpk_org_id,
+           'admin', public.fn_current_user_id(),
+           jsonb_build_object(
+               'offer_id', w.offer_id, 'batch_id', w.batch_id,
+               'mpk_org_id', w.mpk_org_id, 'reason', 'pool_cancelled', 'via', 'admin'),
+           false
+    from w;
+
+    -- Return each matched batch -> published
+    for v_batch_id in
+        select b.id
+        from public.batches b
+        join public.pool_lines pl on pl.id = b.pool_line_id
+        where pl.pool_id = p_pool_id
+          and b.status = 'matched'
+        for update
+    loop
+        update public.batches
+        set status            = 'published',
+            pool_line_id      = null,
+            deal_price_per_kg = null,
+            updated_at        = now()
+        where id = v_batch_id;
+
+        insert into public.batch_events (batch_id, event_type, metadata, created_by)
+        values (v_batch_id, 'returned_to_pool_cancelled',
+            jsonb_build_object('pool_id', p_pool_id, 'reason', p_reason, 'via', 'admin'),
+            public.fn_current_user_id());
+
+        v_count := v_count + 1;
+    end loop;
+
+    -- Reset pool_line running volumes
+    update public.pool_lines
+    set current_volume_kg = 0,
+        updated_at        = now()
+    where pool_id = p_pool_id;
+
+    -- Pool -> cancelled
+    update public.pools
+    set status        = 'cancelled',
+        matched_heads = 0,
+        cancelled_at  = now(),
+        updated_at    = now()
+    where id = p_pool_id;
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.pool.cancelled', 'pools', p_pool_id, v_pool.organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object('pool_id', p_pool_id, 'reason', p_reason,
+            'returned_batches', v_count, 'previous_status', v_pool.status, 'via', 'admin'),
+        true
+    );
+
+    return v_count;
+end;
+$$;
+comment on function public.rpc_admin_cancel_pool(uuid, text) is
+    'ARS-196 | Admin operator cancel of ANY org pool. Gate: fn_is_admin().
+     FSM: draft|filling → cancelled (mirrors RPC-M6-13). Withdraws pending offers,
+     returns matched batches → published, zeroes pool_line volumes. Idempotent
+     (already cancelled = 0). Returns count of batches returned. Additive (P7).';
+
+-- ------------------------------------------------------------
+-- RPC-ADM-04: rpc_admin_edit_pool (ARS-196)
+-- Правка окна поставки (delivery_from/delivery_to — канон D-M6-8) и цен
+-- pool_lines. NB: в схеме pools НЕТ отдельной колонки target_month — окно
+-- поставки является каноническим эквивалентом «целевого месяца» из ТЗ.
+-- Разрешено ТОЛЬКО на ранних статусах draft|filling; после filled (идут
+-- офферы/матчи) — запрещено. Валидация mpk_price >= minimum_price (строжайший
+-- пол по регионам пула + национальный NULL), как в rpc_create_pool.
+-- p_lines: jsonb-массив {pool_line_id, mpk_price_per_kg}. NULL/[] => правится
+-- только окно поставки. Admin-гейт. Событие market.pool.updated (is_audit).
+-- ------------------------------------------------------------
+drop function if exists public.rpc_admin_edit_pool(uuid, date, date, jsonb);
+create or replace function public.rpc_admin_edit_pool(
+    p_pool_id       uuid,
+    p_delivery_from date  default null,
+    p_delivery_to   date  default null,
+    p_lines         jsonb default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_pool          record;
+    v_from          date;
+    v_to            date;
+    v_line          jsonb;
+    v_line_row      record;
+    v_price         int;
+    v_category_id   uuid;
+    v_floor         int;
+    v_updated_lines int := 0;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = 'P0001';
+    end if;
+
+    select p.* into v_pool from public.pools p where p.id = p_pool_id for update;
+    if not found then
+        raise exception 'POOL_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    if v_pool.status not in ('draft', 'filling') then
+        raise exception
+            'INVALID_STATUS: pool edit allowed only from draft|filling (current %)',
+            v_pool.status using errcode = 'P0001';
+    end if;
+
+    -- Delivery window (canonical target period). Coalesce with current values.
+    v_from := coalesce(p_delivery_from, v_pool.delivery_from);
+    v_to   := coalesce(p_delivery_to,   v_pool.delivery_to);
+    if v_from is not null and v_to is not null and v_to < v_from then
+        raise exception 'INVALID_INPUT: delivery_to (%) must be >= delivery_from (%)', v_to, v_from
+            using errcode = 'P0001';
+    end if;
+
+    update public.pools
+    set delivery_from    = v_from,
+        delivery_to      = v_to,
+        filling_deadline = v_to,   -- mirrors rpc_create_pool: deadline = window end
+        updated_at       = now()
+    where id = p_pool_id;
+
+    -- Line price edits (optional). Each line must belong to this pool and
+    -- respect the minimum_price floor (hard block, mirrors rpc_create_pool).
+    if p_lines is not null and jsonb_typeof(p_lines) = 'array' then
+        for v_line in select jsonb_array_elements(p_lines) loop
+            if (v_line->>'pool_line_id') is null then
+                raise exception 'INVALID_INPUT: each line requires pool_line_id'
+                    using errcode = 'P0001';
+            end if;
+            if (v_line->>'mpk_price_per_kg') is null
+               or (v_line->>'mpk_price_per_kg')::int <= 0 then
+                raise exception 'INVALID_INPUT: each line requires mpk_price_per_kg > 0'
+                    using errcode = 'P0001';
+            end if;
+
+            select pl.* into v_line_row
+            from public.pool_lines pl
+            where pl.id = (v_line->>'pool_line_id')::uuid
+              and pl.pool_id = p_pool_id
+            for update;
+            if not found then
+                raise exception 'POOL_LINE_NOT_FOUND: line % not in pool %',
+                    v_line->>'pool_line_id', p_pool_id using errcode = 'P0001';
+            end if;
+
+            v_price := (v_line->>'mpk_price_per_kg')::int;
+
+            -- Resolve category via tsp_sku bridge, then strictest floor across
+            -- the pool's regions (national floor region_id IS NULL always eligible).
+            v_category_id := (
+                select m.category_id
+                  from public.tsp_sku_category_map m
+                 where m.tsp_sku_id = v_line_row.tsp_sku_id
+                   and m.is_active  = true
+                 limit 1
+            );
+            if v_category_id is not null then
+                select max(mp.price_per_kg) into v_floor
+                from public.minimum_prices mp
+                where mp.category_id = v_category_id
+                  and mp.is_active = true
+                  and (
+                      mp.region_id is null
+                      or mp.region_id in (
+                          select pr.region_id from public.pool_regions pr
+                          where pr.pool_id = p_pool_id
+                      )
+                  );
+                if v_floor is not null and v_price < v_floor then
+                    raise exception
+                        'PRICE_BELOW_FLOOR: line mpk_price % below strictest floor % for category %',
+                        v_price, v_floor, v_category_id using errcode = 'P0001';
+                end if;
+            end if;
+
+            update public.pool_lines
+            set mpk_price_per_kg = v_price,
+                updated_at       = now()
+            where id = v_line_row.id;
+            v_updated_lines := v_updated_lines + 1;
+        end loop;
+    end if;
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.pool.updated', 'pools', p_pool_id, v_pool.organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object('pool_id', p_pool_id, 'delivery_from', v_from,
+            'delivery_to', v_to, 'updated_lines', v_updated_lines,
+            'previous_status', v_pool.status, 'via', 'admin'),
+        true
+    );
+
+    return jsonb_build_object(
+        'pool_id',       p_pool_id,
+        'delivery_from', v_from,
+        'delivery_to',   v_to,
+        'updated_lines', v_updated_lines,
+        'status',        v_pool.status
+    );
+end;
+$$;
+comment on function public.rpc_admin_edit_pool(uuid, date, date, jsonb) is
+    'ARS-196 | Admin operator edit of ANY org pool. Gate: fn_is_admin().
+     Edits delivery window (D-M6-8, canonical equivalent of target month — pools
+     has no target_month column) + pool_lines prices. draft|filling only (forbidden
+     after filled). Enforces minimum_price floor (hard block) per rpc_create_pool.
+     Event market.pool.updated. Additive (P7).';
+
+-- ------------------------------------------------------------
+-- RPC-ADM-05: rpc_admin_match_batch_to_pool (ARS-197)
+-- Ручной оператор-matching (Ст.171: координация, не принуждение). M6-путь —
+-- НЕ pre-M6 pool_matches. Предикат совпадения зеркалит rpc_retry_match_pool /
+-- rpc_accept_offer: pl.mpk_price >= batch.farmer_price, sku-совпадение, оверлап
+-- окна поставки (D-M6-8) и региона (D-M6-4), вместимость линии
+-- (current + volume <= max). Прямой матч без Offer: батч → matched,
+-- pool_line_id = лучшая линия (max mpk_price), deal_price = pl.mpk_price
+-- (D-M6-DEALPRICE). Контакты НЕ раскрываются (reveal только на confirmed,
+-- D-M6-5/12) и пул НЕ авто-закрывается (это отдельный шаг — ARS-198).
+-- M6 матчит батч ЦЕЛИКОМ (volume-driven): p_matched_heads должен равняться
+-- batch.heads (или NULL → берётся batch.heads); служит счётчиком pools.matched_heads.
+-- ------------------------------------------------------------
+drop function if exists public.rpc_admin_match_batch_to_pool(uuid, uuid, int);
+create or replace function public.rpc_admin_match_batch_to_pool(
+    p_pool_id       uuid,
+    p_batch_id      uuid,
+    p_matched_heads int default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_pool      record;
+    v_batch     record;
+    v_line      record;
+    v_volume_kg int;
+    v_heads     int;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = 'P0001';
+    end if;
+
+    select p.* into v_pool from public.pools p where p.id = p_pool_id for update;
+    if not found then
+        raise exception 'POOL_NOT_FOUND' using errcode = 'P0001';
+    end if;
+    if v_pool.status not in ('filling', 'filled') then
+        raise exception 'INVALID_STATUS: match allowed only on filling|filled pool (current %)',
+            v_pool.status using errcode = 'P0001';
+    end if;
+
+    select b.* into v_batch from public.batches b where b.id = p_batch_id for update;
+    if not found then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+    -- Idempotent: already matched to this pool's line → return current state.
+    if v_batch.status = 'matched'
+       and v_batch.pool_line_id is not null
+       and exists (select 1 from public.pool_lines pl
+                   where pl.id = v_batch.pool_line_id and pl.pool_id = p_pool_id) then
+        return jsonb_build_object('batch_id', p_batch_id, 'pool_id', p_pool_id,
+            'pool_line_id', v_batch.pool_line_id, 'deal_price_per_kg', v_batch.deal_price_per_kg,
+            'already_matched', true);
+    end if;
+    if v_batch.status not in ('published', 'offering') then
+        raise exception 'INVALID_STATUS: batch must be published|offering to match (current %)',
+            v_batch.status using errcode = 'P0001';
+    end if;
+    if v_batch.farmer_price_per_kg is null then
+        raise exception 'BATCH_NO_PRICE: batch has no farmer_price_per_kg' using errcode = 'P0001';
+    end if;
+
+    v_volume_kg := coalesce(v_batch.heads * v_batch.avg_weight_kg, 0)::int;
+    if v_volume_kg <= 0 then
+        raise exception 'BATCH_NO_VOLUME: heads x avg_weight_kg = 0; cannot match'
+            using errcode = 'P0001';
+    end if;
+
+    -- M6 whole-batch invariant: heads credited must equal the batch head count.
+    v_heads := coalesce(p_matched_heads, v_batch.heads);
+    if v_heads <> v_batch.heads then
+        raise exception
+            'INVALID_INPUT: M6 matches whole batch; p_matched_heads (%) must equal batch heads (%)',
+            v_heads, v_batch.heads using errcode = 'P0001';
+    end if;
+
+    -- Best-matching pool_line for THIS pool (M6 predicate, mirrors rpc_accept_offer).
+    select pl.id as pl_id, pl.mpk_price_per_kg as pl_price,
+           pl.max_volume_kg as pl_max, pl.current_volume_kg as pl_current
+      into v_line
+    from public.pool_lines pl
+    where pl.pool_id = p_pool_id
+      and pl.is_active = true
+      and (pl.tsp_sku_id is null or pl.tsp_sku_id = v_batch.tsp_sku_id)
+      and pl.mpk_price_per_kg >= v_batch.farmer_price_per_kg
+      and (pl.max_volume_kg is null
+           or pl.current_volume_kg + v_volume_kg <= pl.max_volume_kg)
+      and (v_pool.delivery_from is null or v_batch.ready_to   is null
+           or v_pool.delivery_from <= v_batch.ready_to)
+      and (v_pool.delivery_to   is null or v_batch.ready_from is null
+           or v_pool.delivery_to   >= v_batch.ready_from)
+      and exists (
+          select 1 from public.pool_regions pgr
+          where pgr.pool_id = p_pool_id
+            and (
+                (pgr.region_type = 'rayon' and pgr.region_id = v_batch.region_id)
+                or (pgr.region_type = 'oblast' and (
+                    pgr.region_id = v_batch.region_id
+                    or pgr.region_id = (select parent_id from public.regions
+                                        where id = v_batch.region_id)))
+            )
+      )
+    order by pl.mpk_price_per_kg desc
+    limit 1
+    for update;
+    if not found then
+        raise exception
+            'NO_MATCHING_POOL_LINE: pool % has no line accepting batch % (region/window/sku/capacity/price mismatch)',
+            p_pool_id, p_batch_id using errcode = 'P0001';
+    end if;
+
+    -- Batch -> matched (deal_price = matched line MPK bid, D-M6-DEALPRICE).
+    update public.batches
+    set status            = 'matched',
+        pool_line_id      = v_line.pl_id,
+        deal_price_per_kg = v_line.pl_price,
+        matched_at        = now(),
+        updated_at        = now()
+    where id = p_batch_id;
+
+    update public.pool_lines
+    set current_volume_kg = current_volume_kg + v_volume_kg,
+        updated_at        = now()
+    where id = v_line.pl_id;
+
+    update public.pools
+    set matched_heads = matched_heads + v_heads,
+        updated_at    = now()
+    where id = p_pool_id;
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (p_batch_id, 'matched',
+        jsonb_build_object('pool_id', p_pool_id, 'pool_line_id', v_line.pl_id,
+            'deal_price_per_kg', v_line.pl_price, 'volume_kg', v_volume_kg, 'via', 'admin_match'),
+        public.fn_current_user_id());
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.batch.matched', 'batches', p_batch_id, v_pool.organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object('pool_id', p_pool_id, 'pool_line_id', v_line.pl_id,
+            'batch_id', p_batch_id, 'deal_price_per_kg', v_line.pl_price,
+            'volume_kg', v_volume_kg, 'via', 'admin'),
+        true
+    );
+
+    return jsonb_build_object(
+        'batch_id',          p_batch_id,
+        'pool_id',           p_pool_id,
+        'pool_line_id',      v_line.pl_id,
+        'deal_price_per_kg', v_line.pl_price,
+        'volume_kg',         v_volume_kg
+    );
+end;
+$$;
+comment on function public.rpc_admin_match_batch_to_pool(uuid, uuid, int) is
+    'ARS-197 | Admin manual match (Art.171 coordination). Gate: fn_is_admin().
+     M6-path (no pool_matches): batch published|offering → matched into best pool_line
+     (max mpk_price, predicate mirrors rpc_accept_offer). deal_price = line MPK bid.
+     Does NOT reveal contacts (reveal only at confirmed, D-M6-5/12) and does NOT
+     auto-close the pool. Whole-batch (p_matched_heads must equal batch heads).
+     Idempotent. Additive (P7).';
+
+-- ------------------------------------------------------------
+-- RPC-ADM-06: rpc_admin_unmatch (ARS-197)
+-- M6-аналог rpc_rollback_batch_match (без pool_matches): откат матча батча из
+-- пула. Только из batch.status='matched' (confirmed — пост-reveal, не откатываем
+-- здесь). Батч → published (pool_line_id=NULL, deal_price=NULL), объём линии и
+-- pools.matched_heads уменьшаются, filled → filling. Идемпотентно. Admin-гейт.
+-- ------------------------------------------------------------
+drop function if exists public.rpc_admin_unmatch(uuid, uuid);
+create or replace function public.rpc_admin_unmatch(
+    p_pool_id   uuid,
+    p_batch_id  uuid,
+    p_reason    text default null
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_pool      record;
+    v_batch     record;
+    v_line      record;
+    v_volume_kg int;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = 'P0001';
+    end if;
+
+    select p.* into v_pool from public.pools p where p.id = p_pool_id for update;
+    if not found then
+        raise exception 'POOL_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    select b.* into v_batch from public.batches b where b.id = p_batch_id for update;
+    if not found then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    -- Verify the batch is matched into a line of THIS pool.
+    select pl.* into v_line
+    from public.pool_lines pl
+    where pl.id = v_batch.pool_line_id and pl.pool_id = p_pool_id
+    for update;
+    if not found then
+        -- Idempotent: batch not matched to this pool → nothing to roll back.
+        if v_batch.status = 'published' then
+            return true;
+        end if;
+        raise exception 'MATCH_NOT_FOUND: batch % is not matched to pool %', p_batch_id, p_pool_id
+            using errcode = 'P0001';
+    end if;
+
+    if v_batch.status <> 'matched' then
+        raise exception
+            'INVALID_STATUS: unmatch allowed only from matched (current % — confirmed/executed need a different flow)',
+            v_batch.status using errcode = 'P0001';
+    end if;
+
+    v_volume_kg := coalesce(v_batch.heads * v_batch.avg_weight_kg, 0)::int;
+
+    -- Batch -> published
+    update public.batches
+    set status            = 'published',
+        pool_line_id      = null,
+        deal_price_per_kg = null,
+        rollback_reason   = p_reason,
+        rollback_at       = now(),
+        updated_at        = now()
+    where id = p_batch_id;
+
+    -- Line volume down (floor at 0)
+    update public.pool_lines
+    set current_volume_kg = greatest(0, current_volume_kg - v_volume_kg),
+        updated_at        = now()
+    where id = v_line.id;
+
+    -- Pool aggregate counter down (floor at 0); revert filled → filling
+    update public.pools
+    set matched_heads = greatest(0, matched_heads - v_batch.heads),
+        status        = case when status = 'filled' then 'filling' else status end,
+        updated_at    = now()
+    where id = p_pool_id;
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (p_batch_id, 'unmatched',
+        jsonb_build_object('pool_id', p_pool_id, 'pool_line_id', v_line.id,
+            'reason', p_reason, 'via', 'admin'),
+        public.fn_current_user_id());
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.match.rolled_back', 'batches', p_batch_id, v_pool.organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object('pool_id', p_pool_id, 'batch_id', p_batch_id,
+            'pool_line_id', v_line.id, 'reason', p_reason, 'via', 'admin'),
+        true
+    );
+
+    return true;
+end;
+$$;
+comment on function public.rpc_admin_unmatch(uuid, uuid, text) is
+    'ARS-197 | Admin unmatch (M6 analog of rpc_rollback_batch_match, no pool_matches).
+     Gate: fn_is_admin(). batch matched → published (pool_line_id/deal_price NULL),
+     line volume + pools.matched_heads decremented, filled → filling. Idempotent
+     (already published = true). Additive (P7).';
+
+-- ------------------------------------------------------------
+-- RPC-ADM-07: rpc_admin_advance_pool_status (ARS-198)  ⚠ sensitive
+-- M6 FSM-продвижение пула оператором. НЕ pre-M6 rpc_advance_pool_status
+-- (RPC-15, legacy FSM + D40-раскрытие на executing — УСТАРЕЛО).
+-- Канонический M6 FSM (M4 §4.1, из транзакционных RPC rpc_accept_offer /
+-- rpc_pool_accept_partial / rpc_pool_return_batches):
+--   draft                 → filling                (publish + broadcast)
+--   filling               → closed_filled          (confirm batches, REVEAL)
+--   filling               → awaiting_mpk_decision   (window expired, partial)
+--   filling               → expired_empty           (window expired, zero matches)
+--   awaiting_mpk_decision → closed_partial          (confirm batches, REVEAL)
+--   awaiting_mpk_decision → closed_unfilled         (return batches → published)
+--   closed_filled         → executing               (dispatch; contacts already revealed)
+--   closed_partial        → executing
+--   executing             → completed
+-- Раскрытие контактов (mpk_contact_revealed_at + батчи → confirmed) — СТРОГО
+-- на closed_filled/closed_partial (= момент confirmed, D-M6-5/12), НЕ на
+-- executing. Отмена (cancelled) — отдельный RPC rpc_admin_cancel_pool (ARS-196,
+-- со всей unwind-логикой), здесь запрещена. Идемпотентно (new == current → true).
+-- ------------------------------------------------------------
+drop function if exists public.rpc_admin_advance_pool_status(uuid, text);
+create or replace function public.rpc_admin_advance_pool_status(
+    p_pool_id    uuid,
+    p_new_status text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_pool      record;
+    v_allowed   text[];
+    v_confirmed int := 0;
+    v_returned  int := 0;
+    v_revealed  boolean := false;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = 'P0001';
+    end if;
+
+    select p.* into v_pool from public.pools p where p.id = p_pool_id for update;
+    if not found then
+        raise exception 'POOL_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    -- Idempotent no-op.
+    if p_new_status = v_pool.status then
+        return true;
+    end if;
+
+    -- Canonical M6 transition map (cancelled handled by rpc_admin_cancel_pool).
+    v_allowed := case v_pool.status
+        when 'draft'                 then array['filling']
+        when 'filling'               then array['closed_filled','awaiting_mpk_decision','expired_empty']
+        when 'awaiting_mpk_decision' then array['closed_partial','closed_unfilled']
+        when 'closed_filled'         then array['executing']
+        when 'closed_partial'        then array['executing']
+        when 'executing'             then array['completed']
+        else array[]::text[]
+    end;
+
+    if p_new_status = 'cancelled' then
+        raise exception 'USE_CANCEL_RPC: cancel a pool via rpc_admin_cancel_pool (unwinds matches)'
+            using errcode = 'P0001';
+    end if;
+    if not (p_new_status = any(v_allowed)) then
+        raise exception 'INVALID_TRANSITION: % → % not allowed (M6 FSM)',
+            v_pool.status, p_new_status using errcode = 'P0001';
+    end if;
+
+    -- --- Apply transition + side effects ---
+    if p_new_status = 'filling' then
+        -- draft → filling: publish + broadcast offers to eligible published batches
+        -- (mirror rpc_publish_pool; broadcast is owner-scoped, use pool owner org).
+        update public.pools
+        set status = 'filling', published_at = now(), updated_at = now()
+        where id = p_pool_id;
+        perform public.rpc_retry_match_pool(v_pool.organization_id, p_pool_id);
+
+    elsif p_new_status = 'awaiting_mpk_decision' then
+        update public.pools
+        set status = 'awaiting_mpk_decision', awaiting_decision_at = now(), updated_at = now()
+        where id = p_pool_id;
+
+    elsif p_new_status = 'expired_empty' then
+        if exists (
+            select 1 from public.batches b
+            join public.pool_lines pl on pl.id = b.pool_line_id
+            where pl.pool_id = p_pool_id and b.status in ('matched','confirmed')
+        ) then
+            raise exception 'HAS_MATCHES: pool has matched batches; use awaiting_mpk_decision'
+                using errcode = 'P0001';
+        end if;
+        update public.pools
+        set status = 'expired_empty', completed_at = now(), updated_at = now()
+        where id = p_pool_id;
+
+    elsif p_new_status in ('closed_filled','closed_partial') then
+        -- REVEAL point (D-M6-5/12): matched batches → confirmed + reveal MPK identity.
+        with upd as (
+            update public.batches b
+            set status = 'confirmed', confirmed_at = now(), updated_at = now()
+            from public.pool_lines pl
+            where pl.pool_id = p_pool_id
+              and b.pool_line_id = pl.id
+              and b.status = 'matched'
+            returning b.id
+        )
+        insert into public.batch_events (batch_id, event_type, metadata, created_by)
+        select id, 'confirmed',
+               jsonb_build_object('pool_id', p_pool_id, 'via', 'admin_advance',
+                   'target', p_new_status),
+               public.fn_current_user_id()
+        from upd;
+        get diagnostics v_confirmed = row_count;
+
+        update public.pools
+        set status = p_new_status,
+            completed_at = now(),
+            mpk_contact_revealed_at = coalesce(mpk_contact_revealed_at, now()),
+            updated_at = now()
+        where id = p_pool_id;
+        v_revealed := true;
+
+    elsif p_new_status = 'closed_unfilled' then
+        -- Return matched batches → published (mirror rpc_pool_return_batches).
+        with w as (
+            update public.offers o
+            set status = 'withdrawn', responded_at = now()
+            from public.batches b
+            join public.pool_lines pl on pl.id = b.pool_line_id
+            where pl.pool_id = p_pool_id
+              and b.id = o.batch_id
+              and o.status = 'pending'
+            returning o.id as offer_id, o.batch_id, o.mpk_org_id
+        )
+        insert into public.platform_events (
+            event_type, entity_type, entity_id, organization_id,
+            actor_type, actor_id, payload, is_audit
+        )
+        select 'market.offer.withdrawn', 'offers', w.offer_id, w.mpk_org_id,
+               'admin', public.fn_current_user_id(),
+               jsonb_build_object('offer_id', w.offer_id, 'batch_id', w.batch_id,
+                   'mpk_org_id', w.mpk_org_id, 'reason', 'pool_returned', 'via', 'admin'),
+               false
+        from w;
+
+        with upd as (
+            update public.batches b
+            set status = 'published', pool_line_id = null,
+                deal_price_per_kg = null, updated_at = now()
+            from public.pool_lines pl
+            where pl.pool_id = p_pool_id
+              and b.pool_line_id = pl.id
+              and b.status = 'matched'
+            returning b.id
+        )
+        insert into public.batch_events (batch_id, event_type, metadata, created_by)
+        select id, 'returned_to_published',
+               jsonb_build_object('pool_id', p_pool_id, 'via', 'admin_advance'),
+               public.fn_current_user_id()
+        from upd;
+        get diagnostics v_returned = row_count;
+
+        update public.pool_lines set current_volume_kg = 0, updated_at = now()
+        where pool_id = p_pool_id;
+
+        update public.pools
+        set status = 'closed_unfilled', matched_heads = 0,
+            completed_at = now(), updated_at = now()
+        where id = p_pool_id;
+
+    elsif p_new_status = 'executing' then
+        -- Contacts already revealed at closed_filled/closed_partial. Do NOT reveal here.
+        update public.pools
+        set status = 'executing', executing_at = now(), updated_at = now()
+        where id = p_pool_id;
+
+    elsif p_new_status = 'completed' then
+        update public.pools
+        set status = 'completed', completed_at = now(), updated_at = now()
+        where id = p_pool_id;
+    end if;
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.pool.status_changed', 'pools', p_pool_id, v_pool.organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object('pool_id', p_pool_id, 'from', v_pool.status,
+            'to', p_new_status, 'confirmed_batches', v_confirmed,
+            'returned_batches', v_returned, 'contacts_revealed', v_revealed, 'via', 'admin'),
+        true
+    );
+
+    return true;
+end;
+$$;
+comment on function public.rpc_admin_advance_pool_status(uuid, text) is
+    'ARS-198 | Admin M6 FSM advance of ANY org pool. Gate: fn_is_admin().
+     Canonical M6 transitions only (draft→filling→closed_filled/awaiting/expired_empty;
+     awaiting→closed_partial/closed_unfilled; closed_*→executing→completed).
+     REVEAL (batches→confirmed + mpk_contact_revealed_at) STRICTLY at
+     closed_filled/closed_partial (D-M6-5/12), never at executing (supersedes D40).
+     Cancel via rpc_admin_cancel_pool. Idempotent. Additive (P7).';
+
+-- Registry
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
+    ('rpc_admin_cancel_batch',    'rpc_admin_cancel_batch',    null, 'd02_tsp.sql (Section 11 / ARS-195)', 'Admin operator cancel of any batch (draft|published → cancelled); gate fn_is_admin()'),
+    ('rpc_admin_set_batch_terms', 'rpc_admin_set_batch_terms', null, 'd02_tsp.sql (Section 11 / ARS-195)', 'Admin operator edit of any batch terms (price + ready window); gate fn_is_admin()'),
+    ('rpc_admin_cancel_pool',     'rpc_admin_cancel_pool',     null, 'd02_tsp.sql (Section 11 / ARS-196)', 'Admin operator cancel of any pool (draft|filling → cancelled, returns matched batches); gate fn_is_admin()'),
+    ('rpc_admin_edit_pool',       'rpc_admin_edit_pool',       null, 'd02_tsp.sql (Section 11 / ARS-196)', 'Admin operator edit of any pool (delivery window + pool_lines prices, minimum_price floor); gate fn_is_admin()'),
+    ('rpc_admin_match_batch_to_pool', 'rpc_admin_match_batch_to_pool', null, 'd02_tsp.sql (Section 11 / ARS-197)', 'Admin manual M6 match batch→pool line (no reveal, no auto-close); gate fn_is_admin()'),
+    ('rpc_admin_unmatch',         'rpc_admin_unmatch',         null, 'd02_tsp.sql (Section 11 / ARS-197)', 'Admin unmatch (M6 analog of rpc_rollback_batch_match); batch → published; gate fn_is_admin()'),
+    ('rpc_admin_advance_pool_status', 'rpc_admin_advance_pool_status', null, 'd02_tsp.sql (Section 11 / ARS-198)', 'Admin M6 FSM pool advance; reveal at closed_filled/closed_partial (D-M6-5/12); gate fn_is_admin()')
+on conflict (sql_name) do update
+    set dok3_name = excluded.dok3_name, notes = excluded.notes, created_in = excluded.created_in;
+
+grant execute on function public.rpc_admin_cancel_batch(uuid, text)          to authenticated;
+grant execute on function public.rpc_admin_set_batch_terms(uuid, int, date, date) to authenticated;
+grant execute on function public.rpc_admin_cancel_pool(uuid, text)           to authenticated;
+grant execute on function public.rpc_admin_edit_pool(uuid, date, date, jsonb) to authenticated;
+grant execute on function public.rpc_admin_match_batch_to_pool(uuid, uuid, int) to authenticated;
+grant execute on function public.rpc_admin_unmatch(uuid, uuid, text)         to authenticated;
+grant execute on function public.rpc_admin_advance_pool_status(uuid, text)   to authenticated;
+revoke execute on function public.rpc_admin_cancel_batch(uuid, text)          from anon;
+revoke execute on function public.rpc_admin_set_batch_terms(uuid, int, date, date) from anon;
+revoke execute on function public.rpc_admin_cancel_pool(uuid, text)           from anon;
+revoke execute on function public.rpc_admin_edit_pool(uuid, date, date, jsonb) from anon;
+revoke execute on function public.rpc_admin_match_batch_to_pool(uuid, uuid, int) from anon;
+revoke execute on function public.rpc_admin_unmatch(uuid, uuid, text)         from anon;
+revoke execute on function public.rpc_admin_advance_pool_status(uuid, text)   from anon;
+
+-- ============================================================
+-- END SECTION 11 (ADMIN TSP WRITE RPCs)
+-- ============================================================
