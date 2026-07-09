@@ -118,6 +118,10 @@ export function OrgManagement() {
                         size="sm"
                         onClick={() => setToDelete(o)}
                         aria-label="Удалить"
+                        disabled={o.member_count > 0}
+                        title={o.member_count > 0
+                          ? 'Нельзя удалить: в организации есть участники'
+                          : 'Удалить организацию'}
                         className="text-destructive hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -146,8 +150,9 @@ export function OrgManagement() {
           <AlertDialogHeader>
             <AlertDialogTitle>Удалить организацию?</AlertDialogTitle>
             <AlertDialogDescription>
-              «{toDelete?.legal_name}» будет удалена безвозвратно вместе с типами, членством,
-              привязками пользователей и связанными данными. Действие необратимо.
+              «{toDelete?.legal_name}» будет удалена безвозвратно вместе с типами, членством
+              и связанными данными. Удаление доступно только для организаций без участников.
+              Действие необратимо.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
