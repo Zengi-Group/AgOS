@@ -91,7 +91,7 @@ begin
                 'contactRevealed', (p.mpk_contact_revealed_at is not null),
                 'lines',           coalesce((
                     select jsonb_agg(
-                        jsonb_build_object('code', pl.category_label, 'price', pl.mpk_price_per_kg)
+                        jsonb_build_object('id', pl.id, 'code', pl.category_label, 'price', pl.mpk_price_per_kg)
                         order by pl.mpk_price_per_kg desc
                     )
                     from public.pool_lines pl
