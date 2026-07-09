@@ -1,11 +1,17 @@
-// AgOS · TSP-1 · Шаг 4 · Цена (p1/wizard.jsx WizStep4).
+// AgOS · TSP-1 · Шаг 4 · Цена — реcкин под прототип (market-wizard.jsx WizStep4).
+// Сохранены: защитный пол по сорту МПК (mpkSortFloor), lowOk-подтверждение,
+// дисклеймер ст.171 (.mk-ref-d — справочная, не обязательная цена).
 
 import { useState } from 'react'
 import type { WizState } from '../types/batch'
 import { NBSP, CATS } from '../data/tsp-dicts'
 import { fmtMoney, deriveMpkGrade, mpkSortFloor, mpkSortLabel } from '../data/tsp-utils'
 import { useGradeFormula } from '@/hooks/useGradeFormula'
-import { WizShell } from './WizShell'
+import { WizShell, DraftNote } from './WizShell'
+import { MkField } from '../components/MkField'
+import { MkErr } from '../components/MkErr'
+import { MkCta } from '../components/MkCta'
+import { CheckRow } from '../components/CheckRow'
 
 interface Props {
   w: WizState
@@ -31,29 +37,27 @@ export function WizStep4Price({ w, sw, onNext, onBack, onExit }: Props) {
 
   return (
     <WizShell step={4} onBack={onBack} onExit={onExit} title="Цена"
-      cta="Далее →" onCta={tryNext}>
-      <div className="ref-block">
-        <div className="rb-t">Рекомендуемая цена по категории «{cat.name}»: <b className="mono">{fmtMoney(cat.rec)}{NBSP}₸/кг</b></div>
-        <div className="rb-disc">Справочная информация ассоциации. Не является обязательной — цену вы назначаете сами.</div>
+      footer={<><MkCta onClick={tryNext}>Далее</MkCta><DraftNote /></>}>
+      <div className="mk-ref">
+        <div className="mk-ref-t">Рекомендуемая цена по категории «{cat.name}»: <b className="mk-mono">{fmtMoney(cat.rec)}{NBSP}₸/кг</b></div>
+        <div className="mk-ref-d">Справочная информация ассоциации. Не является обязательной — цену вы назначаете сами.</div>
       </div>
-      <label className={'field price-field' + (miss && !(price > 0) ? ' miss' : '')}>
-        <div className="lab">ваша цена, ₸/кг</div>
-        <input className="finput mono big" inputMode="numeric" placeholder="0"
+      <MkField label="Ваша цена, ₸/кг" miss={miss && !(price > 0)}>
+        <input className="mk-input mk-mono price" inputMode="numeric" placeholder="0"
           value={w.price} onChange={(e) => { sw({ price: e.target.value.replace(/\D/g, '').slice(0, 5), lowOk: false }); setMiss(false) }} />
-      </label>
-      {miss && !(price > 0) && <div className="field-err amber">Укажите цену</div>}
+      </MkField>
+      {miss && !(price > 0) && <MkErr amber>Укажите цену</MkErr>}
       {price > 0 && (
-        <div className="calc mono">≈ {w.heads} × {w.avgWeight} кг × {fmtMoney(price)} = <b>{fmtMoney(sum)}{NBSP}₸</b> за партию <span className="calc-note">(ориентировочно)</span></div>
+        <div className="mk-calc mk-mono">≈ {w.heads} × {w.avgWeight} кг × {fmtMoney(price)} = <b>{fmtMoney(sum)}{NBSP}₸</b> за партию <span className="mk-calc-n">(ориентировочно)</span></div>
       )}
       {low && (
-        <div className="warn-panel">
-          <div className="wp-t">Цена ниже защитной цены ассоциации — {fmtMoney(floor)}{NBSP}₸/кг</div>
-          <div className="wp-b">{mpkSort ? `Защитная цена сорта «${mpkSortLabel(mpkSort)}» — это уровень, ниже которого ассоциация не рекомендует продавать. ` : 'Защитная цена — это уровень, ниже которого ассоциация не рекомендует продавать. '}Вы можете опубликовать и по своей цене.</div>
-          <button className={'cb-row warn' + (miss && !w.lowOk ? ' miss' : '')} onClick={() => { sw({ lowOk: !w.lowOk }); setMiss(false) }}>
-            <div className={'cb-box' + (w.lowOk ? ' ch' : '')}>{w.lowOk ? '✓' : ''}</div>
-            <div>Понимаю и подтверждаю цену {fmtMoney(price)}{NBSP}₸/кг</div>
-          </button>
-          {miss && !w.lowOk && <div className="field-err amber" style={{ marginBottom: 0 }}>Подтвердите цену, чтобы продолжить</div>}
+        <div className="mk-warn">
+          <div className="mk-warn-t">Цена ниже защитной цены ассоциации — {fmtMoney(floor)}{NBSP}₸/кг</div>
+          <div className="mk-warn-b">{mpkSort ? `Защитная цена сорта «${mpkSortLabel(mpkSort)}» — это уровень, ниже которого ассоциация не рекомендует продавать. ` : 'Защитная цена — это уровень, ниже которого ассоциация не рекомендует продавать. '}Вы можете опубликовать и по своей цене.</div>
+          <div className={miss && !w.lowOk ? 'mk-miss' : ''}>
+            <CheckRow warn checked={w.lowOk} onClick={() => { sw({ lowOk: !w.lowOk }); setMiss(false) }}>Понимаю и подтверждаю цену {fmtMoney(price)}{NBSP}₸/кг</CheckRow>
+          </div>
+          {miss && !w.lowOk && <MkErr amber>Подтвердите цену, чтобы продолжить</MkErr>}
         </div>
       )}
     </WizShell>
