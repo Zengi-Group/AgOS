@@ -189,6 +189,7 @@ rpc_admin_list_categories_with_stats|rpc_admin_list_category_rules|\
 rpc_admin_get_sku_coverage|rpc_admin_list_prices|\
 rpc_admin_cancel_batch|rpc_admin_set_batch_terms|\
 rpc_admin_cancel_pool|rpc_admin_edit_pool|\
+rpc_admin_match_batch_to_pool|rpc_admin_unmatch|\
 rpc_create_batch|rpc_get_org_batches|rpc_cancel_batch|rpc_dispatch_batch|\
 rpc_lower_price|rpc_update_price|rpc_submit_review|rpc_self_review_due_batches|\
 rpc_self_auto_match_batch|rpc_get_market_batches|rpc_self_activate_pool_request|\
