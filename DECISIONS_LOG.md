@@ -3554,3 +3554,15 @@ Files: d01_kernel.sql (rpc_get_my_context + comment).
 **Verify**: `tsc -b --noEmit` = 0 ошибок. Preview (Vite, seed-fallback, фейк-сессия) — прогнаны все 5 шагов + PubResult, скриншоты; валидация (scroll-to-error + amber), MkSelect-пикер, степпер, упитанность, CheckRow, публикация — работают. Console-ошибки только ожидаемые `Failed to fetch`/`Failed to load user context` (placeholder-бэк без `.env`).
 
 **Files**: new `tsp/components/{MkCta,MkField,MkErr,CheckRow,MkSelect}.tsx`; edited `tsp/components/{WizProgress,StepperCtl,BigRadio,InfoNote}.tsx`, `tsp/wizard/{WizShell,WizStep1Animals,WizStep2Window,WizStep3Category,WizStep4Price,WizStep5Review,PubResult}.tsx`; docs `Docs/AGOS-Farmer-Redesign-Handoff.md`. SQL не тронут → `cross_check.sh` не нужен. Ветка `claude/batch-wizard-impl-67ccab` (= база d5ff04).
+
+### 2026-07-09: Farmer-redesign Phase 4e — тела Review/Turan под .mk-* + PhIcon
+
+**What**: Переверстаны тела `screens/ReviewScreen.tsx` и `screens/TuranScreen.tsx` под дизайн-систему «Рынок» (`.mk-*` + `PhIcon`), 1:1 со структурой прототипа `market-wizard.jsx`. Новый атом `tsp/components/Stars.tsx` (`.mk-stars`/`.mk-star` + PhIcon `starOutline`, amber-заливка при выборе, disabled-режим без onChange). В `PhIcon` добавлена иконка `phone` (Phosphor regular) — замена emoji 📞. Переиспользованы атомы 4d: `MkCta`/`MkField`/`MkErr`/`MkSelect`.
+- **ReviewScreen**: `.mk-h1`/`.mk-sub` + два `.mk-rev-q` (общая оценка + честность взвешивания с `.mk-rev-sub`) со `Stars` + `MkField` (textarea `.mk-input.area`); добавлен экран благодарности `.mk-res` (green `checkCircle`) с `InfoNote` «перекрёстная оценка» (по прототипу). Footer `.sh-foot`.
+- **TuranScreen**: контакты (📞→PhIcon `phone`, ⏰→`clock`) в `.mk-infonote`; тема — `MkSelect`; сообщение — `MkField`+`MkErr` (мин. 5 симв.); success `.mk-res` (✓→`checkCircle`). Footer send+ghost.
+
+**Why / сохранено (HS-2/HS-5)**: `ReviewScreen` сохраняет контракт `onPatch({review:{r1,r2,comment,date}})` → `useBatches` → `rpc_submit_review` (`p_r1/p_r2/p_comment`) — форма не тронута; отзыв сохраняется на финальной кнопке «К партии». `TuranScreen` — TOPICS (5 тем), `prefillTopic`, `canSend`(≥5), тексты и блок контактов (доп. к прототипу) сохранены. Хедеры (`SubHead`) не тронуты (сделаны в Сессии 2). `noUncheckedIndexedAccess` → `TOPICS[0]!` для `initTopic`.
+
+**Verify**: `tsc -b --noEmit` = 0 ошибок. Preview E2E: `/cabinet/turan` (контакты/MkSelect/MkField → success), `/cabinet/review/:id` (Stars 5+4 → amber → success `.mk-res`+InfoNote). Console — только ожидаемые `Failed to fetch` (placeholder-бэк).
+
+**Files**: new `tsp/components/Stars.tsx`; edited `components/icons/PhIcon.tsx` (+phone), `screens/ReviewScreen.tsx`, `screens/TuranScreen.tsx`, docs. SQL не тронут. Ветка `claude/batch-wizard-impl-67ccab` (PR #47 → d5ff04).
