@@ -14,7 +14,6 @@ import {
   Calculator,
   ClipboardList,
   ShoppingCart,
-  Package,
   DollarSign,
   UserCog,
   Building2,
@@ -140,7 +139,9 @@ const ADMIN_GROUPS: NavGroup[] = [
       { id: 'knowledge', icon: BookOpen, label: 'База знаний', route: '/admin/knowledge' },
       { id: 'audit', icon: FileText, label: 'Аудит', route: '/admin/audit' },
       { id: 'marketplace', icon: Store, label: 'Торговая площадка', route: '/admin/marketplace' },
-      { id: 'pools', icon: Package, label: 'Пулы', route: '/admin/pools' },
+      // '/admin/pools' (pre-M6 write-UI) выведён из основной навигации — ARS-200.
+      // Управление ТСП живёт в «Торговой площадке» (/admin/marketplace, M6-канон).
+      // Роут и компоненты сохранены (HS-2), экран несёт баннер deprecated.
       { id: 'pricing', icon: DollarSign, label: 'Цены', route: '/admin/pricing' },
       { id: 'livestock-categories', icon: Tags, label: 'Категории скота', route: '/admin/livestock-categories' },
       { id: 'grade-formula', icon: SlidersHorizontal, label: 'Формула сорта', route: '/admin/grade-formula' },

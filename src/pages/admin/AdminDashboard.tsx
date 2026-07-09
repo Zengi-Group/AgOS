@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Users, Stethoscope, Syringe, Activity, BarChart3, BookOpen, Shield, FileText, Package, DollarSign, LayoutDashboard, Store } from 'lucide-react'
+import { Users, Stethoscope, Syringe, Activity, BarChart3, BookOpen, Shield, FileText, DollarSign, LayoutDashboard, Store } from 'lucide-react'
 import { useSetTopbar } from '@/components/layout/TopbarContext'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -67,17 +67,11 @@ const ADMIN_ONLY_CARDS: DashCard[] = [
   {
     icon: Store,
     label: 'Торговая площадка',
-    description: 'Все батчи, пулы и сделки с полными данными (обзор)',
+    description: 'Батчи, пулы и сделки: обзор и управление (отмена, правка, matching, статус)',
     route: '/admin/marketplace',
     color: 'var(--green)',
   },
-  {
-    icon: Package,
-    label: 'Пулы',
-    description: 'Управление торговыми пулами и согласование сделок',
-    route: '/admin/pools',
-    color: 'var(--blue)',
-  },
+  // Карта «Пулы» (pre-M6 /admin/pools) убрана — управление в «Торговой площадке» (ARS-200).
   {
     icon: DollarSign,
     label: 'Ценообразование',
