@@ -558,7 +558,7 @@ export function CabinetApp() {
 
   const renderReview = ({ match }: { match: { params: { id: string } } }) => {
     const reviewBatch = batches.find((b) => b.id === match.params.id)
-    if (!reviewBatch) return <PlaceholderScreen title="Партия не найдена" sub="" />
+    if (!reviewBatch) return <PlaceholderScreen title="Партия не найдена" icon="ban" emptyTitle="Партия не найдена" emptySub="Возможно, она была удалена или ещё не создана" />
     return (
       <ReviewScreen
         batch={reviewBatch}
@@ -614,11 +614,11 @@ export function CabinetApp() {
                 <RouteV5 exact path="/cabinet/review/:id" render={renderReview} />
                 <RouteV5 exact path="/cabinet/account" render={renderCabinet} />
                 <RouteV5 exact path="/cabinet/turan" render={renderTuran} />
-                <RouteV5 exact path="/cabinet/farm" render={() => <PlaceholderScreen tab title="Ферма" sub="Стадо, задачи, события" />} />
-                <RouteV5 exact path="/cabinet/shop" render={() => <PlaceholderScreen title="Маркет" sub="Дистрибуция и специалисты TURAN" />} />
-                <RouteV5 exact path="/cabinet/services" render={() => <PlaceholderScreen title="Сервисы" sub="Специалисты и услуги TURAN" />} />
-                <RouteV5 exact path="/cabinet/messages" render={() => <PlaceholderScreen tab title="Сообщения" sub="Треды Рынка, Фермы и TURAN" />} />
-                <RouteV5 exact path="/cabinet/thread/:tid" render={() => <PlaceholderScreen title="Сообщения" sub="Треды Рынка, Фермы и TURAN" />} />
+                <RouteV5 exact path="/cabinet/farm" render={() => <PlaceholderScreen tab title="Ферма" sub="Стадо, задачи, события" icon="sprout" emptySub="Стадо, задачи и события хозяйства появятся здесь" />} />
+                <RouteV5 exact path="/cabinet/shop" render={() => <PlaceholderScreen title="Маркет" sub="Дистрибуция и специалисты TURAN" icon="bag" emptySub="Дистрибуция и специалисты TURAN появятся здесь" />} />
+                <RouteV5 exact path="/cabinet/services" render={() => <PlaceholderScreen title="Сервисы" sub="Специалисты и услуги TURAN" icon="grid" emptySub="Специалисты и услуги TURAN появятся здесь" />} />
+                <RouteV5 exact path="/cabinet/messages" render={() => <PlaceholderScreen tab title="Сообщения" sub="Треды Рынка, Фермы и TURAN" icon="chat" emptySub="Треды Рынка, Фермы и TURAN появятся здесь" />} />
+                <RouteV5 exact path="/cabinet/thread/:tid" render={() => <PlaceholderScreen title="Сообщения" sub="Треды Рынка, Фермы и TURAN" icon="chat" emptySub="Треды Рынка, Фермы и TURAN появятся здесь" />} />
                 {/* неизвестный под-путь → Главная (первое совпадение выигрывает) */}
                 <RouteV5 render={renderHome} />
               </IonRouterOutlet>
