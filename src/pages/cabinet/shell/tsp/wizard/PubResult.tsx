@@ -2,7 +2,7 @@
 // Варианты A/B/C/D. Рендерится внутри внешнего <IonPage className="agos-flow-page">
 // (CabinetApp.renderMarket): IonContent (.mk-res) + док-футер .sh-foot.
 
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { IonContent } from '@ionic/react'
 import type { Batch, PubVariant } from '../types/batch'
 import { NBSP } from '../data/tsp-dicts'
@@ -17,7 +17,47 @@ interface PubResultProps {
   onToList?: () => void
 }
 
+// Пауза-поиск между публикацией и результатом. Автоматч уже отработал синхронно
+// (см. BatchWizard.handlePublish) — реального ожидания нет, это минимальное время
+// показа, чтобы «покупатель найден сразу» (вариант A) читался как исход поиска,
+// а не как мгновенный глюк. Вариант D (запланировано) поиск не запускает.
+const SEARCH_MS = 2200
+const SEARCH_PHRASES = [
+  'Ищем покупателя для вашей партии…',
+  'Сверяем цену с активными заказами…',
+  'Проверяем покупателей в вашем районе…',
+]
+
 export function PubResult({ variant, batch, onToBatch, onToList }: PubResultProps) {
+  const [searching, setSearching] = useState(variant !== 'D')
+  const [phraseIdx, setPhraseIdx] = useState(0)
+
+  useEffect(() => {
+    if (!searching) return
+    const step = Math.round(SEARCH_MS / SEARCH_PHRASES.length)
+    const rot = setInterval(
+      () => setPhraseIdx((i) => Math.min(i + 1, SEARCH_PHRASES.length - 1)),
+      step,
+    )
+    const done = setTimeout(() => setSearching(false), SEARCH_MS)
+    return () => { clearInterval(rot); clearTimeout(done) }
+  }, [searching])
+
+  if (searching) {
+    return (
+      <IonContent className="agos-ion-content">
+        <div className="phone-scroll">
+          <div className="mk" data-screen-label={'SCR-03 · публикация · поиск · вариант ' + variant}>
+            <div className="mk-loader">
+              <div className="mk-spin" />
+              <div>{SEARCH_PHRASES[phraseIdx]}</div>
+            </div>
+          </div>
+        </div>
+      </IonContent>
+    )
+  }
+
   const dealPrice = (batch.dealPrice ?? 0) as number
   const price = (batch.price ?? 0) as number
   const variants: Record<PubVariant, { ic: PhIconName; tone: string; h: string; body: ReactNode }> = {

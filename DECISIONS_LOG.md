@@ -3584,3 +3584,12 @@ Files: d01_kernel.sql (rpc_get_my_context + comment).
 **Verify**: живой мастер за авторизацией (в воркти нет бэк-creds, `/cabinet`→`/login`), поэтому статический harness с реальными CSS + точной разметкой Step 1, скриншот + `preview_inspect`: `.mk-input` bg `#fbfaf6` + border `1px #e0d9cc`; `.mk-h1` font-family Geist; `.mk-wiz-prog>.cur` height 2px, bg `#b37a10`, box-shadow none; `.mk-wiz-bar` border-bottom `.5px #ebe6dc`. Консоль — 0 ошибок.
 
 **Files**: edited `src/pages/cabinet/shell/market-proto.css` (только CSS). SQL/canon не тронуты (чистый визуал, без изменения поведения). Ветка `claude/farmer-batch-form-style-1ef437`.
+### 2026-07-09: TSP-1 — экран «Ищем покупателя» между публикацией и результатом (PubResult)
+
+**What**: После публикации партии `PubResult` теперь начинается с фазы `searching` (спиннер `.mk-spin` + сменяющиеся 3 фразы: «Ищем покупателя…» → «Сверяем цену с активными заказами…» → «Проверяем покупателей в вашем районе…», ~2.2 c, футер `.sh-foot` скрыт), затем показывает результат (варианты A/B/C/D — тела не изменены). Реализовано как внутренний `useState`-`phase` в `PubResult.tsx`; `CabinetApp`/`BatchWizard` не тронуты, контракт props не изменён.
+
+**Why**: Автоматч отрабатывает синхронно в `handlePublish`, поэтому вариант A «Покупатель найден» выскакивал мгновенно — фермер не понимал, что система искала. Пауза-поиск (минимальное время показа, не реальный async) даёт исходу читаемость. Решения руководителя (AskUserQuestion): лоадер для A/B/C, но НЕ для D (запланировано — ничего не ищем, сразу результат); наполнение — 3 фразы ~2.2 c. Переиспользован существующий `.mk-loader`/`.mk-spin` (тот же, что в шаге 3 «Определяем категорию…») — новых стилей/иконок нет. `prefers-reduced-motion` уважается ДС.
+
+**Verify**: `tsc -b --noEmit` = 0. Preview E2E (Vite :5211, демо-fallback, фейк-сессия): вариант B — по DOM зафиксированы все 3 фазы (спиннер on, футер скрыт, смена фраз) → reveal «Партия отправлена покупателям» (скриншот); вариант D (окно `m2`) — поиск пропускается, сразу «Запланировано». Спек: `docs/superpowers/specs/2026-07-09-pub-searching-loader-design.md`.
+
+**Files**: edited `src/pages/cabinet/shell/tsp/wizard/PubResult.tsx` (фаза searching); new спек-док; `.claude/launch.json` (+конфиг превью для worktree). SQL не тронут → `cross_check.sh` не нужен. Ветка `claude/farmer-batch-loader-state-f82c12`.
