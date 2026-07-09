@@ -5904,6 +5904,214 @@ comment on function public.rpc_admin_unmatch(uuid, uuid, text) is
      line volume + pools.matched_heads decremented, filled → filling. Idempotent
      (already published = true). Additive (P7).';
 
+-- ------------------------------------------------------------
+-- RPC-ADM-07: rpc_admin_advance_pool_status (ARS-198)  ⚠ sensitive
+-- M6 FSM-продвижение пула оператором. НЕ pre-M6 rpc_advance_pool_status
+-- (RPC-15, legacy FSM + D40-раскрытие на executing — УСТАРЕЛО).
+-- Канонический M6 FSM (M4 §4.1, из транзакционных RPC rpc_accept_offer /
+-- rpc_pool_accept_partial / rpc_pool_return_batches):
+--   draft                 → filling                (publish + broadcast)
+--   filling               → closed_filled          (confirm batches, REVEAL)
+--   filling               → awaiting_mpk_decision   (window expired, partial)
+--   filling               → expired_empty           (window expired, zero matches)
+--   awaiting_mpk_decision → closed_partial          (confirm batches, REVEAL)
+--   awaiting_mpk_decision → closed_unfilled         (return batches → published)
+--   closed_filled         → executing               (dispatch; contacts already revealed)
+--   closed_partial        → executing
+--   executing             → completed
+-- Раскрытие контактов (mpk_contact_revealed_at + батчи → confirmed) — СТРОГО
+-- на closed_filled/closed_partial (= момент confirmed, D-M6-5/12), НЕ на
+-- executing. Отмена (cancelled) — отдельный RPC rpc_admin_cancel_pool (ARS-196,
+-- со всей unwind-логикой), здесь запрещена. Идемпотентно (new == current → true).
+-- ------------------------------------------------------------
+drop function if exists public.rpc_admin_advance_pool_status(uuid, text);
+create or replace function public.rpc_admin_advance_pool_status(
+    p_pool_id    uuid,
+    p_new_status text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_pool      record;
+    v_allowed   text[];
+    v_confirmed int := 0;
+    v_returned  int := 0;
+    v_revealed  boolean := false;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = 'P0001';
+    end if;
+
+    select p.* into v_pool from public.pools p where p.id = p_pool_id for update;
+    if not found then
+        raise exception 'POOL_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    -- Idempotent no-op.
+    if p_new_status = v_pool.status then
+        return true;
+    end if;
+
+    -- Canonical M6 transition map (cancelled handled by rpc_admin_cancel_pool).
+    v_allowed := case v_pool.status
+        when 'draft'                 then array['filling']
+        when 'filling'               then array['closed_filled','awaiting_mpk_decision','expired_empty']
+        when 'awaiting_mpk_decision' then array['closed_partial','closed_unfilled']
+        when 'closed_filled'         then array['executing']
+        when 'closed_partial'        then array['executing']
+        when 'executing'             then array['completed']
+        else array[]::text[]
+    end;
+
+    if p_new_status = 'cancelled' then
+        raise exception 'USE_CANCEL_RPC: cancel a pool via rpc_admin_cancel_pool (unwinds matches)'
+            using errcode = 'P0001';
+    end if;
+    if not (p_new_status = any(v_allowed)) then
+        raise exception 'INVALID_TRANSITION: % → % not allowed (M6 FSM)',
+            v_pool.status, p_new_status using errcode = 'P0001';
+    end if;
+
+    -- --- Apply transition + side effects ---
+    if p_new_status = 'filling' then
+        -- draft → filling: publish + broadcast offers to eligible published batches
+        -- (mirror rpc_publish_pool; broadcast is owner-scoped, use pool owner org).
+        update public.pools
+        set status = 'filling', published_at = now(), updated_at = now()
+        where id = p_pool_id;
+        perform public.rpc_retry_match_pool(v_pool.organization_id, p_pool_id);
+
+    elsif p_new_status = 'awaiting_mpk_decision' then
+        update public.pools
+        set status = 'awaiting_mpk_decision', awaiting_decision_at = now(), updated_at = now()
+        where id = p_pool_id;
+
+    elsif p_new_status = 'expired_empty' then
+        if exists (
+            select 1 from public.batches b
+            join public.pool_lines pl on pl.id = b.pool_line_id
+            where pl.pool_id = p_pool_id and b.status in ('matched','confirmed')
+        ) then
+            raise exception 'HAS_MATCHES: pool has matched batches; use awaiting_mpk_decision'
+                using errcode = 'P0001';
+        end if;
+        update public.pools
+        set status = 'expired_empty', completed_at = now(), updated_at = now()
+        where id = p_pool_id;
+
+    elsif p_new_status in ('closed_filled','closed_partial') then
+        -- REVEAL point (D-M6-5/12): matched batches → confirmed + reveal MPK identity.
+        with upd as (
+            update public.batches b
+            set status = 'confirmed', confirmed_at = now(), updated_at = now()
+            from public.pool_lines pl
+            where pl.pool_id = p_pool_id
+              and b.pool_line_id = pl.id
+              and b.status = 'matched'
+            returning b.id
+        )
+        insert into public.batch_events (batch_id, event_type, metadata, created_by)
+        select id, 'confirmed',
+               jsonb_build_object('pool_id', p_pool_id, 'via', 'admin_advance',
+                   'target', p_new_status),
+               public.fn_current_user_id()
+        from upd;
+        get diagnostics v_confirmed = row_count;
+
+        update public.pools
+        set status = p_new_status,
+            completed_at = now(),
+            mpk_contact_revealed_at = coalesce(mpk_contact_revealed_at, now()),
+            updated_at = now()
+        where id = p_pool_id;
+        v_revealed := true;
+
+    elsif p_new_status = 'closed_unfilled' then
+        -- Return matched batches → published (mirror rpc_pool_return_batches).
+        with w as (
+            update public.offers o
+            set status = 'withdrawn', responded_at = now()
+            from public.batches b
+            join public.pool_lines pl on pl.id = b.pool_line_id
+            where pl.pool_id = p_pool_id
+              and b.id = o.batch_id
+              and o.status = 'pending'
+            returning o.id as offer_id, o.batch_id, o.mpk_org_id
+        )
+        insert into public.platform_events (
+            event_type, entity_type, entity_id, organization_id,
+            actor_type, actor_id, payload, is_audit
+        )
+        select 'market.offer.withdrawn', 'offers', w.offer_id, w.mpk_org_id,
+               'admin', public.fn_current_user_id(),
+               jsonb_build_object('offer_id', w.offer_id, 'batch_id', w.batch_id,
+                   'mpk_org_id', w.mpk_org_id, 'reason', 'pool_returned', 'via', 'admin'),
+               false
+        from w;
+
+        with upd as (
+            update public.batches b
+            set status = 'published', pool_line_id = null,
+                deal_price_per_kg = null, updated_at = now()
+            from public.pool_lines pl
+            where pl.pool_id = p_pool_id
+              and b.pool_line_id = pl.id
+              and b.status = 'matched'
+            returning b.id
+        )
+        insert into public.batch_events (batch_id, event_type, metadata, created_by)
+        select id, 'returned_to_published',
+               jsonb_build_object('pool_id', p_pool_id, 'via', 'admin_advance'),
+               public.fn_current_user_id()
+        from upd;
+        get diagnostics v_returned = row_count;
+
+        update public.pool_lines set current_volume_kg = 0, updated_at = now()
+        where pool_id = p_pool_id;
+
+        update public.pools
+        set status = 'closed_unfilled', matched_heads = 0,
+            completed_at = now(), updated_at = now()
+        where id = p_pool_id;
+
+    elsif p_new_status = 'executing' then
+        -- Contacts already revealed at closed_filled/closed_partial. Do NOT reveal here.
+        update public.pools
+        set status = 'executing', executing_at = now(), updated_at = now()
+        where id = p_pool_id;
+
+    elsif p_new_status = 'completed' then
+        update public.pools
+        set status = 'completed', completed_at = now(), updated_at = now()
+        where id = p_pool_id;
+    end if;
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.pool.status_changed', 'pools', p_pool_id, v_pool.organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object('pool_id', p_pool_id, 'from', v_pool.status,
+            'to', p_new_status, 'confirmed_batches', v_confirmed,
+            'returned_batches', v_returned, 'contacts_revealed', v_revealed, 'via', 'admin'),
+        true
+    );
+
+    return true;
+end;
+$$;
+comment on function public.rpc_admin_advance_pool_status(uuid, text) is
+    'ARS-198 | Admin M6 FSM advance of ANY org pool. Gate: fn_is_admin().
+     Canonical M6 transitions only (draft→filling→closed_filled/awaiting/expired_empty;
+     awaiting→closed_partial/closed_unfilled; closed_*→executing→completed).
+     REVEAL (batches→confirmed + mpk_contact_revealed_at) STRICTLY at
+     closed_filled/closed_partial (D-M6-5/12), never at executing (supersedes D40).
+     Cancel via rpc_admin_cancel_pool. Idempotent. Additive (P7).';
+
 -- Registry
 insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
     ('rpc_admin_cancel_batch',    'rpc_admin_cancel_batch',    null, 'd02_tsp.sql (Section 11 / ARS-195)', 'Admin operator cancel of any batch (draft|published → cancelled); gate fn_is_admin()'),
@@ -5911,7 +6119,8 @@ insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, creat
     ('rpc_admin_cancel_pool',     'rpc_admin_cancel_pool',     null, 'd02_tsp.sql (Section 11 / ARS-196)', 'Admin operator cancel of any pool (draft|filling → cancelled, returns matched batches); gate fn_is_admin()'),
     ('rpc_admin_edit_pool',       'rpc_admin_edit_pool',       null, 'd02_tsp.sql (Section 11 / ARS-196)', 'Admin operator edit of any pool (delivery window + pool_lines prices, minimum_price floor); gate fn_is_admin()'),
     ('rpc_admin_match_batch_to_pool', 'rpc_admin_match_batch_to_pool', null, 'd02_tsp.sql (Section 11 / ARS-197)', 'Admin manual M6 match batch→pool line (no reveal, no auto-close); gate fn_is_admin()'),
-    ('rpc_admin_unmatch',         'rpc_admin_unmatch',         null, 'd02_tsp.sql (Section 11 / ARS-197)', 'Admin unmatch (M6 analog of rpc_rollback_batch_match); batch → published; gate fn_is_admin()')
+    ('rpc_admin_unmatch',         'rpc_admin_unmatch',         null, 'd02_tsp.sql (Section 11 / ARS-197)', 'Admin unmatch (M6 analog of rpc_rollback_batch_match); batch → published; gate fn_is_admin()'),
+    ('rpc_admin_advance_pool_status', 'rpc_admin_advance_pool_status', null, 'd02_tsp.sql (Section 11 / ARS-198)', 'Admin M6 FSM pool advance; reveal at closed_filled/closed_partial (D-M6-5/12); gate fn_is_admin()')
 on conflict (sql_name) do update
     set dok3_name = excluded.dok3_name, notes = excluded.notes, created_in = excluded.created_in;
 
@@ -5921,12 +6130,14 @@ grant execute on function public.rpc_admin_cancel_pool(uuid, text)           to 
 grant execute on function public.rpc_admin_edit_pool(uuid, date, date, jsonb) to authenticated;
 grant execute on function public.rpc_admin_match_batch_to_pool(uuid, uuid, int) to authenticated;
 grant execute on function public.rpc_admin_unmatch(uuid, uuid, text)         to authenticated;
+grant execute on function public.rpc_admin_advance_pool_status(uuid, text)   to authenticated;
 revoke execute on function public.rpc_admin_cancel_batch(uuid, text)          from anon;
 revoke execute on function public.rpc_admin_set_batch_terms(uuid, int, date, date) from anon;
 revoke execute on function public.rpc_admin_cancel_pool(uuid, text)           from anon;
 revoke execute on function public.rpc_admin_edit_pool(uuid, date, date, jsonb) from anon;
 revoke execute on function public.rpc_admin_match_batch_to_pool(uuid, uuid, int) from anon;
 revoke execute on function public.rpc_admin_unmatch(uuid, uuid, text)         from anon;
+revoke execute on function public.rpc_admin_advance_pool_status(uuid, text)   from anon;
 
 -- ============================================================
 -- END SECTION 11 (ADMIN TSP WRITE RPCs)
