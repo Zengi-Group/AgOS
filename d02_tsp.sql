@@ -5189,3 +5189,179 @@ alter table public.batch_allocations add  constraint batch_allocations_status_ch
 -- тот же паттерн) + rpc_get_pool_matches += 'myRating'. Обе стороны — без
 -- double-blind (тот же уровень простоты, что у уже существующего rpc_submit_review).
 -- ============================================================
+
+
+-- ============================================================
+-- SECTION 11: ADMIN TSP WRITE RPCs (ARS-194 / фича: админ-управление TSP)
+-- Оператор-администратор пишет над батчем/пулом ЛЮБОЙ организации.
+-- Гейт — ТОЛЬКО public.fn_is_admin() (без p_organization_id: админ действует
+-- над чужой сущностью). Зеркалит read-паттерн rpc_admin_tsp_* (миграция
+-- 20260702220000). Аддитивно (P7): НЕ трогает org-scoped сигнатуры
+-- rpc_cancel_batch / rpc_set_batch_terms. Идемпотентно.
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- RPC-ADM-01: rpc_admin_cancel_batch (ARS-195)
+-- FSM: draft|published → cancelled (зеркало канона RPC-11). Published требует
+-- отсутствия pool_matches (сначала unmatch — см. ARS-197). Идемпотентно.
+-- Ограничение: offering НЕ отменяем здесь (остались бы висящие офферы —
+-- снятие относится к unmatch-семантике). Событие: market.batch.cancelled
+-- (actor_type=admin, is_audit=true).
+-- ------------------------------------------------------------
+drop function if exists public.rpc_admin_cancel_batch(uuid, text);
+create or replace function public.rpc_admin_cancel_batch(
+    p_batch_id  uuid,
+    p_reason    text default null
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_batch record;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = 'P0001';
+    end if;
+
+    select * into v_batch from public.batches where id = p_batch_id for update;
+    if not found then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    if v_batch.status = 'cancelled' then
+        return true;  -- idempotent
+    end if;
+
+    if v_batch.status not in ('draft', 'published') then
+        raise exception
+            'INVALID_STATUS: cannot cancel batch in status % (matched+ requires unmatch first)',
+            v_batch.status using errcode = 'P0001';
+    end if;
+
+    if v_batch.status = 'published'
+       and exists (select 1 from public.pool_matches where batch_id = p_batch_id) then
+        raise exception 'HAS_MATCHES: batch has pool matches, unmatch first'
+            using errcode = 'P0001';
+    end if;
+
+    update public.batches
+    set status          = 'cancelled',
+        cancelled_at    = now(),
+        rollback_reason = p_reason,
+        updated_at      = now()
+    where id = p_batch_id;
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'market.batch.cancelled', 'batches', p_batch_id, v_batch.organization_id,
+        'admin', public.fn_current_user_id(),
+        jsonb_build_object('batch_id', p_batch_id, 'reason', p_reason,
+            'previous_status', v_batch.status, 'via', 'admin'),
+        true
+    );
+
+    return true;
+end;
+$$;
+comment on function public.rpc_admin_cancel_batch(uuid, text) is
+    'ARS-195 | Admin operator cancel of ANY org batch. Gate: fn_is_admin().
+     FSM: draft|published → cancelled (mirrors RPC-11); published needs no matches.
+     Idempotent. Events: market.batch.cancelled (actor=admin). Additive (P7).';
+
+-- ------------------------------------------------------------
+-- RPC-ADM-02: rpc_admin_set_batch_terms (ARS-195)
+-- Зеркало TSP-FLOW-03 rpc_set_batch_terms, но admin-гейт и без org-фильтра.
+-- Разрешено из draft|published. Инвариант D-M6-6: ready_to >= ready_from.
+-- ------------------------------------------------------------
+drop function if exists public.rpc_admin_set_batch_terms(uuid, int, date, date);
+create or replace function public.rpc_admin_set_batch_terms(
+    p_batch_id            uuid,
+    p_farmer_price_per_kg int  default null,
+    p_ready_from          date default null,
+    p_ready_to            date default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_batch record;
+    v_price int;
+    v_from  date;
+    v_to    date;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = 'P0001';
+    end if;
+
+    select * into v_batch from public.batches where id = p_batch_id for update;
+    if not found then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    if v_batch.status not in ('draft', 'published') then
+        raise exception
+            'INVALID_STATUS: batch terms can be set only from draft|published (current %)',
+            v_batch.status using errcode = 'P0001';
+    end if;
+
+    v_price := coalesce(p_farmer_price_per_kg, v_batch.farmer_price_per_kg);
+    v_from  := coalesce(p_ready_from, v_batch.ready_from);
+    v_to    := coalesce(p_ready_to,   v_batch.ready_to);
+
+    if v_price is not null and v_price <= 0 then
+        raise exception 'INVALID_INPUT: farmer_price_per_kg must be > 0'
+            using errcode = 'P0001';
+    end if;
+    if v_from is not null and v_to is not null and v_to < v_from then
+        raise exception 'INVALID_INPUT: ready_to (%) must be >= ready_from (%)', v_to, v_from
+            using errcode = 'P0001';
+    end if;
+
+    update public.batches
+    set farmer_price_per_kg = v_price,
+        ready_from          = v_from,
+        ready_to            = v_to,
+        updated_at          = now()
+    where id = p_batch_id;
+
+    insert into public.batch_events (batch_id, event_type, metadata, created_by)
+    values (p_batch_id, 'terms_set',
+        jsonb_build_object('farmer_price_per_kg', v_price, 'ready_from', v_from,
+            'ready_to', v_to, 'via', 'admin'),
+        public.fn_current_user_id());
+
+    return jsonb_build_object(
+        'batch_id',            p_batch_id,
+        'farmer_price_per_kg', v_price,
+        'ready_from',          v_from,
+        'ready_to',            v_to,
+        'status',              v_batch.status
+    );
+end;
+$$;
+comment on function public.rpc_admin_set_batch_terms(uuid, int, date, date) is
+    'ARS-195 | Admin operator edit of ANY org batch terms (price + ready window).
+     Gate: fn_is_admin(). draft|published only. D-M6-6 ready_to >= ready_from.
+     Additive (P7): mirrors rpc_set_batch_terms without org-scope.';
+
+-- Registry
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
+    ('rpc_admin_cancel_batch',    'rpc_admin_cancel_batch',    null, 'd02_tsp.sql (Section 11 / ARS-195)', 'Admin operator cancel of any batch (draft|published → cancelled); gate fn_is_admin()'),
+    ('rpc_admin_set_batch_terms', 'rpc_admin_set_batch_terms', null, 'd02_tsp.sql (Section 11 / ARS-195)', 'Admin operator edit of any batch terms (price + ready window); gate fn_is_admin()')
+on conflict (sql_name) do update
+    set dok3_name = excluded.dok3_name, notes = excluded.notes, created_in = excluded.created_in;
+
+grant execute on function public.rpc_admin_cancel_batch(uuid, text)          to authenticated;
+grant execute on function public.rpc_admin_set_batch_terms(uuid, int, date, date) to authenticated;
+revoke execute on function public.rpc_admin_cancel_batch(uuid, text)          from anon;
+revoke execute on function public.rpc_admin_set_batch_terms(uuid, int, date, date) from anon;
+
+-- ============================================================
+-- END SECTION 11 (ADMIN TSP WRITE RPCs)
+-- ============================================================
