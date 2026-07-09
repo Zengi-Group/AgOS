@@ -1,4 +1,6 @@
 import { useNavigate } from 'react-router-dom'
+import { T } from '@/lib/auth-ui/tokens'
+import { StickyDock, CTA } from '@/lib/auth-ui/primitives'
 import type { RoleType } from '../constants'
 
 interface SuccessProps {
@@ -52,86 +54,70 @@ export function Success({ role, companyName = '' }: SuccessProps) {
   const navigate = useNavigate()
   const content = CABINET_CONTENT[role]
 
+  const mono: React.CSSProperties = { fontFamily: T.mono }
   return (
-    <div className="space-y-4 reg-benefit-enter">
+    <div style={{ fontFamily: T.font, display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 8 }}>
       {/* Mini app chrome */}
-      <div className="flex items-center gap-2.5 pb-3 border-b border-dashed border-[#e8ddd0]">
-        <div className="w-7 h-7 rounded-lg bg-[hsl(24,73%,54%)] flex items-center justify-center text-white font-bold text-sm shrink-0">
-          Т
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-semibold text-[#2B180A] truncate leading-tight">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12, borderBottom: `1px dashed ${T.bd}` }}>
+        <div style={{ width: 28, height: 28, borderRadius: 8, background: T.accent, display: 'grid', placeItems: 'center', color: T.ctaFg, fontWeight: 700, fontSize: 14, flexShrink: 0 }}>Т</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: T.fg, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.2 }}>
             {companyName || 'Ваша организация'}
           </div>
-          <div className="text-[10px] text-[#6b5744]/60 uppercase tracking-wide font-mono">
-            TURAN · на рассмотрении
-          </div>
+          <div style={{ ...mono, fontSize: 10, color: T.fg3, textTransform: 'uppercase', letterSpacing: '.06em' }}>TURAN · на рассмотрении</div>
         </div>
       </div>
 
       {/* Welcome */}
       <div>
-        <h2 className="text-[22px] font-semibold text-[#2B180A] font-serif leading-tight">
-          Добро пожаловать
-        </h2>
-        <p className="text-sm text-[#6b5744] mt-1">
-          Кабинет создан. Вот что сделать первым.
-        </p>
+        <h2 style={{ fontFamily: T.font, fontSize: 22, fontWeight: 600, color: T.fg, lineHeight: 1.2, letterSpacing: '-0.02em', margin: 0 }}>Добро пожаловать</h2>
+        <p style={{ fontSize: 14, color: T.fg2, marginTop: 4 }}>Кабинет создан. Вот что сделать первым.</p>
       </div>
 
       {/* KPI grid */}
-      <div className="grid grid-cols-3 gap-2">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
         {content.kpi.map((k, i) => (
-          <div
-            key={i}
-            className="border border-[#e8ddd0] rounded-xl p-2.5 bg-white text-center"
-          >
-            <div className="text-[22px] font-semibold text-[#2B180A] font-serif leading-tight">
-              {k.n}
-            </div>
-            <div className="text-[9px] text-[#6b5744] uppercase tracking-wide font-mono mt-0.5">
-              {k.t}
-            </div>
+          <div key={i} style={{ border: `1px solid ${T.bd}`, borderRadius: 12, padding: 10, background: T.bgC, textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 600, color: T.fg, lineHeight: 1.2 }}>{k.n}</div>
+            <div style={{ ...mono, fontSize: 9, color: T.fg3, textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 2 }}>{k.t}</div>
           </div>
         ))}
       </div>
 
       {/* Task list */}
-      <div className="border border-[#e8ddd0] rounded-xl overflow-hidden bg-white">
-        <div className="px-3 py-2 bg-[#fdf6ee] border-b border-[#e8ddd0] flex justify-between items-center">
-          <span className="text-[10px] text-[#6b5744] uppercase tracking-wide font-mono">
-            Первые шаги
-          </span>
-          <span className="text-[10px] text-[#6b5744]/60 font-mono">0 / 3</span>
+      <div style={{ border: `1px solid ${T.bd}`, borderRadius: 12, overflow: 'hidden', background: T.bgC }}>
+        <div style={{ padding: '8px 12px', background: T.bgS, borderBottom: `1px solid ${T.bd}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ ...mono, fontSize: 10, color: T.fg3, textTransform: 'uppercase', letterSpacing: '.06em' }}>Первые шаги</span>
+          <span style={{ ...mono, fontSize: 10, color: T.fg3 }}>0 / 3</span>
         </div>
         {content.tasks.map((task, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#2B180A]"
-            style={{ borderTop: i === 0 ? 'none' : '1px dashed #e8ddd0' }}
-          >
-            <div className="w-3.5 h-3.5 border border-[hsl(24,73%,54%)] rounded shrink-0" />
-            <span className="flex-1">{task}</span>
-            <span className="text-[#6b5744]/40 text-xs">→</span>
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', fontSize: 14, color: T.fg, borderTop: i === 0 ? 'none' : `1px dashed ${T.bd}` }}>
+            <div style={{ width: 14, height: 14, border: `1px solid ${T.accent}`, borderRadius: 4, flexShrink: 0 }} />
+            <span style={{ flex: 1 }}>{task}</span>
+            <span style={{ color: T.fg3, fontSize: 12 }}>→</span>
           </div>
         ))}
       </div>
 
       {/* Membership pending banner */}
-      <div className="flex gap-2.5 items-start p-3 rounded-xl border border-dashed border-[hsl(24,73%,54%)] bg-[hsl(24,73%,54%)]/5">
-        <span className="text-[hsl(24,73%,54%)] text-base leading-none mt-0.5">⧗</span>
-        <div className="text-[12px] text-[#2B180A]/70 leading-relaxed">
-          <span className="font-semibold text-[#2B180A]">Заявка в ТУРАН · на рассмотрении</span>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: 12, borderRadius: 12, border: `1px dashed ${T.accent}`, background: 'rgba(184,113,10,0.06)' }}>
+        <span style={{ color: T.accent, fontSize: 16, lineHeight: 1, marginTop: 2 }}>⧗</span>
+        <div style={{ fontSize: 12, color: T.fg2, lineHeight: 1.5 }}>
+          <span style={{ fontWeight: 600, color: T.fg }}>Заявка в ТУРАН · на рассмотрении</span>
           <br />Обычно 1–3 дня. Уведомим в WhatsApp.
         </div>
       </div>
 
-      <button
-        onClick={() => navigate(content.route)}
-        className="reg-btn-primary w-full"
-      >
-        {content.cta}
-      </button>
+      <StickyDock>
+        {role === 'farmer' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <CTA onClick={() => navigate('/membership')}>Подать заявку на членство</CTA>
+            <CTA variant="ghost" onClick={() => navigate(content.route)}>Перейти в кабинет</CTA>
+          </div>
+        ) : (
+          <CTA onClick={() => navigate(content.route)}>{content.cta}</CTA>
+        )}
+      </StickyDock>
     </div>
   )
 }

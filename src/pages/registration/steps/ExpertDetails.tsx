@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ChipSelect } from '../components/ChipSelect'
 import { BottomSheet } from '../components/BottomSheet'
 import { FloatingInput } from '../components/FloatingInput'
+import { H1, Lede, StickyDock, CTA } from '@/lib/auth-ui/primitives'
 import { EXPERT_SPECIALIZATIONS, EXPERT_EXPERIENCE, REGIONS } from '../constants'
 import type { RegistrationFormData } from '../constants'
 
@@ -38,15 +39,9 @@ export function ExpertDetails({ formData, onChange, onNext }: ExpertDetailsProps
   const selectedRegion = REGIONS.find(r => r.id === formData.region_id)
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-[#2B180A] font-serif mb-1">
-          О вас как эксперте
-        </h2>
-        <p className="text-sm text-[#6b5744]">
-          Это увидят фермеры в каталоге «Сервисы»
-        </p>
-      </div>
+    <div>
+      <H1>О вас как эксперте</H1>
+      <Lede>Это увидят фермеры в каталоге «Сервисы».</Lede>
 
       <div className="space-y-4">
         {/* ФИО из Contact — readonly */}
@@ -114,9 +109,9 @@ export function ExpertDetails({ formData, onChange, onNext }: ExpertDetailsProps
         />
       </div>
 
-      <button onClick={handleSubmit} className="reg-btn-primary w-full">
-        Далее →
-      </button>
+      <StickyDock>
+        <CTA onClick={handleSubmit}>Далее</CTA>
+      </StickyDock>
 
       <BottomSheet
         open={activeSheet === 'experience'}

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { FloatingInput } from '../components/FloatingInput'
 import { BottomSheet } from '../components/BottomSheet'
 import { ChipSelect } from '../components/ChipSelect'
+import { H1, Lede, StickyDock, CTA } from '@/lib/auth-ui/primitives'
 import { FEED_TYPES, PRODUCTION_VOLUMES, REGIONS } from '../constants'
 import type { RegistrationFormData } from '../constants'
 
@@ -37,12 +38,9 @@ export function FeedProducerDetails({ formData, onChange, onNext }: FeedProducer
   const selectedVolume = PRODUCTION_VOLUMES.find((v) => v.value === formData.production_volume)
 
   return (
-    <div className="space-y-6">
-      <div className="text-center space-y-2">
-        <h2 className="text-xl font-semibold text-[#2B180A] font-serif">
-          О вашем производстве
-        </h2>
-      </div>
+    <div>
+      <H1>О производстве</H1>
+      <Lede>Данные для каталога кормов TURAN. Изменить можно потом.</Lede>
 
       <div className="space-y-4">
         <FloatingInput
@@ -100,9 +98,9 @@ export function FeedProducerDetails({ formData, onChange, onNext }: FeedProducer
         />
       </div>
 
-      <button onClick={handleSubmit} className="reg-btn-primary w-full">
-        Далее
-      </button>
+      <StickyDock>
+        <CTA onClick={handleSubmit}>Далее</CTA>
+      </StickyDock>
 
       <BottomSheet
         open={volumeSheetOpen}

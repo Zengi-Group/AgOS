@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { FloatingInput } from '../components/FloatingInput'
 import { BottomSheet } from '../components/BottomSheet'
+import { H1, Lede, StickyDock, CTA } from '@/lib/auth-ui/primitives'
 import { HERD_SIZES, LEGAL_FORMS, BREEDS, READY_TO_SELL, REGIONS, DISTRICTS } from '../constants'
 import type { RegistrationFormData } from '../constants'
 
@@ -45,15 +46,9 @@ export function FarmerDetails({ formData, onChange, onNext }: FarmerDetailsProps
     options.find((o) => o.value === value)?.label
 
   return (
-    <div className="space-y-6">
-      <div className="text-center space-y-2">
-        <h2 className="text-xl font-semibold text-[#2B180A] font-serif">
-          О вашем хозяйстве
-        </h2>
-        <p className="text-sm text-[#6b5744]">
-          Расскажите о ферме
-        </p>
-      </div>
+    <div>
+      <H1>О хозяйстве</H1>
+      <Lede>Данные помогут подобрать цены и сервисы. Изменить можно потом.</Lede>
 
       <div className="space-y-4">
         <FloatingInput
@@ -172,9 +167,9 @@ export function FarmerDetails({ formData, onChange, onNext }: FarmerDetailsProps
         </button>
       </div>
 
-      <button onClick={handleSubmit} className="reg-btn-primary w-full">
-        Далее
-      </button>
+      <StickyDock>
+        <CTA onClick={handleSubmit}>Далее</CTA>
+      </StickyDock>
 
       <BottomSheet
         open={activeSheet === 'legal_form'}

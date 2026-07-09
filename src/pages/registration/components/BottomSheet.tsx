@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { X, Check } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { T } from '@/lib/auth-ui/tokens'
 
 interface BottomSheetOption {
   value: string
@@ -16,20 +16,10 @@ interface BottomSheetProps {
   onChange: (value: string) => void
 }
 
-export function BottomSheet({
-  open,
-  onClose,
-  title,
-  options,
-  value,
-  onChange,
-}: BottomSheetProps) {
+/** Селектор-шторка в дизайне прототипа (светлая «бумажная» тема). */
+export function BottomSheet({ open, onClose, title, options, value, onChange }: BottomSheetProps) {
   useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
+    document.body.style.overflow = open ? 'hidden' : ''
     return () => {
       document.body.style.overflow = ''
     }
@@ -38,42 +28,59 @@ export function BottomSheet({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, fontFamily: T.font }}>
+      <div className="reg-backdrop-enter" style={{ position: 'absolute', inset: 0, background: 'rgba(20,19,18,0.35)' }} onClick={onClose} />
       <div
-        className="absolute inset-0 bg-black/40 reg-backdrop-enter"
-        onClick={onClose}
-      />
-      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl reg-sheet-enter max-h-[70vh] flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#e8ddd0]">
-          <h3 className="text-base font-medium text-[#2B180A]">{title}</h3>
-          <button
-            onClick={onClose}
-            className="p-1 text-[#6b5744] hover:text-[#2B180A]"
-          >
-            <X className="h-5 w-5" />
+        className="reg-sheet-enter"
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: T.bgC,
+          borderRadius: '20px 20px 0 0',
+          maxHeight: '70vh',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 -8px 40px rgba(20,19,18,0.16)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${T.bd}` }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, color: T.fg, letterSpacing: '-0.01em' }}>{title}</h3>
+          <button onClick={onClose} style={{ padding: 4, background: 'transparent', border: 'none', color: T.fg3, cursor: 'pointer' }}>
+            <X style={{ width: 20, height: 20 }} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto py-2">
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => {
-                onChange(opt.value)
-                onClose()
-              }}
-              className={cn(
-                'w-full flex items-center justify-between px-5 py-3.5 text-left transition-colors',
-                value === opt.value
-                  ? 'bg-[#fdf6ee] text-[#2B180A]'
-                  : 'text-[#2B180A]/80 hover:bg-[#fdf6ee]/50'
-              )}
-            >
-              <span className="text-[15px]">{opt.label}</span>
-              {value === opt.value && (
-                <Check className="h-4 w-4 text-[hsl(24,73%,54%)]" />
-              )}
-            </button>
-          ))}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
+          {options.map((opt) => {
+            const sel = value === opt.value
+            return (
+              <button
+                key={opt.value}
+                onClick={() => {
+                  onChange(opt.value)
+                  onClose()
+                }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '14px 20px',
+                  textAlign: 'left',
+                  background: sel ? T.bgM : 'transparent',
+                  border: 'none',
+                  color: T.fg,
+                  fontFamily: T.font,
+                  fontSize: 15,
+                  cursor: 'pointer',
+                }}
+              >
+                <span>{opt.label}</span>
+                {sel && <Check style={{ width: 16, height: 16, color: T.accent }} />}
+              </button>
+            )
+          })}
         </div>
       </div>
     </div>

@@ -1,3 +1,5 @@
+import { T } from '@/lib/auth-ui/tokens'
+import { StickyDock, CTA } from '@/lib/auth-ui/primitives'
 import type { RoleType } from '../constants'
 
 const ROLE_ILLOS: Record<RoleType, string> = {
@@ -131,54 +133,51 @@ export function BenefitScreen({ role, step, onNext }: BenefitScreenProps) {
     : BENEFIT_CONTENT[role].step2
 
   return (
-    <div className="reg-benefit-enter space-y-5">
+    <div style={{ fontFamily: T.font }}>
       {/* Illustration card */}
-      <div
-        className="rounded-2xl border border-[#e8ddd0] overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, #fdf6ee 0%, #f0e0c8 100%)' }}
-      >
+      <div style={{ borderRadius: 16, border: `1px solid ${T.bd}`, overflow: 'hidden', marginTop: 8 }}>
         <div
-          className="h-24 flex items-center justify-center text-5xl"
           style={{
-            background: 'repeating-linear-gradient(135deg, rgba(196,136,58,0.06) 0 1px, transparent 1px 8px)',
+            height: 96,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 48,
+            background: `linear-gradient(135deg, ${T.bgS} 0%, ${T.bgM} 100%)`,
           }}
         >
           {ROLE_ILLOS[role]}
         </div>
-        <div className="px-4 pt-3 pb-4">
-          <h2 className="text-[18px] font-semibold text-[#2B180A] font-serif leading-snug">
+        <div style={{ padding: '14px 16px 16px', background: T.bgC }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600, color: T.fg, lineHeight: 1.3, letterSpacing: '-0.01em', margin: 0 }}>
             {content.title}
           </h2>
         </div>
       </div>
 
       {/* Benefits list */}
-      <div className="space-y-3">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 20 }}>
         {content.items.map((item, idx) => (
-          <div
-            key={idx}
-            className="flex items-start gap-3 reg-benefit-enter"
-            style={{ animationDelay: `${(idx + 1) * 80}ms` }}
-          >
-            <div className="w-5 h-5 rounded-full bg-[hsl(24,73%,54%)]/10 flex items-center justify-center shrink-0 mt-0.5">
-              <svg className="w-3 h-3 text-[hsl(24,73%,54%)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+          <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ width: 20, height: 20, borderRadius: 999, background: T.bgM, display: 'grid', placeItems: 'center', flexShrink: 0, marginTop: 2 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <p className="text-[14px] text-[#2B180A]/80 leading-relaxed">{item}</p>
+            <p style={{ fontSize: 14, color: T.fg2, lineHeight: 1.5, margin: 0 }}>{item}</p>
           </div>
         ))}
       </div>
 
       {/* Pager dots */}
-      <div className="flex justify-center items-center gap-2 py-1">
-        <div className={`rounded-full transition-all duration-300 ${step === 1 ? 'w-5 h-1.5 bg-[hsl(24,73%,54%)]' : 'w-1.5 h-1.5 bg-[#e8ddd0]'}`} />
-        <div className={`rounded-full transition-all duration-300 ${step === 2 ? 'w-5 h-1.5 bg-[hsl(24,73%,54%)]' : 'w-1.5 h-1.5 bg-[#e8ddd0]'}`} />
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, paddingTop: 20 }}>
+        <div style={{ borderRadius: 999, transition: 'all 300ms', width: step === 1 ? 20 : 6, height: 6, background: step === 1 ? T.accent : T.bd }} />
+        <div style={{ borderRadius: 999, transition: 'all 300ms', width: step === 2 ? 20 : 6, height: 6, background: step === 2 ? T.accent : T.bd }} />
       </div>
 
-      <button onClick={onNext} className="reg-btn-primary w-full">
-        Далее
-      </button>
+      <StickyDock>
+        <CTA onClick={onNext}>Далее</CTA>
+      </StickyDock>
     </div>
   )
 }
