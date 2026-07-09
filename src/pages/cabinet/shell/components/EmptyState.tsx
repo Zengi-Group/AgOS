@@ -14,7 +14,7 @@ interface EmptyStateProps {
 export function EmptyState({ icon, title, sub, action }: EmptyStateProps) {
   return (
     <div className="es">
-      <div className="es-art"><PhIcon name={icon} size={30} color="var(--ink-3)" /></div>
+      <div className="es-art"><PhIcon name={icon} size={46} /></div>
       <div className="es-h">{title}</div>
       {sub && <div className="es-s">{sub}</div>}
       {action && <div className="es-act">{action}</div>}

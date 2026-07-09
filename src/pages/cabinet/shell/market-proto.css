@@ -656,18 +656,28 @@
 }
 .agos-cabinet-stage .mk-cta + .mk-cta { margin-top:8px; }
 /* ─── 9. Empty ─────────────────────────────────────────────────────────── */
-.agos-cabinet-stage .mk-empty { padding:84px 14px 56px; gap:20px; }
+.agos-cabinet-stage .mk-empty { padding:72px 14px 56px; gap:0; }
 .agos-cabinet-stage .mk-empty-art {
-  width:0; height:0; border:0; background:transparent;
-  display:none;
+  width:128px; height:128px; border:0; margin:0 0 26px;
+  display:grid; place-items:center;
+  color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 10%, var(--bg-c));
+  border-radius:44% 56% 57% 43% / 54% 45% 55% 46%;
+  box-shadow:0 0 0 10px color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.agos-cabinet-stage .mk-empty-h {
+  font-size:18px; font-weight:700; color:var(--ink);
+  letter-spacing:-.02em; line-height:1.3; max-width:280px;
 }
 .agos-cabinet-stage .mk-empty-t {
-  font-size:17px; color:var(--fg);
-  font-weight:500;
-  letter-spacing:-.014em;
-  line-height:1.45;
+  font-size:15px; color:var(--fg2);
+  font-weight:400;
+  letter-spacing:-.012em;
+  line-height:1.55;
   max-width:280px;
 }
+.agos-cabinet-stage .mk-empty-h + .mk-empty-t { margin-top:8px; }
+.agos-cabinet-stage .mk-empty .mk-cta { margin-top:24px; max-width:240px; }
 /* ─── 10. Льготный режим ───────────────────────────────────────────────── */
 .agos-cabinet-stage .mk-grace {
   display:flex; align-items:center; gap:14px;
