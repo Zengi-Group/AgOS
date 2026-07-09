@@ -1,23 +1,15 @@
 import { useNavigate } from 'react-router-dom'
-import { cn } from '@/lib/utils'
+import { T } from '@/lib/auth-ui/tokens'
+import { H1, Lede } from '@/lib/auth-ui/primitives'
 import type { RoleType } from '../constants'
 
-const ROLES: { value: RoleType; title: string; desc: string; icon: string }[] = [
-  { value: 'farmer', title: 'Фермер', desc: 'Я выращиваю скот', icon: '/icons/cow.svg' },
-  { value: 'mpk', title: 'Мясокомбинат / Откормплощадка', desc: 'Я закупаю скот', icon: '/icons/factory.svg' },
-  { value: 'services', title: 'Сервисная компания', desc: 'Я оказываю услуги фермерам', icon: '/icons/wrench.svg' },
-  { value: 'feed_producer', title: 'Кормопроизводитель', desc: 'Я произвожу/продаю корма', icon: '/icons/wheat.svg' },
-  { value: 'expert', title: 'Эксперт / консультант', desc: 'Я консультирую фермеров', icon: '/icons/wrench.svg' },
+const ROLES: { value: RoleType; title: string; sub: string; meta: string }[] = [
+  { value: 'farmer', title: 'Фермер', sub: 'Продаю партии, читаю цены, беру услуги.', meta: 'Доступ откроется сразу' },
+  { value: 'mpk', title: 'МПК / Откормплощадка', sub: 'Мясоперерабатывающий комбинат. Закупаю скот у ферм.', meta: 'После проверки TURAN — 1–3 дня' },
+  { value: 'services', title: 'Сервисная компания', sub: 'Оказываю услуги фермерам.', meta: 'После проверки TURAN' },
+  { value: 'feed_producer', title: 'Кормопроизводитель', sub: 'Произвожу и продаю корма.', meta: 'После проверки TURAN' },
+  { value: 'expert', title: 'Эксперт / консультант', sub: 'Консультирую фермеров.', meta: 'После проверки TURAN — 1–3 дня' },
 ]
-
-// Simple icon fallbacks using unicode
-const ROLE_ICONS: Record<RoleType, string> = {
-  farmer: '\uD83D\uDC04',
-  mpk: '\uD83C\uDFED',
-  services: '\uD83D\uDD27',
-  feed_producer: '\uD83C\uDF3E',
-  expert: '\uD83D\uDC68\u200D\u2695\uFE0F',
-}
 
 interface RoleSelectProps {
   onSelect: (role: RoleType) => void
@@ -27,50 +19,45 @@ export function RoleSelect({ onSelect }: RoleSelectProps) {
   const navigate = useNavigate()
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold text-[#2B180A] font-serif leading-tight">
-          Кто вы?
-        </h1>
-        <p className="text-sm text-[#6b5744] mt-1">
-          Выберите роль — от неё зависят поля и кабинет
-        </p>
-      </div>
+    <>
+      <H1>Кто вы в TURAN?</H1>
+      <Lede>Кабинет и лента подстроятся под роль. От неё зависят поля регистрации.</Lede>
 
-      <div className="space-y-2.5">
-        {ROLES.map((role) => (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {ROLES.map((r) => (
           <button
-            key={role.value}
-            onClick={() => onSelect(role.value)}
-            className={cn(
-              'w-full flex items-center gap-3 p-3.5 bg-white rounded-xl border border-[#e8ddd0]',
-              'hover:border-[hsl(24,73%,54%)] hover:bg-[#fdf6ee] active:scale-[0.99]',
-              'transition-all text-left group'
-            )}
+            key={r.value}
+            onClick={() => onSelect(r.value)}
+            style={{
+              textAlign: 'left',
+              padding: '18px 18px',
+              borderRadius: 14,
+              background: T.bgC,
+              border: `1px solid ${T.bd}`,
+              color: T.fg,
+              fontFamily: T.font,
+              cursor: 'pointer',
+              transition: 'all 120ms',
+            }}
           >
-            <div className="w-10 h-10 rounded-lg bg-[#fdf6ee] group-hover:bg-white flex items-center justify-center text-xl shrink-0 transition-colors">
-              {ROLE_ICONS[role.value]}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 10 }}>
+              <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.01em' }}>{r.title}</div>
+              <span style={{ color: T.fg3, fontSize: 22, lineHeight: 1 }}>›</span>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[14px] font-semibold text-[#2B180A] leading-tight">
-                {role.title}
-              </p>
-              <p className="text-[12px] text-[#6b5744] mt-0.5">{role.desc}</p>
-            </div>
-            <span className="text-[#6b5744]/30 group-hover:text-[hsl(24,73%,54%)] transition-colors text-xl leading-none">›</span>
+            <div style={{ fontSize: 14, color: T.fg2, lineHeight: 1.45, marginBottom: 10 }}>{r.sub}</div>
+            <div style={{ fontSize: 11, color: T.fg3, letterSpacing: '.06em', textTransform: 'uppercase' }}>{r.meta}</div>
           </button>
         ))}
       </div>
 
-      <p className="text-center text-sm text-[#6b5744] pt-2">
-        Уже есть аккаунт?{' '}
+      <div style={{ marginTop: 24, textAlign: 'center' }}>
         <button
           onClick={() => navigate('/login')}
-          className="text-[hsl(24,73%,54%)] font-medium hover:underline"
+          style={{ background: 'transparent', border: 'none', padding: '12px 16px', minHeight: 44, color: T.fg2, fontFamily: T.font, fontSize: 15, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
         >
-          Войти
+          Уже есть аккаунт? <span style={{ color: T.accent, fontWeight: 500 }}>Войти ›</span>
         </button>
-      </p>
-    </div>
+      </div>
+    </>
   )
 }

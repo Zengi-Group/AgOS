@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { cn } from '@/lib/utils'
+import { T } from '@/lib/auth-ui/tokens'
 
 interface FloatingInputProps {
   label: string
@@ -13,6 +13,10 @@ interface FloatingInputProps {
   autoAdvanceAt?: number // blur input when value reaches this length
 }
 
+/**
+ * Плавающий лейбл в дизайне прототипа (светлая «бумажная» тема, Geist).
+ * Поведение сохранено (floating label, autoAdvanceAt).
+ */
 export function FloatingInput({
   label,
   value,
@@ -27,6 +31,7 @@ export function FloatingInput({
   const [focused, setFocused] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const hasValue = value.length > 0
+  const floated = focused || hasValue
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
@@ -37,7 +42,7 @@ export function FloatingInput({
   }
 
   return (
-    <div className={cn('relative', className)}>
+    <div className={className} style={{ position: 'relative' }}>
       <input
         ref={inputRef}
         type={type}
@@ -47,27 +52,42 @@ export function FloatingInput({
         onBlur={() => setFocused(false)}
         maxLength={maxLength}
         disabled={disabled}
-        className={cn(
-          'reg-input w-full h-14 px-4 pt-5 pb-2 bg-white border rounded-xl text-[#2B180A] outline-none transition-colors',
-          error
-            ? 'border-red-400 focus:border-red-500'
-            : 'border-[#e8ddd0] focus:border-[#2B180A]',
-          disabled && 'opacity-50 cursor-not-allowed'
-        )}
+        className="reg-input"
+        style={{
+          width: '100%',
+          height: 56,
+          padding: '20px 16px 8px',
+          background: T.bgC,
+          border: `1px solid ${error ? T.red : focused ? T.fg : T.bd}`,
+          borderRadius: 12,
+          color: T.fg,
+          fontFamily: T.font,
+          fontWeight: 500,
+          letterSpacing: '-0.01em',
+          outline: 'none',
+          transition: 'border-color 80ms',
+          boxSizing: 'border-box',
+          opacity: disabled ? 0.5 : 1,
+        }}
       />
       <label
-        className={cn(
-          'absolute left-4 transition-all duration-200 pointer-events-none',
-          focused || hasValue
-            ? 'top-2 text-xs text-[#6b5744]'
-            : 'top-4 text-base text-[#6b5744]/60'
-        )}
+        style={{
+          position: 'absolute',
+          left: 16,
+          pointerEvents: 'none',
+          transition: 'all 160ms',
+          color: T.fg3,
+          fontFamily: T.font,
+          top: floated ? 8 : 17,
+          fontSize: floated ? 11 : 16,
+          fontWeight: floated ? 500 : 400,
+          letterSpacing: floated ? '.06em' : 0,
+          textTransform: floated ? 'uppercase' : 'none',
+        }}
       >
         {label}
       </label>
-      {error && (
-        <p className="text-xs mt-1 px-1" style={{ color: 'var(--red)' }}>{error}</p>
-      )}
+      {error && <div style={{ fontSize: 12, color: T.red, marginTop: 6, paddingLeft: 4 }}>{error}</div>}
     </div>
   )
 }

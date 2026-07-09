@@ -17,6 +17,7 @@ import { Route as RouteV5, useLocation } from 'react-router-dom-v5'
 import '@ionic/react/css/core.css'
 import './cabinet.css'
 import './ionic.css'
+import './shell-proto.css'
 import { useAuth } from '@/hooks/useAuth'
 import { ShellCtx } from './context'
 import {

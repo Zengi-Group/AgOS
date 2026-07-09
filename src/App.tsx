@@ -10,9 +10,12 @@ import { RequireAuth } from '@/components/guards/RequireAuth'
 import { RequireExpert } from '@/components/guards/RequireExpert'
 import { PublicLanding } from '@/components/guards/PublicLanding'
 import { Login } from '@/pages/auth/Login'
+import { Welcome } from '@/pages/auth/Welcome'
 import { AdminLogin } from '@/pages/auth/AdminLogin'
 import { ForgotPin } from '@/pages/auth/ForgotPin'
 import { Registration } from '@/pages/registration/Registration'
+import { Membership } from '@/pages/membership/Membership'
+import { useAuth } from '@/hooks/useAuth'
 
 // ── Public site (migrated from turan-industry-catalyst) ──────────────────────
 const BusinessCard = lazy(() => import('@/pages/public/BusinessCard'))
@@ -139,6 +142,15 @@ const queryClient = new QueryClient({
 // обёрнутый сайт). Гейт аддитивный — web-таргет монтирует всё как раньше.
 const IS_NATIVE = import.meta.env.VITE_APP_TARGET === 'native'
 
+// Native cold-start (ARS farmer-redesign): неавторизованных встречает тёмный
+// Welcome (вход мобильного приложения); авторизованных уводим в кабинет.
+// Web-таргет корня по-прежнему показывает публичный лендинг (PublicLanding).
+function NativeEntry() {
+  const { session, loading } = useAuth()
+  if (loading) return null
+  return session ? <Navigate to="/cabinet" replace /> : <Welcome />
+}
+
 function App() {
   return (
     <HelmetProvider>
@@ -147,11 +159,13 @@ function App() {
       <AuthProvider>
         <BrowserRouter>
           <Routes>
-            {/* Native: корень уводит в кабинет (RequireAuth отбросит на /login если нет сессии). */}
-            <Route path="/" element={IS_NATIVE ? <Navigate to="/cabinet" replace /> : <PublicLanding />} />
+            {/* Native: корень встречает неавторизованных тёмным Welcome, авторизованных — кабинетом. */}
+            <Route path="/" element={IS_NATIVE ? <NativeEntry /> : <PublicLanding />} />
+            <Route path="/welcome" element={<Welcome />} />
             <Route path="/login" element={<Login />} />
             <Route path="/forgot-pin" element={<ForgotPin />} />
             <Route path="/register" element={<Registration />} />
+            <Route path="/membership" element={<Membership />} />
 
             {/* ── Публичный сайт + админ-логин: только web-таргет (§8) ─── */}
             {!IS_NATIVE && (

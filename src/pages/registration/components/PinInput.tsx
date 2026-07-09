@@ -1,4 +1,6 @@
-import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
+import { useEffect, useRef } from 'react'
+import { T } from '@/lib/auth-ui/tokens'
+import { PinCells } from '@/lib/auth-ui/primitives'
 
 interface PinInputProps {
   value: string
@@ -9,45 +11,46 @@ interface PinInputProps {
   disabled?: boolean
 }
 
-export function PinInput({
-  value,
-  onChange,
-  onComplete,
-  label = 'Введите PIN-код',
-  error,
-  disabled,
-}: PinInputProps) {
+/**
+ * PIN-ввод в дизайне прототипа (светлая «бумажная» тема): 6 клеток-точек +
+ * скрытый input для нативной цифровой клавиатуры. Контракт props сохранён
+ * (value/onChange/onComplete/label/error/disabled) — CreatePin работает как прежде.
+ */
+export function PinInput({ value, onChange, onComplete, label, error, disabled }: PinInputProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!disabled) inputRef.current?.focus()
+  }, [disabled])
+
   const handleChange = (val: string) => {
-    onChange(val)
-    if (val.length === 6 && onComplete) {
-      onComplete(val)
-    }
+    const clean = val.replace(/\D/g, '').slice(0, 6)
+    onChange(clean)
+    if (clean.length === 6 && onComplete) onComplete(clean)
   }
 
   return (
-    <div className="space-y-2">
-      <p className="text-sm text-[#6b5744] text-center">{label}</p>
-      <div className="flex justify-center">
-        <InputOTP
-          maxLength={6}
-          value={value}
-          onChange={handleChange}
-          disabled={disabled}
-          inputMode="numeric"
-        >
-          <InputOTPGroup>
-            <InputOTPSlot index={0} />
-            <InputOTPSlot index={1} />
-            <InputOTPSlot index={2} />
-            <InputOTPSlot index={3} />
-            <InputOTPSlot index={4} />
-            <InputOTPSlot index={5} />
-          </InputOTPGroup>
-        </InputOTP>
-      </div>
-      {error && (
-        <p className="text-xs text-center text-red-600">{error}</p>
+    <div onClick={() => inputRef.current?.focus()} style={{ display: 'flex', flexDirection: 'column', cursor: 'text' }}>
+      {label && (
+        <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.08em', textTransform: 'uppercase', color: T.fg3, textAlign: 'center' }}>
+          {label}
+        </div>
       )}
+      <PinCells value={value} error={!!error} />
+      <div style={{ minHeight: 20, marginTop: 14, color: T.red, fontSize: 13, textAlign: 'center' }}>{error}</div>
+      <input
+        ref={inputRef}
+        type="tel"
+        inputMode="numeric"
+        enterKeyHint="done"
+        pattern="[0-9]*"
+        autoComplete="one-time-code"
+        maxLength={6}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => handleChange(e.target.value)}
+        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1, border: 0, padding: 0, margin: 0 }}
+      />
     </div>
   )
 }
