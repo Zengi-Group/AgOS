@@ -2662,7 +2662,52 @@ begin
                 expires_at           = excluded.expires_at,
                 responded_at         = null,
                 responded_by         = null
-        returning batch_id
+        returning id as offer_id, batch_id, offered_price_per_kg, expires_at
+    ),
+    -- TSP-FLOW-06: emit market.offer.created per broadcast offer (Dok4 §3.3a) so
+    -- the push/notification path (offer_created_mpk, Dok4 §7) can fire. Recipient
+    -- org = pool MPK (v_mpk_org_id, P-AI-2). System actor (broadcast, no user).
+    -- Additive: existing market.pool.retry_match aggregate event is untouched.
+    ev_offer_created as (
+        insert into public.platform_events (
+            event_type, entity_type, entity_id, organization_id,
+            actor_type, actor_id, payload, is_audit
+        )
+        select 'market.offer.created', 'offers', u.offer_id, v_mpk_org_id,
+               'system', null,
+               jsonb_build_object(
+                   'offer_id', u.offer_id,
+                   'batch_id', u.batch_id,
+                   'mpk_org_id', v_mpk_org_id,
+                   'offered_price_per_kg', u.offered_price_per_kg,
+                   'expires_at', u.expires_at
+               ),
+               false
+        from upserted u
+        returning id as event_id, organization_id as org_id, payload
+    ),
+    -- Slice-4 dispatcher (Dok4 §6.1 transactional): fan each just-emitted event
+    -- out to notifications for EVERY active user of the recipient MPK org, on each
+    -- channel enabled in user_notification_preferences (absent row = enabled).
+    -- template=offer_created_mpk (Dok4 §7: in_app + push); payload already carries
+    -- offered_price_per_kg + expires_at (the template's placeholders). Recipient
+    -- resolution via user_organization_roles (users have no org FK, D5).
+    notif_offer_created as (
+        insert into public.notifications (
+            user_id, organization_id, channel, template_id, params,
+            platform_event_id, delivery_status
+        )
+        select uor.user_id, e.org_id, ch.channel, 'offer_created_mpk', e.payload,
+               e.event_id, 'pending'
+        from ev_offer_created e
+        join public.user_organization_roles uor
+            on uor.organization_id = e.org_id
+        join public.users usr
+            on usr.id = uor.user_id and usr.is_active = true
+        cross join unnest(array['in_app','push']) as ch(channel)
+        left join public.user_notification_preferences pref
+            on pref.user_id = uor.user_id and pref.channel = ch.channel
+        where coalesce(pref.is_enabled, true) = true
     )
     select count(*), count(distinct batch_id)
       into v_offers_upserted, v_batches_count
@@ -2859,13 +2904,32 @@ begin
         responded_by = public.fn_current_user_id()
     where id = p_offer_id;
 
-    -- 2) Withdraw siblings (FCFS)
-    update public.offers
-    set status       = 'withdrawn',
-        responded_at = now()
-    where batch_id = v_offer.batch_id
-      and id != p_offer_id
-      and status = 'pending';
+    -- 2) Withdraw siblings (FCFS) + emit market.offer.withdrawn (TSP-FLOW-06,
+    --    reason=sibling_accepted, Dok4 §3.3a). Recipient org = each sibling MPK
+    --    (P-AI-2). Additive: accept/matched events below untouched.
+    with w as (
+        update public.offers
+        set status       = 'withdrawn',
+            responded_at = now()
+        where batch_id = v_offer.batch_id
+          and id != p_offer_id
+          and status = 'pending'
+        returning id as offer_id, batch_id, mpk_org_id
+    )
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    )
+    select 'market.offer.withdrawn', 'offers', w.offer_id, w.mpk_org_id,
+           'system', null,
+           jsonb_build_object(
+               'offer_id', w.offer_id,
+               'batch_id', w.batch_id,
+               'mpk_org_id', w.mpk_org_id,
+               'reason', 'sibling_accepted'
+           ),
+           false
+    from w;
 
     -- 3) Batch -> matched.
     -- D-M6-DEALPRICE (CEO 2026-06-23): the farmer is paid the MATCHED pool line's
@@ -3194,7 +3258,53 @@ begin
                 expires_at           = excluded.expires_at,
                 responded_at         = null,
                 responded_by         = null
-        returning 1
+        returning id as offer_id, mpk_org_id, offered_price_per_kg, expires_at
+    ),
+    -- TSP-FLOW-06: emit market.offer.created per re-broadcast offer (Dok4 §3.3a)
+    -- so the push/notification path (offer_created_mpk, Dok4 §7) can fire. Recipient
+    -- org = each matching MPK (per-row, P-AI-2). System actor (broadcast, no user).
+    -- Additive: existing market.batch.price_lowered event below is untouched.
+    ev_offer_created as (
+        insert into public.platform_events (
+            event_type, entity_type, entity_id, organization_id,
+            actor_type, actor_id, payload, is_audit
+        )
+        select 'market.offer.created', 'offers', u.offer_id, u.mpk_org_id,
+               'system', null,
+               jsonb_build_object(
+                   'offer_id', u.offer_id,
+                   'batch_id', p_batch_id,
+                   'mpk_org_id', u.mpk_org_id,
+                   'offered_price_per_kg', u.offered_price_per_kg,
+                   'expires_at', u.expires_at
+               ),
+               false
+        from upserted u
+        returning id as event_id, organization_id as org_id, payload
+    ),
+    -- Slice-4 dispatcher (Dok4 §6.1 transactional): fan each just-emitted event
+    -- out to notifications for EVERY active user of the recipient MPK org, on each
+    -- channel enabled in user_notification_preferences (absent row = enabled).
+    -- template=offer_created_mpk (Dok4 §7: in_app + push); payload already carries
+    -- offered_price_per_kg + expires_at (the template's placeholders). Recipient
+    -- resolution via user_organization_roles (users have no org FK, D5). org_id
+    -- here is per-row (each matching MPK, from the event's organization_id).
+    notif_offer_created as (
+        insert into public.notifications (
+            user_id, organization_id, channel, template_id, params,
+            platform_event_id, delivery_status
+        )
+        select uor.user_id, e.org_id, ch.channel, 'offer_created_mpk', e.payload,
+               e.event_id, 'pending'
+        from ev_offer_created e
+        join public.user_organization_roles uor
+            on uor.organization_id = e.org_id
+        join public.users usr
+            on usr.id = uor.user_id and usr.is_active = true
+        cross join unnest(array['in_app','push']) as ch(channel)
+        left join public.user_notification_preferences pref
+            on pref.user_id = uor.user_id and pref.channel = ch.channel
+        where coalesce(pref.is_enabled, true) = true
     )
     select count(*) into v_mpk_count from upserted;
 
@@ -3346,7 +3456,9 @@ language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
-declare v_batch record;
+declare
+    v_batch record;
+    v_event_id uuid;
 begin
     select * into v_batch
     from public.batches
@@ -3380,9 +3492,36 @@ begin
     ) values (
         'market.batch.dispatched', 'batches', p_batch_id, p_organization_id,
         'farmer', public.fn_current_user_id(),
-        jsonb_build_object('batch_id', p_batch_id),
+        jsonb_build_object('batch_id', p_batch_id, 'dispatched_at', now()),
         true
-    );
+    ) returning id into v_event_id;
+
+    -- Slice-4 dispatcher (Dok4 §6.1 transactional, NOTIF-DISPATCH-01): notify the
+    -- COUNTERPARTY MPK (not the event org — the event org is the farmer here). The
+    -- MPK is resolved from the accepted offer on this batch; dispatch is post-confirmed
+    -- so contacts are already revealed (D-M6-5/12) and the recipient is lawful. Fan out
+    -- to every active user of that MPK org (user_organization_roles — no org FK on users,
+    -- D5) on channels in_app + push (Dok4 §7 batch_dispatched_mpk), filtered by
+    -- user_notification_preferences (absent row = enabled). params carries the template's
+    -- only placeholder {dispatched_at}. Zero accepted offers → zero rows (safe no-op).
+    insert into public.notifications (
+        user_id, organization_id, channel, template_id, params,
+        platform_event_id, delivery_status
+    )
+    select uor.user_id, o.mpk_org_id, ch.channel, 'batch_dispatched_mpk',
+           jsonb_build_object('dispatched_at', to_char(now(), 'DD.MM.YYYY')),
+           v_event_id, 'pending'
+    from public.offers o
+    join public.user_organization_roles uor
+        on uor.organization_id = o.mpk_org_id
+    join public.users usr
+        on usr.id = uor.user_id and usr.is_active = true
+    cross join unnest(array['in_app','push']) as ch(channel)
+    left join public.user_notification_preferences pref
+        on pref.user_id = uor.user_id and pref.channel = ch.channel
+    where o.batch_id = p_batch_id
+      and o.status = 'accepted'
+      and coalesce(pref.is_enabled, true) = true;
 
     return true;
 end; $$;
@@ -3632,13 +3771,31 @@ begin
     -- Withdraw any still-pending offers for matched batches in this pool BEFORE
     -- resetting batch.pool_line_id (M4 §2.4 close_pool: pending offers to MPKs
     -- for this category are withdrawn when the pool closes).
-    update public.offers o
-    set status = 'withdrawn', responded_at = now()
-    from public.batches b
-    join public.pool_lines pl on pl.id = b.pool_line_id
-    where pl.pool_id = p_pool_id
-      and b.id = o.batch_id
-      and o.status = 'pending';
+    -- + emit market.offer.withdrawn (TSP-FLOW-06, reason=pool_returned, Dok4 §3.3a).
+    with w as (
+        update public.offers o
+        set status = 'withdrawn', responded_at = now()
+        from public.batches b
+        join public.pool_lines pl on pl.id = b.pool_line_id
+        where pl.pool_id = p_pool_id
+          and b.id = o.batch_id
+          and o.status = 'pending'
+        returning o.id as offer_id, o.batch_id, o.mpk_org_id
+    )
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    )
+    select 'market.offer.withdrawn', 'offers', w.offer_id, w.mpk_org_id,
+           'system', null,
+           jsonb_build_object(
+               'offer_id', w.offer_id,
+               'batch_id', w.batch_id,
+               'mpk_org_id', w.mpk_org_id,
+               'reason', 'pool_returned'
+           ),
+           false
+    from w;
 
     -- Return each matched batch -> published
     for v_batch_id in
@@ -3828,13 +3985,31 @@ begin
     end if;
 
     -- Withdraw any pending offers for matched batches BEFORE resetting pool_line_id
-    update public.offers o
-    set status = 'withdrawn', responded_at = now()
-    from public.batches b
-    join public.pool_lines pl on pl.id = b.pool_line_id
-    where pl.pool_id = p_pool_id
-      and b.id = o.batch_id
-      and o.status = 'pending';
+    -- + emit market.offer.withdrawn (TSP-FLOW-06, reason=pool_cancelled, Dok4 §3.3a).
+    with w as (
+        update public.offers o
+        set status = 'withdrawn', responded_at = now()
+        from public.batches b
+        join public.pool_lines pl on pl.id = b.pool_line_id
+        where pl.pool_id = p_pool_id
+          and b.id = o.batch_id
+          and o.status = 'pending'
+        returning o.id as offer_id, o.batch_id, o.mpk_org_id
+    )
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    )
+    select 'market.offer.withdrawn', 'offers', w.offer_id, w.mpk_org_id,
+           'system', null,
+           jsonb_build_object(
+               'offer_id', w.offer_id,
+               'batch_id', w.batch_id,
+               'mpk_org_id', w.mpk_org_id,
+               'reason', 'pool_cancelled'
+           ),
+           false
+    from w;
 
     -- Return each matched batch -> published
     for v_batch_id in

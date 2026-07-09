@@ -270,6 +270,10 @@ INSERT INTO public.user_notification_preferences (user_id, channel)
   ON CONFLICT DO NOTHING;
 ```
 
+> **Реализация (2026-07-08, Slice-4, D-DISPATCH-01) — реальность:** таблица создана в `d01_kernel.sql` (не в отдельной миграции — patch-файлы запрещены, CLAUDE.md). Два отличия от эскиза выше, оба намеренные:
+> 1. `channel` CHECK включает **`push`** (супермножество `notifications.channel`, ARS-142 C4) — а не только `whatsapp/in_app`.
+> 2. **Seed НЕ выполняется.** Семантика «отсутствие строки = канал включён» (default-on): диспетчер делает `LEFT JOIN ... coalesce(is_enabled, true)`, поэтому пустая таблица = все каналы включены для всех. Строка пишется только когда юзер ВЫКЛючает канал. Это убирает необходимость бэкфилла и гонку «новый юзер без seed-строки».
+
 ---
 
 ## 3. Полный каталог событий по доменам
@@ -334,11 +338,11 @@ INSERT INTO public.user_notification_preferences (user_id, channel)
 | **market.batch.confirmed** | `rpc_accept_offer` (auto-close path) | Farmer+MPK Notification ✅ (D-M6-5: identity revealed), Audit | batch_id, pool_id, mpk_org_id, mpk_legal_name, farmer_org_id, farmer_legal_name |
 | **market.batch.dispatched** | `rpc_confirm_dispatch` | MPK Notification ✅, AI GW | batch_id, dispatched_at, by_user_id |
 | **market.batch.delivered** | `rpc_confirm_delivery` | Farmer Notification ✅, Review-prompt scheduler | batch_id, delivered_at, by_user_id |
-| **market.offer.created** *(PENDING-CODE — declared in canon Microstep6; not yet emitted; debt TSP-FLOW-06)* | `rpc_publish_pool` / `rpc_retry_match_pool` / `rpc_lower_batch_price` — **NOT EMITTED YET** | MPK Notification ✅ (pending) | offer_id, batch_id, mpk_org_id, offered_price_per_kg, expires_at |
+| **market.offer.created** *(EMITTED — 2026-07-08, ARS-143/TSP-FLOW-06)* | `rpc_retry_match_pool` (inline из `rpc_publish_pool`) / `rpc_lower_batch_price` | MPK Notification ✅ (`offer_created_mpk`, §7) | offer_id, batch_id, mpk_org_id, offered_price_per_kg, expires_at |
 | **market.offer.accepted** *(emitted in code today via `rpc_accept_offer`)* | `rpc_accept_offer` | Farmer + MPK Notification ✅, Audit | offer_id, batch_id, mpk_org_id, deal_price_per_kg, accepted_at |
 | **market.offer.rejected** *(emitted in code today via MPK rejection path)* | `rpc_accept_offer` (MPK reject) / manual reject path | Farmer Notification ✅ | offer_id, batch_id, mpk_org_id, rejected_at, reason |
 | **market.offer.expired** *(PENDING-CODE — canonical; not yet emitted by cron; debt TSP-FLOW-06)* | System cron (offer window elapsed) — **NOT EMITTED YET** | Farmer Notification ✅ (pending) | offer_id, batch_id, mpk_org_id, expired_at, offers_window_hours |
-| **market.offer.withdrawn** *(PENDING-CODE — declared in canon Microstep6; not yet emitted for all paths; debt TSP-FLOW-06)* | `rpc_accept_offer` (sibling withdraw) / cancel paths — **PARTIAL** | MPK Realtime ✅ (pending full coverage) | offer_id, batch_id, mpk_org_id, reason: 'sibling_accepted'\|'batch_cancelled'\|'pool_cancelled'\|'pool_returned' |
+| **market.offer.withdrawn** *(EMITTED — 2026-07-08, TSP-FLOW-06; `batch_cancelled` ждёт M6-версии rpc_cancel_batch, TSP-FLOW-04)* | `rpc_accept_offer` (sibling) / `rpc_cancel_pool` / `rpc_pool_return_batches` | MPK Realtime ✅ | offer_id, batch_id, mpk_org_id, reason: 'sibling_accepted'\|'pool_cancelled'\|'pool_returned' (\|'batch_cancelled' — pending TSP-FLOW-04) |
 | **market.pool.cancelled** | `rpc_cancel_pool` | MPK + всех matched Farmer Notification ✅, Audit | pool_id, mpk_org_id, reason, affected_batches_count |
 | **market.pool.closed_partial** | `rpc_pool_accept_partial` | Farmer Notification ✅ (matched batches confirmed), Audit | pool_id, mpk_org_id, confirmed_batches_count, fill_ratio |
 | **market.pool.closed_unfilled** | `rpc_pool_return_batches` / cron (window expired, no decision) | Farmer Notification ✅ (batches → published), Audit | pool_id, mpk_org_id, returned_batches_count |
@@ -691,6 +695,8 @@ async def should_send(org_id, alert_type, entity_id):
 | batch_expired | WA | Farmer | *{head_count} гол. {category} — батч истёк без покупателя. Хотите переопубликовать? Ответьте ДА.* |
 | batch_published_mpk | in_app | MPK | *Новый лот: {head_count} гол. {category}, {region}. Грейд: {grade}. Дата готовности: {ready_date}.* |
 | batch_cancelled_mpk | in_app | MPK | *Лот {head_count} гол. {category} отменён продавцом. Пул обновлён.* |
+| batch_dispatched_mpk | in_app + push | MPK | *Продавец отгрузил партию по вашей сделке. Дата отгрузки: {dispatched_at}. Детали в кабинете.* |
+| offer_created_mpk | in_app + push | MPK | *Новое предложение по партии. Цена: {offered_price_per_kg} ₸/кг. Действует до {expires_at}. Ответьте в кабинете.* |
 | pool_contacts_revealed | WA + in_app | Farmer | *Контакт покупателя раскрыт: {mpk_name}. Дата отгрузки: {dispatch_date}. Контакт менеджера: {contact}.* |
 | vaccination_overdue | WA | Farmer | *{farmer_name}, вакцинация {disease_name} для группы «{group_name}» просрочена на {days_overdue} дней. Ответьте ПЛАН.* |
 | vaccination_reminder | WA | Farmer | *{farmer_name}, напоминание: вакцинация {disease_name} через {days_until} дней ({scheduled_date}).* |
@@ -714,6 +720,12 @@ async def should_send(org_id, alert_type, entity_id):
 | certificate_issued | WA + in_app | Farmer | *🎓 Сертификат получен! «{course_name}» пройден. Доступен в кабинете.* |
 | enrollment_confirmed | in_app | Farmer | *Записаны на курс «{course_name}». Начало: {start_date}.* |
 | epidemic_signal_detected | in_app | Admin/Expert | *Зафиксирован сигнал: {disease_name}, {region}. Требует подтверждения.* |
+
+**ARS-143 (C5) — доп. TSP push-шаблоны (2026-07-08, канон-правка §7↔§3.3a):**
+- `batch_dispatched_mpk` ← событие `market.batch.dispatched` (эмитится `rpc_confirm_dispatch`). Аудитория MPK, стадия — после `batch.confirmed` (контакты уже раскрыты), но payload (`batch_id, dispatched_at`) имени не несёт — текст анонимен по построению. ✅ **Диспетчеризуется в `notifications`** (2026-07-09, Slice-4, NOTIF-DISPATCH-01): в той же транзакции `rpc_confirm_dispatch` уведомляет КОНТРАГЕНТА-MPK (не орг события — там фермер!), резолвя MPK через accepted-offer этого батча; fan-out всем активным юзерам MPK-орг × `in_app + push`, фильтр `user_notification_preferences`. Событие эмитится с `is_audit=true` (аудит-трейл) — диспетчеризация от этого не зависит. Последний хоп notification→FCM/APNs = ARS-156 (ключи).
+- `offer_created_mpk` ← событие `market.offer.created` (payload `offer_id, batch_id, mpk_org_id, offered_price_per_kg, expires_at`). Аудитория MPK, стадия — до `batch.confirmed` → имени контрагента нет (D-M6-5/12). ✅ Событие **эмитится** (2026-07-08, TSP-FLOW-06 закрыт): `rpc_retry_match_pool` (inline из `rpc_publish_pool`) и `rpc_lower_batch_price` эмитят per-offer в `platform_events`. ✅ **Диспетчеризуется в `notifications`** (2026-07-08, Slice-4, D-DISPATCH-01): в той же транзакции RPC (Dok4 §6.1, transactional path) событие раскрывается в строки `notifications` для КАЖДОГО активного юзера MPK-орг (resolve через `user_organization_roles`) по каналам `in_app + push`, отфильтрованным через `user_notification_preferences` (отсутствие строки = включено). `platform_event_id` связывает нотификацию с событием. Остаётся только последний хоп `notification → FCM/APNs → устройство` — он требует провайдерских ключей (ARS-156), не диспетчера.
+- `pool.awaiting_mpk_decision` из тикета ARS-143 **не является отдельным событием** — момент «пул наполнен → MPK решает» покрыт `batch_matched_mpk` («Подтвердите в кабинете»). Отдельный шаблон не заводится.
+- Оставшийся канон-гэп §7↔§3.3a (`batch.delivered`, `batch.awaiting_price_decision`, `pool.cancelled/closed_partial/closed_unfilled`, прочие `offer.*`) — вне C5/push; выносится отдельным тикетом сверки каталога.
 
 ---
 

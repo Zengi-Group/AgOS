@@ -16,7 +16,7 @@ export function createWebHost(): AgOSHost {
       await supabase.auth.signOut()
     },
 
-    async registerPushToken() {
+    async registerPushToken(): Promise<null> {
       // Web Push — опционально, вне скоупа S1 (push-клиент = S5, бэкенд = C-серия).
       return null
     },

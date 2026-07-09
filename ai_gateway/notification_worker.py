@@ -29,11 +29,55 @@ logger = logging.getLogger("agos.gateway.notifications")
 WORKER_ID = f"notif-{uuid.uuid4().hex[:8]}"
 BATCH_SIZE = 10
 
-# Dok 4 §5: Notification templates (Russian)
+# Dok 4 §7: Notification templates (Russian). Texts are COPIED from the Dok 4 §7
+# catalog verbatim — do not paraphrase (CLAUDE.md: reference canon, don't invent).
 TEMPLATES: dict[str, str] = {
     "application_approved": "Заявка одобрена! Ваш статус: {new_level}. Откройте кабинет.",
     "application_rejected": "Заявка отклонена. Причина: {reject_reason}. Контакт: {contact_info}.",
+    # ── ARS-143 (C5): TSP push-relevant templates (Dok 4 §7) ──────────────────
+    # Anonymity invariant (D-M6-5/12): before `market.batch.confirmed` the
+    # counterparty legal_name is NOT in the payload — matched/published/cancelled
+    # texts below carry NO counterparty name by construction. pool_contacts_revealed
+    # runs only AT/AFTER reveal, so {mpk_name} there is lawful.
+    "batch_matched_farmer": "Батч подобран! {head_count} гол. {category}, дата отгрузки {ready_date}. Расчётная выручка: {estimated_total} ₸. Детали в кабинете.",
+    "batch_matched_mpk": "Новый матч: {head_count} гол. {category}, {region}. Вес: {avg_weight} кг. Дата: {ready_date}. Подтвердите в кабинете.",
+    "batch_published_mpk": "Новый лот: {head_count} гол. {category}, {region}. Грейд: {grade}. Дата готовности: {ready_date}.",
+    "batch_cancelled_mpk": "Лот {head_count} гол. {category} отменён продавцом. Пул обновлён.",
+    # market.batch.dispatched (rpc_confirm_dispatch): post-confirmed, payload carries
+    # no name → anonymous by construction. offer.created: pre-confirmed → no name
+    # (D-M6-5/12); event now EMITTED by rpc_retry_match_pool / rpc_lower_batch_price
+    # (TSP-FLOW-06, 2026-07-08).
+    "batch_dispatched_mpk": "Продавец отгрузил партию по вашей сделке. Дата отгрузки: {dispatched_at}. Детали в кабинете.",
+    "offer_created_mpk": "Новое предложение по партии. Цена: {offered_price_per_kg} ₸/кг. Действует до {expires_at}. Ответьте в кабинете.",
+    "pool_contacts_revealed": "Контакт покупателя раскрыт: {mpk_name}. Дата отгрузки: {dispatch_date}. Контакт менеджера: {contact}.",
 }
+
+# ARS-143 (C5) + ARS-144/155 (C6): deep-link path per template for the push `data`
+# payload. CapacitorHost.pushNotificationActionPerformed reads data.path → onDeepLink
+# → router (ARS-155). Missing entry → client falls back to '/cabinet' (no crash).
+# {placeholders} are filled from notification params at dispatch time.
+#
+# Paths MUST match REAL routes (verified 2026-07-08):
+#   Farmer surface (CabinetApp.tsx): /cabinet/batch/:id  (pool has no URL — modal only)
+#   MPK surface  (MpkApp.tsx):       /mpk/tsp, /mpk/offers  (pool detail = modal, no URL)
+# Audience per Dok 4 §7: *_farmer + pool_contacts_revealed → Farmer; *_mpk → MPK.
+# Pool detail screens are modals (opened by id, no route), so pool-scoped events land
+# on the nearest listing route that contains that pool.
+PUSH_DEEP_LINKS: dict[str, str] = {
+    "batch_matched_farmer": "/cabinet/batch/{batch_id}",
+    # matched/dispatched/new-offer are ACTIONABLE for MPK → the offers screen
+    # (MpkIncomingOffersScreen: accept/reject); published/cancelled are feed
+    # updates → the TSP browse screen (MpkTspScreen: pools + batches).
+    "batch_matched_mpk": "/mpk/offers",
+    "batch_published_mpk": "/mpk/tsp",
+    "batch_cancelled_mpk": "/mpk/tsp",
+    "batch_dispatched_mpk": "/mpk/offers",
+    "offer_created_mpk": "/mpk/offers",
+    "pool_contacts_revealed": "/cabinet/batch/{batch_id}",
+}
+
+# Push notification title (Android/iOS show title + body). Body = rendered template.
+PUSH_TITLE = "TURAN — рынок"
 
 
 def render_template(template_id: str, params: dict[str, Any]) -> str:
@@ -90,6 +134,60 @@ def send_whatsapp_message(phone: str, text: str, settings: Any) -> bool:
         return False
     except Exception as e:
         logger.error("WhatsApp send failed: %s", e, exc_info=True)
+        return False
+
+
+def _build_deep_link(template_id: str, params: dict[str, Any]) -> str:
+    """Resolve the deep-link path for a push from its template + params (C6).
+
+    Falls back to '/cabinet' when the template has no mapping or a placeholder
+    param is missing — client must never crash on a bad path (ARS-155).
+    """
+    pattern = PUSH_DEEP_LINKS.get(template_id)
+    if not pattern:
+        return "/cabinet"
+    try:
+        return pattern.format(**params)
+    except (KeyError, IndexError):
+        logger.warning("push deep-link: %s missing param for %s", template_id, pattern)
+        return "/cabinet"
+
+
+def send_push(user_id: str, text: str, path: str, settings: Any) -> bool:
+    """ARS-142 (C4): dispatch a native push by invoking the push-send edge fn (C3/ARS-141).
+
+    The edge function resolves the user's active push_token rows itself (service_role),
+    sends via FCM/APNs, retries, and deactivates dead tokens — the worker only hands it
+    user_id + rendered text + deep-link data. Returns True on a 2xx from the function.
+    """
+    if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
+        logger.warning("push: Supabase not configured — skipping send to %s", user_id[:8])
+        return False
+
+    url = f"{settings.SUPABASE_URL}/functions/v1/push-send"
+    headers = {
+        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+    }
+    body = {
+        "user_id": user_id,
+        "title": PUSH_TITLE,
+        "body": text,
+        "data": {"path": path},
+    }
+    try:
+        with httpx.Client(timeout=20.0) as client:
+            resp = client.post(url, json=body, headers=headers)
+            if resp.status_code in (200, 201):
+                logger.info("push sent for user %s (%s)", user_id[:8], resp.text[:120])
+                return True
+            logger.error("push-send edge error: status=%d body=%s", resp.status_code, resp.text[:300])
+            return False
+    except httpx.TimeoutException:
+        logger.error("push-send edge timeout for user %s", user_id[:8])
+        return False
+    except Exception as e:
+        logger.error("push send failed: %s", e, exc_info=True)
         return False
 
 
@@ -154,6 +252,19 @@ def process_notification_batch() -> dict[str, int]:
                     sent += 1
                 else:
                     _mark_failed(supabase, notif_id, "WHATSAPP_API_ERROR")
+                    failed += 1
+
+            elif channel == "push":
+                # ARS-142 (C4): native push via the push-send edge fn (ARS-141).
+                # Deep-link path derived from template+params (C6) so a tap lands on
+                # the right screen (ARS-155). whatsapp/in_app paths untouched.
+                path = _build_deep_link(template_id, params)
+                success = send_push(str(user_id), text, path, settings)
+                if success:
+                    _mark_sent(supabase, notif_id)
+                    sent += 1
+                else:
+                    _mark_failed(supabase, notif_id, "PUSH_SEND_ERROR")
                     failed += 1
 
             elif channel == "in_app":

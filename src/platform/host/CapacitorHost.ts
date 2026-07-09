@@ -15,7 +15,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { PushNotifications } from '@capacitor/push-notifications'
 import { supabase } from '@/lib/supabase'
-import type { AgOSHost } from './AgOSHost'
+import type { AgOSHost, PushToken } from './AgOSHost'
 import type { KVStorage } from '@/platform/storage'
 import { setAppStorageBackend, setDraftStorageBackend } from '@/platform/storage'
 import { setNetworkBackend } from '@/platform/network'
@@ -128,10 +128,29 @@ export async function createCapacitorHost(): Promise<AgOSHost> {
   }
   void CapApp.addListener('appUrlOpen', (e) => emitDeepLink(urlToPath(e.url)))
 
+  // Deep-link из тапа по push (S5.3 / ARS-155): payload несёт целевой path (контракт C6 / ARS-144).
+  // Пустой/неизвестный payload → home '/cabinet', без краша (роутер разрулит §6 шаг 5).
+  void PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+    const data = action.notification.data as { path?: string; link?: string } | undefined
+    const raw = data?.path ?? data?.link
+    if (!raw) {
+      emitDeepLink('/cabinet')
+      return
+    }
+    emitDeepLink(raw.startsWith('/') ? raw : urlToPath(raw))
+  })
+
   // Сплэш держался launchAutoHide:false — прячем, когда нативный слой готов.
   void SplashScreen.hide()
 
-  let pushHandler: ((token: string) => void) | null = null
+  let pushHandler: ((token: PushToken) => void) | null = null
+
+  // iOS → APNs, Android → FCM (EngSpec §6, соответствует CHECK push_token / ARS-139).
+  const toPushToken = (value: string): PushToken => {
+    const p = Capacitor.getPlatform()
+    const platform = p === 'ios' ? 'ios' : 'android'
+    return { token: value, platform, provider: platform === 'ios' ? 'apns' : 'fcm' }
+  }
 
   const host: AgOSHost = {
     kind: 'capacitor',
@@ -149,21 +168,22 @@ export async function createCapacitorHost(): Promise<AgOSHost> {
     },
 
     async registerPushToken() {
-      // Полная клиентская привязка токен→БД — S5 (§6, C-серия). Здесь host-метод
-      // получает нативный APNs/FCM-токен (Apple 4.2: push на борту сборки).
+      // Клиентская часть S5 (§6): получаем нативный APNs/FCM-токен и отдаём ядру с
+      // provider/platform; привязку токен→БД (rpc_register_push_token) делает ядро.
       try {
         const perm = await PushNotifications.requestPermissions()
         if (perm.receive !== 'granted') return null
-        return await new Promise<string | null>((resolve) => {
+        return await new Promise<PushToken | null>((resolve) => {
           let settled = false
-          const finish = (v: string | null) => {
+          const finish = (v: PushToken | null) => {
             if (settled) return
             settled = true
             resolve(v)
           }
           void PushNotifications.addListener('registration', (t) => {
-            if (pushHandler) pushHandler(t.value)
-            finish(t.value)
+            const pt = toPushToken(t.value)
+            if (pushHandler) pushHandler(pt)
+            finish(pt)
           })
           void PushNotifications.addListener('registrationError', () => finish(null))
           void PushNotifications.register()
