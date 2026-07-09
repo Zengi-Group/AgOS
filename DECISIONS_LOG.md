@@ -3541,3 +3541,35 @@ Files: d01_kernel.sql (rpc_get_my_context + comment).
 **Why**: Комментарий в ionic.css утверждал «фон даёт ion-page = --ion-background-color», но `ion-page` по умолчанию не красит `--ion-background-color` как свой фон (это делают `body`/`ion-content`). Прозрачный `ion-content` + не-крашеная `ion-page` = прозрачная страница → bleed-through только во время transform-перехода.
 
 **Files**: `src/pages/cabinet/shell/ionic.css` (ion-content --background transparent→var(--bg); +.ion-page background). SQL не тронут.
+
+### 2026-07-09: Farmer-redesign Phase 4d — Wizard «Продать новую партию» переверстан под прототип
+
+**What**: Переверстаны все экраны визарда TSP-1 под дизайн-систему «Рынок» (`.mk-*` + Phosphor `PhIcon`), 1:1 со структурой прототипа `agos-farmer/public/agos/app/market-wizard.jsx`+`market-ui.jsx`. Файлы: `tsp/wizard/{WizShell,WizStep1Animals,WizStep2Window,WizStep3Category,WizStep4Price,WizStep5Review,PubResult}`. `BatchWizard.tsx` (оркестратор) НЕ тронут. Новые mk-атомы в `tsp/components/`: `MkCta`,`MkField`,`MkErr`,`CheckRow`,`MkSelect` (триггер `.mk-seltrig`+нижний пикер `.mk-pick*`, порт из прототипа, поиск при >8 опций). Реверс атомов, используемых только визардом: `WizProgress`→`.mk-wiz-prog`, `StepperCtl`→`.mk-stp`, `BigRadio`→`.mk-big-radio`, `InfoNote`→`.mk-infonote` (сигнатура `{title,children}`). `Cta`/`KV` (общие) — не тронуты.
+
+**Why / ключевые решения**:
+- **База ветки (решение руководителя, AskUserQuestion).** Воркдерев `claude/batch-wizard-impl-67ccab` был отрезан от `main` (без редизайн-фундамента: нет `market-proto.css`/`PhIcon`/phosphor). `git reset --hard` на `claude/farmer-app-redesign-d5ff04` (ветка своих коммитов не имела — потерь нет), где готовы 4a–4c + scaffold. `npm install` доставил `@phosphor-icons/react@2.1.10` (peer-tree чист, D-DEP-BUMP-01 ✓).
+- **Архитектура входа.** `CabinetApp.renderMarket` уже оборачивает визард в `<IonPage className="agos-flow-page">` (slide-up). Поэтому `WizShell`/`PubResult` рендерят `IonContent`+`.sh-foot` НАПРЯМУЮ (без вложенного IonPage). CabinetApp не тронут. `wizScrollTo` переписан под shadow-скроллер ion-content.
+- **Сохранено дословно (HS-2/HS-5, проверено в preview E2E):** `rpc_create_batch`+`rpc_self_auto_match_batch`+`buildLocalBatch` (публикация без бэка → variant B), `useBatchDraft`, `lowOk`/floor через `mpkSortFloor` (в UI показал 1650 ₸/кг для сорта «КРС·Высшая»), `useGradeFormula`+карточка сорта МПК на шаге 3 (богаче прототипа), дисклеймер цен ст.171 (`.mk-ref-d`). **Отклонение от прототипа сохранено:** регион = бейдж из профиля (`farmRegion`), а НЕ пикер DISTRICTS — регион берётся из регистрации хозяйства.
+
+**Verify**: `tsc -b --noEmit` = 0 ошибок. Preview (Vite, seed-fallback, фейк-сессия) — прогнаны все 5 шагов + PubResult, скриншоты; валидация (scroll-to-error + amber), MkSelect-пикер, степпер, упитанность, CheckRow, публикация — работают. Console-ошибки только ожидаемые `Failed to fetch`/`Failed to load user context` (placeholder-бэк без `.env`).
+
+**Files**: new `tsp/components/{MkCta,MkField,MkErr,CheckRow,MkSelect}.tsx`; edited `tsp/components/{WizProgress,StepperCtl,BigRadio,InfoNote}.tsx`, `tsp/wizard/{WizShell,WizStep1Animals,WizStep2Window,WizStep3Category,WizStep4Price,WizStep5Review,PubResult}.tsx`; docs `Docs/AGOS-Farmer-Redesign-Handoff.md`. SQL не тронут → `cross_check.sh` не нужен. Ветка `claude/batch-wizard-impl-67ccab` (= база d5ff04).
+
+### 2026-07-09: Farmer-redesign Phase 4e — тела Review/Turan под .mk-* + PhIcon
+
+**What**: Переверстаны тела `screens/ReviewScreen.tsx` и `screens/TuranScreen.tsx` под дизайн-систему «Рынок» (`.mk-*` + `PhIcon`), 1:1 со структурой прототипа `market-wizard.jsx`. Новый атом `tsp/components/Stars.tsx` (`.mk-stars`/`.mk-star` + PhIcon `starOutline`, amber-заливка при выборе, disabled-режим без onChange). В `PhIcon` добавлена иконка `phone` (Phosphor regular) — замена emoji 📞. Переиспользованы атомы 4d: `MkCta`/`MkField`/`MkErr`/`MkSelect`.
+- **ReviewScreen**: `.mk-h1`/`.mk-sub` + два `.mk-rev-q` (общая оценка + честность взвешивания с `.mk-rev-sub`) со `Stars` + `MkField` (textarea `.mk-input.area`); добавлен экран благодарности `.mk-res` (green `checkCircle`) с `InfoNote` «перекрёстная оценка» (по прототипу). Footer `.sh-foot`.
+- **TuranScreen**: контакты (📞→PhIcon `phone`, ⏰→`clock`) в `.mk-infonote`; тема — `MkSelect`; сообщение — `MkField`+`MkErr` (мин. 5 симв.); success `.mk-res` (✓→`checkCircle`). Footer send+ghost.
+
+**Why / сохранено (HS-2/HS-5)**: `ReviewScreen` сохраняет контракт `onPatch({review:{r1,r2,comment,date}})` → `useBatches` → `rpc_submit_review` (`p_r1/p_r2/p_comment`) — форма не тронута; отзыв сохраняется на финальной кнопке «К партии». `TuranScreen` — TOPICS (5 тем), `prefillTopic`, `canSend`(≥5), тексты и блок контактов (доп. к прототипу) сохранены. Хедеры (`SubHead`) не тронуты (сделаны в Сессии 2). `noUncheckedIndexedAccess` → `TOPICS[0]!` для `initTopic`.
+
+**Verify**: `tsc -b --noEmit` = 0 ошибок. Preview E2E: `/cabinet/turan` (контакты/MkSelect/MkField → success), `/cabinet/review/:id` (Stars 5+4 → amber → success `.mk-res`+InfoNote). Console — только ожидаемые `Failed to fetch` (placeholder-бэк).
+
+**Files**: new `tsp/components/Stars.tsx`; edited `components/icons/PhIcon.tsx` (+phone), `screens/ReviewScreen.tsx`, `screens/TuranScreen.tsx`, docs. SQL не тронут. Ветка `claude/batch-wizard-impl-67ccab` (PR #47 → d5ff04).
+### 2026-07-09: Farmer-redesign shell-polish — Выход на профиле + Empty State для заглушек
+
+**What**: (1) **Выход.** На экране профиля (`CabinetScreen`, `/cabinet/account`, вход через иконку-аккаунт в шапке) тихая ссылка «Выйти из аккаунта» заменена на заметную кнопку «Выход» (`.cab-logout`, красная) — та же логика `onLogout`→`signOut` (не менял). Проверено: клик → редирект на `/login`. (2) **Empty State.** Новый компонент `components/EmptyState.tsx` (иконка в рамке `.es-art` + заголовок + подпись + опц. действие); `PlaceholderScreen` переведён со старого плоского `.ph-stub` на `EmptyState` с иконкой под секцию (Ферма→sprout, Сообщения→chat, Магазин→bag, Сервисы→grid, «партия не найдена»→ban). CSS `.es-*`/`.cab-logout` в `cabinet.css`.
+
+**Why**: Пользователь: добавить Выход (он существовал, но был незаметной ссылкой — сделал явным) + оформить пустые экраны. Empty State использует свои классы `.es-*`, а НЕ `.mk-empty`, потому что полиш ДС (`market-proto.css §9`) принудительно прячет арт-бокс `.mk-empty-art{display:none}` (у Рынка/Списка пустое состояние — текст-only); чтобы иконка была видимой и не ломать Рынок/Список, сделан отдельный `.es-*`. Логика (signOut, роуты, заголовки) не тронута (HS-5, аддитивно).
+
+**Files**: new `src/pages/cabinet/shell/components/EmptyState.tsx`; edited `screens/PlaceholderScreen.tsx`, `screens/CabinetScreen.tsx`, `CabinetApp.tsx` (иконки в 6 вызовах PlaceholderScreen), `cabinet.css` (`.es-*`, `.cab-logout`). SQL не тронут. Ветка `claude/farmer-redesign-shell-polish` (от d5ff04).
