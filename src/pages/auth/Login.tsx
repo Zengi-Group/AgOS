@@ -4,7 +4,10 @@ import { supabase } from '@/lib/supabase'
 import { loadMyContext, pickShellPath } from '@/lib/account'
 import { toast } from 'sonner'
 import { T } from '@/lib/auth-ui/tokens'
-import { AuthShell, AuthBody, TopBar, H1, Lede, StickyDock, CTA, Field, inputStyle, PinCells } from '@/lib/auth-ui/primitives'
+import { AuthShell, AuthBody, TopBar, H1, Lede, StickyDock, CTA, Field, PinCells } from '@/lib/auth-ui/primitives'
+import { PhonePicker } from '@/components/PhonePicker'
+import { maskPhoneE164 } from '@/lib/phone'
+import { isValidPhoneNumber } from 'libphonenumber-js'
 
 type Step = 'phone' | 'pin'
 
@@ -13,7 +16,7 @@ const STEP_LABELS: Record<Step, string> = { phone: 'Номер', pin: 'PIN' }
 export function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [phone, setPhone] = useState('+7')
+  const [phone, setPhone] = useState('') // E.164 из PhonePicker
   const [pin, setPin] = useState('')
   const [step, setStep] = useState<Step>('phone')
   const [isLoading, setIsLoading] = useState(false)
@@ -21,23 +24,9 @@ export function Login() {
   const pinRef = useRef<HTMLInputElement>(null)
 
   // ── auth logic preserved from previous Login (Supabase phone+PIN) ──
-  const phoneDigits = phone.replace(/\D/g, '').slice(1)
-  const maskedPhone =
-    phoneDigits.length >= 7 ? `+7 (${phoneDigits.slice(0, 3)}) ${phoneDigits.slice(3, 6)}-••-••` : phone
-
-  const formatPhone = (value: string) => {
-    const digits = value.replace(/\D/g, '')
-    if (digits.length <= 1) return '+7'
-    const rest = digits.slice(1, 11)
-    let formatted = '+7'
-    if (rest.length > 0) formatted += ' (' + rest.slice(0, 3)
-    if (rest.length >= 3) formatted += ') ' + rest.slice(3, 6)
-    if (rest.length >= 6) formatted += '-' + rest.slice(6, 8)
-    if (rest.length >= 8) formatted += '-' + rest.slice(8, 10)
-    return formatted
-  }
-
-  const phoneValid = phone.replace(/\D/g, '').length === 11
+  // phone — E.164 («+77001234567»); для KZ идентично прежнему `+7`+10 цифр.
+  const maskedPhone = maskPhoneE164(phone)
+  const phoneValid = isValidPhoneNumber(phone)
 
   const handlePhoneSubmit = () => {
     if (!phoneValid) {
@@ -54,7 +43,7 @@ export function Login() {
     setIsLoading(true)
     try {
       const { error: authError } = await supabase.auth.signInWithPassword({
-        phone: `+7${phoneDigits}`,
+        phone,
         password: value,
       })
       if (authError) {
@@ -107,18 +96,14 @@ export function Login() {
             <H1>Вход в кабинет</H1>
             <Lede>Введите номер, который использовали при регистрации. Далее введёте PIN.</Lede>
             <Field label="Мобильный номер">
-              <input
-                type="tel"
-                inputMode="tel"
-                autoFocus
+              <PhonePicker
                 value={phone}
-                onChange={(e) => {
-                  setPhone(formatPhone(e.target.value))
+                autoFocus
+                error={!!error}
+                onChange={(v) => {
+                  setPhone(v)
                   setError(null)
                 }}
-                onKeyDown={(e) => e.key === 'Enter' && handlePhoneSubmit()}
-                placeholder="+7 (___) ___-__-__"
-                style={inputStyle}
               />
             </Field>
             {error && (
@@ -158,7 +143,7 @@ export function Login() {
             </div>
             <div style={{ marginTop: 8, textAlign: 'center' }}>
               <button
-                onClick={() => navigate('/forgot-pin', { state: { phone: `+7${phoneDigits}` } })}
+                onClick={() => navigate('/forgot-pin', { state: { phone } })}
                 style={{
                   background: 'transparent',
                   border: 'none',

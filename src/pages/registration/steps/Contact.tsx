@@ -5,6 +5,9 @@ import { toast } from 'sonner'
 import { T } from '@/lib/auth-ui/tokens'
 import { H1, Lede, Field, inputStyle, StickyDock, CTA } from '@/lib/auth-ui/primitives'
 import { OtpInput } from '../components/OtpInput'
+import { PhonePicker } from '@/components/PhonePicker'
+import { maskPhoneE164 } from '@/lib/phone'
+import { isValidPhoneNumber } from 'libphonenumber-js'
 import type { RegistrationFormData } from '../constants'
 
 interface ContactProps {
@@ -13,16 +16,8 @@ interface ContactProps {
   onNext: () => void
 }
 
-// formData.phone хранит 10 цифр национального номера (без кода +7).
-function fmtNational(digits: string): string {
-  const d = digits.replace(/\D/g, '').slice(0, 10)
-  let out = ''
-  if (d.length > 0) out += '(' + d.slice(0, 3)
-  if (d.length >= 3) out += ') ' + d.slice(3, 6)
-  if (d.length >= 6) out += '-' + d.slice(6, 8)
-  if (d.length >= 8) out += '-' + d.slice(8, 10)
-  return out
-}
+// formData.phone хранит международный номер в формате E.164 («+77001234567»).
+// Для KZ (страна по умолчанию в PhonePicker) значение == прежний контракт `+7`+10 цифр.
 
 export function Contact({ formData, onChange, onNext }: ContactProps) {
   const navigate = useNavigate()
@@ -32,10 +27,7 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
   const [otpValue, setOtpValue] = useState('')
   const [countdown, setCountdown] = useState(0)
 
-  const maskedPhone =
-    formData.phone.length >= 7
-      ? `+7 (${formData.phone.slice(0, 3)}) ${formData.phone.slice(3, 6)}-••-••`
-      : `+7 ${formData.phone}`
+  const maskedPhone = maskPhoneE164(formData.phone)
 
   useEffect(() => {
     if (countdown <= 0) return
@@ -48,8 +40,8 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
     if (!formData.full_name.trim() || formData.full_name.trim().length < 2) {
       errs.full_name = 'Введите ваше имя'
     }
-    if (formData.phone.length < 10) {
-      errs.phone = 'Введите номер телефона'
+    if (!isValidPhoneNumber(formData.phone)) {
+      errs.phone = 'Введите номер телефона полностью'
     }
     setErrors(errs)
     return Object.keys(errs).length === 0
@@ -60,7 +52,7 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
     setIsSending(true)
     try {
       const { data, error } = await supabase.functions.invoke('bird-otp', {
-        body: { action: 'send', phone: `+7${formData.phone}` },
+        body: { action: 'send', phone: formData.phone },
       })
       if (error || data?.error) {
         toast.error(data?.error || error?.message || 'Ошибка отправки кода')
@@ -101,7 +93,7 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
     setIsSending(true)
     try {
       const { data, error } = await supabase.functions.invoke('bird-otp', {
-        body: { action: 'send', phone: `+7${formData.phone}` },
+        body: { action: 'send', phone: formData.phone },
       })
       if (error || data?.error) {
         toast.error(data?.error || error?.message)
@@ -181,36 +173,14 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
       </Field>
 
       <Field label="Мобильный номер">
-        <div style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
-          <div
-            style={{
-              display: 'grid',
-              placeItems: 'center',
-              height: 52,
-              padding: '0 16px',
-              background: T.bgM,
-              border: `1px solid ${T.bd}`,
-              borderRadius: 12,
-              color: T.fg,
-              fontFamily: T.font,
-              fontSize: 17,
-              fontWeight: 500,
-            }}
-          >
-            +7
-          </div>
-          <input
-            style={{ ...inputStyle, flex: 1 }}
-            type="tel"
-            inputMode="numeric"
-            value={fmtNational(formData.phone)}
-            onChange={(e) => {
-              onChange({ phone: e.target.value.replace(/\D/g, '').slice(0, 10) })
-              if (errors.phone) setErrors((prev) => ({ ...prev, phone: '' }))
-            }}
-            placeholder="(___) ___-__-__"
-          />
-        </div>
+        <PhonePicker
+          value={formData.phone}
+          onChange={(v) => {
+            onChange({ phone: v })
+            if (errors.phone) setErrors((prev) => ({ ...prev, phone: '' }))
+          }}
+          error={!!errors.phone}
+        />
         {errors.phone && <div style={{ fontSize: 12, color: T.red, marginTop: 6 }}>{errors.phone}</div>}
       </Field>
 

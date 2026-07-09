@@ -18,7 +18,7 @@ export function CreatePin({ formData, onChange, onNext }: CreatePinProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const phone = `+7${formData.phone}`
+  const phone = formData.phone // E.164 из PhonePicker
 
   const handlePinEntered = (value: string) => {
     if (value.length < 6) return

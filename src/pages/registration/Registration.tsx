@@ -214,7 +214,7 @@ export function Registration() {
         p_name: name,
         p_bin: bin || null,
         p_region_id: formData.region_id || null,
-        p_phone: `+7${formData.phone}`,
+        p_phone: formData.phone,
         p_role_data: enrichedRoleData,
       })
 

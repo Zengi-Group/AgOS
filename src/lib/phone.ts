@@ -24,3 +24,30 @@ export function normalizePhoneKz(value: string): string | null {
   if (d.length !== 11 || !d.startsWith('7')) return null
   return '+' + d
 }
+
+// ── Международный номер (E.164) — для вход-фаннела с PhonePicker ──
+
+import { parsePhoneNumber } from 'libphonenumber-js'
+
+/**
+ * Маскирует E.164-номер для показа на экране OTP/PIN: международный формат
+ * с скрытыми последними 4 цифрами, напр. «+7 700 123 ••-••». Страна-агностично.
+ */
+export function maskPhoneE164(e164: string): string {
+  try {
+    const p = parsePhoneNumber(e164)
+    if (p) {
+      const s = p.formatInternational()
+      let hidden = 0
+      return s
+        .split('')
+        .reverse()
+        .map((ch) => (/\d/.test(ch) && hidden < 4 ? (hidden++, '•') : ch))
+        .reverse()
+        .join('')
+    }
+  } catch {
+    /* неполный/некорректный — возвращаем как есть */
+  }
+  return e164
+}
