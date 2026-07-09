@@ -107,7 +107,6 @@ export function WizStep1Animals({ w, sw, onNext, onBack, onExit }: Props) {
       <div className="mk-kindrow" style={{ marginTop: 4 }}>
         <span className="mk-lab" style={{ marginBottom: 0 }}>Регион</span>
         <span className="mk-fixbadge">{farmRegion || 'из профиля хозяйства'}</span>
-        <span className="mk-kindhint">берётся из данных регистрации хозяйства — менять не нужно</span>
       </div>
     </WizShell>
   )
