@@ -1735,12 +1735,12 @@
 .agos-cabinet-stage .mk-cta:active { transform:scale(.985); }
 /* footer wizard: увеличенный safe-area (шторка home на iOS) */
 .agos-cabinet-stage .sh-foot { padding-bottom:calc(14px + env(safe-area-inset-bottom, 0px)); }
-/* — draft-note: приглушить, центр — */
+/* — draft-note: приглушить, центр; микрокопия = sans, спокойный трекинг — */
 .agos-cabinet-stage .mk-note {
   text-align:center;
   color:var(--fg3);
-  font-size:10.5px;
-  letter-spacing:.08em;
+  font-size:11.5px;
+  letter-spacing:.01em;
   margin-top:10px;
 }
 /* — ошибка ниже поля: чуть плотнее к инпуту — */
@@ -1797,6 +1797,9 @@
 .agos-cabinet-stage .fw-herd-h { font-size:15px; font-weight:600; color:var(--fg); }
 .agos-cabinet-stage .fw-herd-note { font-size:13px; color:var(--fg2); line-height:1.5; padding:2px 0 4px; }
 
+/* — тихая иконка-идентичность над заголовком шага (FwShell.titleIcon) — */
+.agos-cabinet-stage .fw-title-icon { margin:10px 0 0; display:flex; }
+
 /* — F1 ряды категорий со степпером — */
 .agos-cabinet-stage .fw-cats { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); overflow:hidden; margin-bottom:10px; }
 .agos-cabinet-stage .fw-cats.mk-miss { border-color:var(--amber); background:color-mix(in srgb, var(--amber) 6%, var(--bg-c)); }
@@ -1804,7 +1807,11 @@
 .agos-cabinet-stage .fw-cat + .fw-cat { border-top:1px solid var(--bd-s); }
 .agos-cabinet-stage .fw-cat-t { font-size:14px; font-weight:600; color:var(--fg); }
 .agos-cabinet-stage .fw-cat-s { font-size:11px; color:var(--fg3); margin-top:1px; }
-.agos-cabinet-stage .fw-cat-stp { width:148px; }
+.agos-cabinet-stage .fw-cat-stp { width:184px; }
+/* компактнее кнопки, шире окно цифры (~74px, до 4 цифр); ручной ввод — первичный сценарий */
+.agos-cabinet-stage .fw-cat-stp .mk-stp { grid-template-columns:44px minmax(0,1fr) 44px; }
+.agos-cabinet-stage .fw-cat-stp .mk-stp-b { height:44px; }
+.agos-cabinet-stage .fw-cat-stp .mk-stp-i { height:44px; font-size:18px; }
 .agos-cabinet-stage .fw-cat-stp.fw-zero .mk-stp-i { color:var(--fg3); }
 
 /* — F2 Payoff-1 · цены — */

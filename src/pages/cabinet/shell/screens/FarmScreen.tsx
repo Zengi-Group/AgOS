@@ -46,7 +46,7 @@ export function FarmScreen({ onStart, onResume }: Props) {
             <div className="fw-hook-s">Покажем, что почём сейчас продаётся, и соберём план работ на год</div>
             <div className="es-act">
               <MkCta onClick={onStart}>Рассказать про стадо</MkCta>
-              <div className="mk-note mk-mono">≈ 3 минуты · можно прерваться — всё сохранится</div>
+              <div className="mk-note">≈ 3 минуты · можно прерваться — всё сохранится</div>
             </div>
           </div>
         ) : (
@@ -69,7 +69,7 @@ function FarmResume({ heads, total, onResume, onEdit }: {
 
   return (
     <>
-      <div className="fw-herd-eyebrow mk-mono">ВАШЕ СТАДО · {total} ГОЛОВ</div>
+      <div className="fw-herd-eyebrow">ВАШЕ СТАДО · {total} ГОЛОВ</div>
       <div className="fw-herd-box">
         {rows.map((f) => (
           <div className="fw-herd-row" key={f.key}>

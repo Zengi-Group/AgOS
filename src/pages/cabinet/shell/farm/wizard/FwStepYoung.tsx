@@ -32,7 +32,6 @@ export function FwStepYoung({ progress, dots, value, setValue, onNext, onSkip, o
       onBack={onBack}
       bar
       progress={dots ? progress : undefined}
-      stepLabel={`вопрос ${progress.step} из ${progress.count} · молодняк`}
       title="Что обычно делаете с телятами?"
       titleQ
       screenLabel="SCR-F4 · мастер · молодняк"
