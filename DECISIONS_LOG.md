@@ -3626,3 +3626,13 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: tsc чистый; живой прогон preview 375px (QA +77000001999, создан bird-otp, удалён после — оба слоя верифицированы): «Весной» → 4 чипа фев–май; «фев» → амбер-выбор (inset ring подтверждён inspect); «другой месяц» → грид 4×3 с сохранённым выбором; «Осенью» → сен/окт/ноя, месяц сброшен; F1 — без иконки, черновик восстанавливается.
 
 **Files**: `src/pages/cabinet/shell/farm/wizard/{FwStepCalving,FwStepHerd,FwShell}.tsx`, `src/pages/cabinet/shell/market-proto.css`, `Docs/AGOS-Dok6-Slice7-Farm-Wizard.md` (SCR-F3 + §6), `Docs/AGOS-DesignRules-FarmerCabinet.md` (R-16…R-18).
+
+### 2026-07-11: Сообщения кабинета — треды модулей + AI-консультант (ARS-231, Phase 6 редизайна)
+
+**What**: `/cabinet/messages` и `/cabinet/thread/:tid` из заглушек стали рабочими экранами — порт Фазы 03 прототипа (`app/messages.jsx`): 4 треда «каждый модуль — собеседник» (Консультант AI · Рынок · Ферма · TURAN, паттерн Kaspi, D-NAV-11), pinned «ТРЕБУЕТ РЕШЕНИЯ» с хендлерами ярусов Главной («один объект — две поверхности»), дайджест вместо пустого треда, AI-чат с моком aiReply. Тред TURAN = лента; форма обращения выделена в route `turan` (TuranScreen сохранён, доступен из ленты). Бейдж таба «Сообщения» теперь включает decision-партии.
+
+**Why**: слой уведомлений спроектирован (D68, Dok 4, воркер жив), но фермеру негде было читать in-app события; концепция тредов уже была решена в прототипе — G2 подтверждён CEO скриншотом этого экрана. НЕ «центр уведомлений» — осознанное решение прототипа.
+
+**Verify**: tsc + vite build чистые; живой прогон с реальным логином (синтетический QA-аккаунт +77000002311, удалён после): список тредов с бейджами, гашение непрочитанных по входу, тред TURAN (членство/справочные цены с дисклеймером ст. 171/«Написать в TURAN» → форма), AI-чат вопрос→ответ по справочным ценам. Консоль без ошибок.
+
+**Files**: `src/pages/cabinet/shell/{data/threads.ts,screens/{MessagesScreen,ThreadScreen,ConsultantScreen}.tsx,components/ThreadAv.tsx,messages-proto.css,CabinetApp.tsx,nav.ts}`, `Docs/AGOS-Farmer-Redesign-Handoff.md`.

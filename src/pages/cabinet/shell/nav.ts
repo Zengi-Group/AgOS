@@ -27,7 +27,8 @@ export function routeToUrl(r: Route): string {
     case 'farm': return '/cabinet/farm'
     case 'shop': return '/cabinet/shop'
     case 'messages': return '/cabinet/messages'
-    case 'thread': return r.tid === 'turan' ? '/cabinet/turan' : `/cabinet/thread/${r.tid ?? 'consultant'}`
+    // ARS-231: тред TURAN — лента на /cabinet/thread/turan; форма обращения — route 'turan'.
+    case 'thread': return `/cabinet/thread/${r.tid ?? 'consultant'}`
     case 'turan': return '/cabinet/turan'
     default: return '/cabinet'
   }
@@ -50,7 +51,7 @@ export function urlToRoute(pathname: string): Route {
     case 'shop': return { name: 'shop' }
     case 'services': return { name: 'services' }
     case 'messages': return { name: 'messages' }
-    case 'turan': return { name: 'thread', tid: 'turan' }
+    case 'turan': return { name: 'turan' }
     case 'thread': return { name: 'thread', tid: seg[1] ?? 'consultant' }
     default: return { name: 'home' }
   }
