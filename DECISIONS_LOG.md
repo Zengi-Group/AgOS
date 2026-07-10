@@ -3522,3 +3522,11 @@ Files: d01_kernel.sql (rpc_get_my_context + comment).
 **Verify**: `tsc -b` = 0. Визуал 4 стадий (none/pending/approved/член-без-стада) проверен на живом Vite-бандле (temp dev-роут, удалён перед коммитом): pending → «Заявка на рассмотрении» (wait) + «Завести стадо» (акцент) + «Продать» (locked). SQL не тронут → `cross_check.sh` не нужен. Ветка `claude/empty-state-pending-steps`.
 
 **Files**: `data/membership.ts` (убраны obs-pending/m-pay), `screens/HomeScreen.tsx` (onboarding-условие), `components/HomeStartLadder.tsx` (шаг членства + wait + акцент), `cabinet.css` (`.s-wait`).
+
+### 2026-07-10: Дизайн-контракт мастера профиля фермы — Dok 6 Slice 7 (ARS-212, Такт 1)
+
+**What**: Визуальная развёртка опросника-мастера Узла 1 v2.1 в языке `/cabinet` shell — новый слайс `Docs/AGOS-Dok6-Slice7-Farm-Wizard.md`. Экраны: хук на табе Ферма (F0a) + resume-стейт (F0b) → мастер полноэкранным флоу (`agos-flow-page`, зеркально BatchWizard): состав стада со степперами (F1, CTA «Показать цены») → Payoff-1 цены по категориям фермера (F2, сорт по головам, дисклеймер `.ps-disc`, мост «Ещё N вопросов») → ярус «План»: отёл+месяц / молодняк / содержание (F3–F5, BigRadio + fw-why «зачем спрашиваем» + skip) → генерация (F6, паттерн PubResult) / финал без плана (F7).
+
+**Why**: Такт 1 (Spec & Design) ARS-212; функциональный канон готов (Узел 1 v2.1, F-D13/14), не хватало UI-контракта для кодогенерации. Ключевые дизайн-решения D-FW-1..5: ярусная прогресс-модель (payoff вне прогресса), без оценки стада в ₸ (весов не спрашиваем — не врём), primary CTA Payoff-1 = мост к плану (не продажа — гейт членства), пауза-ритуал 900 мс, финал без плана = тоже награда. F-Q11: рекомендация — v1 только цены, слот под пулы зарезервирован.
+
+**Files**: новый `Docs/AGOS-Dok6-Slice7-Farm-Wizard.md`. Код/SQL не тронуты → `cross_check.sh` не нужен. Мозг: строка в `apex-brain/projects/agos/specs/farm-module.md`. Ветка `claude/ars-212-wizard-design-9dc825`; функциональный такт — отдельная сессия (Opus).
