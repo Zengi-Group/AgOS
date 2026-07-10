@@ -22,9 +22,16 @@ export function HomeStartLadder({ herdFilled }: { herdFilled: boolean }) {
   if (isMember && herdFilled) return null
 
   // S0 / S3 — лестница. «active» — единственный следующий шаг (акцент).
-  const stepJoin: Step = isMember
-    ? { key: 'join', icon: 'check', title: 'Вы в ассоциации', state: 'done' }
-    : { key: 'join', icon: 'users', title: 'Вступить в ассоциацию', sub: 'Откроются цены и продажа скота через TURAN', state: 'active', onClick: () => ctx.memberAct('apply') }
+  // Шаг «Членство» отражает реальный статус заявки: подал → «на рассмотрении» (не даём
+  // подать повторно); одобрено → «оплатить взнос»; отклонено → «подать заново».
+  const stepJoin: Step =
+    isMember
+      ? { key: 'join', icon: 'check', title: 'Вы в ассоциации', state: 'done' }
+      : m === 'pending'
+        ? { key: 'join', icon: 'clock', title: 'Заявка на рассмотрении', sub: 'Ответим в течение 3 рабочих дней', state: 'done' }
+        : m === 'approved'
+          ? { key: 'join', icon: 'users', title: 'Оплатить членский взнос', sub: 'Заявка одобрена — оформите членство', state: 'active', onClick: () => ctx.memberAct('pay') }
+          : { key: 'join', icon: 'users', title: m === 'rejected' ? 'Подать заявку заново' : 'Вступить в ассоциацию', sub: 'Откроются цены и продажа скота через TURAN', state: 'active', onClick: () => ctx.memberAct('apply') }
 
   const stepHerd: Step = herdFilled
     ? { key: 'herd', icon: 'check', title: 'Стадо заведено', state: 'done' }

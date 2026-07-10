@@ -340,7 +340,13 @@ export function CabinetApp() {
   // Единый вход: все CTA «Вступить» / «Подать заявку» ведут в /membership (не в шторку).
   const memberAct = (act: string) => {
     if (offline) { offlineToast(); return }
-    if (act === 'apply') { setSheet(null); navigate('/membership') }
+    if (act === 'apply') {
+      setSheet(null)
+      // Членство требует юр. хозяйства (БИН). Нет организации (незавершённая регистрация) →
+      // сначала достраиваем регистрацию (создать орг), оттуда откроется членство. Иначе —
+      // полноэкранный процесс подачи заявки.
+      navigate(profile?.orgId ? '/membership' : '/register')
+    }
     else setSheet({ kind: 'payvznos' })
   }
   // Оплата взноса — симуляция на пилоте (реальной платёжной системы пока нет): выбор способа →
