@@ -1405,7 +1405,8 @@ comment on function public.rpc_publish_batch(uuid, uuid, uuid, jsonb) is
 -- Explicit grants for anon-blocking:
 -- ============================================================
 revoke execute on function public.rpc_get_ai_farm_context(uuid,uuid) from anon;
-revoke execute on function public.rpc_upsert_herd_group(uuid,uuid,text,int,numeric,uuid,uuid,uuid,jsonb) from anon;
+-- rpc_upsert_herd_group: revoke перенесён после переопределения функции ниже
+-- (сигнатура расширена ARS-212 — здесь старая сигнатура ещё/уже не существует).
 revoke execute on function public.rpc_get_feeding_plan(uuid,uuid,uuid) from anon;
 revoke execute on function public.rpc_get_farm_tasks(uuid,uuid,int,text) from anon;
 revoke execute on function public.rpc_complete_farm_task(uuid,uuid,text,jsonb,uuid,jsonb) from anon;
@@ -1847,9 +1848,11 @@ comment on function public.rpc_get_ai_farm_context(uuid, uuid) is
 -- INSERT path в 011 уже правильный: confidence = greatest(herd_groups.confidence, 50).
 -- Синхронизируем UPDATE path с той же логикой.
 --
--- Это CREATE OR REPLACE всей функции из 011 с единственным изменением:
---   confidence = 50  →  confidence = greatest(v_old_confidence, 50)
---   где v_old_confidence читается в SELECT перед UPDATE.
+-- Это CREATE OR REPLACE всей функции из 011 с изменениями:
+--   1) L-AUDIT-5: confidence = 50 → greatest(v_old_confidence, 50),
+--      где v_old_confidence читается в SELECT перед UPDATE.
+--   2) ARS-212 (аддитивно): p_data_source default 'ai_extracted';
+--      confidence выводится из data_source (D21), мастер профиля шлёт 'platform'.
 -- ============================================================
 
 drop function if exists public.rpc_upsert_herd_group(p_organization_id uuid, p_farm_id uuid, p_animal_category_code text, p_head_count integer, p_avg_weight_kg numeric, p_breed_id uuid, p_herd_group_id uuid, p_actor_id uuid, p_ai_context jsonb);
@@ -1862,7 +1865,10 @@ create or replace function public.rpc_upsert_herd_group(
     p_breed_id              uuid            default null,
     p_herd_group_id         uuid            default null,
     p_actor_id              uuid            default null,
-    p_ai_context            jsonb           default null
+    p_ai_context            jsonb           default null,
+    -- ARS-212 (аддитивно, P7): источник записи. Default сохраняет поведение
+    -- существующих вызовов (AI Gateway); мастер профиля передаёт 'platform' (L3).
+    p_data_source           text            default 'ai_extracted'
 )
 returns jsonb
 language plpgsql
@@ -1875,10 +1881,24 @@ declare
     v_old_count         int;
     v_old_weight        numeric;
     v_old_confidence    int;    -- L-AUDIT-5: читаем для GREATEST
+    v_new_confidence    int;    -- ARS-212: выводится из p_data_source (D21)
 begin
     if not public._ai_check_farm_org(p_farm_id, p_organization_id) then
         raise exception 'FORBIDDEN: farm % does not belong to organization %',
             p_farm_id, p_organization_id using errcode = 'P0001';
+    end if;
+
+    -- D21 Layered Truth: confidence выводится из data_source
+    -- (registration=25, ai_extracted=50, platform=75, erp=95)
+    v_new_confidence := case p_data_source
+        when 'registration' then 25
+        when 'ai_extracted' then 50
+        when 'platform'     then 75
+        when 'erp'          then 95
+    end;
+    if v_new_confidence is null then
+        raise exception 'INVALID: unknown data_source %', p_data_source
+            using errcode = 'P0002';
     end if;
 
     -- Resolve category
@@ -1908,11 +1928,11 @@ begin
         set    head_count        = p_head_count,
                avg_weight_kg     = coalesce(p_avg_weight_kg, avg_weight_kg),
                breed_id          = coalesce(p_breed_id, breed_id),
-               data_source       = 'ai_extracted',
+               data_source       = p_data_source,
                -- L-AUDIT-5 FIX: GREATEST сохраняет накопленную уверенность.
                -- Фермер подтвердил данные → уверенность растёт или остаётся.
                -- До фикса: ERP=90 → AI update → 50. Теперь: ERP=90 → AI update → 90.
-               confidence        = greatest(v_old_confidence, 50),
+               confidence        = greatest(v_old_confidence, v_new_confidence),
                count_updated_at  = case when p_head_count is distinct from v_old_count
                                         then now() else count_updated_at end,
                weight_updated_at = case when p_avg_weight_kg is not null
@@ -1930,7 +1950,7 @@ begin
             count_updated_at, weight_updated_at
         ) values (
             p_farm_id, p_organization_id, v_category_id, p_breed_id,
-            p_head_count, p_avg_weight_kg, 'ai_extracted', 50,
+            p_head_count, p_avg_weight_kg, p_data_source, v_new_confidence,
             now(), case when p_avg_weight_kg is not null then now() end
         )
         on conflict (farm_id, animal_category_id)
@@ -1938,8 +1958,8 @@ begin
             head_count        = excluded.head_count,
             avg_weight_kg     = coalesce(excluded.avg_weight_kg, herd_groups.avg_weight_kg),
             breed_id          = coalesce(excluded.breed_id, herd_groups.breed_id),
-            data_source       = 'ai_extracted',
-            confidence        = greatest(herd_groups.confidence, 50),
+            data_source       = excluded.data_source,
+            confidence        = greatest(herd_groups.confidence, excluded.confidence),
             count_updated_at  = now(),
             weight_updated_at = case when excluded.avg_weight_kg is not null then now()
                                      else herd_groups.weight_updated_at end,
@@ -1966,7 +1986,7 @@ begin
             'animal_category_code', p_animal_category_code,
             'new_head_count',       p_head_count,
             'new_avg_weight_kg',    p_avg_weight_kg,
-            'data_source',          'ai_extracted',
+            'data_source',          p_data_source,
             'ai_context',           p_ai_context
         )
     );
@@ -1976,18 +1996,25 @@ begin
         'animal_category_code', p_animal_category_code,
         'head_count',           p_head_count,
         'avg_weight_kg',        p_avg_weight_kg,
-        'data_source',          'ai_extracted',
-        'confidence',           greatest(coalesce(v_old_confidence, 0), 50)
+        'data_source',          p_data_source,
+        'confidence',           greatest(coalesce(v_old_confidence, 0), v_new_confidence)
     );
 end;
 $$;
 
-comment on function public.rpc_upsert_herd_group(uuid,uuid,text,int,numeric,uuid,uuid,uuid,jsonb) is
-    'L-AUDIT-5 FIX: UPDATE path теперь использует GREATEST(existing_confidence, 50).
+-- Anon-блок: перевешивается здесь же при каждом переопределении сигнатуры
+-- (старый revoke в блоке GRANTS выше удалён — сигнатура расширена ARS-212).
+revoke execute on function public.rpc_upsert_herd_group(uuid,uuid,text,int,numeric,uuid,uuid,uuid,jsonb,text) from anon;
+
+comment on function public.rpc_upsert_herd_group(uuid,uuid,text,int,numeric,uuid,uuid,uuid,jsonb,text) is
+    'L-AUDIT-5 FIX: UPDATE path теперь использует GREATEST(existing_confidence, new).
      Синхронизировано с INSERT/upsert path (был greatest уже в 011_ai_rpc_catalog.sql).
-     Смысл: AI-подтверждение данных никогда не снижает накопленную уверенность.
+     Смысл: подтверждение данных никогда не снижает накопленную уверенность.
      ERP-синхронизированные данные (confidence=90) сохраняют свой уровень
      даже при последующем AI-update.
+     ARS-212 (аддитивно): p_data_source (default ai_extracted — поведение AI Gateway
+     не меняется); confidence выводится из data_source по D21: registration=25,
+     ai_extracted=50, platform=75 (мастер профиля, Узел 1 v2.1 §4), erp=95.
 
      Всё остальное без изменений относительно 011_ai_rpc_catalog.sql:
      - Ownership check через _ai_check_farm_org
