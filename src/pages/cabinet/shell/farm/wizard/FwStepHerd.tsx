@@ -8,7 +8,6 @@ import { FwShell, DraftNote } from './FwShell'
 import { StepperCtl } from '../../tsp/components/StepperCtl'
 import { MkCta } from '../../tsp/components/MkCta'
 import { MkErr } from '../../tsp/components/MkErr'
-import { PhIcon } from '../../components/icons/PhIcon'
 
 interface Props {
   heads: FwState['heads']
@@ -38,7 +37,6 @@ export function FwStepHerd({ heads, setHeads, prefilled, onNext, onExit }: Props
       onExit={onExit}
       onBack={onExit}
       bar
-      titleIcon={<PhIcon name="cow" size={26} color="var(--fg3)" />}
       title="Кто у вас в стаде?"
       titleQ
       sub="Сколько примерно голов в каждой группе"

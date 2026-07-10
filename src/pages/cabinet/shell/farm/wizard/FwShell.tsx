@@ -23,7 +23,6 @@ interface FwShellProps {
   exitTop?: boolean              // bar=false, но нужен X справа сверху (Payoff-1)
   progress?: { count: number; step: number }  // ярус 2: точки по ветке (omit → без точек)
   stepLabel?: string             // mk-wiz-step (mono)
-  titleIcon?: ReactNode          // тихая иконка-идентичность над заголовком (PhIcon, fg3)
   title?: string
   titleQ?: boolean               // .q — акцентный заголовок-вопрос
   sub?: string
@@ -33,7 +32,7 @@ interface FwShellProps {
 }
 
 export function FwShell({
-  onExit, onBack, bar, exitTop, progress, stepLabel, titleIcon, title, titleQ, sub, footer, screenLabel, children,
+  onExit, onBack, bar, exitTop, progress, stepLabel, title, titleQ, sub, footer, screenLabel, children,
 }: FwShellProps) {
   return (
     <>
@@ -59,7 +58,6 @@ export function FwShell({
                 <button className="mk-wiz-exit" onClick={onExit} aria-label="Выйти"><PhIcon name="x" size={16} /></button>
               </div>
             )}
-            {titleIcon && <div className="fw-title-icon">{titleIcon}</div>}
             {title && <h1 className={'mk-h1' + (titleQ ? ' q' : '')}>{title}</h1>}
             {sub && <p className="mk-sub">{sub}</p>}
             {children}

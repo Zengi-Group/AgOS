@@ -1797,9 +1797,6 @@
 .agos-cabinet-stage .fw-herd-h { font-size:15px; font-weight:600; color:var(--fg); }
 .agos-cabinet-stage .fw-herd-note { font-size:13px; color:var(--fg2); line-height:1.5; padding:2px 0 4px; }
 
-/* — тихая иконка-идентичность над заголовком шага (FwShell.titleIcon) — */
-.agos-cabinet-stage .fw-title-icon { margin:10px 0 0; display:flex; }
-
 /* — F1 ряды категорий со степпером — */
 .agos-cabinet-stage .fw-cats { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); overflow:hidden; margin-bottom:10px; }
 .agos-cabinet-stage .fw-cats.mk-miss { border-color:var(--amber); background:color-mix(in srgb, var(--amber) 6%, var(--bg-c)); }
@@ -1837,8 +1834,25 @@
 .agos-cabinet-stage .fw-pay-sell:hover { background:color-mix(in srgb, var(--green) 16%, transparent); }
 
 /* — F3 чипы месяца (сами чипы — mk-fat-c) — */
-.agos-cabinet-stage .fw-months { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:4px; }
-.agos-cabinet-stage .fw-months.mk-miss .mk-fat-c { border-color:var(--amber); }
+/* окно сезона: одна строка чипов (3–4 шт); .full — полный грид 4×3 («другой месяц») */
+.agos-cabinet-stage .fw-months { display:grid; grid-template-columns:repeat(auto-fit, minmax(64px, 1fr)); gap:8px; margin-top:4px; }
+.agos-cabinet-stage .fw-months.full { grid-template-columns:repeat(4, 1fr); }
+.agos-cabinet-stage .fw-mon {
+  height:46px;
+  border:1px solid var(--bd); border-radius:12px;
+  background:var(--bg-c);
+  font-size:14px; font-weight:500; color:var(--fg2);
+  cursor:pointer;
+  transition:background 120ms var(--ease), box-shadow 120ms var(--ease), transform 120ms var(--ease);
+}
+.agos-cabinet-stage .fw-mon:active { transform:scale(.95); }
+.agos-cabinet-stage .fw-mon.sel {
+  background:color-mix(in srgb, var(--amber) 12%, var(--bg-c));
+  box-shadow:inset 0 0 0 1.5px var(--amber);
+  color:var(--fg); font-weight:600;
+}
+.agos-cabinet-stage .fw-months.mk-miss .fw-mon { border-color:var(--amber); }
+.agos-cabinet-stage .fw-mon-more { margin-top:8px; font-size:13px; text-align:left; padding:6px 0; }
 
 /* — «зачем спрашиваем» (дизайн-ход #2) — */
 .agos-cabinet-stage .fw-why { display:flex; align-items:flex-start; gap:7px; margin-top:14px; padding:10px 12px; border-radius:var(--r-md); background:var(--bg-m); color:var(--fg2); font-size:12px; line-height:1.45; }

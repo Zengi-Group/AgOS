@@ -3616,3 +3616,13 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: tsc чистый; живой прогон preview 375px: /login и шаг регистрации — ссылка в доке под CTA; мастер (QA-аккаунт +77000001888, создан bird-otp, удалён после: public.users+auth верифицированы пустыми) — карточки 50/23/6 голов, чипы ▼−30 amber / ▲+10/+50 green, «23 головы» склонение, «Все цены» отсутствует, дисклеймер ст.171 на месте.
 
 **Files**: `src/pages/cabinet/shell/farm/wizard/{FwPayoffPrices,FarmWizard}.tsx`, `src/pages/cabinet/shell/components/icons/PhIcon.tsx` (+shieldCheck), `src/pages/cabinet/shell/market-proto.css` (блок F2), `src/pages/auth/Login.tsx`, `src/pages/registration/steps/Contact.tsx`, `Docs/AGOS-DesignRules-FarmerCabinet.md` (§4 + R-13…R-15).
+
+### 2026-07-10: SCR-F3 месяц ⇄ сезон + чипы-ячейки; иконка коровы убрана — правила R-16…R-18 (ARS-212)
+
+**What**: (1) Иконка cow над заголовком F1 удалена по указанию CEO (снят и проп FwShell.titleIcon с CSS — не используется, HS-4; cow в PhIcon остаётся — используется на F0a). (2) SCR-F3: месяцы «первых отёлов» теперь наследуют сезон (R-17) — показывается окно сезона (spring фев–май / autumn сен–ноя, = сабы опций), «У нас иначе — другой месяц» раскрывает полный грид 12 (P5); смена сезона сбрасывает месяц. (3) Чипы месяца:新 класс .fw-mon — ячейки с границей/подложкой (bg-c + bd, radius 12, h46), выбор = амбер-тинт + inset-ring; вместо «голого текста» mk-fat-c, из-за которого «сливались карточки». Slice7 §SCR-F3 + таблица классов синхронизированы.
+
+**Why**: вопрос CEO «как соотносятся сезоны с календарём?» вскрыл несвязанность каскадных вопросов (грид 12 месяцев не зависел от сезона — так задала спека); правки распылены в R-16 (без декоративных иконок над заголовками), R-17 (каскадный саб-вопрос наследует ответ родителя + явный выход на полный набор), R-18 (standalone-чипы всегда с границей и подложкой).
+
+**Verify**: tsc чистый; живой прогон preview 375px (QA +77000001999, создан bird-otp, удалён после — оба слоя верифицированы): «Весной» → 4 чипа фев–май; «фев» → амбер-выбор (inset ring подтверждён inspect); «другой месяц» → грид 4×3 с сохранённым выбором; «Осенью» → сен/окт/ноя, месяц сброшен; F1 — без иконки, черновик восстанавливается.
+
+**Files**: `src/pages/cabinet/shell/farm/wizard/{FwStepCalving,FwStepHerd,FwShell}.tsx`, `src/pages/cabinet/shell/market-proto.css`, `Docs/AGOS-Dok6-Slice7-Farm-Wizard.md` (SCR-F3 + §6), `Docs/AGOS-DesignRules-FarmerCabinet.md` (R-16…R-18).
