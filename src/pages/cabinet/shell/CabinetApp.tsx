@@ -43,6 +43,8 @@ import { LimitSheet } from './components/sheets/LimitSheet'
 import { BatchWizard } from './tsp/wizard/BatchWizard'
 import { PubResult } from './tsp/wizard/PubResult'
 import type { PubVariant } from './tsp/types/batch'
+import { FarmScreen } from './screens/FarmScreen'
+import { FarmWizard } from './farm/wizard/FarmWizard'
 import { PayVznosSheet } from './components/sheets/PayVznosSheet'
 import { PayProSheet } from './components/sheets/PayProSheet'
 import { ProGateSheet } from './components/sheets/ProGateSheet'
@@ -241,6 +243,10 @@ export function CabinetApp() {
   // ---------- TSP-1: визард «Новая партия» + результат публикации ----------
   const [wizActive, setWizActive] = useState(false)
   const [pubResult, setPubResult] = useState<{ batch: Batch; variant: PubVariant } | null>(null)
+
+  // ---------- ARS-212: мастер профиля фермы (флоу-страница на табе Ферма) ----------
+  const [farmWizActive, setFarmWizActive] = useState(false)
+  const [farmWizStart, setFarmWizStart] = useState<'herd' | 'plan'>('herd')
 
   // ---------- persistence ----------
   useEffect(() => {
@@ -595,6 +601,38 @@ export function CabinetApp() {
     />
   )
 
+  // ARS-212: таб «Ферма» — F0 (FarmScreen) или флоу-страница мастера (зеркально renderMarket).
+  // «Продать через TURAN» с Payoff-1 закрывает мастер и открывает TSP-визард на Рынке (гейт
+  // членства — существующие правила Рынка; кнопку показываем только продающим статусам).
+  const farmCanSell = (['active', 'grace', 'expiring'] as MembershipStatus[]).includes(membership)
+  const sellFromFarm = () => {
+    setFarmWizActive(false)
+    const activeCount = batches.filter((b) =>
+      ['scheduled', 'published', 'offering', 'decision', 'matched', 'confirmed', 'dispatched'].includes(b.state)
+    ).length
+    if (activeCount >= 5) { go({ name: 'market' }); setSheet({ kind: 'limit' }); return }
+    setWizActive(true); go({ name: 'market' })
+  }
+  const renderFarm = () => {
+    if (farmWizActive) {
+      return (
+        <IonPage className="agos-flow-page">
+          <FarmWizard
+            startAt={farmWizStart}
+            onExit={() => setFarmWizActive(false)}
+            onSell={farmCanSell ? sellFromFarm : undefined}
+          />
+        </IonPage>
+      )
+    }
+    return (
+      <FarmScreen
+        onStart={() => { setFarmWizStart('herd'); setFarmWizActive(true) }}
+        onResume={() => { setFarmWizStart('plan'); setFarmWizActive(true) }}
+      />
+    )
+  }
+
   // Пока грузится реальный профиль — лоадер (а не демо-экран). См. profileLoading выше.
   if (profileLoading) {
     return (
@@ -619,7 +657,7 @@ export function CabinetApp() {
                 <RouteV5 exact path="/cabinet/review/:id" render={renderReview} />
                 <RouteV5 exact path="/cabinet/account" render={renderCabinet} />
                 <RouteV5 exact path="/cabinet/turan" render={renderTuran} />
-                <RouteV5 exact path="/cabinet/farm" render={() => <PlaceholderScreen tab title="Ферма" sub="Стадо, задачи, события" icon="sprout" emptySub="Стадо, задачи и события хозяйства появятся здесь" />} />
+                <RouteV5 exact path="/cabinet/farm" render={renderFarm} />
                 <RouteV5 exact path="/cabinet/shop" render={() => <PlaceholderScreen title="Маркет" sub="Дистрибуция и специалисты TURAN" icon="bag" emptySub="Дистрибуция и специалисты TURAN появятся здесь" />} />
                 <RouteV5 exact path="/cabinet/services" render={() => <PlaceholderScreen title="Сервисы" sub="Специалисты и услуги TURAN" icon="grid" emptySub="Специалисты и услуги TURAN появятся здесь" />} />
                 <RouteV5 exact path="/cabinet/messages" render={() => <PlaceholderScreen tab title="Сообщения" sub="Треды Рынка, Фермы и TURAN" icon="chat" emptySub="Треды Рынка, Фермы и TURAN появятся здесь" />} />

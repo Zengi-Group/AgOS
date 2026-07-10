@@ -1779,3 +1779,51 @@
 /* ══════ app-local: топ-бар пушевых экранов (back + kebab), не из прототипа ══════ */
 .agos-cabinet-stage .mk-topbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:2px -6px 2px; min-height:40px; }
 .agos-cabinet-stage .mk-topbar .mk-wiz-back { margin-left:-4px; }
+
+
+/* ══════ fw · ARS-212 · Мастер профиля фермы (Dok6 Slice7 §6) — только из токенов палитры ══════ */
+
+/* — F0a хук: hero по центру (каркас es), собственные типоразмеры mk-h1/mk-sub — */
+.agos-cabinet-stage .fw-hook { padding-top:40px; }
+.agos-cabinet-stage .fw-hook-t { font-size:20px; font-weight:700; letter-spacing:-.02em; line-height:1.25; color:var(--fg); max-width:280px; }
+.agos-cabinet-stage .fw-hook-s { font-size:13px; color:var(--fg3); line-height:1.5; max-width:288px; margin-top:8px; }
+
+/* — F0b resume: eyebrow + сводка стада — */
+.agos-cabinet-stage .fw-herd-eyebrow { font-size:10px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--fg3); margin:2px 0 10px; }
+.agos-cabinet-stage .fw-herd-box { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); overflow:hidden; margin-bottom:16px; }
+.agos-cabinet-stage .fw-herd-row { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; }
+.agos-cabinet-stage .fw-herd-row + .fw-herd-row { border-top:1px solid var(--bd-s); }
+.agos-cabinet-stage .fw-herd-n { font-size:14px; font-weight:600; color:var(--fg); }
+.agos-cabinet-stage .fw-herd-h { font-size:15px; font-weight:600; color:var(--fg); }
+.agos-cabinet-stage .fw-herd-note { font-size:13px; color:var(--fg2); line-height:1.5; padding:2px 0 4px; }
+
+/* — F1 ряды категорий со степпером — */
+.agos-cabinet-stage .fw-cats { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); overflow:hidden; margin-bottom:10px; }
+.agos-cabinet-stage .fw-cats.mk-miss { border-color:var(--amber); background:color-mix(in srgb, var(--amber) 6%, var(--bg-c)); }
+.agos-cabinet-stage .fw-cat { display:grid; grid-template-columns:1fr auto; align-items:center; gap:12px; padding:12px 14px; }
+.agos-cabinet-stage .fw-cat + .fw-cat { border-top:1px solid var(--bd-s); }
+.agos-cabinet-stage .fw-cat-t { font-size:14px; font-weight:600; color:var(--fg); }
+.agos-cabinet-stage .fw-cat-s { font-size:11px; color:var(--fg3); margin-top:1px; }
+.agos-cabinet-stage .fw-cat-stp { width:148px; }
+.agos-cabinet-stage .fw-cat-stp.fw-zero .mk-stp-i { color:var(--fg3); }
+
+/* — F2 Payoff-1 · цены — */
+.agos-cabinet-stage .fw-exit-row { display:flex; justify-content:flex-end; margin:2px -4px 4px; }
+.agos-cabinet-stage .fw-pay-eyebrow { font-size:10px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--fg3); margin:2px 0 12px; }
+.agos-cabinet-stage .fw-pay-list { display:flex; flex-direction:column; gap:10px; }
+.agos-cabinet-stage .fw-pay-card { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); padding:13px 14px; }
+.agos-cabinet-stage .fw-pay-name { font-size:14px; font-weight:700; color:var(--fg); }
+.agos-cabinet-stage .fw-pay-herd { font-size:11px; color:var(--fg3); margin-top:2px; }
+.agos-cabinet-stage .fw-pay-row { display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-top:8px; }
+.agos-cabinet-stage .fw-pay-row .pbars { margin-left:auto; }
+.agos-cabinet-stage .fw-pay-prot { font-size:12px; color:var(--fg2); margin-top:6px; }
+.agos-cabinet-stage .fw-pay-sell { display:inline-flex; align-items:center; gap:4px; margin-top:10px; padding:9px 12px; width:100%; justify-content:center; border:1.5px solid var(--green); background:color-mix(in srgb, var(--green) 10%, transparent); color:var(--green-d); border-radius:var(--r-md); font-weight:600; font-size:13px; cursor:pointer; }
+.agos-cabinet-stage .fw-pay-sell:hover { background:color-mix(in srgb, var(--green) 16%, transparent); }
+
+/* — F3 чипы месяца (сами чипы — mk-fat-c) — */
+.agos-cabinet-stage .fw-months { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:4px; }
+.agos-cabinet-stage .fw-months.mk-miss .mk-fat-c { border-color:var(--amber); }
+
+/* — «зачем спрашиваем» (дизайн-ход #2) — */
+.agos-cabinet-stage .fw-why { display:flex; align-items:flex-start; gap:7px; margin-top:14px; padding:10px 12px; border-radius:var(--r-md); background:var(--bg-m); color:var(--fg2); font-size:12px; line-height:1.45; }
+.agos-cabinet-stage .fw-why > svg { color:var(--fg3); margin-top:1px; flex-shrink:0; }
