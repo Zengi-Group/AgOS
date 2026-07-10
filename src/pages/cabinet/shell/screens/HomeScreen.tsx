@@ -53,11 +53,13 @@ export function HomeScreen({ membership, farm, decisions, observe, loading, go, 
   }
   if (farmOverdue) farmSub += ' · есть просрочка'
 
-  // Зона ярусов пуста (нет «Требует решения» и «Идёт само») → показываем стартовый
-  // модуль-лестницу (ARS-209), чтобы главная не выглядела пустой и вела фермера по
-  // первым шагам. Аддитивно (HS-5): баннер/сервисы/быстрый доступ на месте.
+  // Стартовый модуль-лестница (ARS-209) ведёт фермера по первым шагам. Показываем на
+  // стадиях онбординга (none/pending/approved — независимо от ярусов, иначе карточка
+  // «Заявка на рассмотрении» прятала бы лестницу) ИЛИ когда ярусы пусты (член без стада/
+  // сделок). Сам модуль растворяется, когда онбординг завершён (член + стадо). HS-5.
   const herdFilled = !!farm.herd && farm.herd.totalHeads > 0
   const quiet = decisions.length === 0 && observe.length === 0
+  const onboarding = membership === 'none' || membership === 'pending' || membership === 'approved'
 
   return (
     <IonShellFrame label={'Главная · ' + membership} onRefresh={onRefresh}>
@@ -68,7 +70,7 @@ export function HomeScreen({ membership, farm, decisions, observe, loading, go, 
           <ServiceGrid />
           <div className="home-div" />
 
-          {quiet && <HomeStartLadder herdFilled={herdFilled} />}
+          {(onboarding || quiet) && <HomeStartLadder herdFilled={herdFilled} />}
 
           {decisions.length > 0 && (
             <div className="blk">
