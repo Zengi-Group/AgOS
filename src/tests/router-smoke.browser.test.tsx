@@ -67,9 +67,9 @@ const T = { timeout: 15_000 }
 
 it('v6: /login рендерится и навигируется на /register', async () => {
   mountAppAt('/login')
-  await expect.element(page.getByText('Вход в личный кабинет'), T).toBeInTheDocument()
-  await page.getByRole('link', { name: 'Зарегистрироваться' }).click()
-  await expect.element(page.getByText('Как с вами связаться?'), T).toBeInTheDocument()
+  await expect.element(page.getByText('Вход в кабинет'), T).toBeInTheDocument()
+  await page.getByRole('button', { name: /Зарегистрироваться/ }).click()
+  await expect.element(page.getByText('С чего начнём?'), T).toBeInTheDocument()
   expect(window.location.pathname).toBe('/register')
 })
 

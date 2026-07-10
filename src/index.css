@@ -1,4 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Literata:wght@400;500;600;700&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&family=Source+Sans+3:wght@300;400;500;600&display=swap');
+/* Шрифты вынесены из этого render-blocking @import в <link> в index.html (P-1, ARS-217):
+   @import обнаруживается только ПОСЛЕ загрузки+парсинга index.css → сериализованный
+   блокирующий раунд-трип. <link> в <head> открывается параллельно с CSS. Заодно убраны
+   неиспользуемые Cormorant Garamond и DM Sans (0 вхождений в src). */
 
 @tailwind base;
 @tailwind components;
@@ -119,6 +122,9 @@
 @layer base {
   /* ═══ ORIGINAL — Global (landing, registration, login) ═══ */
   :root {
+    /* Единый фон boot-пути (P-2, ARS-218): BootScreen + #root-плейсхолдер + body.
+       Совпадает с theme-color (index.html) и manifest.background_color → нет светлой вспышки. */
+    --boot-bg: #fdf6ee;
     --background: 32 79% 96%;
     --foreground: 26 65% 10%;
     --card: 37 30% 93%;

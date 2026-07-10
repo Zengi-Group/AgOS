@@ -7,6 +7,7 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { HostProvider } from '@/platform/host/HostContext'
 import { RequireAuth } from '@/components/guards/RequireAuth'
 import { PushDeepLinkBridge } from '@/components/PushDeepLinkBridge'
+import { BootScreen } from '@/components/BootScreen'
 
 import { RequireExpert } from '@/components/guards/RequireExpert'
 import { PublicLanding } from '@/components/guards/PublicLanding'
@@ -55,75 +56,95 @@ const AdminPassportsPage = lazy(() => import('@/pages/admin/subsidies/AdminPassp
 const ApplicationsHub = lazy(() => import('@/pages/admin/applications/ApplicationsHub').then(m => ({ default: m.ApplicationsHub })))
 const MembershipLevelTab = lazy(() => import('@/pages/admin/applications/MembershipLevelTab').then(m => ({ default: m.MembershipLevelTab })))
 const EducationTab = lazy(() => import('@/pages/admin/applications/EducationTab').then(m => ({ default: m.EducationTab })))
-import { AppLayout } from '@/components/layout/AppLayout'
-import { FarmProfile } from '@/pages/cabinet/FarmProfile'
-import { ReportSick } from '@/pages/cabinet/vet/ReportSick'
-import { VetCaseList } from '@/pages/cabinet/vet/VetCaseList'
-import { VetCaseDetail } from '@/pages/cabinet/vet/VetCaseDetail'
-import { CabinetDashboard } from '@/pages/cabinet/CabinetDashboard'
+// ── Legacy web-cabinet + admin/expert/consulting console — ВСЕ lazy (P-1, ARS-217) ──
+// Раньше эти ~65 компонентов были eager static-import → падали в entry-чанк и грузились
+// на первом кадре ФЕРМЕРА (гейт `!IS_NATIVE` — рантайм, код не вырезал). recharts (тяжёлый)
+// протекал через eager consulting-табы. Перевод в lazy() выносит их из entry: фермер/нативка
+// больше не качают код админки на старте; чанки грузятся только при заходе на web-роут.
+// AppLayout — lazy: обёртка legacy+admin subtree, один Suspense на её element покрывает всё.
+const AppLayout = lazy(() => import('@/components/layout/AppLayout').then(m => ({ default: m.AppLayout })))
+const FarmProfile = lazy(() => import('@/pages/cabinet/FarmProfile').then(m => ({ default: m.FarmProfile })))
+const ReportSick = lazy(() => import('@/pages/cabinet/vet/ReportSick').then(m => ({ default: m.ReportSick })))
+const VetCaseList = lazy(() => import('@/pages/cabinet/vet/VetCaseList').then(m => ({ default: m.VetCaseList })))
+const VetCaseDetail = lazy(() => import('@/pages/cabinet/vet/VetCaseDetail').then(m => ({ default: m.VetCaseDetail })))
+const CabinetDashboard = lazy(() => import('@/pages/cabinet/CabinetDashboard').then(m => ({ default: m.CabinetDashboard })))
 // New mobile shells (farmer + MPK) — own full-screen chrome, mounted OUTSIDE AppLayout.
 // New = primary /cabinet; legacy web cabinet → /cabinet-legacy (CEO decision 2026-06-23).
 // CabinetApp — lazy (S2, ревью PR #27): он тянет Ionic core.css с НЕслойным body-правилом
 // и v5-остров — им нечего делать в main-чанке публичного сайта/админки (3G-бюджет Dok6);
 // плюс каскад body перестаёт зависеть от порядка импортов в main.tsx.
 const CabinetApp = lazy(() => import('@/pages/cabinet/shell/CabinetApp').then(m => ({ default: m.CabinetApp })))
-import { MpkApp } from '@/pages/cabinet/shell/mpk/MpkApp'
-import { HerdOverview } from '@/pages/cabinet/herd/HerdOverview'
-import { HerdGroupForm } from '@/pages/cabinet/herd/HerdGroupForm'
-import { FeedInventory } from '@/pages/cabinet/feed/FeedInventory'
-import { FeedItemForm } from '@/pages/cabinet/feed/FeedItemForm'
-import { RationPage } from '@/pages/cabinet/ration/RationPage'
-import { Calculator as RationCalculator } from '@/pages/cabinet/ration/tabs/Calculator'
-import { GroupRations } from '@/pages/cabinet/ration/tabs/GroupRations'
-import { Summary as RationSummary } from '@/pages/cabinet/ration/tabs/Summary'
-import { Budget as RationBudget } from '@/pages/cabinet/ration/tabs/Budget'
-import { ProductionPlan } from '@/pages/cabinet/plan/ProductionPlan'
-import { TaskList } from '@/pages/cabinet/plan/TaskList'
-import { Timeline } from '@/pages/cabinet/plan/Timeline'
-import { CascadePreview } from '@/pages/cabinet/plan/CascadePreview'
-import { KpiDashboard } from '@/pages/cabinet/plan/KpiDashboard'
-import { MarketDashboard } from '@/pages/cabinet/market/MarketDashboard'
-import { CreateBatch } from '@/pages/cabinet/market/CreateBatch'
-import { BatchDetail } from '@/pages/cabinet/market/BatchDetail'
-import { PriceInfo } from '@/pages/cabinet/market/PriceInfo'
-import { AdminDashboard } from '@/pages/admin/AdminDashboard'
-import { MembershipDecision } from '@/pages/admin/MembershipDecision'
-import { VetCaseQueue } from '@/pages/admin/expert/VetCaseQueue'
-import { CaseConsultation } from '@/pages/admin/expert/CaseConsultation'
-import { VaccinationPlans } from '@/pages/admin/expert/VaccinationPlans'
-import { RecordVaccination } from '@/pages/admin/expert/RecordVaccination'
-import { EpidemicSignals } from '@/pages/admin/expert/EpidemicSignals'
-import { ExpertKpi } from '@/pages/admin/expert/ExpertKpi'
-import { KnowledgeBase } from '@/pages/admin/knowledge/KnowledgeBase'
-import { Restrictions } from '@/pages/admin/restrictions/Restrictions'
-import { AuditLog } from '@/pages/admin/audit/AuditLog'
-import { PoolQueue } from '@/pages/admin/pools/PoolQueue'
-import { PoolDetail } from '@/pages/admin/pools/PoolDetail'
-import { MarketplaceAdmin } from '@/pages/admin/marketplace/MarketplaceAdmin'
-import { PriceGridManagement } from '@/pages/admin/pricing/PriceGridManagement'
-import { UserManagement } from '@/pages/admin/users/UserManagement'
-import { RoleAssignment } from '@/pages/admin/roles/RoleAssignment'
-import { OrgManagement } from '@/pages/admin/orgs/OrgManagement'
-import { RegionDirectory } from '@/pages/admin/regions/RegionDirectory'
-import { SystemSettings } from '@/pages/admin/settings/SystemSettings'
-import { FeedReferenceAdmin, CatalogTab as FeedCatalogTab, PricesTab as FeedPricesTab, NormsTab as FeedNormsTab } from '@/pages/admin/feeds/FeedReferenceAdmin'
-import { CapexReferenceAdmin, CapexMaterialsTab, CapexNormsTab, CapexSurchargesTab } from '@/pages/admin/capex/CapexReferenceAdmin'
-import { LivestockPricesAdmin } from '@/pages/admin/livestock-prices/LivestockPricesAdmin'
-import { LivestockCategoriesLayout, CategoriesTab as LivestockCategoriesTab, RulesTab as LivestockRulesTab } from '@/pages/admin/livestock-categories/LivestockCategoriesLayout'
-import { GradeFormulaAdmin } from '@/pages/admin/grade-formula/GradeFormulaAdmin'
-import { DirectoriesHub } from '@/pages/admin/directories/DirectoriesHub'
-import { NormsReferenceAdmin, FacilityNormsTab, PaddockNormsTab, CalvingScenariosTab, RegionalPastureTab, CapexCoefficientsTab } from '@/pages/admin/directories/norms/NormsReferenceAdmin'
-import { ConsultingDashboard } from '@/pages/admin/consulting/ConsultingDashboard'
-import { ProjectPage } from '@/pages/admin/consulting/ProjectPage'
-import { ProjectWizard } from '@/pages/admin/consulting/ProjectWizard'
-import { SummaryTab } from '@/pages/admin/consulting/tabs/SummaryTab'
-import { HerdTab } from '@/pages/admin/consulting/tabs/HerdTab'
-import { PnlTab } from '@/pages/admin/consulting/tabs/PnlTab'
-import { CashFlowTab } from '@/pages/admin/consulting/tabs/CashFlowTab'
-import { CapexTab } from '@/pages/admin/consulting/tabs/CapexTab'
-import { TechCardTab } from '@/pages/admin/consulting/tabs/TechCardTab'
-import { RationTab } from '@/pages/admin/consulting/tabs/RationTab'
-import { StaffTab } from '@/pages/admin/consulting/tabs/StaffTab'
+// MpkApp — lazy (P-1): тоже нативная оболочка (Ionic-остров), не нужна в entry.
+const MpkApp = lazy(() => import('@/pages/cabinet/shell/mpk/MpkApp').then(m => ({ default: m.MpkApp })))
+const HerdOverview = lazy(() => import('@/pages/cabinet/herd/HerdOverview').then(m => ({ default: m.HerdOverview })))
+const HerdGroupForm = lazy(() => import('@/pages/cabinet/herd/HerdGroupForm').then(m => ({ default: m.HerdGroupForm })))
+const FeedInventory = lazy(() => import('@/pages/cabinet/feed/FeedInventory').then(m => ({ default: m.FeedInventory })))
+const FeedItemForm = lazy(() => import('@/pages/cabinet/feed/FeedItemForm').then(m => ({ default: m.FeedItemForm })))
+const RationPage = lazy(() => import('@/pages/cabinet/ration/RationPage').then(m => ({ default: m.RationPage })))
+const RationCalculator = lazy(() => import('@/pages/cabinet/ration/tabs/Calculator').then(m => ({ default: m.Calculator })))
+const GroupRations = lazy(() => import('@/pages/cabinet/ration/tabs/GroupRations').then(m => ({ default: m.GroupRations })))
+const RationSummary = lazy(() => import('@/pages/cabinet/ration/tabs/Summary').then(m => ({ default: m.Summary })))
+const RationBudget = lazy(() => import('@/pages/cabinet/ration/tabs/Budget').then(m => ({ default: m.Budget })))
+const ProductionPlan = lazy(() => import('@/pages/cabinet/plan/ProductionPlan').then(m => ({ default: m.ProductionPlan })))
+const TaskList = lazy(() => import('@/pages/cabinet/plan/TaskList').then(m => ({ default: m.TaskList })))
+const Timeline = lazy(() => import('@/pages/cabinet/plan/Timeline').then(m => ({ default: m.Timeline })))
+const CascadePreview = lazy(() => import('@/pages/cabinet/plan/CascadePreview').then(m => ({ default: m.CascadePreview })))
+const KpiDashboard = lazy(() => import('@/pages/cabinet/plan/KpiDashboard').then(m => ({ default: m.KpiDashboard })))
+const MarketDashboard = lazy(() => import('@/pages/cabinet/market/MarketDashboard').then(m => ({ default: m.MarketDashboard })))
+const CreateBatch = lazy(() => import('@/pages/cabinet/market/CreateBatch').then(m => ({ default: m.CreateBatch })))
+const BatchDetail = lazy(() => import('@/pages/cabinet/market/BatchDetail').then(m => ({ default: m.BatchDetail })))
+const PriceInfo = lazy(() => import('@/pages/cabinet/market/PriceInfo').then(m => ({ default: m.PriceInfo })))
+const AdminDashboard = lazy(() => import('@/pages/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })))
+const MembershipDecision = lazy(() => import('@/pages/admin/MembershipDecision').then(m => ({ default: m.MembershipDecision })))
+const VetCaseQueue = lazy(() => import('@/pages/admin/expert/VetCaseQueue').then(m => ({ default: m.VetCaseQueue })))
+const CaseConsultation = lazy(() => import('@/pages/admin/expert/CaseConsultation').then(m => ({ default: m.CaseConsultation })))
+const VaccinationPlans = lazy(() => import('@/pages/admin/expert/VaccinationPlans').then(m => ({ default: m.VaccinationPlans })))
+const RecordVaccination = lazy(() => import('@/pages/admin/expert/RecordVaccination').then(m => ({ default: m.RecordVaccination })))
+const EpidemicSignals = lazy(() => import('@/pages/admin/expert/EpidemicSignals').then(m => ({ default: m.EpidemicSignals })))
+const ExpertKpi = lazy(() => import('@/pages/admin/expert/ExpertKpi').then(m => ({ default: m.ExpertKpi })))
+const KnowledgeBase = lazy(() => import('@/pages/admin/knowledge/KnowledgeBase').then(m => ({ default: m.KnowledgeBase })))
+const Restrictions = lazy(() => import('@/pages/admin/restrictions/Restrictions').then(m => ({ default: m.Restrictions })))
+const AuditLog = lazy(() => import('@/pages/admin/audit/AuditLog').then(m => ({ default: m.AuditLog })))
+const PoolQueue = lazy(() => import('@/pages/admin/pools/PoolQueue').then(m => ({ default: m.PoolQueue })))
+const PoolDetail = lazy(() => import('@/pages/admin/pools/PoolDetail').then(m => ({ default: m.PoolDetail })))
+const MarketplaceAdmin = lazy(() => import('@/pages/admin/marketplace/MarketplaceAdmin').then(m => ({ default: m.MarketplaceAdmin })))
+const PriceGridManagement = lazy(() => import('@/pages/admin/pricing/PriceGridManagement').then(m => ({ default: m.PriceGridManagement })))
+const UserManagement = lazy(() => import('@/pages/admin/users/UserManagement').then(m => ({ default: m.UserManagement })))
+const RoleAssignment = lazy(() => import('@/pages/admin/roles/RoleAssignment').then(m => ({ default: m.RoleAssignment })))
+const OrgManagement = lazy(() => import('@/pages/admin/orgs/OrgManagement').then(m => ({ default: m.OrgManagement })))
+const RegionDirectory = lazy(() => import('@/pages/admin/regions/RegionDirectory').then(m => ({ default: m.RegionDirectory })))
+const SystemSettings = lazy(() => import('@/pages/admin/settings/SystemSettings').then(m => ({ default: m.SystemSettings })))
+const FeedReferenceAdmin = lazy(() => import('@/pages/admin/feeds/FeedReferenceAdmin').then(m => ({ default: m.FeedReferenceAdmin })))
+const FeedCatalogTab = lazy(() => import('@/pages/admin/feeds/FeedReferenceAdmin').then(m => ({ default: m.CatalogTab })))
+const FeedPricesTab = lazy(() => import('@/pages/admin/feeds/FeedReferenceAdmin').then(m => ({ default: m.PricesTab })))
+const FeedNormsTab = lazy(() => import('@/pages/admin/feeds/FeedReferenceAdmin').then(m => ({ default: m.NormsTab })))
+const CapexReferenceAdmin = lazy(() => import('@/pages/admin/capex/CapexReferenceAdmin').then(m => ({ default: m.CapexReferenceAdmin })))
+const CapexMaterialsTab = lazy(() => import('@/pages/admin/capex/CapexReferenceAdmin').then(m => ({ default: m.CapexMaterialsTab })))
+const CapexNormsTab = lazy(() => import('@/pages/admin/capex/CapexReferenceAdmin').then(m => ({ default: m.CapexNormsTab })))
+const CapexSurchargesTab = lazy(() => import('@/pages/admin/capex/CapexReferenceAdmin').then(m => ({ default: m.CapexSurchargesTab })))
+const LivestockPricesAdmin = lazy(() => import('@/pages/admin/livestock-prices/LivestockPricesAdmin').then(m => ({ default: m.LivestockPricesAdmin })))
+const LivestockCategoriesLayout = lazy(() => import('@/pages/admin/livestock-categories/LivestockCategoriesLayout').then(m => ({ default: m.LivestockCategoriesLayout })))
+const LivestockCategoriesTab = lazy(() => import('@/pages/admin/livestock-categories/LivestockCategoriesLayout').then(m => ({ default: m.CategoriesTab })))
+const LivestockRulesTab = lazy(() => import('@/pages/admin/livestock-categories/LivestockCategoriesLayout').then(m => ({ default: m.RulesTab })))
+const GradeFormulaAdmin = lazy(() => import('@/pages/admin/grade-formula/GradeFormulaAdmin').then(m => ({ default: m.GradeFormulaAdmin })))
+const DirectoriesHub = lazy(() => import('@/pages/admin/directories/DirectoriesHub').then(m => ({ default: m.DirectoriesHub })))
+const NormsReferenceAdmin = lazy(() => import('@/pages/admin/directories/norms/NormsReferenceAdmin').then(m => ({ default: m.NormsReferenceAdmin })))
+const FacilityNormsTab = lazy(() => import('@/pages/admin/directories/norms/NormsReferenceAdmin').then(m => ({ default: m.FacilityNormsTab })))
+const PaddockNormsTab = lazy(() => import('@/pages/admin/directories/norms/NormsReferenceAdmin').then(m => ({ default: m.PaddockNormsTab })))
+const CalvingScenariosTab = lazy(() => import('@/pages/admin/directories/norms/NormsReferenceAdmin').then(m => ({ default: m.CalvingScenariosTab })))
+const RegionalPastureTab = lazy(() => import('@/pages/admin/directories/norms/NormsReferenceAdmin').then(m => ({ default: m.RegionalPastureTab })))
+const CapexCoefficientsTab = lazy(() => import('@/pages/admin/directories/norms/NormsReferenceAdmin').then(m => ({ default: m.CapexCoefficientsTab })))
+const ConsultingDashboard = lazy(() => import('@/pages/admin/consulting/ConsultingDashboard').then(m => ({ default: m.ConsultingDashboard })))
+const ProjectPage = lazy(() => import('@/pages/admin/consulting/ProjectPage').then(m => ({ default: m.ProjectPage })))
+const ProjectWizard = lazy(() => import('@/pages/admin/consulting/ProjectWizard').then(m => ({ default: m.ProjectWizard })))
+const SummaryTab = lazy(() => import('@/pages/admin/consulting/tabs/SummaryTab').then(m => ({ default: m.SummaryTab })))
+const HerdTab = lazy(() => import('@/pages/admin/consulting/tabs/HerdTab').then(m => ({ default: m.HerdTab })))
+const PnlTab = lazy(() => import('@/pages/admin/consulting/tabs/PnlTab').then(m => ({ default: m.PnlTab })))
+const CashFlowTab = lazy(() => import('@/pages/admin/consulting/tabs/CashFlowTab').then(m => ({ default: m.CashFlowTab })))
+const CapexTab = lazy(() => import('@/pages/admin/consulting/tabs/CapexTab').then(m => ({ default: m.CapexTab })))
+const TechCardTab = lazy(() => import('@/pages/admin/consulting/tabs/TechCardTab').then(m => ({ default: m.TechCardTab })))
+const RationTab = lazy(() => import('@/pages/admin/consulting/tabs/RationTab').then(m => ({ default: m.RationTab })))
+const StaffTab = lazy(() => import('@/pages/admin/consulting/tabs/StaffTab').then(m => ({ default: m.StaffTab })))
 import NotFound from '@/pages/public/NotFound'
 import '@/i18n'
 
@@ -148,7 +169,8 @@ const IS_NATIVE = import.meta.env.VITE_APP_TARGET === 'native'
 // Web-таргет корня по-прежнему показывает публичный лендинг (PublicLanding).
 function NativeEntry() {
   const { session, loading } = useAuth()
-  if (loading) return null
+  // P-2 (ARS-218): пока резолвится сессия — брендовый boot вместо белого `null`.
+  if (loading) return <BootScreen />
   return session ? <Navigate to="/cabinet" replace /> : <Welcome />
 }
 
@@ -206,11 +228,11 @@ function App() {
             <Route element={<RequireAuth />}>
               {/* New mobile shells — full-screen, own chrome, NOT wrapped in AppLayout.
                   Primary /cabinet (farmer) + /mpk (МПК); legacy web cabinet → /cabinet-legacy. */}
-              <Route path="/cabinet/*" element={<Suspense fallback={null}><CabinetApp /></Suspense>} />
-              <Route path="/mpk/*" element={<MpkApp />} />
+              <Route path="/cabinet/*" element={<Suspense fallback={<BootScreen />}><CabinetApp /></Suspense>} />
+              <Route path="/mpk/*" element={<Suspense fallback={<BootScreen />}><MpkApp /></Suspense>} />
               {/* Легаси web-кабинет + админ/эксперт-консоль: только web-таргет (§8). */}
               {!IS_NATIVE && (
-              <Route element={<AppLayout />}>
+              <Route element={<Suspense fallback={<BootScreen />}><AppLayout /></Suspense>}>
                 <Route path="/cabinet-legacy">
                   <Route index element={<CabinetDashboard />} />
                   <Route path="farm" element={<FarmProfile />} />

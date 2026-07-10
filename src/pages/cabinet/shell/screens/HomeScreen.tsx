@@ -16,7 +16,7 @@ import { HomeStartLadder } from '../components/HomeStartLadder'
 import { TierHead } from '../components/TierHead'
 import { DecisionCard } from '../components/DecisionCard'
 import { ObserveCard } from '../components/ObserveCard'
-import { SkeletonBlocks } from '../components/SkeletonBlocks'
+import { ScreenSkeleton } from '../components/ScreenSkeleton'
 import { PhIcon } from '../components/icons/PhIcon'
 
 interface Props {
@@ -64,7 +64,7 @@ export function HomeScreen({ membership, farm, decisions, observe, loading, go, 
   return (
     <IonShellFrame label={'Главная · ' + membership} onRefresh={onRefresh}>
       <HomeHead />
-      {loading ? <SkeletonBlocks n={5} /> : (
+      {loading ? <ScreenSkeleton variant="home" /> : (
         <div className="home-stack">
           <HomeBanner />
           <ServiceGrid />

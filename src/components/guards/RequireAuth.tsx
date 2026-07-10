@@ -1,17 +1,14 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
-import { Loader2 } from 'lucide-react'
+import { BootScreen } from '@/components/BootScreen'
 
 export function RequireAuth() {
   const { session, loading } = useAuth()
   const location = useLocation()
 
+  // P-2 (ARS-218): брендовый boot вместо голого спиннера при резолве сессии.
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[#fdf6ee]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
+    return <BootScreen />
   }
 
   if (!session) {

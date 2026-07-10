@@ -5,11 +5,13 @@
 import type { ReactNode } from 'react'
 import { IonPage, IonContent, IonRefresher, IonRefresherContent } from '@ionic/react'
 import { OfflineBar } from './OfflineBar'
-import { ShellTabBarIon } from './ShellTabBarIon'
 
 interface Props {
   label?: string
   children: ReactNode
+  // P-4 (ARS-220): таб-бар переехал в единый постоянный IonTabs (CabinetApp), фрейм его
+  // больше НЕ рендерит. `noTabs` сохранён для совместимости вызовов (в т.ч. МПК) — сейчас
+  // no-op; скрытие бара на детальных экранах решается на уровне IonTabs (hideTabBar).
   noTabs?: boolean
   // Pull-to-refresh (spec §7): экраны с поллингом передают свой рефетч.
   onRefresh?: () => Promise<unknown>
@@ -18,7 +20,7 @@ interface Props {
   footBare?: boolean
 }
 
-export function IonShellFrame({ label, children, noTabs, onRefresh, footer, footBare }: Props) {
+export function IonShellFrame({ label, children, onRefresh, footer, footBare }: Props) {
   return (
     <IonPage data-screen-label={label || ''}>
       <OfflineBar />
@@ -36,7 +38,6 @@ export function IonShellFrame({ label, children, noTabs, onRefresh, footer, foot
         <div className="phone-scroll">{children}</div>
       </IonContent>
       {footer && <div className={'sh-foot' + (footBare ? ' bare' : '')}>{footer}</div>}
-      {!noTabs && <ShellTabBarIon />}
     </IonPage>
   )
 }
