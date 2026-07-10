@@ -530,6 +530,36 @@
 .agos-cabinet-stage .es-s { font-size: 14px; color: var(--ink-3); line-height: 1.55; max-width: 288px; margin-top: 8px; }
 .agos-cabinet-stage .es-act { margin-top: 24px; width: 100%; max-width: 260px; }
 
+/* ---------- Главная · стартовый модуль «С чего начать» (HomeStartLadder.tsx, ARS-209) ----------
+   Направление A «карта-лестница», выровнено под язык Главной: плоская карта (без тени),
+   радиус/бордер/иконки как у ярусов (dec-row/obs-card) — простые Phosphor-иконки, статус
+   цветом иконки (амбер=active · зелёный=done · нейтр.=todo/locked), подпись только у active. */
+.agos-cabinet-stage .hsl {
+  background: var(--card); border: 1px solid var(--line-soft);
+  border-radius: 12px; padding: 0 14px;
+}
+.agos-cabinet-stage .hsl-step {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 12px 0; border: none; background: none; cursor: pointer;
+  border-bottom: 1px solid var(--line-soft);
+}
+.agos-cabinet-stage .hsl > .hsl-step:last-child { border-bottom: none; }
+.agos-cabinet-stage .hsl-step:disabled { cursor: default; }
+.agos-cabinet-stage .hsl-step.s-locked { opacity: .5; }
+.agos-cabinet-stage .hsl-ic {
+  flex-shrink: 0; width: 28px; display: grid; place-items: center; color: var(--ink-3);
+}
+.agos-cabinet-stage .hsl-step.s-active .hsl-ic { color: var(--accent); }
+.agos-cabinet-stage .hsl-step.s-done .hsl-ic { color: var(--green); }
+.agos-cabinet-stage .hsl-body { flex: 1; min-width: 0; }
+.agos-cabinet-stage .hsl-t { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink); letter-spacing: -.01em; line-height: 1.3; }
+.agos-cabinet-stage .hsl-step.s-active .hsl-t { font-weight: 700; }
+.agos-cabinet-stage .hsl-step.s-done .hsl-t { color: var(--ink-2); }
+.agos-cabinet-stage .hsl-step.s-locked .hsl-t { color: var(--ink-3); }
+.agos-cabinet-stage .hsl-s { display: block; font-size: 11px; color: var(--ink-2); line-height: 1.3; margin-top: 2px; }
+.agos-cabinet-stage .hsl-tr { flex-shrink: 0; line-height: 0; color: var(--ink-4); }
+.agos-cabinet-stage .hsl-step.s-active .hsl-tr { color: var(--accent); }
+
 /* ---------- Кнопка выхода на экране профиля ---------- */
 .agos-cabinet-stage .cab-logout {
   width: 100%; margin-top: 12px; min-height: 46px; border-radius: 10px;
