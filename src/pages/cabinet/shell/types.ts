@@ -40,7 +40,6 @@ export type SheetKind =
   | 'paypro'
   | 'progate'
   | 'membgate'
-  | 'membdocs'
   | 'prices'
   | 'withdraw'     // WithdrawSheet
   | 'dispatch'     // DispatchSheet

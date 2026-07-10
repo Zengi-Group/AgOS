@@ -1,8 +1,9 @@
-// AgOS · Заявка на членство (светлый экран пост-регистрации).
+// AgOS · Заявка на членство — ЕДИНЫЙ полноэкранный процесс (/membership).
+// Все CTA «Вступить» / «Подать заявку» из кабинета ведут сюда (memberAct('apply') → navigate).
 // Дизайн портирован из прототипа agos-farmer (routes/membership.tsx).
 // Реальная логика: загрузка документов в Supabase Storage (bucket membership-documents,
-// путь {orgId}/docs/{slotKey}_{ts}.{ext}) + rpc_submit_membership_application — как в
-// in-cabinet MembDocsSheet. orgId берём из контекста (rpc_get_my_context через useAuth).
+// путь {orgId}/docs/{slotKey}_{ts}.{ext}) + rpc_submit_membership_application.
+// orgId берём из контекста (rpc_get_my_context через useAuth).
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -151,6 +152,8 @@ export function Membership() {
           return
         }
       }
+      // Обновляем контекст → кабинет увидит applicationStatus='pending' при возврате.
+      void refreshContext()
       setStep('pending')
     } catch (e) {
       toast.error('Ошибка отправки: ' + (e instanceof Error ? e.message : 'сеть'))
