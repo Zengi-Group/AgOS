@@ -80,7 +80,7 @@ export function TuranScreen({ onBack, toast, prefillTopic }: Props) {
             placeholder="Опишите ситуацию подробнее…" onChange={(e) => setMessage(e.target.value)} />
         </MkField>
         {message.length > 0 && !canSend && <MkErr>Минимум 5 символов</MkErr>}
-        <div className="mk-note mk-mono" style={{ marginTop: 8 }}>обращения обрабатываются в течение 1 рабочего дня</div>
+        <div className="mk-note" style={{ marginTop: 8 }}>обращения обрабатываются в течение 1 рабочего дня</div>
       </div>
     </IonShellFrame>
   )
