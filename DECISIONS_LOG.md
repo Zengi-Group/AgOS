@@ -3502,3 +3502,11 @@ Files: d01_kernel.sql (rpc_get_my_context + comment).
 **Verify**: мои файлы типо-чисты (в `tsc -b` не фигурируют; ошибки только в файлах origin/main #55 — отсутствуют деп `libphonenumber-js`/`react-phone-number-input` в worktree, пред-существующий пробел окружения). Живой прогон недоступен (`/cabinet` за Supabase-логином). Визуал проверен overlay-инъекцией с реальными классами `.hsl*` + токенами ДС + путями Phosphor, preview mobile 375px, S0/S3/S4 — совпадает с макетом A. База ветки приведена к origin/main (846c78f, ff без конфликтов).
 
 **Files**: new `src/pages/cabinet/shell/components/HomeStartLadder.tsx`; edited `screens/HomeScreen.tsx`, `cabinet.css` (`.hsl*`/`.hsl-calm*`). SQL/canon не тронуты → `cross_check.sh` не нужен. Мозг: `apex-brain/projects/agos/specs/farmer-home-empty-state.md`. Задача ARS-209. Ветка `claude/farmer-empty-state-design-dff623`.
+
+### 2026-07-10: Реальный пустой стейт вместо демо-сида для залогиненного фермера (ARS-210)
+
+**What**: Фермер без членства/фермы видел на главной фейк из демо-сида («Членство активно» + «Ферма · Отёл, день 34 · 7 задач»). Фикс: (1) `farm-seed.ts` + `emptyFarm()` — реальный пустой стейт (без cycle/задач/стада); (2) `farm-load.ts` — при «контекст есть, но фермы нет» возвращаем `emptyFarm()` вместо `null` (null оставлен только для «контекст не загрузился» — аноним/сбой, чтобы не мигать пустотой у члена при транзиентной ошибке RPC); (3) `CabinetApp.tsx` — при валидной сессии, но пустом профиле (нет орг/членства) выставляем реальный пустой стейт (`membership='none'` + `emptyFarm()`), а не демо.
+
+**Why**: оболочка стартовала с демо-сида (`INITIAL_STATE.membership='active'` + `seedFarm()`) и вытесняла его только не-null данными → пустой реальный аккаунт сид не вытеснял (P9/P11: система обязана отражать реальность, incomplete state = норма). Заодно чинит стадию empty-state (ARS-209): теперь из реального membership → корректный S0 вместо ошибочного S3. Аддитивно (HS-5).
+
+**Verify**: `tsc -b` = 0. Рендер S0 для `none` верифицирован ранее (ARS-209); data-wiring — типы + логика. Живой прод-репро на +77777731913 — за CEO. SQL/схема не тронуты → `cross_check.sh` не нужен. PR #61. Ветка `smartmope/ars-210-real-empty-state`.
