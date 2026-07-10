@@ -126,6 +126,9 @@
 
 /* ─── нижний таб-бар (Ionic IonTabBar .agos-tabbar) в стиле прототипа .sh-tabbar ─── */
 .agos-cabinet-stage .agos-tabbar { --background: var(--bg); background: var(--bg); border-top: 1px solid var(--bd); min-height: auto; padding: 8px 6px calc(8px + env(safe-area-inset-bottom)); contain: none; }
+/* P-4 (ARS-220): единый постоянный бар скрыт на детальных экранах (Список/Партия/Отзыв/
+   TURAN) — сохраняет прежний фуллскрин-UX, но сам IonTabBar не пересобирается. */
+.agos-cabinet-stage .agos-tabbar.agos-tabbar--hidden { display: none; }
 .agos-cabinet-stage .agos-tabbar ion-tab-button {
   --color: var(--fg2); --color-selected: var(--accent);
   --background: transparent; --background-focused: transparent; --ripple-color: transparent;
