@@ -42,11 +42,8 @@ export function buildDecisions({ batches, membership, h }: BuildArgs): DecisionC
       { t: 'Варианты', kind: 'ghost', fn: () => h.open(b) },
     ],
   }))
-  if (membership === 'approved') cards.push({
-    id: 'm-pay', pri: 0, src: 'ЧЛЕНСТВО TURAN', due: 'до ' + MEMB_DATES.payApproved,
-    t: 'Заявка одобрена — оплатите взнос, чтобы открыть продажу',
-    actions: [{ t: 'Оплатить взнос', kind: 'primary', fn: h.pay }, { t: 'Кабинет', kind: 'ghost', fn: h.cabinet }],
-  })
+  // approved («оплатить взнос») больше НЕ отдельная карточка яруса — этот шаг онбординга
+  // показывает стартовый модуль главной (HomeStartLadder, ARS-209), чтобы не дублировать.
   if (membership === 'expiring') cards.push({
     id: 'm-ext', pri: 0, src: 'ЧЛЕНСТВО TURAN', due: 'до ' + MEMB_DATES.expiringTill,
     t: 'Продлите членство',
@@ -92,7 +89,7 @@ const OBSERVE_SUB: Record<string, (b: Batch) => string> = {
 }
 export const OBSERVE_RANK: Record<string, number> = { offering: 0, matched: 1, published: 2, dispatched: 3, scheduled: 4, delivered: 5 }
 
-export function buildObserve({ batches, membership, h }: BuildArgs): ObserveItemModel[] {
+export function buildObserve({ batches, h }: BuildArgs): ObserveItemModel[] {
   const items: ObserveItemModel[] = []
   batches
     .filter((b) => ['offering', 'matched', 'published', 'dispatched', 'scheduled'].includes(b.state) || (b.state === 'delivered' && !b.review))
@@ -102,10 +99,8 @@ export function buildObserve({ batches, membership, h }: BuildArgs): ObserveItem
       sub: (OBSERVE_SUB[b.state] || (() => STATUS_CHIP[b.state] ?? ''))(b),
       src: 'Продажа', onOpen: () => h.open(b),
     }))
-  if (membership === 'pending') items.push({
-    id: 'obs-pending', rank: 8, dot: 'gray',
-    t: 'Заявка на рассмотрении', sub: 'ответ в течение 3 рабочих дней', src: 'Членство',
-    onOpen: () => h.cabinet(),
-  })
+  // pending («Заявка на рассмотрении») больше НЕ отдельная карточка яруса — этот шаг
+  // показывает стартовый модуль главной (HomeStartLadder, ARS-209), чтобы не дублировать
+  // и не прятать лестницу (иначе observe>0 → quiet=false → модуль исчезал).
   return items.sort((a, b) => a.rank - b.rank)
 }
