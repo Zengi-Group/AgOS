@@ -1797,9 +1797,6 @@
 .agos-cabinet-stage .fw-herd-h { font-size:15px; font-weight:600; color:var(--fg); }
 .agos-cabinet-stage .fw-herd-note { font-size:13px; color:var(--fg2); line-height:1.5; padding:2px 0 4px; }
 
-/* — тихая иконка-идентичность над заголовком шага (FwShell.titleIcon) — */
-.agos-cabinet-stage .fw-title-icon { margin:10px 0 0; display:flex; }
-
 /* — F1 ряды категорий со степпером — */
 .agos-cabinet-stage .fw-cats { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); overflow:hidden; margin-bottom:10px; }
 .agos-cabinet-stage .fw-cats.mk-miss { border-color:var(--amber); background:color-mix(in srgb, var(--amber) 6%, var(--bg-c)); }
@@ -1818,18 +1815,44 @@
 .agos-cabinet-stage .fw-exit-row { display:flex; justify-content:flex-end; margin:2px -4px 4px; }
 .agos-cabinet-stage .fw-pay-eyebrow { font-size:10px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--fg3); margin:2px 0 12px; }
 .agos-cabinet-stage .fw-pay-list { display:flex; flex-direction:column; gap:10px; }
-.agos-cabinet-stage .fw-pay-card { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); padding:13px 14px; }
-.agos-cabinet-stage .fw-pay-name { font-size:14px; font-weight:700; color:var(--fg); }
-.agos-cabinet-stage .fw-pay-herd { font-size:11px; color:var(--fg3); margin-top:2px; }
-.agos-cabinet-stage .fw-pay-row { display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-top:8px; }
+.agos-cabinet-stage .fw-pay-card { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); padding:14px; }
+/* внутренняя сетка карточки: шапка (имя+поголовье | дельта-чип) → цена|бары → защитная */
+.agos-cabinet-stage .fw-pay-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.agos-cabinet-stage .fw-pay-hl { min-width:0; }
+.agos-cabinet-stage .fw-pay-name { font-size:14.5px; font-weight:700; color:var(--fg); letter-spacing:-.01em; }
+.agos-cabinet-stage .fw-pay-herd { font-size:12px; color:var(--fg3); margin-top:2px; }
+/* дельта — единственный цветовой акцент карточки: чип с тонированной подложкой */
+.agos-cabinet-stage .fw-pay-card .pdelta { flex:none; padding:4px 9px; border-radius:var(--r-full); font-size:12px; }
+.agos-cabinet-stage .fw-pay-card .pdelta.up { background:color-mix(in srgb, var(--ok) 12%, transparent); }
+.agos-cabinet-stage .fw-pay-card .pdelta.down { background:color-mix(in srgb, var(--warn) 14%, transparent); }
+.agos-cabinet-stage .fw-pay-card .pdelta.flat { background:var(--bg-m); }
+.agos-cabinet-stage .fw-pay-row { display:flex; align-items:flex-end; gap:10px; margin-top:10px; }
+.agos-cabinet-stage .fw-pay-card .psm-price { font-size:27px; letter-spacing:-.02em; }
 .agos-cabinet-stage .fw-pay-row .pbars { margin-left:auto; }
-.agos-cabinet-stage .fw-pay-prot { font-size:12px; color:var(--fg2); margin-top:6px; }
+.agos-cabinet-stage .fw-pay-prot { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--fg2); margin-top:9px; }
 .agos-cabinet-stage .fw-pay-sell { display:inline-flex; align-items:center; gap:4px; margin-top:10px; padding:9px 12px; width:100%; justify-content:center; border:1.5px solid var(--green); background:color-mix(in srgb, var(--green) 10%, transparent); color:var(--green-d); border-radius:var(--r-md); font-weight:600; font-size:13px; cursor:pointer; }
 .agos-cabinet-stage .fw-pay-sell:hover { background:color-mix(in srgb, var(--green) 16%, transparent); }
 
 /* — F3 чипы месяца (сами чипы — mk-fat-c) — */
-.agos-cabinet-stage .fw-months { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:4px; }
-.agos-cabinet-stage .fw-months.mk-miss .mk-fat-c { border-color:var(--amber); }
+/* окно сезона: одна строка чипов (3–4 шт); .full — полный грид 4×3 («другой месяц») */
+.agos-cabinet-stage .fw-months { display:grid; grid-template-columns:repeat(auto-fit, minmax(64px, 1fr)); gap:8px; margin-top:4px; }
+.agos-cabinet-stage .fw-months.full { grid-template-columns:repeat(4, 1fr); }
+.agos-cabinet-stage .fw-mon {
+  height:46px;
+  border:1px solid var(--bd); border-radius:12px;
+  background:var(--bg-c);
+  font-size:14px; font-weight:500; color:var(--fg2);
+  cursor:pointer;
+  transition:background 120ms var(--ease), box-shadow 120ms var(--ease), transform 120ms var(--ease);
+}
+.agos-cabinet-stage .fw-mon:active { transform:scale(.95); }
+.agos-cabinet-stage .fw-mon.sel {
+  background:color-mix(in srgb, var(--amber) 12%, var(--bg-c));
+  box-shadow:inset 0 0 0 1.5px var(--amber);
+  color:var(--fg); font-weight:600;
+}
+.agos-cabinet-stage .fw-months.mk-miss .fw-mon { border-color:var(--amber); }
+.agos-cabinet-stage .fw-mon-more { margin-top:8px; font-size:13px; text-align:left; padding:6px 0; }
 
 /* — «зачем спрашиваем» (дизайн-ход #2) — */
 .agos-cabinet-stage .fw-why { display:flex; align-items:flex-start; gap:7px; margin-top:14px; padding:10px 12px; border-radius:var(--r-md); background:var(--bg-m); color:var(--fg2); font-size:12px; line-height:1.45; }

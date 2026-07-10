@@ -9,7 +9,7 @@
 // весов не спрашиваем). F-Q11: v1 — только справочные цены (слот под пулы не строим).
 
 import { useEffect, useState } from 'react'
-import { fmtMoney, fmtDGen, TODAY } from '../../data/fmt'
+import { fmtMoney, fmtDGen, ruPlural, TODAY } from '../../data/fmt'
 import { PRICE_NEXT, stickerData, FARMER_LEAD_CAT } from '../../data/prices'
 import { HERD_FIELDS, type FwState } from '../types'
 import { FwShell } from './FwShell'
@@ -26,11 +26,10 @@ interface Props {
   planQuestions: number          // N вопросов яруса 2 (по ветке)
   onBridge: () => void           // мост к ярусу «План»
   onExit: () => void             // «Пока хватит» / X → выход (F0b)
-  onAllPrices: (catKey: string) => void  // «Все цены TURAN» → шторка PriceSheet
   onSell?: (catKey: string) => void      // «Продать через TURAN» (только членам)
 }
 
-export function FwPayoffPrices({ heads, region, planQuestions, onBridge, onExit, onAllPrices, onSell }: Props) {
+export function FwPayoffPrices({ heads, region, planQuestions, onBridge, onExit, onSell }: Props) {
   const [ready, setReady] = useState(false)
   useEffect(() => {
     const t = setTimeout(() => setReady(true), PAUSE_MS)
@@ -61,14 +60,18 @@ export function FwPayoffPrices({ heads, region, planQuestions, onBridge, onExit,
 
   const renderCard = (s: ReturnType<typeof stickerData>, herdCount: number | null) => (
     <div className="fw-pay-card" key={s.catKey}>
-      <div className="fw-pay-name">{s.name}</div>
-      {herdCount != null && <div className="fw-pay-herd">у вас {herdCount} голов</div>}
+      <div className="fw-pay-head">
+        <div className="fw-pay-hl">
+          <div className="fw-pay-name">{s.name}</div>
+          {herdCount != null && <div className="fw-pay-herd">у вас {herdCount} {ruPlural(herdCount, 'голова', 'головы', 'голов')}</div>}
+        </div>
+        <PriceDelta s={s} />
+      </div>
       <div className="fw-pay-row">
         <span className="psm-price mk-mono">{fmtMoney(s.price)}<span className="psm-unit"> ₸/кг</span></span>
-        <PriceDelta s={s} />
         <PriceBars bars={s.bars} />
       </div>
-      <div className="fw-pay-prot">защитная: <span className="mk-mono">{fmtMoney(s.prot)} ₸/кг</span></div>
+      <div className="fw-pay-prot"><PhIcon name="shieldCheck" size={14} color="var(--fg3)" /> защитная цена <span className="mk-mono">{fmtMoney(s.prot)} ₸/кг</span></div>
       {onSell && <button className="fw-pay-sell" onClick={() => onSell(s.catKey)}>Продать через TURAN <PhIcon name="chevronRight" size={13} /></button>}
     </div>
   )
@@ -91,10 +94,7 @@ export function FwPayoffPrices({ heads, region, planQuestions, onBridge, onExit,
           ? renderCard(stickerData(FARMER_LEAD_CAT), null)
           : cards.map((c) => renderCard(c.sticker, c.heads))}
       </div>
-      {onlyLead && <div className="mk-note" style={{ textAlign: 'left' }}>Цены по остальным категориям — по ссылке ниже</div>}
-      <button className="mk-link" style={{ textAlign: 'left' }} onClick={() => onAllPrices(cards[0]?.sticker.catKey ?? FARMER_LEAD_CAT)}>
-        Все цены TURAN <PhIcon name="chevronRight" size={13} />
-      </button>
+      {onlyLead && <div className="mk-note" style={{ textAlign: 'left' }}>Цены по остальным категориям — в разделе «Цены» на Главной</div>}
       <div className="ps-disc">Справочная информация ассоциации TURAN. Не является обязательной — цену вы назначаете сами.</div>
     </FwShell>
   )

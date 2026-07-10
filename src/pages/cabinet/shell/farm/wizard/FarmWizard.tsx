@@ -31,7 +31,7 @@ interface Props {
 }
 
 export function FarmWizard({ startAt, onExit, onSell }: Props) {
-  const { openPrices, toast, farmRegion } = useShell()
+  const { toast, farmRegion } = useShell()
   const { load, save } = useFarmDraft()
 
   const [w, setW] = useState<FwState>(() => load())
@@ -138,7 +138,6 @@ export function FarmWizard({ startAt, onExit, onSell }: Props) {
         planQuestions={branch.length}
         onBridge={bridgeToPlan}
         onExit={exitSaved}
-        onAllPrices={openPrices}
         onSell={onSell}
       />
     )

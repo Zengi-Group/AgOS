@@ -1,5 +1,7 @@
 // AgOS · ARS-212 · SCR-F3 · Отёл (ярус 2, только при маточном). BigRadio ×4; при сезонном
-// ответе — блок чипов месяца первого отёла (обязателен для «Дальше»). «Круглый год» и
+// ответе — чипы месяца первого отёла ОКНА СЕЗОНА (R-17: саб-вопрос наследует ответ родителя;
+// spring=фев–май, autumn=сен–ноя) + «Другой месяц…» раскрывает полный грид 12 (P5: реальные
+// отёлы могут начаться вне типичного окна). Месяц обязателен для «Дальше». «Круглый год» и
 // «По-разному» — полноправные опции (легальный путь, F-D14), ничего не блокируют.
 // fw-why (InfoNote): «зачем спрашиваем». Skip-link пишет null и идёт дальше (порог не достигнут).
 
@@ -12,6 +14,12 @@ import { MkErr } from '../../tsp/components/MkErr'
 import { FwWhy } from './FwWhy'
 
 const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+
+// Типичное окно сезона (совпадает с сабами опций) — месяцы 1..12.
+const SEASON_WINDOW: Record<'spring' | 'autumn', number[]> = {
+  spring: [2, 3, 4, 5],
+  autumn: [9, 10, 11],
+}
 
 const OPTS: { v: CalvingAnswer; t: string; s: string }[] = [
   { v: 'spring',     t: 'Весной',      s: 'обычно февраль–май' },
@@ -35,7 +43,18 @@ interface Props {
 
 export function FwStepCalving({ progress, dots, value, month, setValue, setMonth, onNext, onSkip, onBack, onExit }: Props) {
   const [miss, setMiss] = useState(false)
+  const [allMonths, setAllMonths] = useState(
+    // черновик содержит месяц вне окна сезона → сразу полный грид, чтобы выбор был виден
+    () => (value === 'spring' || value === 'autumn') && month != null && !SEASON_WINDOW[value].includes(month)
+  )
   const seasonal = value === 'spring' || value === 'autumn'
+  const shownMonths = seasonal && !allMonths ? SEASON_WINDOW[value] : MONTHS.map((_, i) => i + 1)
+
+  const pickSeason = (v: CalvingAnswer) => {
+    if (v !== value) { setMonth(null); setAllMonths(false) }  // смена сезона = новое окно, старый месяц не тащим
+    setValue(v)
+    setMiss(false)
+  }
 
   const tryNext = () => {
     if (seasonal && month == null) { setMiss(true); return }
@@ -59,20 +78,24 @@ export function FwStepCalving({ progress, dots, value, month, setValue, setMonth
     >
       <div className="mk-stack8">
         {OPTS.map((o) => (
-          <BigRadio key={o.v} sel={value === o.v} title={o.t} sub={o.s}
-            onClick={() => { setValue(o.v); if (o.v !== 'spring' && o.v !== 'autumn') setMonth(null); setMiss(false) }} />
+          <BigRadio key={o.v} sel={value === o.v} title={o.t} sub={o.s} onClick={() => pickSeason(o.v)} />
         ))}
       </div>
 
       {seasonal && (
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 20 }}>
           <span className="mk-lab">С какого месяца первые отёлы?</span>
-          <div className={'fw-months' + (miss ? ' mk-miss' : '')}>
-            {MONTHS.map((m, i) => (
-              <button key={m} className={'mk-fat-c' + (month === i + 1 ? ' sel' : '')}
-                onClick={() => { setMonth(i + 1); setMiss(false) }}>{m}</button>
+          <div className={'fw-months' + (allMonths ? ' full' : '') + (miss ? ' mk-miss' : '')}>
+            {shownMonths.map((n) => (
+              <button key={n} className={'fw-mon' + (month === n ? ' sel' : '')}
+                onClick={() => { setMonth(n); setMiss(false) }}>{MONTHS[n - 1]}</button>
             ))}
           </div>
+          {!allMonths && (
+            <button className="mk-link fw-mon-more" onClick={() => setAllMonths(true)}>
+              У нас иначе — другой месяц
+            </button>
+          )}
           {miss && <MkErr amber>Укажите месяц — хотя бы примерно</MkErr>}
         </div>
       )}
