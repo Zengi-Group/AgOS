@@ -27,6 +27,8 @@ SQL_FILES = [
     "d09_consulting.sql",
     # d10_public_site.sql intentionally absent? — undecided; flagged as DEPLOY-PIPE-01 in IMPL_DEBT.md
     "d11_norms.sql",
+    "d12_billing.sql",      # ARS-203: membership billing (depends on d01)
+    "d13_governance.sql",   # ARS-204: feature governance / M3 (depends on d01, d12)
 ]
 
 def deploy(password: str):

@@ -13,7 +13,7 @@ set -uo pipefail
 CRITICAL=0
 SIGNIFICANT=0
 MINOR=0
-SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql)
+SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d12_billing.sql d13_governance.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql)
 # TSP canonical trade layer = self-serve adapter migration (D-TSP-CANON-01, 2026-06-23).
 # Brought into cross_check scope per convergence Slice A. The adapter intentionally
 # redefines rpc_create_batch / rpc_get_org_batches (text-sig) over the d07 uuid-sig —
