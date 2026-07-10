@@ -12,6 +12,7 @@ import { IonShellFrame } from '../components/IonShellFrame'
 import { HomeHead } from '../components/HomeHead'
 import { HomeBanner } from '../components/HomeBanner'
 import { ServiceGrid } from '../components/ServiceGrid'
+import { HomeStartLadder } from '../components/HomeStartLadder'
 import { TierHead } from '../components/TierHead'
 import { DecisionCard } from '../components/DecisionCard'
 import { ObserveCard } from '../components/ObserveCard'
@@ -52,6 +53,12 @@ export function HomeScreen({ membership, farm, decisions, observe, loading, go, 
   }
   if (farmOverdue) farmSub += ' · есть просрочка'
 
+  // Зона ярусов пуста (нет «Требует решения» и «Идёт само») → показываем стартовый
+  // модуль-лестницу (ARS-209), чтобы главная не выглядела пустой и вела фермера по
+  // первым шагам. Аддитивно (HS-5): баннер/сервисы/быстрый доступ на месте.
+  const herdFilled = !!farm.herd && farm.herd.totalHeads > 0
+  const quiet = decisions.length === 0 && observe.length === 0
+
   return (
     <IonShellFrame label={'Главная · ' + membership} onRefresh={onRefresh}>
       <HomeHead />
@@ -60,6 +67,8 @@ export function HomeScreen({ membership, farm, decisions, observe, loading, go, 
           <HomeBanner />
           <ServiceGrid />
           <div className="home-div" />
+
+          {quiet && <HomeStartLadder herdFilled={herdFilled} />}
 
           {decisions.length > 0 && (
             <div className="blk">
