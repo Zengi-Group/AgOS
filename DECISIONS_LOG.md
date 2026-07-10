@@ -3606,3 +3606,13 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: tsc чистый; живой прогон через preview (QA-аккаунт +77000001777, создан bird-otp/register и удалён после проверки: public.users + auth = 0 строк): F1 — «300»/«1250» видны целиком, select-all работает, сумма>0 → Payoff; F2 и F3 — микрокопия sans, точки прогресса на месте.
 
 **Files**: `src/pages/cabinet/shell/farm/wizard/{FwStepHerd,FwStepCalving,FwStepYoung,FwStepHousing,FwShell,FwPayoffPrices}.tsx`, `src/pages/cabinet/shell/screens/FarmScreen.tsx`, `src/pages/cabinet/shell/tsp/components/{StepperCtl,BigRadio}.tsx`, `src/pages/cabinet/shell/market-proto.css`, `Docs/AGOS-DesignRules-FarmerCabinet.md` (§2 + R-9…R-12).
+
+### 2026-07-10: Payoff-1 карточки цен + вторичные ссылки auth-фаннела — правила R-13…R-15 (ARS-212)
+
+**What**: (1) Карточка цены SCR-F2 перестроена на внутреннюю сетку: шапка «категория + „у вас N голов/головы“ | дельта-чип» (чип = единственный цветовой акцент, тонированная подложка ok/warn), цена 27px mono с барами по базовой линии, подвал «защитная цена» с иконкой shieldCheck (добавлена в PhIcon, путь 1:1 из @phosphor-icons/core regular). Склонение голов через существующий ruPlural. (2) «Все цены TURAN ›» удалена по прямому указанию CEO (+ снят проп onAllPrices и openPrices из FarmWizard, note onlyLead переадресован на раздел «Цены»); шторка PriceSheet остаётся доступной из постоянной навигации. (3) «Нет аккаунта? Зарегистрироваться ›» (Login) и «Есть аккаунт? Войти ›» (Contact) перенесены из середины контента под primary CTA внутрь StickyDock.
+
+**Why**: правки CEO по скриншотам; за каждой зафиксировано общее правило в реестре канона (R-13 вторичное действие под CTA, R-14 один путь вперёд на шаге флоу, R-15 сетка карточки данных + один чип-акцент + иконка-пояснение термина) и §4 канона дополнен. Всё в существующих токенах/шрифтах (daylight, Geist/Geist Mono, плоские карты).
+
+**Verify**: tsc чистый; живой прогон preview 375px: /login и шаг регистрации — ссылка в доке под CTA; мастер (QA-аккаунт +77000001888, создан bird-otp, удалён после: public.users+auth верифицированы пустыми) — карточки 50/23/6 голов, чипы ▼−30 amber / ▲+10/+50 green, «23 головы» склонение, «Все цены» отсутствует, дисклеймер ст.171 на месте.
+
+**Files**: `src/pages/cabinet/shell/farm/wizard/{FwPayoffPrices,FarmWizard}.tsx`, `src/pages/cabinet/shell/components/icons/PhIcon.tsx` (+shieldCheck), `src/pages/cabinet/shell/market-proto.css` (блок F2), `src/pages/auth/Login.tsx`, `src/pages/registration/steps/Contact.tsx`, `Docs/AGOS-DesignRules-FarmerCabinet.md` (§4 + R-13…R-15).

@@ -109,13 +109,18 @@ export function Login() {
             {error && (
               <div style={{ marginTop: 4, color: T.red, fontSize: 13 }}>{error}</div>
             )}
-            <div style={{ marginTop: 24, textAlign: 'center' }}>
+            <StickyDock>
+              <CTA disabled={!phoneValid} onClick={handlePhoneSubmit}>
+                Продолжить
+              </CTA>
               <button
                 onClick={() => navigate('/register')}
                 style={{
+                  display: 'block',
+                  width: '100%',
                   background: 'transparent',
                   border: 'none',
-                  padding: '12px 16px',
+                  padding: '12px 16px 0',
                   minHeight: 44,
                   color: T.fg2,
                   fontFamily: T.font,
@@ -126,11 +131,6 @@ export function Login() {
               >
                 Нет аккаунта? <span style={{ color: T.accent, fontWeight: 500 }}>Зарегистрироваться ›</span>
               </button>
-            </div>
-            <StickyDock>
-              <CTA disabled={!phoneValid} onClick={handlePhoneSubmit}>
-                Продолжить
-              </CTA>
             </StickyDock>
           </>
         ) : (

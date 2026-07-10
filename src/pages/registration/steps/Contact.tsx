@@ -184,19 +184,16 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
         {errors.phone && <div style={{ fontSize: 12, color: T.red, marginTop: 6 }}>{errors.phone}</div>}
       </Field>
 
-      <div style={{ marginTop: 24, textAlign: 'center' }}>
-        <button
-          onClick={() => navigate('/login')}
-          style={{ background: 'transparent', border: 'none', padding: '12px 16px', minHeight: 44, color: T.fg2, fontFamily: T.font, fontSize: 15, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
-        >
-          Есть аккаунт? <span style={{ color: T.accent, fontWeight: 500 }}>Войти ›</span>
-        </button>
-      </div>
-
       <StickyDock>
         <CTA disabled={isSending} onClick={handleSendOtp}>
           {isSending ? 'Отправка…' : 'Получить код'}
         </CTA>
+        <button
+          onClick={() => navigate('/login')}
+          style={{ display: 'block', width: '100%', background: 'transparent', border: 'none', padding: '12px 16px 0', minHeight: 44, color: T.fg2, fontFamily: T.font, fontSize: 15, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
+        >
+          Есть аккаунт? <span style={{ color: T.accent, fontWeight: 500 }}>Войти ›</span>
+        </button>
       </StickyDock>
     </>
   )
