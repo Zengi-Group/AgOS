@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase'
 import { loadMyContext } from '@/lib/account'
 import {
   HERD_FIELDS, deriveActivityType, calvingSystemValue, shelterTypeValue,
-  type FwState, type HerdKey, type CalvingAnswer, type HousingAnswer,
+  type FwState, type HerdKey, type CalvingAnswer, type HousingAnswer, type YoungAnswer,
 } from '../types'
 
 export interface FarmCtx {
@@ -42,7 +42,7 @@ const CODE_TO_KEY: Record<string, HerdKey> = {
 
 // farms.calving_system → ответ мастера (two_season не имеет чипа → «по-разному»).
 function calvingFromDb(v: string | null | undefined): CalvingAnswer {
-  if (v === 'spring' || v === 'autumn' || v === 'year_round') return v
+  if (v === 'spring' || v === 'autumn' || v === 'year_round' || v === 'varies') return v
   if (v === 'two_season') return 'varies'
   return ''
 }
@@ -126,8 +126,7 @@ export async function ensureFarm(ctx: FarmCtx): Promise<string | null> {
 
 // Записывает состав стада (herd_groups, ON CONFLICT по farm_id+category → идемпотентно, дублей
 // нет) + выведенный архетип (farm_activity_types). Категории с 0 голов не пишем.
-// ⚠ Дефект (не наша правка): rpc_upsert_herd_group хардкодит data_source='ai_extracted'/conf 50 —
-// нет параметра для 'platform'/L3, поэтому запись ляжет как L2. UI зовёт корректно; чинить — в SQL.
+// p_data_source='platform' → confidence 75/L3 в RPC (Узел 1 §4, D21; аддитивный параметр ARS-212).
 export async function saveHerdAndArchetype(orgId: string, farmId: string, heads: FwState['heads']): Promise<void> {
   for (const f of HERD_FIELDS) {
     const n = heads[f.key]
@@ -138,6 +137,7 @@ export async function saveHerdAndArchetype(orgId: string, farmId: string, heads:
         p_farm_id: farmId,
         p_animal_category_code: f.code,
         p_head_count: n,
+        p_data_source: 'platform',
       })
       if (error) console.warn('rpc_upsert_herd_group', f.code, error.message)
     } catch (e) { console.warn('rpc_upsert_herd_group исключение', f.code, e) }
@@ -152,12 +152,21 @@ export async function saveHerdAndArchetype(orgId: string, farmId: string, heads:
   } catch (e) { console.warn('rpc_set_farm_activity_types исключение', e) }
 }
 
-// Обновляет поле фермы (calving_system / shelter_type). rpc_upsert_farm(coalesce) — null-поля
-// не затирают существующие. Месяц первого отёла (cycle_start_date) НЕ пишется: у RPC нет
-// такого параметра (см. дефект в отчёте) — остаётся в черновике для хэндоффа ARS-213.
+// D78: месяц первого отёла (1–12) → якорная дата цикла = ближайшее будущее 1-е число месяца
+// (комментарий колонки farms.cycle_start_date). year_round/«по-разному»/skip → null (не пишем).
+function cycleStartFromMonth(month: number): string {
+  const now = new Date()
+  const year = now.getFullYear() + (month < now.getMonth() + 1 ? 1 : 0)
+  return `${year}-${String(month).padStart(2, '0')}-01`
+}
+
+// Обновляет поля фермы (calving_system / shelter_type / cycle_start_date / calf_strategy).
+// rpc_upsert_farm(coalesce) — null-поля не затирают существующие; поэтому смена сезонного отёла
+// на year_round НЕ чистит старый cycle_start_date — мост ARS-213 смотрит calving_system и
+// игнорирует нерелевантный якорь. Токены calf_strategy = CHECK колонки (L-7).
 export async function saveFarmField(
   orgId: string, farmId: string,
-  patch: { calving?: CalvingAnswer; housing?: HousingAnswer },
+  patch: { calving?: CalvingAnswer; calvingMonth?: number | null; housing?: HousingAnswer; young?: YoungAnswer },
 ): Promise<void> {
   try {
     const { error } = await supabase.rpc('rpc_upsert_farm', {
@@ -167,6 +176,8 @@ export async function saveFarmField(
       p_region_id: null,
       p_shelter_type: patch.housing !== undefined ? shelterTypeValue(patch.housing) : null,
       p_calving_system: patch.calving !== undefined ? calvingSystemValue(patch.calving) : null,
+      p_cycle_start_date: patch.calvingMonth ? cycleStartFromMonth(patch.calvingMonth) : null,
+      p_calf_strategy: patch.young || null,
     })
     if (error) console.warn('rpc_upsert_farm (update) недоступен:', error.message)
   } catch (e) { console.warn('rpc_upsert_farm (update) исключение:', e) }
@@ -177,11 +188,13 @@ export async function saveFarmField(
 // ниже порога — graceful). Вызывается только при достигнутом пороге. RPC может отсутствовать в
 // этом деплое (несмёрженная ветка) → любую ошибку глотаем: мастер завершится финалом F7.
 // Показ плана — ARS-215 (вне этого слайса).
-export async function generatePlan(orgId: string, farmId: string): Promise<void> {
+export async function generatePlan(orgId: string, farmId: string, firstCalvingMonth?: number | null): Promise<void> {
   try {
     const { error } = await supabase.rpc('rpc_generate_plan_from_profile', {
       p_organization_id: orgId,
       p_farm_id: farmId,
+      // сезонный отёл: без месяца мост берёт дефолт (март/сентябрь) — передаём ответ фермера (D78)
+      p_first_calving_month: firstCalvingMonth ?? null,
     })
     if (error) console.warn('rpc_generate_plan_from_profile (ARS-213) недоступен:', error.message)
   } catch (e) { console.warn('rpc_generate_plan_from_profile (ARS-213) исключение:', e) }

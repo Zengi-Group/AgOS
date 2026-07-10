@@ -68,11 +68,11 @@ export function deriveActivityType(heads: FwState['heads']): 'cow_calf' | 'finis
   return 'cow_calf'
 }
 
-// calving-ответ → farms.calving_system (d01 CHECK: spring/autumn/year_round/two_season).
-// «По-разному» (varies) не имеет чистого enum-значения → пишем null (профиль полезен частично,
-// P11; порог всё равно достигнут, т.к. ответ дан — см. thresholdReached).
+// calving-ответ → farms.calving_system (d01 CHECK: spring/autumn/year_round/two_season/varies).
+// «По-разному» пишется как 'varies' (F-D14: легальный ответ; null «съедал» бы его и порог
+// моста ARS-213 не срабатывал — дефект стыка закрыт в d01 расширением CHECK).
 export function calvingSystemValue(c: CalvingAnswer): string | null {
-  return c === 'spring' || c === 'autumn' || c === 'year_round' ? c : null
+  return c === '' ? null : c
 }
 
 // housing-ответ → farms.shelter_type (d01 CHECK: stall/pasture/mixed/feedlot).
