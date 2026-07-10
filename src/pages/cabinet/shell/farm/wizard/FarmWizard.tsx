@@ -149,7 +149,7 @@ export function FarmWizard({ startAt, onExit, onSell }: Props) {
       <FwResult
         generating={thresholdReached(w)}
         onGenerate={async () => {
-          if (ctx?.organizationId && ctx.farmId) await generatePlan(ctx.organizationId, ctx.farmId)
+          if (ctx?.organizationId && ctx.farmId) await generatePlan(ctx.organizationId, ctx.farmId, w.calvingMonth)
         }}
         hasUnanswered={hasUnanswered}
         onToFarm={onExit}

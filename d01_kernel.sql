@@ -755,7 +755,8 @@ create table if not exists public.farms (
                                 'spring',       -- весенний отёл (March–May)
                                 'autumn',       -- осенний отёл (Sep–Nov)
                                 'year_round',   -- круглогодичный
-                                'two_season'    -- весна + осень
+                                'two_season',   -- весна + осень
+                                'varies'        -- «по-разному» (F-D14, ARS-212: легальный ответ; план = слой-1)
                             )),
     total_area_ha   numeric(10,2),  -- total farm area (informational, P11)
     pasture_area_ha numeric(10,2),  -- grazing area (informational, P11)
@@ -791,10 +792,18 @@ alter table public.farms
             'keep'          -- оставляю себе (рост стада)
         ));
 
+-- 2026-07-10 (ARS-212, F-D14): «по-разному» — легальный ответ про отёл (порог моста ARS-213
+-- требует calving_system is not null; null «съедал» бы ответ ЛПХ и блокировал план — дефект
+-- стыка). Значение 'varies': несезонный, план = слой-1 (как year_round). Идемпотентная
+-- эволюция CHECK (P7, паттерн notifications_channel_check).
+alter table public.farms drop constraint if exists farms_calving_system_check;
+alter table public.farms add constraint farms_calving_system_check
+    check (calving_system in ('spring', 'autumn', 'year_round', 'two_season', 'varies'));
+
 comment on column public.farms.cycle_start_date is
     'D78 (Узел 1 v2.1 §4): якорная дата цикла = дата первого отёла (1-е число месяца
      из ответа «месяц первого отёла»). Релевантна при сезонном calving_system;
-     year_round/«по-разному» → null (план держится на слое-1, F-D6/F-D14).';
+     year_round/varies(«по-разному») → null (план держится на слое-1, F-D6/F-D14).';
 comment on column public.farms.calf_strategy is
     'F-D2 (Узел 1 v2.1 §4): модификатор доращивания — «что делаете с телятами».
      Значения = токены мастера ARS-212 (L-7: UI-коды совпадают с CHECK).
@@ -3964,7 +3973,12 @@ begin
                shelter_type     = coalesce(p_shelter_type, shelter_type),
                calving_system   = coalesce(p_calving_system, calving_system),
                total_area_ha    = coalesce(p_total_area_ha, total_area_ha),
-               cycle_start_date = coalesce(p_cycle_start_date, cycle_start_date),
+               -- D78-гигиена (ARS-212): переход на несезонный отёл гасит якорь — иначе
+               -- coalesce вечно держал бы старую дату при смене spring→year_round/varies.
+               cycle_start_date = case
+                   when p_calving_system in ('year_round', 'varies') then null
+                   else coalesce(p_cycle_start_date, cycle_start_date)
+               end,
                calf_strategy    = coalesce(p_calf_strategy, calf_strategy),
                updated_at       = now()
         where  id = p_farm_id

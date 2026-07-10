@@ -42,7 +42,7 @@ const CODE_TO_KEY: Record<string, HerdKey> = {
 
 // farms.calving_system → ответ мастера (two_season не имеет чипа → «по-разному»).
 function calvingFromDb(v: string | null | undefined): CalvingAnswer {
-  if (v === 'spring' || v === 'autumn' || v === 'year_round') return v
+  if (v === 'spring' || v === 'autumn' || v === 'year_round' || v === 'varies') return v
   if (v === 'two_season') return 'varies'
   return ''
 }
@@ -188,11 +188,13 @@ export async function saveFarmField(
 // ниже порога — graceful). Вызывается только при достигнутом пороге. RPC может отсутствовать в
 // этом деплое (несмёрженная ветка) → любую ошибку глотаем: мастер завершится финалом F7.
 // Показ плана — ARS-215 (вне этого слайса).
-export async function generatePlan(orgId: string, farmId: string): Promise<void> {
+export async function generatePlan(orgId: string, farmId: string, firstCalvingMonth?: number | null): Promise<void> {
   try {
     const { error } = await supabase.rpc('rpc_generate_plan_from_profile', {
       p_organization_id: orgId,
       p_farm_id: farmId,
+      // сезонный отёл: без месяца мост берёт дефолт (март/сентябрь) — передаём ответ фермера (D78)
+      p_first_calving_month: firstCalvingMonth ?? null,
     })
     if (error) console.warn('rpc_generate_plan_from_profile (ARS-213) недоступен:', error.message)
   } catch (e) { console.warn('rpc_generate_plan_from_profile (ARS-213) исключение:', e) }
