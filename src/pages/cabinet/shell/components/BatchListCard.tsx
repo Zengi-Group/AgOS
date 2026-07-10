@@ -37,7 +37,7 @@ export function BatchCard({ b, onOpen }: { b: Batch; onOpen: () => void }) {
     <button className={'mk-card' + (dec ? ' urgent' : '')} onClick={onOpen}>
       <div className="mk-card-top">
         <span className="mk-card-name">{catName(b)}</span>
-        <span className="mk-card-meta mk-mono">{b.heads} голов · ср. {b.avgWeight} кг</span>
+        <span className="mk-card-meta"><span className="mk-mono">{b.heads}</span> голов · ср. <span className="mk-mono">{b.avgWeight}</span> кг</span>
       </div>
       <div className="mk-card-state"><StatusChip b={b} />{fact && <span className="mk-card-fact">{fact}</span>}</div>
       <div className="mk-card-price">

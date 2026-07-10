@@ -177,7 +177,7 @@ function BatchPath({ batch }: { batch: Batch }) {
         <div className="mk-trk-bd">
           <div className="mk-trk-t">{stg.t}</div>
           <div className="mk-trk-d">{desc}</div>
-          {meta && <div className="mk-trk-meta mk-mono">{meta}</div>}
+          {meta && <div className="mk-trk-meta">{meta}</div>}
         </div>
       </div>
     )
@@ -185,18 +185,18 @@ function BatchPath({ batch }: { batch: Batch }) {
 
   return (
     <div className={'mk-trk ' + (expanded ? 'ex' : 'co')}>
-      <button type="button" className={'mk-trk-more top mk-mono' + (expanded || beforeN === 0 ? ' hidden' : '')}
+      <button type="button" className={'mk-trk-more top' + (expanded || beforeN === 0 ? ' hidden' : '')}
         onClick={() => setExpanded(true)} tabIndex={expanded || beforeN === 0 ? -1 : 0}>
         +{beforeN} пройдено
       </button>
       {PATH_STAGES.map((stg, i) => renderRow(stg, i))}
-      <button type="button" className={'mk-trk-more bot mk-mono' + (expanded || afterN === 0 ? ' hidden' : '')}
+      <button type="button" className={'mk-trk-more bot' + (expanded || afterN === 0 ? ' hidden' : '')}
         onClick={() => setExpanded(true)} tabIndex={expanded || afterN === 0 ? -1 : 0}>
         ещё {afterN}
         <span className="mk-trk-more-arr" aria-hidden><PhIcon name="chevronRight" size={12} /></span>
       </button>
       {N > 3 && (
-        <button type="button" className={'mk-trk-collapse mk-mono' + (expanded ? '' : ' hidden')}
+        <button type="button" className={'mk-trk-collapse' + (expanded ? '' : ' hidden')}
           onClick={() => setExpanded(false)} tabIndex={expanded ? 0 : -1}>
           свернуть
         </button>
@@ -266,7 +266,7 @@ function SplitPanel({ batch }: { batch: Batch }) {
     <div className="mk-headsum">
       <div className="mk-headsum-top">
         <span>Продано {matched} из {total} гол.</span>
-        {remaining > 0 && <span className="mk-mono">{withdrawn ? `остаток снят (${remaining})` : `на рынке ещё ${remaining}`}</span>}
+        {remaining > 0 && <span>{withdrawn ? `остаток снят (${remaining})` : `на рынке ещё ${remaining}`}</span>}
       </div>
       <div className="mk-headbar"><i style={{ width: `${pct}%` }} /></div>
       {allocs.length > 0 && (

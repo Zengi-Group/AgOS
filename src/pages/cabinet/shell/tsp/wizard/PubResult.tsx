@@ -65,7 +65,7 @@ export function PubResult({ variant, batch, onToBatch, onToList }: PubResultProp
       ic: 'checkCircle', tone: 'green', h: 'Покупатель найден',
       body: (
         <>
-          <div className="mk-pr-price mk-mono">Цена сделки: <b>{fmtMoney(dealPrice)}{NBSP}₸/кг</b></div>
+          <div className="mk-pr-price">Цена сделки: <b className="mk-mono">{fmtMoney(dealPrice)}{NBSP}₸/кг</b></div>
           {dealPrice > price && <div className="mk-pr-badge">на {fmtMoney(dealPrice - price)}{NBSP}₸/кг выше вашей цены</div>}
           <p>Покупатель сейчас добирает полный заказ. Когда доберёт — сделка подтвердится, и мы покажем, кто покупатель. Обычно это занимает от нескольких часов до нескольких дней.</p>
         </>

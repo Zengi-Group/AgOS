@@ -51,7 +51,7 @@ export function FwShell({
                     : <span style={{ flex: 1 }} />}
                   <button className="mk-wiz-exit" onClick={onExit} aria-label="Выйти"><PhIcon name="x" size={16} /></button>
                 </div>
-                {stepLabel && <div className="mk-wiz-step mk-mono">{stepLabel}</div>}
+                {stepLabel && <div className="mk-wiz-step">{stepLabel}</div>}
               </>
             )}
             {!bar && exitTop && (
