@@ -3585,3 +3585,13 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: `cross_check.sh` = 0 critical (3 significant — преиждевшие PGRST203 по TSP-адаптеру, вне скоупа); дубли определений: обе функции ровно по 1 разу на все d-файлы. **Деплой в Supabase из этой сессии не выполнялся** (нет psql/DB-креденшалов) — прогнать `deploy_sql.py d01 d07` + `cross_check.sh` при мерже. Открыто: мост ARS-213 (`rpc_generate_plan_from_profile`) пока принимает месяц транзитно (`p_first_calving_month`) и не читает `farms.cycle_start_date`/`calf_strategy` — доработка на ветке ARS-213; Dok 3 §3.1 (RPC-05) — синхронизация сигнатур за Architect.
 
 **Files**: `d01_kernel.sql` (farms ALTER + comments, rpc_upsert_farm, registry note), `d07_ai_gateway.sql` (rpc_upsert_herd_group + revoke + comment). Ветка `claude/busy-babbage-1d4f50`.
+
+### 2026-07-10: Накат SQL ARS-212/213/214 на прод-Supabase (до мержа PR #67)
+
+**What**: Через Supabase MCP (`execute_sql`, проект AgOS `mwtbozflyldcadypherr`) накачены изменённые блоки PR #67: d01 (колонки `farms.cycle_start_date`/`calf_strategy`, CHECK `calving_system`+='varies', `rpc_upsert_farm` 9 параметров + D78-гигиена якоря) → d05 (секция ARS-213: `fn_activity_to_farm_type`, `fn_derive_farm_archetype`, `rpc_generate_plan_from_profile` + registry RPC-33a) → d07 (FARM-01 `rpc_get_production_plan`; `rpc_upsert_herd_group` + `p_data_source`/D21-confidence). Старые сигнатуры сняты `drop function if exists` — overload-двойников нет (проверено: по 1 функции).
+
+**Why**: полный флоу мастера (состав → цены → 3 вопроса → draft-ЦТК) должен работать end-to-end для живой проверки; всё аддитивно (default-параметры), существующие вызовы AI Gateway/legacy не затронуты.
+
+**Verify**: контрольный SELECT после наката — колонки 2/2, CHECK с 'varies', p_data_source/p_calf_strategy в сигнатурах, мост smoke `fn_activity_to_farm_type('mixed')='combined'`, строка RPC-33a в registry. ⚠️ Прод впереди main до мержа PR #67 — мержить не откладывая (P4). Файлы целиком не гнались — извлечённые идемпотентные блоки в порядке d01→d05→d07 (эквивалентно, дублей определений в диапазонах нет).
+
+**Files**: изменений кода нет (deploy-only запись). Ветка `claude/ars-212-wizard-design-9dc825`, PR #67.
