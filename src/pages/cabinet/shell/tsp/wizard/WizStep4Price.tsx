@@ -48,7 +48,7 @@ export function WizStep4Price({ w, sw, onNext, onBack, onExit }: Props) {
       </MkField>
       {miss && !(price > 0) && <MkErr amber>Укажите цену</MkErr>}
       {price > 0 && (
-        <div className="mk-calc mk-mono">≈ {w.heads} × {w.avgWeight} кг × {fmtMoney(price)} = <b>{fmtMoney(sum)}{NBSP}₸</b> за партию <span className="mk-calc-n">(ориентировочно)</span></div>
+        <div className="mk-calc"><span className="mk-mono">≈ {w.heads} × {w.avgWeight} кг × {fmtMoney(price)} = <b>{fmtMoney(sum)}{NBSP}₸</b></span> за партию <span className="mk-calc-n">(ориентировочно)</span></div>
       )}
       {low && (
         <div className="mk-warn">

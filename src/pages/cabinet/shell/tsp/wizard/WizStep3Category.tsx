@@ -62,7 +62,7 @@ export function WizStep3Category({ w, sw, onNext, onBack, onExit, onTuran }: Pro
         <MkCta variant="ghost" onClick={() => { sw({ catKey: null, catUnknown: false }); onBack() }}>Вернуться к данным</MkCta>
         <p className="mk-cc-note" style={{ marginTop: 14 }}>Если данные верны — напишите в TURAN, мы добавим категорию.</p>
         <MkCta variant="ghost" onClick={onTuran}>Написать в TURAN</MkCta>
-        <div className="mk-note mk-mono" style={{ marginTop: 10 }}>черновик сохранён · публикация недоступна</div>
+        <div className="mk-note" style={{ marginTop: 10 }}>черновик сохранён · публикация недоступна</div>
       </WizShell>
     )
   }
