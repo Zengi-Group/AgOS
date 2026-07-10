@@ -90,7 +90,7 @@ export function FarmWizard({ startAt, onExit, onSell }: Props) {
       await saveHerdAndArchetype(ctx.organizationId, farmId, w.heads)
     }
   }
-  const persistFarmField = (patch: { calving?: CalvingAnswer; housing?: HousingAnswer }) => {
+  const persistFarmField = (patch: Parameters<typeof saveFarmField>[2]) => {
     if (ctx?.organizationId && ctx.farmId) saveFarmField(ctx.organizationId, ctx.farmId, patch)
   }
 
@@ -169,7 +169,7 @@ export function FarmWizard({ startAt, onExit, onSell }: Props) {
         month={w.calvingMonth}
         setValue={(v: CalvingAnswer) => sw({ calving: v })}
         setMonth={(m) => sw({ calvingMonth: m })}
-        onNext={() => { persistFarmField({ calving: w.calving }); advanceStep() }}
+        onNext={() => { persistFarmField({ calving: w.calving, calvingMonth: w.calvingMonth }); advanceStep() }}
         onSkip={() => { sw({ calving: '', calvingMonth: null }); advanceStep() }}
         onBack={stepBack}
         onExit={exitSaved}
@@ -183,7 +183,7 @@ export function FarmWizard({ startAt, onExit, onSell }: Props) {
         dots={dots}
         value={w.young}
         setValue={(v: YoungAnswer) => sw({ young: v })}
-        onNext={advanceStep}
+        onNext={() => { persistFarmField({ young: w.young }); advanceStep() }}
         onSkip={() => { sw({ young: '' }); advanceStep() }}
         onBack={stepBack}
         onExit={exitSaved}
