@@ -54,6 +54,7 @@ import { FARMER_LEAD_CAT, stickerData } from './data/prices'
 import type { BannerCard, ServiceDef } from './data/banners'
 import { loadAccountProfile, type AccountProfile } from '@/lib/account'
 import { loadFarmState } from './data/farm-load'
+import { emptyFarm } from './data/farm-seed'
 // S3 (ARS-149, EngSpec §4): платформенные адаптеры — KV-хранилище и реальный сетевой статус.
 import { appStorage } from '@/platform/storage'
 import { useOnline } from '@/platform/network'
@@ -169,11 +170,16 @@ export function CabinetApp() {
         navigate('/', { replace: true })
         return
       }
+      // Сессия валидна (getUser прошёл), но контекста нет — напр. зарегистрирован, ещё нет
+      // орг/членства. Показываем реальный ПУСТОЙ стейт, а НЕ демо-сид (ARS-210): членства нет,
+      // фермы нет. Иначе фермер без членства видел бы фейковые «Членство активно» + «Отёл, день 34».
       setProfile(null)
+      setMembership('none')
+      setFarm(emptyFarm())
       setProfileLoading(false)
     })
-    // null = аноним/нет бэкенда/нет фермы → остаётся seedFarm() (демо). Лёгкий поллинг 30с —
-    // стадо/задачи обновляются без перезагрузки после правок в профиле фермы (D-SYNC-01).
+    // Поллинг 30с — стадо/задачи обновляются без перезагрузки после правок в профиле (D-SYNC-01).
+    // loadFarmState: контекст есть, но фермы нет → emptyFarm(); аноним/сбой сети → null (сид не трогаем).
     pullFarm()
     const id = setInterval(pullFarm, 30000)
     return () => { alive = false; clearInterval(id) }

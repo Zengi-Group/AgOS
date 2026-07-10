@@ -3,10 +3,13 @@
 // корма, активные вет-кейсы, ближайшие задачи (farm_tasks). Здесь берём только то, что
 // нужно Главной фермера: стадо (поголовье по группам) и задачи/горизонт «Впереди».
 //
-// null = аноним / нет бэкенда / нет фермы → caller (CabinetApp) оставляет seedFarm() (демо).
+// Возвраты (ARS-210): null = контекст не загрузился (аноним / сбой сети) → caller решает
+// (аноним оставляет демо-сид, вошедший аккаунт — пусто). emptyFarm() = контекст есть, но
+// фермы у аккаунта нет → реальный ПУСТОЙ стейт (НЕ демо-сид). Реальные данные = заполнено.
 
 import { supabase } from '@/lib/supabase'
 import { loadMyContext } from '@/lib/account'
+import { emptyFarm } from './farm-seed'
 import type { FarmState, FarmTask, FarmPlanItem, HerdSummary } from './farm-seed'
 
 interface RawHerdGroup {
@@ -67,8 +70,9 @@ export async function loadFarmState(): Promise<FarmState | null> {
   if (!ctx) return null
 
   // Основная ферма фермерской орг: primary, иначе первая.
+  // Контекст есть, но фермы нет → реальный ПУСТОЙ стейт (не демо-сид) — ARS-210.
   const farm = ctx.farms.find((f) => f.is_primary) ?? ctx.farms[0] ?? null
-  if (!farm) return null
+  if (!farm) return emptyFarm()
 
   try {
     const { data, error } = await supabase.rpc('rpc_get_farm_summary', {

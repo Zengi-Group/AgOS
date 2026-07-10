@@ -56,6 +56,13 @@ export function seedFarm(): FarmState {
   }
 }
 
+// Реальный ПУСТОЙ стейт фермы (ARS-210): вошедший аккаунт без фермы/стада/задач.
+// Не демо — никакого cycle/задач; herd отсутствует. Используется вместо seedFarm(),
+// когда сессия валидна, но фермы у аккаунта ещё нет (иначе демо-сид маскировал бы реальность).
+export function emptyFarm(): FarmState {
+  return { planFuture: [], tasks: [] }
+}
+
 // тихий сезон (демо «штиль»): открытых задач нет, горизонт «Впереди» остаётся
 export function seedFarmQuiet(): FarmState {
   const f = seedFarm()
