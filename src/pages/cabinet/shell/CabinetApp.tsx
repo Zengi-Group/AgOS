@@ -47,7 +47,6 @@ import { PayVznosSheet } from './components/sheets/PayVznosSheet'
 import { PayProSheet } from './components/sheets/PayProSheet'
 import { ProGateSheet } from './components/sheets/ProGateSheet'
 import { MembGateSheet } from './components/sheets/MembGateSheet'
-import { MembDocsSheet } from './components/sheets/MembDocsSheet'
 import { PriceSheet } from './components/sheets/PriceSheet'
 import { buildDecisions, buildObserve, type DecH } from './data/membership'
 import { FARMER_LEAD_CAT, stickerData } from './data/prices'
@@ -336,19 +335,13 @@ export function CabinetApp() {
   const openPrices = (catKey: string) => setSheet({ kind: 'prices', catKey })
 
   // ---------- членство ----------
-  // Флоу: 'apply' → шторка документов (загрузка + подача заявки) → 'pending' (проверка админом)
-  // → 'approved' (одобрено, взнос не оплачен) → 'pay' → оплата взноса → 'active'.
+  // Флоу: 'apply' → полноэкранный процесс подачи заявки (/membership: интро → документы →
+  // отправка → 'pending') → 'approved' (одобрено, взнос не оплачен) → 'pay' → оплата → 'active'.
+  // Единый вход: все CTA «Вступить» / «Подать заявку» ведут в /membership (не в шторку).
   const memberAct = (act: string) => {
     if (offline) { offlineToast(); return }
-    if (act === 'apply') setSheet({ kind: 'membdocs' })
+    if (act === 'apply') { setSheet(null); navigate('/membership') }
     else setSheet({ kind: 'payvznos' })
-  }
-  // Заявка с документами отправлена на проверку админу → ждём решения.
-  const onMembDocsSubmitted = () => {
-    setSheet(null)
-    setMembership('pending')
-    setTuranUnread(false)
-    showToast('Заявка отправлена на проверку')
   }
   // Оплата взноса — симуляция на пилоте (реальной платёжной системы пока нет): выбор способа →
   // «Оплатить» → членство сразу активно, Рынок (TSP) открывается.
@@ -652,12 +645,6 @@ export function CabinetApp() {
               membership={membership}
               onClose={() => closeSheet('membgate')}
               onAct={memberAct}
-            />
-            <MembDocsSheet
-              open={sheet?.kind === 'membdocs'}
-              orgId={profile?.orgId ?? null}
-              onClose={() => closeSheet('membdocs')}
-              onSubmitted={onMembDocsSubmitted}
             />
             <PriceSheet
               open={sheet?.kind === 'prices'}
