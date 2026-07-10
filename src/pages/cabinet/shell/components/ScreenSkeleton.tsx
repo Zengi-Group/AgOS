@@ -5,7 +5,7 @@
 // а не абстрактные полосы. Переиспользует shimmer-примитив `.skel-blk`/`.skel-wrap`
 // (cabinet.css) → единый визуальный язык загрузки на всех экранах (Home/Market/List/Batch).
 
-export type SkelVariant = 'home' | 'market' | 'list' | 'batch'
+export type SkelVariant = 'home' | 'market' | 'list' | 'batch' | 'farm'
 
 function Blk({ h, w, r }: { h: number; w?: number | string; r?: number }) {
   return <div className="skel-blk" style={{ height: h, width: w, borderRadius: r }} />
@@ -54,6 +54,16 @@ export function ScreenSkeleton({ variant }: { variant: SkelVariant }) {
         <Blk h={16} w="50%" r={6} />
         <Blk h={88} r={14} />
         <Blk h={88} r={14} />
+      </div>
+    )
+  }
+  if (variant === 'farm') {
+    // силуэт F0 (ARS-212): eyebrow сводки стада + карточка групп + CTA
+    return (
+      <div className="skel-wrap" aria-hidden>
+        <Blk h={16} w="46%" r={6} />
+        <Blk h={128} r={14} />
+        <Blk h={48} r={12} />
       </div>
     )
   }

@@ -277,10 +277,10 @@ begin
     return (
         select jsonb_build_object(
             'plan_id',     fpp.id,
-            'plan_name',   fpp.plan_name,
+            'plan_name',   fpp.name,
             'status',      fpp.status,
-            'start_date',  fpp.plan_start_date,
-            'end_date',    fpp.plan_end_date,
+            'start_date',  fpp.cycle_start_date,
+            'end_date',    fpp.cycle_end_date,
             'phases', (
                 select coalesce(jsonb_agg(jsonb_build_object(
                     'phase_id',      fph.id,
