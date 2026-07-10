@@ -34,7 +34,6 @@ export function FwStepHousing({ progress, dots, value, willBuildPlan, setValue, 
       onBack={onBack}
       bar
       progress={dots ? progress : undefined}
-      stepLabel={`вопрос ${progress.step} из ${progress.count} · содержание`}
       title="Как содержите скот?"
       titleQ
       screenLabel="SCR-F5 · мастер · содержание"

@@ -3596,3 +3596,13 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: контрольный SELECT после наката — колонки 2/2, CHECK с 'varies', p_data_source/p_calf_strategy в сигнатурах, мост smoke `fn_activity_to_farm_type('mixed')='combined'`, строка RPC-33a в registry. ⚠️ Прод впереди main до мержа PR #67 — мержить не откладывая (P4). Файлы целиком не гнались — извлечённые идемпотентные блоки в порядке d01→d05→d07 (эквивалентно, дублей определений в диапазонах нет).
 
 **Files**: изменений кода нет (deploy-only запись). Ветка `claude/ars-212-wizard-design-9dc825`, PR #67.
+
+### 2026-07-10: Дизайн-фикс мастера фермы SCR-F1/F2/ярус-2 — правки CEO → правила R-9…R-12 (ARS-212)
+
+**What**: Точечные правки опросника по скриншот-фидбеку Arshidin'а: (1) убран eyebrow «вопрос N · тема» со всех 4 шагов (дублировал хедер+заголовок; контекст яруса 2 — в точках wiz-bar); (2) степпер F1: `.fw-cat-stp` 148→184px, кнопки 56→44px → окно цифры 14→~74px (до 4 цифр видны целиком), у общего `StepperCtl` добавлен select-all по фокусу — ручной ввод стал первичным сценарием для больших стад; (3) саб F1 «Сколько примерно голов — точность не важна» → «Сколько примерно голов в каждой группе»; (4) mk-mono снят со всей текстовой микрокопии farm-зоны (DraftNote, подписи категорий, note/eyebrow FarmScreen, «у вас N голов»/eyebrow/«защитная:» Payoff, mk-br-s BigRadio — общий с TSP); `.mk-note` 10.5→11.5px, трекинг .08em→.01em; (5) новая опц. `titleIcon` в FwShell — на F1 тихая PhIcon `cow` (26px, fg3) на месте убранного eyebrow.
+
+**Why**: канон уже требовал mono только для цифр/ID (DS v12 §Type) — код нарушал; правки распылены в общие правила R-9…R-12 реестра `Docs/AGOS-DesignRules-FarmerCabinet.md` (процесс D-UI-FARMER-RULES-01), §2 дополнен формулировкой «mono только для данных». Всё аддитивно (HS-5): FwShell/StepperCtl расширены, ничего не удалено.
+
+**Verify**: tsc чистый; живой прогон через preview (QA-аккаунт +77000001777, создан bird-otp/register и удалён после проверки: public.users + auth = 0 строк): F1 — «300»/«1250» видны целиком, select-all работает, сумма>0 → Payoff; F2 и F3 — микрокопия sans, точки прогресса на месте.
+
+**Files**: `src/pages/cabinet/shell/farm/wizard/{FwStepHerd,FwStepCalving,FwStepYoung,FwStepHousing,FwShell,FwPayoffPrices}.tsx`, `src/pages/cabinet/shell/screens/FarmScreen.tsx`, `src/pages/cabinet/shell/tsp/components/{StepperCtl,BigRadio}.tsx`, `src/pages/cabinet/shell/market-proto.css`, `Docs/AGOS-DesignRules-FarmerCabinet.md` (§2 + R-9…R-12).

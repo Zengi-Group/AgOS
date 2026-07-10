@@ -48,7 +48,6 @@ export function FwStepCalving({ progress, dots, value, month, setValue, setMonth
       onBack={onBack}
       bar
       progress={dots ? progress : undefined}
-      stepLabel={`вопрос ${progress.step} из ${progress.count} · отёл`}
       title="Когда у вас обычно телятся?"
       titleQ
       screenLabel="SCR-F3 · мастер · отёл"

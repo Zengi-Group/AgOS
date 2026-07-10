@@ -8,6 +8,7 @@ import { FwShell, DraftNote } from './FwShell'
 import { StepperCtl } from '../../tsp/components/StepperCtl'
 import { MkCta } from '../../tsp/components/MkCta'
 import { MkErr } from '../../tsp/components/MkErr'
+import { PhIcon } from '../../components/icons/PhIcon'
 
 interface Props {
   heads: FwState['heads']
@@ -37,10 +38,10 @@ export function FwStepHerd({ heads, setHeads, prefilled, onNext, onExit }: Props
       onExit={onExit}
       onBack={onExit}
       bar
-      stepLabel="вопрос 1 · стадо"
+      titleIcon={<PhIcon name="cow" size={26} color="var(--fg3)" />}
       title="Кто у вас в стаде?"
       titleQ
-      sub="Сколько примерно голов — точность не важна"
+      sub="Сколько примерно голов в каждой группе"
       screenLabel="SCR-F1 · мастер · состав стада"
       footer={<><MkCta onClick={tryNext}>Показать цены</MkCta><DraftNote /></>}
     >
@@ -56,7 +57,7 @@ export function FwStepHerd({ heads, setHeads, prefilled, onNext, onExit }: Props
             <div className="fw-cat" key={f.key}>
               <div className="fw-cat-l">
                 <div className="fw-cat-t">{f.label}</div>
-                <div className="fw-cat-s mk-mono">{f.sub}</div>
+                <div className="fw-cat-s">{f.sub}</div>
               </div>
               <div className={'fw-cat-stp' + (v > 0 ? '' : ' fw-zero')}>
                 <StepperCtl value={v} min={0} max={9999}

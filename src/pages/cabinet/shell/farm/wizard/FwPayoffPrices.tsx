@@ -62,13 +62,13 @@ export function FwPayoffPrices({ heads, region, planQuestions, onBridge, onExit,
   const renderCard = (s: ReturnType<typeof stickerData>, herdCount: number | null) => (
     <div className="fw-pay-card" key={s.catKey}>
       <div className="fw-pay-name">{s.name}</div>
-      {herdCount != null && <div className="fw-pay-herd mk-mono">у вас {herdCount} голов</div>}
+      {herdCount != null && <div className="fw-pay-herd">у вас {herdCount} голов</div>}
       <div className="fw-pay-row">
         <span className="psm-price mk-mono">{fmtMoney(s.price)}<span className="psm-unit"> ₸/кг</span></span>
         <PriceDelta s={s} />
         <PriceBars bars={s.bars} />
       </div>
-      <div className="fw-pay-prot mk-mono">защитная: {fmtMoney(s.prot)} ₸/кг</div>
+      <div className="fw-pay-prot">защитная: <span className="mk-mono">{fmtMoney(s.prot)} ₸/кг</span></div>
       {onSell && <button className="fw-pay-sell" onClick={() => onSell(s.catKey)}>Продать через TURAN <PhIcon name="chevronRight" size={13} /></button>}
     </div>
   )
@@ -85,7 +85,7 @@ export function FwPayoffPrices({ heads, region, planQuestions, onBridge, onExit,
         <button className="mk-link" onClick={onExit}>Пока хватит — стадо сохранено</button>
       </>}
     >
-      <div className="fw-pay-eyebrow mk-mono">{eyebrow}</div>
+      <div className="fw-pay-eyebrow">{eyebrow}</div>
       <div className="fw-pay-list">
         {onlyLead
           ? renderCard(stickerData(FARMER_LEAD_CAT), null)

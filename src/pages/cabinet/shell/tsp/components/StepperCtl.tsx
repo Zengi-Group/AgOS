@@ -12,6 +12,7 @@ export function StepperCtl({ value, onChange, min, max }: { value: number; onCha
         inputMode="numeric"
         value={value}
         onChange={(e) => { const n = parseInt(e.target.value.replace(/\D/g, '') || '0', 10); onChange(n) }}
+        onFocus={(e) => e.target.select()}
         onBlur={() => set(value)}
       />
       <button className="mk-stp-b" onClick={() => set(value + 1)} aria-label="плюс"><PhIcon name="plus" size={18} /></button>
