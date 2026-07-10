@@ -2,7 +2,8 @@
 
 **Status:** Adopted 2026-04-25 (see [DECISIONS_LOG.md](../DECISIONS_LOG.md) → "TURAN DS v12 — token refresh from Claude Design handoff").
 **Source:** Claude Design handoff bundle `sUQuD5CZM096QCWYHxG0NQ` → exported HTML/CSS prototypes.
-**Scope in production code:** `[data-shell]` only — `/cabinet` and `/admin`. Landing (`:root`) and Registration (`.reg-*`) are **not governed** by this doc; they have their own legacy palette.
+**Scope in production code:** `[data-shell]` only — `/admin` (and expert console). Landing (`:root`) and Registration (`.reg-*`) are **not governed** by this doc; they have their own legacy palette.
+**Farmer zone carve-out (2026-07-10, D-UI-FARMER-RULES-01):** the farmer cabinet `/cabinet` (`.agos-cabinet-stage`) and the auth funnel were redesigned from the `Zengi-Group/agos-farmer` prototype and are governed by **`Docs/AGOS-DesignRules-FarmerCabinet.md`** — notably **Phosphor icons via `PhIcon`**, not lucide. Token *names* (`--bg/--fg/--bd/…`) stay v12-compatible; values differ (warm daylight palette).
 
 ---
 
@@ -114,6 +115,8 @@ Skeleton shimmer is the only `linear` easing. Page transitions are instant (no a
 ---
 
 ## Iconography
+
+> **Zone split (D-UI-FARMER-RULES-01):** the rules below apply to `[data-shell]` (admin/expert) only. Farmer zone (`/cabinet`, auth funnel) = **Phosphor via `PhIcon`**, canon: `Docs/AGOS-DesignRules-FarmerCabinet.md` §3. Never mix the two libraries within one zone.
 
 - **Library:** `lucide-react` (matches our shadcn/ui stack)
 - **Stroke:** 1.5 default, 1.8 for active nav item (gives +15% weight without changing the icon)
