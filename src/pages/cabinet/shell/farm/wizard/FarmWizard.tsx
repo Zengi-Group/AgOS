@@ -38,7 +38,17 @@ export function FarmWizard({ startAt, onExit, onSell }: Props) {
   const [ctx, setCtx] = useState<FarmCtx | null>(null)
   const [prefilled, setPrefilled] = useState(false)
   const [screen, setScreen] = useState<Screen>(startAt === 'plan' ? 'step' : 'herd')
-  const [stepIdx, setStepIdx] = useState(0)
+  // Resume (F0b «Ещё N вопросов») → ярус 2 с первого неотвеченного вопроса ветки (по черновику).
+  const [stepIdx, setStepIdx] = useState<number>(() => {
+    if (startAt !== 'plan') return 0
+    const b = branchSteps(w.heads)
+    for (let i = 0; i < b.length; i++) {
+      const s = b[i]
+      const empty = s === 'calving' ? w.calving === '' : s === 'young' ? w.young === '' : w.housing === ''
+      if (empty) return i
+    }
+    return 0
+  })
 
   // Загрузка контекста фермы + предзаполнение стада из БД (rpc_get_farm_summary), если черновик пуст.
   useEffect(() => {
