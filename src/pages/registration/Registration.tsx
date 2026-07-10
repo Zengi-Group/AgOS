@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
@@ -77,9 +77,12 @@ function getDisplayName(role: RoleType | null, formData: RegistrationFormData): 
 }
 
 export function Registration() {
-  const { session } = useAuth()
+  const { session, organization, userContext } = useAuth()
   const navigate = useNavigate()
   const [step, setStep] = useState<Step>('contact')
+  // Достройка регистрации: аутентифицирован, но организации нет (бросил регистрацию до
+  // создания орга). Возобновляем с выбора роли — телефон/PIN уже пройдены.
+  const resumingRef = useRef(false)
   const [formData, setFormData] = useState<RegistrationFormData>(() => {
     try {
       const saved = sessionStorage.getItem(STORAGE_KEY)
@@ -92,14 +95,6 @@ export function Registration() {
     return INITIAL_FORM_DATA
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  // If already authenticated with context, redirect to cabinet
-  useEffect(() => {
-    if (session && step === 'contact') {
-      // User already logged in — they may be coming back.
-      // Don't redirect automatically — they might want to re-register.
-    }
-  }, [session, step])
 
   // Persist form to sessionStorage
   useEffect(() => {
@@ -131,9 +126,26 @@ export function Registration() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
+  // Аутентифицирован, но организации нет (незавершённая регистрация) → пропускаем телефон/PIN
+  // и начинаем с выбора роли. Гейтим по userContext (загружен, но организаций нет), чтобы не
+  // прыгнуть до резолва контекста и не сбить валидного пользователя. Один раз — со шага 'contact'.
+  useEffect(() => {
+    if (userContext && !organization && step === 'contact') {
+      resumingRef.current = true
+      goTo('role_select')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userContext, organization, step])
+
   const goBack = useCallback(() => {
     if (step === 'contact' && formData.otp_sent) {
       updateForm({ otp_sent: false })
+      return
+    }
+    // Достройка регистрации: телефон/PIN уже пройдены — с первого шага (role_select) назад
+    // ведём в кабинет, а не на create_pin/contact.
+    if (resumingRef.current && step === 'role_select') {
+      navigate('/cabinet')
       return
     }
     const curIdx = STEP_ORDER.indexOf(step)
@@ -141,7 +153,7 @@ export function Registration() {
       const prev = STEP_ORDER[curIdx - 1]
       if (prev) goTo(prev)
     }
-  }, [step, formData.otp_sent, updateForm, goTo])
+  }, [step, formData.otp_sent, updateForm, goTo, navigate])
 
   const handleRegister = async () => {
     setIsSubmitting(true)

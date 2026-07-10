@@ -69,7 +69,7 @@ const ANIM_CSS = `
 
 export function Membership() {
   const navigate = useNavigate()
-  const { organization, refreshContext } = useAuth()
+  const { organization, refreshContext, userContext } = useAuth()
   const orgId = organization?.id ?? null
 
   const [step, setStep] = useState<Step>('intro')
@@ -86,14 +86,32 @@ export function Membership() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Нет организации (незавершённая регистрация) → членство невозможно без юр. хозяйства (БИН).
+  // Уводим достраивать регистрацию (создать орг); оттуда снова откроется членство. Гейтим по
+  // userContext (загружен, но организаций нет) — так не редиректим валидного фермера до резолва
+  // контекста при холодной загрузке прямо на /membership.
+  useEffect(() => {
+    if (userContext && !orgId) navigate('/register', { replace: true })
+  }, [userContext, orgId, navigate])
+
+  // Резюме: возвращаем туда, где фермер остановился. Заявка уже отправлена → сразу статус
+  // «на рассмотрении» (без повторной подачи); есть черновик документов → шаг «Документы».
+  // Меняем стартовый шаг только из 'intro', чтобы не сбивать навигацию пользователя.
   useEffect(() => {
     if (!orgId) return
     let alive = true
-    supabase.storage
-      .from('membership-documents')
-      .list(`${orgId}/docs`, { limit: 100 })
-      .then(({ data }) => {
-        if (!alive || !data) return
+    Promise.all([
+      supabase.storage.from('membership-documents').list(`${orgId}/docs`, { limit: 100 }),
+      supabase
+        .from('membership_applications')
+        .select('status')
+        .eq('organization_id', orgId)
+        .order('submitted_at', { ascending: false })
+        .limit(1),
+    ]).then(([docsRes, appRes]) => {
+      if (!alive) return
+      const data = docsRes.data
+      if (data) {
         setFiles((prev) => {
           const next = { ...prev }
           for (const slot of DOC_SLOTS) {
@@ -102,7 +120,16 @@ export function Membership() {
           }
           return next
         })
-      })
+      }
+      const st = (appRes.data?.[0] as { status: string } | undefined)?.status
+      const hasDocs = !!data && DOC_SLOTS.some((s) => data.find((x) => x.name.startsWith(`${s.key}_`)))
+      setStep((prev) =>
+        prev !== 'intro' ? prev
+          : (st === 'submitted' || st === 'under_review') ? 'pending'
+            : hasDocs ? 'docs'
+              : 'intro'
+      )
+    })
     return () => {
       alive = false
     }
@@ -136,21 +163,23 @@ export function Membership() {
 
   const submit = async () => {
     if (readyCount < 3) return
+    // Без организации заявку подать нельзя — раньше здесь показывался фейковый «pending»
+    // (RPC пропускался), из-за чего статус не сохранялся и фермер подавал по кругу. Уводим
+    // достраивать регистрацию (создать орг), затем членство.
+    if (!orgId) { navigate('/register', { replace: true }); return }
     setStep('submitting')
     try {
-      if (orgId) {
-        const { error: rpcErr } = await supabase.rpc('rpc_submit_membership_application', {
-          p_organization_id: orgId,
-          p_membership_type: 'associate',
-          p_notes: null,
-        })
-        // PENDING_EXISTS = заявка уже на проверке — считаем успехом (документы обновлены).
-        if (rpcErr && !rpcErr.message?.includes('PENDING_EXISTS')) {
-          if (rpcErr.message?.includes('ALREADY_ACTIVE')) toast.error('Членство уже активно')
-          else toast.error('Не удалось отправить заявку: ' + rpcErr.message)
-          setStep('docs')
-          return
-        }
+      const { error: rpcErr } = await supabase.rpc('rpc_submit_membership_application', {
+        p_organization_id: orgId,
+        p_membership_type: 'associate',
+        p_notes: null,
+      })
+      // PENDING_EXISTS = заявка уже на проверке — считаем успехом (документы обновлены).
+      if (rpcErr && !rpcErr.message?.includes('PENDING_EXISTS')) {
+        if (rpcErr.message?.includes('ALREADY_ACTIVE')) toast.error('Членство уже активно')
+        else toast.error('Не удалось отправить заявку: ' + rpcErr.message)
+        setStep('docs')
+        return
       }
       // Обновляем контекст → кабинет увидит applicationStatus='pending' при возврате.
       void refreshContext()
