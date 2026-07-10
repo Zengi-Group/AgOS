@@ -3636,3 +3636,13 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: tsc + vite build чистые; живой прогон с реальным логином (синтетический QA-аккаунт +77000002311, удалён после): список тредов с бейджами, гашение непрочитанных по входу, тред TURAN (членство/справочные цены с дисклеймером ст. 171/«Написать в TURAN» → форма), AI-чат вопрос→ответ по справочным ценам. Консоль без ошибок.
 
 **Files**: `src/pages/cabinet/shell/{data/threads.ts,screens/{MessagesScreen,ThreadScreen,ConsultantScreen}.tsx,components/ThreadAv.tsx,messages-proto.css,CabinetApp.tsx,nav.ts}`, `Docs/AGOS-Farmer-Redesign-Handoff.md`.
+
+### 2026-07-11: Чат-механика кабинета — Chatscope; транспорт AI — Vercel AI SDK (ARS-231, R-19)
+
+**What**: По фидбеку CEO («дизайн интерфейса чатов очень плохой — смотрим готовые библиотеки») проанализированы 5 вариантов: Chatscope (принят), React Chat Elements (отклонён: peer-гвоздь react-dom 18.2.0 + HugeIcons против Phosphor-only + дизайн 2017), Gifted Chat (отклонён: React Native, у нас Capacitor), Chatbot UI (отклонён: приложение-шаблон Next.js, мертво с 08-2024), Vercel AI SDK (принят НЕ как UI, а как транспорт реального Консультанта — useChat к AI Gateway, отдельная задача). ConsultantScreen переведён на @chatscope/chat-ui-kit-react + тема messages-chatscope.css (cs-* → daylight-токены); FontAwesome-кнопки kit отключены, свои PhIcon; IonShellFrame +noScroll. Правило R-19 в канон фермерской зоны.
+
+**Why**: чат-механика (скролл-полотно, группировка, contenteditable-инпут, typing) — решённая задача; самодельная вёрстка проигрывает по качеству и стоит дороже в поддержке. Kit ставится один раз, доменный слой (pinned-решения, действия, дисклеймеры ст. 171) остаётся нашим.
+
+**Verify**: peer-чек D-DEP-BUMP-01 (react 18.3.1 deduped, invalid только известный v5-остров); живой прогон: диалог вопрос→ответ, маршрутизация мока починена («чем кормить бычков» → кормовой ответ, не ценовой), голубой фон инпута дефолтной темы kit перекрыт (гоча: __content-editor-container). tsc чистый.
+
+**Files**: package.json (+@chatscope/*), `src/pages/cabinet/shell/{screens/ConsultantScreen.tsx,messages-chatscope.css,messages-proto.css,components/IonShellFrame.tsx,data/threads.ts,CabinetApp.tsx}`, `Docs/{AGOS-DesignRules-FarmerCabinet.md (R-19),AGOS-Farmer-Redesign-Handoff.md}`.

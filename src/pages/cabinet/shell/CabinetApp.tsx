@@ -21,6 +21,9 @@ import './ionic.css'
 import './shell-proto.css'
 import './market-proto.css'
 import './messages-proto.css'
+// ARS-231 (решение CEO): чат-механика — Chatscope; база kit → перекраска в daylight
+import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css'
+import './messages-chatscope.css'
 import { useAuth } from '@/hooks/useAuth'
 import { ShellCtx } from './context'
 import {
