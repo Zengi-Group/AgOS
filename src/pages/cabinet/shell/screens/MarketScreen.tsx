@@ -11,7 +11,7 @@ import { IonShellFrame } from '../components/IonShellFrame'
 import { TabHead } from '../components/TabHead'
 import { PhIcon } from '../components/icons/PhIcon'
 import { BatchCard } from '../components/BatchListCard'
-import { SkeletonBlocks } from '../components/SkeletonBlocks'
+import { ScreenSkeleton } from '../components/ScreenSkeleton'
 
 // тизер-гейт «Продаю» (shell/market.jsx SellGate) — для не-членов; вне прототипа, стиль сохранён
 function SellGate({ membership, onApply }: { membership: MembershipStatus; onApply: () => void }) {
@@ -92,7 +92,7 @@ export function MarketScreen({ membership, batches, loading, onNew, onApply, onP
     <IonShellFrame label={'Рынок · ' + membership} footer={footer} footBare onRefresh={onRefresh}>
       <TabHead title="Рынок" />
       <div className="mk">
-        {loading ? <SkeletonBlocks n={4} /> : isGate ? (
+        {loading ? <ScreenSkeleton variant="market" /> : isGate ? (
           <SellGate membership={membership} onApply={onApply} />
         ) : approved ? (
           // Заявка одобрена, но взнос не оплачен → Рынок (TSP) заблокирован до оплаты.

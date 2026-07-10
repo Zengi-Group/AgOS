@@ -3,11 +3,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
+import { BootScreen } from '@/components/BootScreen'
 // S2 (ARS-148, ADR-NATIVE-ROUTER-01 AMEND-1): Ionic-навигация. IonReactRouter живёт
 // на изолированном react-router v5 (v5-остров, vite.config.ts agos:ionic-v5-island);
 // остальное приложение остаётся на v6. Гейт-спайк пройден 2026-07-03.
-import { setupIonicReact, IonApp, IonPage, IonRouterOutlet } from '@ionic/react'
+import { setupIonicReact, IonApp, IonPage, IonRouterOutlet, IonTabs, IonTabBar, IonTabButton } from '@ionic/react'
+import { PhIcon } from './components/icons/PhIcon'
 import type { UseIonRouterResult } from '@ionic/react'
 import { useIonRouter } from '@ionic/react'
 import { IonReactRouter } from '@ionic/react-router'
@@ -27,11 +28,13 @@ import {
 import { routeToUrl, urlToRoute, routeKey, dirFor } from './nav'
 import { supabase } from '@/lib/supabase'
 import type {
-  MembershipStatus, Route, SheetKind, SheetState, ShellState, ToastState, ShellContextValue, Batch,
+  MembershipStatus, Route, RouteName, SheetKind, SheetState, ShellState, ToastState, ShellContextValue, Batch,
 } from './types'
 import { useBatches } from './hooks/useBatches'
 import { Toast } from './components/Toast'
 import { PlaceholderScreen } from './screens/PlaceholderScreen'
+import { IonShellFrame } from './components/IonShellFrame'
+import { ScreenSkeleton } from './components/ScreenSkeleton'
 import { CabinetScreen } from './screens/CabinetScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { MarketScreen } from './screens/MarketScreen'
@@ -140,12 +143,20 @@ export function CabinetApp() {
   // Ферма: по умолчанию демо-сид (для анонима/без бэкенда). Для вошедшего аккаунта
   // ниже подгружается реальная сводка стада (rpc_get_farm_summary) и перекрывает сид.
   const [farm, setFarm] = useState(init.farm)
+  // P-3 (ARS-219, F6): пока первая загрузка фермы не завершилась — Главная показывает
+  // скелет, а не демо-сид `init.farm` (иначе вошедший фермер видит фейковые «N голов»,
+  // которые затем подменяются реальными). Флаг взводится после ПЕРВОГО settle pullFarm()
+  // (resolve ИЛИ reject) — для анонима (loadFarmState→null) сид тогда показывается штатно.
+  const [farmLoaded, setFarmLoaded] = useState(false)
 
   // S3 (ARS-149): реальный сетевой статус вместо заглушки — OfflineBar и
   // офлайн-гейты (memberAct → offlineToast) оживают. Web = navigator.onLine (Dok6 Slice1).
   const online = useOnline()
   const offline = !online
   const loading = batchesLoading
+  // P-3 (ARS-219, F6): Главная зависит и от партий, и от сводки фермы — скелет держим,
+  // пока не готовы ОБА источника (иначе herd-строка поповит демо-сид → реальные данные).
+  const homeLoading = loading || !farmLoaded
 
   // Реальная сводка фермы (стадо + задачи) перекрывает демо-сид. Хойстнута из эффекта
   // (S2): переиспользуется pull-to-refresh на Главной (IonRefresher, spec §7).
@@ -181,7 +192,7 @@ export function CabinetApp() {
     })
     // Поллинг 30с — стадо/задачи обновляются без перезагрузки после правок в профиле (D-SYNC-01).
     // loadFarmState: контекст есть, но фермы нет → emptyFarm(); аноним/сбой сети → null (сид не трогаем).
-    pullFarm()
+    pullFarm().finally(() => { if (alive) setFarmLoaded(true) })
     const id = setInterval(pullFarm, 30000)
     return () => { alive = false; clearInterval(id) }
   }, [pullFarm])
@@ -315,6 +326,13 @@ export function CabinetApp() {
     setRoute((cur) => (routeKey(cur) === routeKey(r) ? cur : r))
   }, [])
   const tab = tabOf(route)
+  // P-4 (ARS-220): единый постоянный IonTabBar (не пересобирается при переходах). На
+  // детальных экранах он скрыт — как было при per-page noTabs (решение CEO: сохранить UX).
+  // Флоу-страницы (agos-flow-page: TSP-визард, результат публикации, мастер фермы) — полноэкранные,
+  // без таб-бара (контракт Slice 5a/7). До P-4 (ARS-220) бар не рендерился внутри их IonPage;
+  // с постоянным IonTabBar его надо прятать явно — иначе бар просвечивает под визардом.
+  const hideTabBar = (['p1list', 'batch', 'review', 'turan'] as RouteName[]).includes(route.name)
+    || wizActive || !!pubResult || farmWizActive
 
   const handleLogout = async () => {
     await signOut()
@@ -467,7 +485,7 @@ export function CabinetApp() {
       observe={observe}
       bannerVariant={bannerVariant}
       sticker={sticker}
-      loading={loading}
+      loading={homeLoading}
       onBanner={onBanner}
       openService={openService}
       go={go}
@@ -534,6 +552,7 @@ export function CabinetApp() {
     return (
       <ListScreen
         batches={batches}
+        loading={loading}
         onBatch={(id) => go({ name: 'batch', batchId: id, back: { name: 'p1list' } })}
         onNew={() => {
           if (activeCount >= ACTIVE_COUNT_LIMIT) { setSheet({ kind: 'limit' }); return }
@@ -548,6 +567,11 @@ export function CabinetApp() {
 
   const renderBatch = ({ match }: { match: { params: { id: string } } }) => {
     const currentBatch = batches.find((b) => b.id === match.params.id)
+    // P-3 (ARS-219): на deep-link/reload партии ещё грузятся → скелет карточки,
+    // а НЕ ложное «Партия не найдена» (F5). «Не найдена» — только когда загрузка завершена.
+    if (!currentBatch && loading) {
+      return <IonShellFrame noTabs label="Партия"><ScreenSkeleton variant="batch" /></IonShellFrame>
+    }
     if (!currentBatch) return <PlaceholderScreen title="Партия не найдена" sub="" />
     return (
       <BatchScreen
@@ -569,6 +593,10 @@ export function CabinetApp() {
 
   const renderReview = ({ match }: { match: { params: { id: string } } }) => {
     const reviewBatch = batches.find((b) => b.id === match.params.id)
+    // P-3 (ARS-219): загрузка ещё идёт → скелет, не ложное «не найдена» (F5).
+    if (!reviewBatch && loading) {
+      return <IonShellFrame noTabs label="Партия"><ScreenSkeleton variant="batch" /></IonShellFrame>
+    }
     if (!reviewBatch) return <PlaceholderScreen title="Партия не найдена" icon="ban" emptyTitle="Партия не найдена" emptySub="Возможно, она была удалена или ещё не создана" />
     return (
       <ReviewScreen
@@ -633,13 +661,10 @@ export function CabinetApp() {
     )
   }
 
-  // Пока грузится реальный профиль — лоадер (а не демо-экран). См. profileLoading выше.
+  // Пока грузится реальный профиль — брендовый boot (а не голый спиннер/демо-экран).
+  // P-2 (ARS-218): единый BootScreen на всём пути в кабинет. См. profileLoading выше.
   if (profileLoading) {
-    return (
-      <div className="agos-cabinet-stage" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Loader2 className="animate-spin" style={{ width: 28, height: 28, color: '#b0a18f' }} />
-      </div>
-    )
+    return <BootScreen label="Загрузка кабинета…" />
   }
 
   return (
@@ -649,22 +674,54 @@ export function CabinetApp() {
           <IonApp>
             <IonReactRouter>
               <IonBridge onIon={(ion) => { ionRef.current = ion }} onPath={syncFromPath} />
-              <IonRouterOutlet>
-                <RouteV5 exact path="/cabinet" render={renderHome} />
-                <RouteV5 exact path="/cabinet/market" render={renderMarket} />
-                <RouteV5 exact path="/cabinet/list" render={renderList} />
-                <RouteV5 exact path="/cabinet/batch/:id" render={renderBatch} />
-                <RouteV5 exact path="/cabinet/review/:id" render={renderReview} />
-                <RouteV5 exact path="/cabinet/account" render={renderCabinet} />
-                <RouteV5 exact path="/cabinet/turan" render={renderTuran} />
-                <RouteV5 exact path="/cabinet/farm" render={renderFarm} />
-                <RouteV5 exact path="/cabinet/shop" render={() => <PlaceholderScreen title="Маркет" sub="Дистрибуция и специалисты TURAN" icon="bag" emptySub="Дистрибуция и специалисты TURAN появятся здесь" />} />
-                <RouteV5 exact path="/cabinet/services" render={() => <PlaceholderScreen title="Сервисы" sub="Специалисты и услуги TURAN" icon="grid" emptySub="Специалисты и услуги TURAN появятся здесь" />} />
-                <RouteV5 exact path="/cabinet/messages" render={() => <PlaceholderScreen tab title="Сообщения" sub="Треды Рынка, Фермы и TURAN" icon="chat" emptySub="Треды Рынка, Фермы и TURAN появятся здесь" />} />
-                <RouteV5 exact path="/cabinet/thread/:tid" render={() => <PlaceholderScreen title="Сообщения" sub="Треды Рынка, Фермы и TURAN" icon="chat" emptySub="Треды Рынка, Фермы и TURAN появятся здесь" />} />
-                {/* неизвестный под-путь → Главная (первое совпадение выигрывает) */}
-                <RouteV5 render={renderHome} />
-              </IonRouterOutlet>
+              {/* P-4 (ARS-220): IonTabs владеет ОДНИМ постоянным IonTabBar — он больше не
+                  пересобирается при каждом переходе (раньше таб-бар рендерился внутри каждой
+                  страницы через IonShellFrame). Роуты в outlet не изменены. */}
+              <IonTabs>
+                <IonRouterOutlet>
+                  <RouteV5 exact path="/cabinet" render={renderHome} />
+                  <RouteV5 exact path="/cabinet/market" render={renderMarket} />
+                  <RouteV5 exact path="/cabinet/list" render={renderList} />
+                  <RouteV5 exact path="/cabinet/batch/:id" render={renderBatch} />
+                  <RouteV5 exact path="/cabinet/review/:id" render={renderReview} />
+                  <RouteV5 exact path="/cabinet/account" render={renderCabinet} />
+                  <RouteV5 exact path="/cabinet/turan" render={renderTuran} />
+                  <RouteV5 exact path="/cabinet/farm" render={renderFarm} />
+                  <RouteV5 exact path="/cabinet/shop" render={() => <PlaceholderScreen title="Маркет" sub="Дистрибуция и специалисты TURAN" icon="bag" emptySub="Дистрибуция и специалисты TURAN появятся здесь" />} />
+                  <RouteV5 exact path="/cabinet/services" render={() => <PlaceholderScreen title="Сервисы" sub="Специалисты и услуги TURAN" icon="grid" emptySub="Специалисты и услуги TURAN появятся здесь" />} />
+                  <RouteV5 exact path="/cabinet/messages" render={() => <PlaceholderScreen tab title="Сообщения" sub="Треды Рынка, Фермы и TURAN" icon="chat" emptySub="Треды Рынка, Фермы и TURAN появятся здесь" />} />
+                  <RouteV5 exact path="/cabinet/thread/:tid" render={() => <PlaceholderScreen title="Сообщения" sub="Треды Рынка, Фермы и TURAN" icon="chat" emptySub="Треды Рынка, Фермы и TURAN появятся здесь" />} />
+                  {/* неизвестный под-путь → Главная (первое совпадение выигрывает) */}
+                  <RouteV5 render={renderHome} />
+                </IonRouterOutlet>
+                {/* Постоянный таб-бар. selected/onClick — прежняя схема (ctx.go), href нет:
+                    навигация идёт через go()→ion.push, как и раньше. hideTabBar скрывает бар
+                    на детальных экранах (сохранение UX, решение CEO). */}
+                <IonTabBar slot="bottom" className={'agos-tabbar' + (hideTabBar ? ' agos-tabbar--hidden' : '')}>
+                  <IonTabButton tab="home" selected={tab === 'home'} onClick={() => go({ name: 'home' })}>
+                    <span className="bn-ic"><PhIcon name="home" size={22} /></span>
+                    <span className="bn-t">Главная</span>
+                  </IonTabButton>
+                  <IonTabButton tab="farm" selected={tab === 'farm'} onClick={() => go({ name: 'farm' })}>
+                    <span className="bn-ic"><PhIcon name="sprout" size={22} /></span>
+                    <span className="bn-t">Ферма</span>
+                  </IonTabButton>
+                  <IonTabButton tab="market" selected={tab === 'market'} onClick={() => go({ name: 'market' })}>
+                    <span className="bn-ic">
+                      <PhIcon name="market" size={22} />
+                      {marketDot && <i className="tb-dot" />}
+                    </span>
+                    <span className="bn-t">Рынок</span>
+                  </IonTabButton>
+                  <IonTabButton tab="messages" selected={tab === 'messages'} onClick={() => go({ name: 'messages' })}>
+                    <span className="bn-ic">
+                      <PhIcon name="chat" size={22} />
+                      {msgBadge > 0 && <i className="tb-badge mono">{msgBadge}</i>}
+                    </span>
+                    <span className="bn-t">Сообщения</span>
+                  </IonTabButton>
+                </IonTabBar>
+              </IonTabs>
             </IonReactRouter>
             {/* Тост и шторки — поверх страниц; IonModal (Sheet.tsx) сам портится в ion-app.
                 Шторки смонтированы постоянно (open-флаг) — dismiss-анимация играет и при

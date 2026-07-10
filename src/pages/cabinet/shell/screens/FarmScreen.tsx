@@ -11,7 +11,7 @@ import { PhIcon } from '../components/icons/PhIcon'
 import { MkCta } from '../tsp/components/MkCta'
 import { HERD_FIELDS, branchSteps, type HerdKey } from '../farm/types'
 import { loadFarmCtx, type FarmCtx } from '../farm/data/farm-profile'
-import { SkeletonBlocks } from '../components/SkeletonBlocks'
+import { ScreenSkeleton } from '../components/ScreenSkeleton'
 
 interface Props {
   onStart: () => void    // F0a CTA / «Поправить состав» → мастер с F1 (prefill)
@@ -37,7 +37,7 @@ export function FarmScreen({ onStart, onResume }: Props) {
       <TabHead title="Ферма" />
       <div className="mk">
         {loading ? (
-          <SkeletonBlocks n={3} />
+          <ScreenSkeleton variant="farm" />
         ) : !hasHerd ? (
           // ── SCR-F0a · Хук ──
           <div className="es fw-hook">

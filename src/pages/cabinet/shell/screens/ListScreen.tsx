@@ -9,12 +9,15 @@ import { filterBatches, DONE_STATES_SET, type ListFilter } from '../data/status'
 import { IonShellFrame } from '../components/IonShellFrame'
 import { BatchCard } from '../components/BatchListCard'
 import { PhIcon } from '../components/icons/PhIcon'
+import { ScreenSkeleton } from '../components/ScreenSkeleton'
 
 interface Props {
   batches: Batch[]
   onBatch: (id: string) => void
   onNew: () => void
   onBack: () => void
+  /** P-3 (ARS-219): пока грузятся партии — скелет, а НЕ ложный empty-state «Партий нет». */
+  loading?: boolean
 }
 
 const FILTERS: { k: ListFilter; t: string }[] = [
@@ -23,7 +26,7 @@ const FILTERS: { k: ListFilter; t: string }[] = [
   { k: 'done', t: 'Завершённые' },
 ]
 
-export function ListScreen({ batches, onBatch, onNew, onBack }: Props) {
+export function ListScreen({ batches, onBatch, onNew, onBack, loading }: Props) {
   const [filter, setFilter] = useState<ListFilter>('all')
   const list = filterBatches(batches, filter)
   const dec = list.filter((b) => b.state === 'decision')
@@ -52,26 +55,33 @@ export function ListScreen({ batches, onBatch, onNew, onBack }: Props) {
         <span aria-hidden style={{ width: 34 }} />
       </div>
       <div className="mk mk-pt">
-        <div className="mk-tabs">
-          {FILTERS.map((f) => (
-            <button key={f.k} className={'mk-tab' + (filter === f.k ? ' on' : '')} onClick={() => setFilter(f.k)}>
-              <span className="mk-tab-t">{f.t}</span>
-            </button>
-          ))}
-        </div>
-        {isEmpty ? (
-          <div className="mk-empty">
-            <div className="mk-empty-art"><PhIcon name="package" size={46} /></div>
-            <div className="mk-empty-h">{filter === 'done' ? 'Завершённых партий пока нет' : 'Партий пока нет'}</div>
-            {filter !== 'done' && <div className="mk-empty-t">Создайте первую — она появится в этом списке.</div>}
-            {filter !== 'done' && <button className="mk-cta primary" onClick={onNew}>Создать первую партию</button>}
-          </div>
+        {loading && batches.length === 0 ? (
+          // P-3 (ARS-219): первичная загрузка — скелет вместо ложного «Партий нет».
+          <ScreenSkeleton variant="list" />
         ) : (
-          <div className="mk-listgroups">
-            {group('Требуют решения', dec, true)}
-            {group('В работе', act, false)}
-            {group('Завершённые', fin, false)}
-          </div>
+          <>
+            <div className="mk-tabs">
+              {FILTERS.map((f) => (
+                <button key={f.k} className={'mk-tab' + (filter === f.k ? ' on' : '')} onClick={() => setFilter(f.k)}>
+                  <span className="mk-tab-t">{f.t}</span>
+                </button>
+              ))}
+            </div>
+            {isEmpty ? (
+              <div className="mk-empty">
+                <div className="mk-empty-art"><PhIcon name="package" size={46} /></div>
+                <div className="mk-empty-h">{filter === 'done' ? 'Завершённых партий пока нет' : 'Партий пока нет'}</div>
+                {filter !== 'done' && <div className="mk-empty-t">Создайте первую — она появится в этом списке.</div>}
+                {filter !== 'done' && <button className="mk-cta primary" onClick={onNew}>Создать первую партию</button>}
+              </div>
+            ) : (
+              <div className="mk-listgroups">
+                {group('Требуют решения', dec, true)}
+                {group('В работе', act, false)}
+                {group('Завершённые', fin, false)}
+              </div>
+            )}
+          </>
         )}
       </div>
     </IonShellFrame>

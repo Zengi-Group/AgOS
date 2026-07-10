@@ -74,6 +74,23 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src')
     }
   },
+  // Vendor-сплит (P-1, ARS-217): изолируем тяжёлые библиотеки в отдельные кэш-стабильные
+  // чанки. recharts (~консалтинг) и @ionic (нативная оболочка) уже не в entry (их импортёры
+  // lazy), но группировка даёт гранулярный кэш и не даёт им протечь обратно в общий вендор.
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('recharts') || id.includes('/d3-') || id.includes('victory-vendor')) return 'charts'
+          if (id.includes('@ionic') || id.includes('ionicons')) return 'ionic'
+          if (id.includes('@radix-ui')) return 'radix'
+          if (id.includes('@supabase')) return 'supabase'
+          if (id.includes('i18next')) return 'i18n'
+        },
+      },
+    },
+  },
   test: {
     projects: [{
       // S3 (ARS-149): unit-тесты платформенных адаптеров (node, без DOM/браузера).
