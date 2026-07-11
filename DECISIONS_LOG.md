@@ -3728,3 +3728,13 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: tsc по изменённым файлам чист (ошибки только в chatscope-модуле — не установлен в воркри, к правке не относится); живые скриншоты `/login` («Нет аккаунта? Зарегистрироваться») и `/register`-Contact («Есть аккаунт? Войти») — приглушённый префикс + амбер-действие в доке под CTA, без шеврона; консоль без ошибок. RoleSelect — тот же атом, верифицирован по построению (достижим только через OTP-флоу).
 
 **Files**: `src/lib/auth-ui/primitives.tsx`, `src/pages/auth/Login.tsx`, `src/pages/registration/steps/{Contact,RoleSelect}.tsx`, `Docs/AGOS-DesignRules-FarmerCabinet.md (R-25)`.
+
+### 2026-07-11: Канон дизайна → merge=union + CHECK 10 (конец конфликтам R-N в параллельных PR)
+
+**What**: Каждый дизайн-PR конфликтовал в `Docs/AGOS-DesignRules-FarmerCabinet.md` — все ветки от одной базы аппендят строку R-N в хвост реестра (и секцию в DECISIONS_LOG). Лог уже был на `merge=union` (не конфликтовал); канон — нет. Добавил `Docs/AGOS-DesignRules-FarmerCabinet.md merge=union` в `.gitattributes`. Побочка union — молчаливое слияние двух одинаковых R-N (в этом же rebase поймали R-24 дважды: #75 и наш) — закрыта новым `CHECK 10` в `cross_check.sh` (падает SIGNIFICANT на дублях R-N).
+
+**Why**: конфликт был чисто механический (append в одну строку), не смысловой — union его убирает. Но union слепа к дублю ID в реестре с монотонным счётчиком → нужен guard. Пара «union + CHECK 10» = нет мусорных конфликтов и нет тихих дублей.
+
+**Verify**: `bash -n cross_check.sh` ок; `git check-attr merge` → union на обоих журналах; CHECK 10 на текущем каноне → «R-N уникальны». Данный PR перенумерован R-24→R-25 (R-24 занят #75).
+
+**Files**: `.gitattributes`, `cross_check.sh` (CHECK 10).
