@@ -5,7 +5,7 @@ import { PhIcon } from './icons/PhIcon'
 import { TuranStar } from './icons/TuranStar'
 import { MSG_META, type ThreadId } from '../data/threads'
 
-export function ThreadAv({ tid, size = 18 }: { tid: ThreadId; size?: number }) {
+export function ThreadAv({ tid, size = 34 }: { tid: ThreadId; size?: number }) {
   const m = MSG_META[tid]
   return (
     <span className={'thr-av tone-' + m.tone}>

@@ -7,7 +7,7 @@
 // подключается отдельной задачей (кандидат: @ai-sdk/react useChat) — контракт не меняется.
 
 import { useEffect, useState } from 'react'
-import { ChatContainer, MessageList, Message, MessageInput, TypingIndicator, Avatar } from '@chatscope/chat-ui-kit-react'
+import { ChatContainer, MessageList, Message, MessageInput, TypingIndicator } from '@chatscope/chat-ui-kit-react'
 import { IonShellFrame } from '../components/IonShellFrame'
 import { PhIcon } from '../components/icons/PhIcon'
 import { TuranStar } from '../components/icons/TuranStar'
@@ -63,8 +63,8 @@ export function ConsultantScreen({ aiLog, typing, offline, offlineToast, onSend,
       <div className="ai-chat">
         <div className="thr-head">
           <button className="thr-back" title="Сообщения" onClick={onBack}><PhIcon name="chevronLeft" size={20} /></button>
-          <span className="thr-av tone-accent"><TuranStar size={16} /></span>
-          <div className="thr-head-t"><b>Консультант TURAN</b><span>всегда на связи</span></div>
+          <span className="thr-av tone-accent"><TuranStar size={30} /></span>
+          <div className="thr-head-t"><b>Консультант TURAN</b><span className="thr-presence"><i className="pres-dot" />всегда на связи</span></div>
         </div>
         <ChatContainer className="ai-cs">
           <MessageList typingIndicator={typing ? <TypingIndicator content="Консультант печатает" /> : undefined}>
@@ -76,12 +76,7 @@ export function ConsultantScreen({ aiLog, typing, offline, offlineToast, onSend,
                   direction: m.who === 'c' ? 'incoming' : 'outgoing',
                   position: posOf(i),
                 }}
-                avatarSpacer={m.who === 'c' && posOf(i) !== 'last' && posOf(i) !== 'single'}
-              >
-                {m.who === 'c' && (posOf(i) === 'last' || posOf(i) === 'single') ? (
-                  <Avatar><span className="ai-msg-star"><TuranStar size={12} /></span></Avatar>
-                ) : undefined}
-              </Message>
+              />
             ))}
           </MessageList>
         </ChatContainer>

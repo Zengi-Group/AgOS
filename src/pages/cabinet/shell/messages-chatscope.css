@@ -15,16 +15,18 @@
 
 /* ═══ список тредов (ConversationList) — R-19 ═══ */
 .agos-cabinet-stage .cs-conversation-list { background: transparent; border: none; font-family: inherit; padding-top: 4px; }
+/* строки без линий-разделителей: дышат воздухом + мягкая скруглённая подложка при
+   нажатии — тап-таргет как карточка (паттерн CometChat, R-20) */
 .agos-cabinet-stage .cs-conversation {
-  background: transparent; border-top: 1px solid var(--bd-s); border-radius: 0;
-  padding: 13px 2px; gap: 12px; align-items: flex-start; transition: opacity 60ms var(--ease);
+  background: transparent; border: none; border-radius: var(--r-xl);
+  margin: 0 -6px; padding: 12px 8px; gap: 11px; align-items: flex-start;
+  transition: background 90ms var(--ease);
 }
-.agos-cabinet-stage .cs-conversation:first-child { border-top: none; }
-.agos-cabinet-stage .cs-conversation:hover,
-.agos-cabinet-stage .cs-conversation.cs-conversation:active { background: transparent; }
-.agos-cabinet-stage .cs-conversation:active { opacity: 0.6; }
-/* аватар треда: наш 42px-кружок внутри cs-avatar, без клипа/фона kit */
-.agos-cabinet-stage .cs-conversation .cs-avatar { width: 42px; height: 42px; min-width: 42px; background: transparent; overflow: visible; }
+.agos-cabinet-stage .cs-conversation:hover { background: color-mix(in srgb, var(--bg-m) 55%, transparent); }
+.agos-cabinet-stage .cs-conversation.cs-conversation:active,
+.agos-cabinet-stage .cs-conversation:active { background: var(--bg-m); }
+/* аватар треда: наш глиф-якорь внутри cs-avatar, без клипа/фона kit */
+.agos-cabinet-stage .cs-conversation .cs-avatar { width: 44px; height: 44px; min-width: 44px; background: transparent; overflow: visible; }
 .agos-cabinet-stage .cs-conversation .cs-conversation__content { margin: 0; }
 /* unread-бейдж kit → красный кружок канона */
 .agos-cabinet-stage .cs-conversation__unread-dot,
@@ -34,49 +36,52 @@
   font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; align-self: center;
 }
 
-/* день-разделитель kit → как .msg-day (мелкие капсы, без линий) */
+/* день-разделитель kit → центрированная пилюля (паттерн CometChat, R-18/R-20:
+   чипы всегда с подложкой). Линии ::before/::after гасим — хугаем текст fit-content. */
 .agos-cabinet-stage .cs-message-separator {
-  background: transparent; color: var(--fg3); font-family: inherit;
-  font-size: 9.5px; font-weight: 600; letter-spacing: 0.07em; padding: 12px 0 9px;
+  display: block; width: fit-content; margin: 14px auto 11px;
+  background: var(--bg-m); color: var(--fg2); font-family: inherit;
+  font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em;
+  padding: 5px 14px; border-radius: var(--r-full);
 }
 .agos-cabinet-stage .cs-message-separator::before,
 .agos-cabinet-stage .cs-message-separator::after { display: none; }
 
 /* пузыри лент (CustomContent): база incoming наследуется от .cs-message--incoming;
    тут — форма «хвостика» и amber-вариант pinned «ТРЕБУЕТ РЕШЕНИЯ» */
-.agos-cabinet-stage .thr-cs .cs-message--incoming .cs-message__content { border-radius: 3px var(--r-xl) var(--r-xl) var(--r-xl); }
-.agos-cabinet-stage .thr-cs .cs-message { max-width: 88%; margin-bottom: 7px; }
+.agos-cabinet-stage .thr-cs .cs-message--incoming .cs-message__content { border-radius: 5px 18px 18px 18px; }
+.agos-cabinet-stage .thr-cs .cs-message { max-width: 84%; margin-bottom: 9px; }
 .agos-cabinet-stage .thr-cs .cs-message.thr-pin .cs-message__content {
   border-color: color-mix(in srgb, var(--amber) 45%, var(--bd));
   background: color-mix(in srgb, var(--amber) 7%, var(--bg-c));
 }
 .agos-cabinet-stage .thr-cs .cs-message__custom-content { display: block; }
-.agos-cabinet-stage .cs-message-list .cs-message-list__scroll-wrapper > .cs-message { max-width: 88%; }
+.agos-cabinet-stage .cs-message-list .cs-message-list__scroll-wrapper > .cs-message { max-width: 84%; }
+/* соседние пузыри одного автора слипаются плотнее (группировка CometChat, R-20) */
+.agos-cabinet-stage .cs-message.cs-message--normal,
+.agos-cabinet-stage .cs-message.cs-message--last { margin-top: 2px; }
 
-/* пузыри: incoming — плоская карточка, outgoing — тёмная CTA (как канон) */
+/* пузыри: incoming — карточка с лёгким подъёмом (R-21: чат-баблы — исключение из
+   §6-плоскости, иначе «убого»), outgoing — тёмная CTA. Крупный читаемый текст. */
 .agos-cabinet-stage .cs-message .cs-message__content {
-  font-family: inherit; font-size: 13px; line-height: 1.5; padding: 10px 13px;
-  border-radius: var(--r-lg);
+  font-family: inherit; font-size: 15.5px; line-height: 1.55; padding: 12px 16px;
+  border-radius: 18px;
 }
 .agos-cabinet-stage .cs-message--incoming .cs-message__content {
-  background: var(--bg-c); border: 1px solid var(--bd-s); color: var(--fg); box-shadow: var(--sh-sm);
+  background: var(--bg-c); border: 1px solid var(--bd); color: var(--fg); box-shadow: var(--sh-sm);
 }
 .agos-cabinet-stage .cs-message--incoming.cs-message--single .cs-message__content,
-.agos-cabinet-stage .cs-message--incoming.cs-message--last .cs-message__content { border-bottom-left-radius: 4px; }
+.agos-cabinet-stage .cs-message--incoming.cs-message--last .cs-message__content { border-bottom-left-radius: 5px; }
 .agos-cabinet-stage .cs-message--outgoing .cs-message__content {
-  background: var(--cta); color: var(--cta-fg);
+  background: var(--cta); color: var(--cta-fg); box-shadow: var(--sh-sm);
 }
 .agos-cabinet-stage .cs-message--outgoing.cs-message--single .cs-message__content,
-.agos-cabinet-stage .cs-message--outgoing.cs-message--last .cs-message__content { border-bottom-right-radius: 4px; }
-
-/* аватар-звезда у входящих — наш атом внутри cs-avatar */
-.agos-cabinet-stage .cs-message .cs-avatar { width: 20px; height: 20px; min-width: 20px; min-height: 20px; }
-.agos-cabinet-stage .cs-message__avatar-spacer { width: 20px; }
+.agos-cabinet-stage .cs-message--outgoing.cs-message--last .cs-message__content { border-bottom-right-radius: 5px; }
 
 /* «Консультант печатает» */
 .agos-cabinet-stage .cs-typing-indicator { background: transparent; padding: 4px 2px; }
 .agos-cabinet-stage .cs-typing-indicator__dot { background-color: var(--fg3); }
-.agos-cabinet-stage .cs-typing-indicator__text { color: var(--fg3); font-family: inherit; font-size: 11px; }
+.agos-cabinet-stage .cs-typing-indicator__text { color: var(--fg2); font-family: inherit; font-size: 13px; }
 
 /* инпут kit'а в нашем доке: пилюля как ai-input */
 .agos-cabinet-stage .ai-inrow .cs-message-input { flex: 1; min-width: 0; border: none; background: transparent; padding: 0; }
@@ -87,7 +92,7 @@
 .agos-cabinet-stage .cs-message-input .cs-message-input__content-editor-wrapper:focus-within { border-color: var(--bd-h); }
 .agos-cabinet-stage .cs-message-input .cs-message-input__content-editor-container,
 .agos-cabinet-stage .cs-message-input .cs-message-input__content-editor {
-  background: transparent; color: var(--fg); font-family: inherit; font-size: 13.5px; caret-color: var(--accent);
+  background: transparent; color: var(--fg); font-family: inherit; font-size: 15.5px; caret-color: var(--accent);
 }
 .agos-cabinet-stage .cs-message-input .cs-message-input__content-editor[data-placeholder]:empty::before { color: var(--fg3); }
 /* kit после отправки выделяет пустой contenteditable — селекция красила плейсхолдер

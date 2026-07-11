@@ -679,7 +679,7 @@
 }
 .agos-cabinet-stage .mk-empty-h + .mk-empty-t { margin-top:8px; }
 .agos-cabinet-stage .mk-empty .mk-cta { margin-top:24px; max-width:240px; }
-/* Оффер вступления (гейт не-члена) — тот же блоб-язык, что empty-state (R-6/R-20) */
+/* Оффер вступления (гейт не-члена) — тот же блоб-язык, что empty-state (R-6/R-24) */
 .agos-cabinet-stage .mk-offer {
   padding:56px 14px 40px; display:flex; flex-direction:column;
   align-items:center; text-align:center;
