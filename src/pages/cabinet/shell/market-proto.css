@@ -1875,6 +1875,12 @@
 .agos-cabinet-stage .fw-months.mk-miss .fw-mon { border-color:var(--amber); }
 .agos-cabinet-stage .fw-mon-more { margin-top:8px; font-size:13px; text-align:left; padding:6px 0; }
 
+/* — F3–F5 · опции-карточки (BigRadio): не сливаться (R-18: чип выбора = видимая граница + зазор),
+   компактнее. mk-stack8 в ленте партий = gap:0 — поэтому зазор возвращаем только в fw-opts. — */
+.agos-cabinet-stage .fw-opts { gap:8px; }
+.agos-cabinet-stage .fw-opts .mk-big-radio { padding:12px 14px; }
+.agos-cabinet-stage .fw-opts .mk-big-radio:not(.sel) { border-color:var(--bd); }
+
 /* — «зачем спрашиваем» (дизайн-ход #2) — */
 .agos-cabinet-stage .fw-why { display:flex; align-items:flex-start; gap:7px; margin-top:14px; padding:10px 12px; border-radius:var(--r-md); background:var(--bg-m); color:var(--fg2); font-size:12px; line-height:1.45; }
 .agos-cabinet-stage .fw-why > svg { color:var(--fg3); margin-top:1px; flex-shrink:0; }

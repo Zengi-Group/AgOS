@@ -3,11 +3,11 @@
 // spring=фев–май, autumn=сен–ноя) + «Другой месяц…» раскрывает полный грид 12 (P5: реальные
 // отёлы могут начаться вне типичного окна). Месяц обязателен для «Дальше». «Круглый год» и
 // «По-разному» — полноправные опции (легальный путь, F-D14), ничего не блокируют.
-// fw-why (InfoNote): «зачем спрашиваем». Skip-link пишет null и идёт дальше (порог не достигнут).
+// fw-why (InfoNote): «зачем спрашиваем». Док — только CTA (R-27).
 
 import { useState } from 'react'
 import type { CalvingAnswer } from '../types'
-import { FwShell, DraftNote } from './FwShell'
+import { FwShell } from './FwShell'
 import { BigRadio } from '../../tsp/components/BigRadio'
 import { MkCta } from '../../tsp/components/MkCta'
 import { MkErr } from '../../tsp/components/MkErr'
@@ -36,12 +36,11 @@ interface Props {
   setValue: (v: CalvingAnswer) => void
   setMonth: (m: number | null) => void
   onNext: () => void
-  onSkip: () => void
   onBack: () => void
   onExit: () => void
 }
 
-export function FwStepCalving({ progress, dots, value, month, setValue, setMonth, onNext, onSkip, onBack, onExit }: Props) {
+export function FwStepCalving({ progress, dots, value, month, setValue, setMonth, onNext, onBack, onExit }: Props) {
   const [miss, setMiss] = useState(false)
   const [allMonths, setAllMonths] = useState(
     // черновик содержит месяц вне окна сезона → сразу полный грид, чтобы выбор был виден
@@ -70,13 +69,9 @@ export function FwStepCalving({ progress, dots, value, month, setValue, setMonth
       title="Когда у вас обычно телятся?"
       titleQ
       screenLabel="SCR-F3 · мастер · отёл"
-      footer={<>
-        <MkCta onClick={tryNext}>Дальше</MkCta>
-        <button className="mk-link" onClick={onSkip}>Пропустить вопрос</button>
-        <DraftNote />
-      </>}
+      footer={<MkCta onClick={tryNext}>Дальше</MkCta>}
     >
-      <div className="mk-stack8">
+      <div className="mk-stack8 fw-opts">
         {OPTS.map((o) => (
           <BigRadio key={o.v} sel={value === o.v} title={o.t} sub={o.s} onClick={() => pickSeason(o.v)} />
         ))}

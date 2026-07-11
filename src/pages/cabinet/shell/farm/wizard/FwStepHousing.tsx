@@ -1,9 +1,9 @@
 // AgOS · ARS-212 · SCR-F5 · Содержание (всем веткам). Каркас = F3. Сезонный хребет работ КЗ:
 // заготовка сена, зимовка, перегоны, дегельминтизация. CTA последнего вопроса ветки:
-// «Собрать план работ» если порог достигнут, иначе «Готово». Skip-link есть.
+// «Собрать план работ» если порог достигнут, иначе «Готово». Док — только CTA (R-27).
 
 import type { HousingAnswer } from '../types'
-import { FwShell, DraftNote } from './FwShell'
+import { FwShell } from './FwShell'
 import { BigRadio } from '../../tsp/components/BigRadio'
 import { MkCta } from '../../tsp/components/MkCta'
 import { FwWhy } from './FwWhy'
@@ -22,12 +22,11 @@ interface Props {
   willBuildPlan: boolean          // порог достигнут → CTA «Собрать план работ»
   setValue: (v: HousingAnswer) => void
   onNext: () => void
-  onSkip: () => void
   onBack: () => void
   onExit: () => void
 }
 
-export function FwStepHousing({ progress, dots, value, willBuildPlan, setValue, onNext, onSkip, onBack, onExit }: Props) {
+export function FwStepHousing({ progress, dots, value, willBuildPlan, setValue, onNext, onBack, onExit }: Props) {
   return (
     <FwShell
       onExit={onExit}
@@ -37,13 +36,9 @@ export function FwStepHousing({ progress, dots, value, willBuildPlan, setValue, 
       title="Как содержите скот?"
       titleQ
       screenLabel="SCR-F5 · мастер · содержание"
-      footer={<>
-        <MkCta onClick={onNext}>{willBuildPlan ? 'Собрать план работ' : 'Готово'}</MkCta>
-        <button className="mk-link" onClick={onSkip}>Пропустить вопрос</button>
-        <DraftNote />
-      </>}
+      footer={<MkCta onClick={onNext}>{willBuildPlan ? 'Собрать план работ' : 'Готово'}</MkCta>}
     >
-      <div className="mk-stack8">
+      <div className="mk-stack8 fw-opts">
         {OPTS.map((o) => (
           <BigRadio key={o.v} sel={value === o.v} title={o.t} sub={o.s} onClick={() => setValue(o.v)} />
         ))}
