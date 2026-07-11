@@ -1,9 +1,9 @@
 // AgOS · ARS-212 · SCR-F4 · Молодняк (при маточном или телятах). Каркас = F3. Модификатор
 // доращивания (F-D2): хвост плана после отъёма, окно продажи, зимний запас кормов, сигнал TSP.
-// Skip-link есть (не влияет на порог).
+// Док — только CTA (R-27).
 
 import type { YoungAnswer } from '../types'
-import { FwShell, DraftNote } from './FwShell'
+import { FwShell } from './FwShell'
 import { BigRadio } from '../../tsp/components/BigRadio'
 import { MkCta } from '../../tsp/components/MkCta'
 import { FwWhy } from './FwWhy'
@@ -20,12 +20,11 @@ interface Props {
   value: YoungAnswer
   setValue: (v: YoungAnswer) => void
   onNext: () => void
-  onSkip: () => void
   onBack: () => void
   onExit: () => void
 }
 
-export function FwStepYoung({ progress, dots, value, setValue, onNext, onSkip, onBack, onExit }: Props) {
+export function FwStepYoung({ progress, dots, value, setValue, onNext, onBack, onExit }: Props) {
   return (
     <FwShell
       onExit={onExit}
@@ -35,13 +34,9 @@ export function FwStepYoung({ progress, dots, value, setValue, onNext, onSkip, o
       title="Что обычно делаете с телятами?"
       titleQ
       screenLabel="SCR-F4 · мастер · молодняк"
-      footer={<>
-        <MkCta onClick={onNext}>Дальше</MkCta>
-        <button className="mk-link" onClick={onSkip}>Пропустить вопрос</button>
-        <DraftNote />
-      </>}
+      footer={<MkCta onClick={onNext}>Дальше</MkCta>}
     >
-      <div className="mk-stack8">
+      <div className="mk-stack8 fw-opts">
         {OPTS.map((o) => (
           <BigRadio key={o.v} sel={value === o.v} title={o.t} sub={o.s} onClick={() => setValue(o.v)} />
         ))}

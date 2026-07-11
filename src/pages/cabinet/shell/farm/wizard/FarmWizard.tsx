@@ -174,7 +174,6 @@ export function FarmWizard({ startAt, onExit, onSell }: Props) {
         setValue={(v: CalvingAnswer) => sw({ calving: v })}
         setMonth={(m) => sw({ calvingMonth: m })}
         onNext={() => { persistFarmField({ calving: w.calving, calvingMonth: w.calvingMonth }); advanceStep() }}
-        onSkip={() => { sw({ calving: '', calvingMonth: null }); advanceStep() }}
         onBack={stepBack}
         onExit={exitSaved}
       />
@@ -188,7 +187,6 @@ export function FarmWizard({ startAt, onExit, onSell }: Props) {
         value={w.young}
         setValue={(v: YoungAnswer) => sw({ young: v })}
         onNext={() => { persistFarmField({ young: w.young }); advanceStep() }}
-        onSkip={() => { sw({ young: '' }); advanceStep() }}
         onBack={stepBack}
         onExit={exitSaved}
       />
@@ -203,7 +201,6 @@ export function FarmWizard({ startAt, onExit, onSell }: Props) {
       willBuildPlan={willBuildPlan}
       setValue={(v: HousingAnswer) => sw({ housing: v })}
       onNext={() => { persistFarmField({ housing: w.housing }); advanceStep() }}
-      onSkip={() => { sw({ housing: '' }); advanceStep() }}
       onBack={stepBack}
       onExit={exitSaved}
     />
