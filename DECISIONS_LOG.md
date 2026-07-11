@@ -3646,3 +3646,13 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: peer-чек D-DEP-BUMP-01 (react 18.3.1 deduped, invalid только известный v5-остров); живой прогон: диалог вопрос→ответ, маршрутизация мока починена («чем кормить бычков» → кормовой ответ, не ценовой), голубой фон инпута дефолтной темы kit перекрыт (гоча: __content-editor-container). tsc чистый.
 
 **Files**: package.json (+@chatscope/*), `src/pages/cabinet/shell/{screens/ConsultantScreen.tsx,messages-chatscope.css,messages-proto.css,components/IonShellFrame.tsx,data/threads.ts,CabinetApp.tsx}`, `Docs/{AGOS-DesignRules-FarmerCabinet.md (R-19),AGOS-Farmer-Redesign-Handoff.md}`.
+
+### 2026-07-11: Chatscope распространён на список тредов и ленты (ARS-231, R-19 доп.)
+
+**What**: По уточнению CEO («дизайн чатов плохой относился и к спискам/лентам») MessagesScreen переведён на Chatscope ConversationList (Conversation + Conversation.Content: наш превью/mini-CTA/unread), ThreadScreen — на MessageList + MessageSeparator + Message.CustomContent (доменный пузырь; pin «ТРЕБУЕТ РЕШЕНИЯ» = amber через .cs-message.thr-pin). Теперь ВСЕ 3 поверхности сообщений на kit. Мёртвый CSS старой ручной вёрстки (.thr-list/.thr/.thr-badge/.msg/.msg-b/.msg-day) удалён (HS-4).
+
+**Why**: единообразие — вся чат-механика из одного проверенного источника; доменная логика (threads.ts, хендлеры decH, дисклеймеры) не тронута.
+
+**Verify**: tsc + build чистые; живой прогон с реальным логином (QA-аккаунт, удалён после): список на ConversationList визуально идентичен прежнему, лента TURAN (разделитель/пузыри/дисклеймер ст.171/«Написать в TURAN» → форма) работает, действие внутри CustomContent срабатывает, amber-pin подтверждён DOM-пробой (bg #fbfaf6 → amber-tint при .thr-pin). Гоча: MessageList валидирует тип прямых детей — Message рендерим функцией renderBubble(), не компонентом (обёртка даёт варнинг). Консоль чистой вкладки — без ошибок.
+
+**Files**: `src/pages/cabinet/shell/{screens/{MessagesScreen,ThreadScreen}.tsx,messages-chatscope.css,messages-proto.css}`, `Docs/{AGOS-DesignRules-FarmerCabinet.md (R-19 доп.),AGOS-Farmer-Redesign-Handoff.md}`.

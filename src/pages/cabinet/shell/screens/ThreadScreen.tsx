@@ -1,19 +1,25 @@
-// AgOS · ARS-231 · Тред модуля (Рынок / Ферма / TURAN) — порт app/messages.jsx ThreadScreen.
-// Лента = проекция событий модуля: pinned «ТРЕБУЕТ РЕШЕНИЯ» + сообщения дня.
-// Кнопки pinned зовут те же хендлеры, что ярусы Главной (один объект — две поверхности).
+// AgOS · ARS-231 · Тред модуля (Рынок / Ферма / TURAN) на Chatscope MessageList
+// (решение CEO 2026-07-11, R-19). Лента = проекция событий модуля: pinned «ТРЕБУЕТ РЕШЕНИЯ»
+// + сообщения дня. Доменный пузырь рендерится через Message.CustomContent — kit даёт
+// скролл/группировку/каркас, содержимое (текст, действия, дисклеймеры) наше. Кнопки зовут
+// те же хендлеры, что ярусы Главной (один объект — две поверхности).
 
+import { ChatContainer, MessageList, Message, MessageSeparator } from '@chatscope/chat-ui-kit-react'
 import { IonShellFrame } from '../components/IonShellFrame'
 import { PhIcon } from '../components/icons/PhIcon'
 import { TuranStar } from '../components/icons/TuranStar'
 import { ThreadAv } from '../components/ThreadAv'
 import { MSG_META, buildThreadMsgs, type ThreadEnv, type ThreadId, type ThreadMsg } from '../data/threads'
 
-function MsgBubble({ m }: { m: ThreadMsg }) {
+// Message рендерим ФУНКЦИЕЙ, не компонентом: Chatscope MessageList валидирует тип
+// прямых детей (allowed: Message/MessageGroup/MessageSeparator) — обёртка-компонент
+// отвергается варнингом. Функция возвращает элемент с type===Message → проходит.
+function renderBubble(m: ThreadMsg) {
   const acts = m.actions ?? []
   const hasFooter = acts.length > 0 || m.open
   return (
-    <div className="msg">
-      <div className={'msg-b' + (m.pin ? ' pin' : '')}>
+    <Message key={m.id} model={{ direction: 'incoming', position: 'single' }} className={m.pin ? 'thr-pin' : undefined}>
+      <Message.CustomContent>
         <div className="msg-t">{m.t}</div>
         {m.s && <div className="msg-s">{m.s}</div>}
         {hasFooter && (
@@ -29,8 +35,8 @@ function MsgBubble({ m }: { m: ThreadMsg }) {
           </div>
         )}
         {m.time && <div className="msg-time">{m.time}</div>}
-      </div>
-    </div>
+      </Message.CustomContent>
+    </Message>
   )
 }
 
@@ -47,22 +53,24 @@ export function ThreadScreen({ tid, env, onBack, onAsk }: Props) {
   const pinned = msgs.filter((x) => x.pin)
   const feed = msgs.filter((x) => !x.pin)
   return (
-    <IonShellFrame noTabs label={'Сообщения · тред ' + m.n}>
-      <div className="mk">
+    <IonShellFrame noTabs noScroll label={'Сообщения · тред ' + m.n}>
+      <div className="ai-chat">
         <div className="thr-head">
           <button className="thr-back" title="Сообщения" onClick={onBack}><PhIcon name="chevronLeft" size={20} /></button>
           <ThreadAv tid={tid} size={16} />
           <div className="thr-head-t"><b>{m.n}</b><span>{m.sub}</span></div>
           <button className="thr-ask" title="Спросить Консультанта" onClick={onAsk}><TuranStar size={16} /></button>
         </div>
-        {pinned.length > 0 && (
-          <>
-            <div className="msg-day">ТРЕБУЕТ РЕШЕНИЯ · ЗАКРЕПЛЕНО</div>
-            {pinned.map((x) => <MsgBubble key={x.id} m={x} />)}
-          </>
-        )}
-        <div className="msg-day">СЕГОДНЯ</div>
-        {feed.map((x) => <MsgBubble key={x.id} m={x} />)}
+        <ChatContainer className="ai-cs thr-cs">
+          <MessageList>
+            {pinned.length > 0 && (
+              <MessageSeparator>ТРЕБУЕТ РЕШЕНИЯ · ЗАКРЕПЛЕНО</MessageSeparator>
+            )}
+            {pinned.map(renderBubble)}
+            <MessageSeparator>СЕГОДНЯ</MessageSeparator>
+            {feed.map(renderBubble)}
+          </MessageList>
+        </ChatContainer>
       </div>
     </IonShellFrame>
   )

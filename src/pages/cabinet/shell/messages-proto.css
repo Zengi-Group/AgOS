@@ -11,12 +11,7 @@
 .agos-cabinet-stage .thr-av.tone-green { background: color-mix(in srgb, var(--green) 13%, transparent); color: var(--green); }
 .agos-cabinet-stage .thr-av.tone-neutral { background: var(--bg-m); color: var(--fg2); border: 1px solid var(--bd); }
 
-/* список тредов */
-.agos-cabinet-stage .thr-list { display: flex; flex-direction: column; padding-top: 6px; }
-.agos-cabinet-stage .thr { display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; background: none; border: none;
-  border-top: 1px solid var(--bd-s); padding: 13px 0; cursor: pointer; font-family: inherit; transition: opacity 60ms var(--ease); }
-.agos-cabinet-stage .thr:first-child { border-top: none; }
-.agos-cabinet-stage .thr:active { opacity: 0.6; }
+/* доменный контент строки треда (внутри Chatscope Conversation.Content, R-19) */
 .agos-cabinet-stage .thr-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .agos-cabinet-stage .thr-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .agos-cabinet-stage .thr-n { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--fg); }
@@ -29,8 +24,6 @@
   border: 1px solid var(--bd-h); color: var(--fg); background: transparent; line-height: 1; transition: background 60ms var(--ease); }
 .agos-cabinet-stage .thr-mini-btn:hover { background: var(--bg-m); }
 .agos-cabinet-stage .thr-mini-btn.primary { background: var(--cta); color: var(--cta-fg); border-color: var(--cta); }
-.agos-cabinet-stage .thr-badge { min-width: 19px; height: 19px; padding: 0 6px; border-radius: var(--r-full); background: var(--red); color: #fff;
-  font-size: 10.5px; font-weight: 600; display: grid; place-items: center; flex-shrink: 0; margin-top: 2px; }
 .agos-cabinet-stage .thr-foot { font-size: 11px; color: var(--fg3); line-height: 1.5; padding: 18px 2px 4px; border-top: 1px solid var(--bd-s); margin-top: 6px; }
 
 /* шапка треда / консультанта */
@@ -47,14 +40,8 @@
   background: var(--bg-c); display: grid; place-items: center; cursor: pointer; transition: all 60ms var(--ease); }
 .agos-cabinet-stage .thr-ask:hover { background: var(--bg-m); border-color: var(--bd-h); }
 
-/* день-разделитель */
-.agos-cabinet-stage .msg-day { font-size: 9.5px; font-weight: 600; letter-spacing: 0.07em; color: var(--fg3); text-align: center; padding: 12px 0 9px; }
-
-/* пузырь события — плоский, без тени; иерархия по бордюру и фону */
-.agos-cabinet-stage .msg { display: flex; margin-bottom: 7px; }
-.agos-cabinet-stage .msg-b { max-width: 88%; background: var(--bg-c); border: 1px solid var(--bd); border-radius: 3px var(--r-xl) var(--r-xl) var(--r-xl);
-  padding: 11px 13px 10px; }
-.agos-cabinet-stage .msg-b.pin { border-color: color-mix(in srgb, var(--amber) 45%, var(--bd)); background: color-mix(in srgb, var(--amber) 7%, var(--bg-c)); }
+/* содержимое пузыря ленты (внутри Chatscope Message.CustomContent, R-19):
+   каркас/фон/бордюр даёт .cs-message__content (messages-chatscope.css). */
 .agos-cabinet-stage .msg-t { font-size: 13px; color: var(--fg); line-height: 1.5; }
 .agos-cabinet-stage .msg-s { font-size: 11.5px; color: var(--fg3); line-height: 1.45; margin-top: 4px; }
 
