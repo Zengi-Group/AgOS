@@ -3,6 +3,15 @@
 > Формат: SQL rollback-tx (паттерн `tests/tsp_happy_path_test.sql`: полный прогон в
 > транзакции с ROLLBACK — ноль мутаций, можно гнать на проде). Каждый сьют при успехе
 > делает `RAISE 'XXX_TEST_PASS'`. Это основной слой автоматизации FSM-переходов.
+>
+> **⚠ Ловушка (FARM-02-bis, 2026-07-11):** rollback-tx через MCP `execute_sql`/psql
+> запускается с привилегированного подключения БЕЗ `session_preload_libraries=safeupdate`.
+> Supabase накладывает этот гард только на API-роли (`authenticated`/`service_role`) — RPC
+> с DELETE/UPDATE без явного WHERE (даже на temp-таблице) пройдёт rollback-tx зелёным и
+> упадёт `21000` при КАЖДОМ реальном вызове через приложение. `rpc_start_production_plan`
+> был именно таким случаем — «зелёный» e2e маскировал функцию, которая никогда не
+> срабатывала для настоящих фермеров. Для RPC с DELETE/UPDATE — проверять ДОПОЛНИТЕЛЬНО
+> через настоящую authenticated-сессию (см. `scripts/seed_farmer.mjs`), не только rollback-tx.
 
 ---
 
@@ -61,12 +70,21 @@
 
 #### E2E-FARM-01 · HAPPY · Узел 1: порог → генерация draft-ЦТК → читатель плана
 `layer:sql` `canon:F-D11/F-D12/F-D14;D78` `impl:d05_ops_edu.sql;d07_ai_gateway.sql` `auto:candidate:sql` `status:active`
-- **Шаги (rollback-tx):** ферма с записью в user_organization_roles; herd_groups += COW>0
+- **Шаги (rollback-tx ДЛЯ ЧТЕНИЯ; генерация — через настоящую authenticated-сессию, см. ловушку
+  выше):** ферма с записью в user_organization_roles; herd_groups += COW>0
   (`data_source='platform'`, confidence 75); `farms.calving_system='spring'` →
   `rpc_generate_plan_from_profile(org, farm, 3, actor)` → `rpc_get_production_plan(org, farm, 'any')`.
 - **Ожидание:** `generated:true`, шаблон `BEEF_COW_CALF_KZ`, `cycle_start_date` = 1-е число
   месяца отёла (D78); читатель возвращает draft-план (`plan_id`/`plan_name`/`status='draft'`/
-  даты + `phases[]`, каждая с `task_counts{total,completed,overdue}`). Транзакция откатывается.
-- **Регресс-защита:** 42803 `aggregate function calls cannot be nested` в
-  `rpc_get_production_plan` (FARM-01-bis, пофикшен ARS-215) — до фикса читатель падал на
-  ЛЮБОМ существующем плане. Прогон 2026-07-11: PASS (15 фаз, первая «Туровые отёлы», 5 задач).
+  даты + `phases[]`, каждая с `task_counts{total,completed,overdue}`).
+- **Регресс-защита ×2:**
+  (1) 42803 `aggregate function calls cannot be nested` в `rpc_get_production_plan`
+  (FARM-01-bis) — до фикса читатель падал на ЛЮБОМ существующем плане;
+  (2) 21000 `DELETE requires a WHERE clause` в `fn_generate_production_plan`
+  (FARM-02-bis) — `delete from _phase_code_map` (temp-таблица) блокировался Supabase
+  `safeupdate`-гардом для API-ролей; генерация падала при КАЖДОМ реальном вызове через
+  приложение, маскировалось graceful-фоллбэком мастера на F7 (ARS-213 «Done» с 2026-07-10
+  фактически никогда не работал для настоящих фермеров). Оба — d05/d07, пофикшены ARS-215.
+- **Прогон 2026-07-11 (проверено ДВАЖДЫ — привилегированный psql И authenticated-сессия
+  через `scripts/seed_farmer.mjs`):** PASS — draft «ЦТК 2027», 15 фаз, первая «Туровые
+  отёлы» (5 задач); подтверждено живым скриншотом state C в браузере (see FARM-TAB-03).

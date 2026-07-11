@@ -3383,7 +3383,12 @@ begin
         start_date  date    not null,
         end_date    date    not null
     ) on commit drop;
-    delete from _phase_code_map;
+    -- FARM-02-bis (ARS-215): DELETE без WHERE блокируется Supabase safeupdate-гардом для
+    -- API-ролей (authenticated/service_role) — функция падала 21000 при ЛЮБОМ реальном
+    -- вызове через rpc.*, работала только с прямого psql-подключения (маскировалось
+    -- graceful-фоллбэком мастера на F7 «Стадо записано» — план молча не создавался никогда).
+    -- TRUNCATE не подпадает под гард и корректен для temp-таблицы в транзакции.
+    truncate _phase_code_map;
 
     -- ── 3. СОЗДАТЬ FarmProductionPlan ────────────────────────
     v_cycle_end_date := p_plan_start_date + (v_cycle_days - 1);
