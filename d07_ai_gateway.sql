@@ -282,6 +282,9 @@ begin
             'start_date',  fpp.cycle_start_date,
             'end_date',    fpp.cycle_end_date,
             'phases', (
+                -- FARM-01-bis (ARS-215): счётчики задач в lateral-подзапросе —
+                -- count() внутри jsonb_agg() = вложенные агрегаты (42803), функция
+                -- падала на ЛЮБОМ существующем плане. Payload не изменён.
                 select coalesce(jsonb_agg(jsonb_build_object(
                     'phase_id',      fph.id,
                     'name',          fph.name_ru,
@@ -289,16 +292,19 @@ begin
                     'start_date',    fph.start_date,
                     'end_date',      fph.end_date,
                     'is_sale_phase', fph.is_sale_phase,
-                    'task_counts', jsonb_build_object(
+                    'task_counts',   tc.counts
+                ) order by fph.start_date), '[]'::jsonb)
+                from   public.farm_phases fph
+                cross  join lateral (
+                    select jsonb_build_object(
                         'total',     count(ft.id),
                         'completed', count(ft.id) filter (where ft.status = 'completed'),
                         'overdue',   count(ft.id) filter (where ft.status = 'overdue')
-                    )
-                ) order by fph.start_date), '[]'::jsonb)
-                from   public.farm_phases fph
-                left   join public.farm_tasks ft on ft.farm_phase_id = fph.id
+                    ) as counts
+                    from   public.farm_tasks ft
+                    where  ft.farm_phase_id = fph.id
+                ) tc
                 where  fph.plan_id = fpp.id
-                group  by fph.id
             )
         )
         from   public.farm_production_plans fpp

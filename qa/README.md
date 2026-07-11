@@ -21,6 +21,7 @@ qa/
     06-tsp-mpk.md            — TSPM-* сторона МПК: заявка-пул, офферы, underfill, приёмка
     07-security-cross.md     — SEC-*  RLS, гейты, раскрытие контактов, антитраст, deep-link
     08-backend-e2e.md        — E2E-*  сквозные backend-прогоны (SQL rollback-tx)
+    09-farm.md               — FARM-* таб «Ферма»: состояния F0a/F0b/C, мастер, финалы F7/F8
 ```
 
 ## 2. Формат кейса
