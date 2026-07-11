@@ -3,6 +3,18 @@
 > Maintained by: Architect & Coordinator Agent
 > Format: WHAT was decided → WHY (alternatives considered) → CONSEQUENCES (what becomes easy/hard)
 
+### 2026-07-11: Рынок — оффер вступления (гейт не-члена) в блоб-язык empty-state (R-24)
+
+**What**: `SellGate` (заглушка вкладки «Рынок» для не-члена, скриншот CEO) переведён из старой пунктирной прямоугольной рамки (`.sell-gate`) в канонический блоб-язык empty-state: органичный блоб `.mk-empty-art` + PhIcon `market`, заголовок 18px/700, контент по центру, флаг-чеки в центрированной колонке, тёмный CTA. Новые классы `.mk-offer*` в `market-proto.css`; `.gate-list/.gate-row/.gate-ck` (осиротели) удалены из `cabinet.css`. `.sell-gate` сохранён — им ещё пользуется `ApprovedPlate` (транзакционная плашка «оплатите взнос»), которая осознанно остаётся компактной. Все состояния членства (pending/rejected/note/CTA) и пропсы — без изменений (HS-2/HS-5, аддитивно).
+
+**Why**: правка CEO «улучши Empty State вкладки Рынок → офер на вступление». Экран был портом прототипа и не получил daylight-редизайн — пунктирная рамка прямо нарушала R-6/UI-EMPTYSTATE-01 («рамка → блоб») и §4 канона. Применено уже принятое правило R-6 к пропущенному экрану; зафиксировано новым правилом R-24 (гейты/оферы = блоб, не рамка), чтобы не повторилось.
+
+**Verify**: dev-preview (порт 5188, mobile 375×812) через временный демо-роут `/cabinet-demo` + `INITIAL_STATE.membership='none'` (оба отката сделаны) — гейт рендерится с блобом, заголовком, чек-листом и тёмным CTA, консистентно с members-empty ниже. Временный `npm install` в воркри подтянул объявленный, но не установленный `@chatscope/*` (#73) — не бамп, синхронизация. SQL не тронут → `cross_check.sh` не нужен.
+
+**Files**: `src/pages/cabinet/shell/screens/MarketScreen.tsx`, `src/pages/cabinet/shell/market-proto.css`, `src/pages/cabinet/shell/cabinet.css`, `Docs/AGOS-DesignRules-FarmerCabinet.md` (R-24). Ветка `claude/market-offers-empty-state-903207` (worktree `phone-field-design-0cc909`).
+
+---
+
 ### 2026-07-10: Плавность и восприятие скорости нативного фермера — 4 слайса (ARS-216 · P-1..P-4)
 
 **What**: Аудит (/feature, 4 параллельных агента) показал, что «тормозит» = 3 явления. Пофикшено 4 аддитивными слайсами: **P-1 (ARS-217)** — весь admin/expert/consulting/legacy-cabinet + `MpkApp` переведены в `lazy()` в `App.tsx` (было eager static-import → падали в entry-чанк фермера; гейт `!IS_NATIVE` рантайм, код не вырезал); `manualChunks` в `vite.config.ts` (recharts/ionic/radix/supabase/i18n); шрифты 9→7 семейств из render-blocking `@import` (index.css) в `<link>` (index.html), убраны неиспользуемые Cormorant/DM Sans. **P-2 (ARS-218)** — `BootScreen` (брендовая марка + фон-токен `--boot-bg=#fdf6ee`) заменил белые провалы `null`/голый Loader2 на всём пути в кабинет (`NativeEntry`, `Suspense` /cabinet+/mpk, `RequireAuth`, `profileLoading`); инлайн-плейсхолдер в `#root` (index.html) — первый кадр не пустой. **P-3 (ARS-219)** — `ScreenSkeleton` (силуэты home/market/list/batch, переиспользует `.skel-blk`) вместо дженерик `SkeletonBlocks` (удалён); `ListScreen` получил `loading` (скелет вместо ложного «Партий нет»); `renderBatch`/`renderReview` — скелет при `loading && !found` вместо ложного «не найдена»; Home gated на `farmLoaded` (нет вспышки демо-сида). **P-4 (ARS-220)** — единый постоянный `IonTabs`+`IonTabBar` (CabinetApp) вместо per-page таб-бара в `IonShellFrame` (хрома не пересобирается при переходах); бар скрыт на детальных экранах через `hideTabBar` (route-based) — прежний фуллскрин-UX сохранён (решение CEO); `ShellTabBarIon` удалён.
@@ -3730,3 +3742,22 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Impact**: это не узкий баг ARS-215 — это откат в самое сердце фичи, которую ARS-213 уже объявил «Done» два дня назад. Урок: **верификация RPC через привилегированное SQL-подключение (MCP execute_sql/psql) не эквивалентна вызову через реальный API-путь** — Supabase накладывает гарды (safeupdate и подобные) только на API-роли. Для любого RPC, который делает DELETE/UPDATE без явного WHERE (даже на temp-таблице), нужна проверка через настоящую authenticated-сессию, не только rollback-tx с суперпользователя.
 
 **Files**: `d05_ops_edu.sql` (`fn_generate_production_plan`), `scripts/seed_farmer.mjs` (новый, переиспользуемый QA-фикстур).
+### 2026-07-11: Переключатель входа/регистрации → общий атом AuthAltAction (R-25)
+
+**What**: По правке CEO «"Есть аккаунт? Войти" реализован принципиально плохо» — элемент был инлайн-версткой ×3 (Login/Contact/RoleSelect): full-width невидимая кнопка с кликабельным префиксом и `›`-шевроном, на RoleSelect ещё и без дока. Введён единственный примитив `AuthAltAction` в `auth-ui/primitives.tsx` (префикс — тихая `fg3` некликабельная подпись; тап-таргет — только слово-действие, accent, 44pt; без шеврона — это кросс-линк, не drill-down). Все три экрана переведены на него в `StickyDock` под primary CTA (RoleSelect обёрнут в StickyDock; AuthBody даёт 140px нижнего клиренса). Правило R-25.
+
+**Why**: дублирование одного интерактива инлайн-стилями разъезжается и заставляет правку повторяться (урок R-13); шеврон `›` — сигнификатор drill-down, неверный для кросс-линка между входами (на карточках ролей `›` остаётся — там он корректен).
+
+**Verify**: tsc по изменённым файлам чист (ошибки только в chatscope-модуле — не установлен в воркри, к правке не относится); живые скриншоты `/login` («Нет аккаунта? Зарегистрироваться») и `/register`-Contact («Есть аккаунт? Войти») — приглушённый префикс + амбер-действие в доке под CTA, без шеврона; консоль без ошибок. RoleSelect — тот же атом, верифицирован по построению (достижим только через OTP-флоу).
+
+**Files**: `src/lib/auth-ui/primitives.tsx`, `src/pages/auth/Login.tsx`, `src/pages/registration/steps/{Contact,RoleSelect}.tsx`, `Docs/AGOS-DesignRules-FarmerCabinet.md (R-25)`.
+
+### 2026-07-11: Канон дизайна → merge=union + CHECK 10 (конец конфликтам R-N в параллельных PR)
+
+**What**: Каждый дизайн-PR конфликтовал в `Docs/AGOS-DesignRules-FarmerCabinet.md` — все ветки от одной базы аппендят строку R-N в хвост реестра (и секцию в DECISIONS_LOG). Лог уже был на `merge=union` (не конфликтовал); канон — нет. Добавил `Docs/AGOS-DesignRules-FarmerCabinet.md merge=union` в `.gitattributes`. Побочка union — молчаливое слияние двух одинаковых R-N (в этом же rebase поймали R-24 дважды: #75 и наш) — закрыта новым `CHECK 10` в `cross_check.sh` (падает SIGNIFICANT на дублях R-N).
+
+**Why**: конфликт был чисто механический (append в одну строку), не смысловой — union его убирает. Но union слепа к дублю ID в реестре с монотонным счётчиком → нужен guard. Пара «union + CHECK 10» = нет мусорных конфликтов и нет тихих дублей.
+
+**Verify**: `bash -n cross_check.sh` ок; `git check-attr merge` → union на обоих журналах; CHECK 10 на текущем каноне → «R-N уникальны». Данный PR перенумерован R-24→R-25 (R-24 занят #75).
+
+**Files**: `.gitattributes`, `cross_check.sh` (CHECK 10).

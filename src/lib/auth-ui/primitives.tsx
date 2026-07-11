@@ -225,6 +225,45 @@ export function CTA({
   )
 }
 
+/**
+ * Переключатель фаннела: «Есть аккаунт? Войти» / «Нет аккаунта? Зарегистрироваться».
+ * Живёт в доке под primary CTA (R-13/R-24). Префикс — тихая НЕкликабельная подпись;
+ * тап-таргет — только слово-действие (accent, 44pt). Без `›`-шеврона: это кросс-линк
+ * между входами, не drill-down (шеврон закреплён за карточками-переходами вглубь).
+ */
+export function AuthAltAction({
+  prefix,
+  action,
+  onClick,
+}: {
+  prefix: string
+  action: string
+  onClick: () => void
+}) {
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <span style={{ fontSize: 15, color: T.fg3, fontFamily: T.font }}>{prefix} </span>
+      <button
+        onClick={onClick}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          padding: '10px 8px',
+          minHeight: 44,
+          color: T.accent,
+          fontWeight: 600,
+          fontSize: 15,
+          fontFamily: T.font,
+          cursor: 'pointer',
+          WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        {action}
+      </button>
+    </div>
+  )
+}
+
 /* iOS-inline поле: uppercase-лейбл + контент + подсказка */
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (

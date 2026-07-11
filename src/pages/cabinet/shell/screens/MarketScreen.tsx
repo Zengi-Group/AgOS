@@ -19,11 +19,12 @@ function SellGate({ membership, onApply }: { membership: MembershipStatus; onApp
     ? 'Заявка на рассмотрении. Ответим в течение 3 рабочих дней.'
     : membership === 'rejected' ? 'Заявка отклонена: нужна выписка о регистрации хозяйства.' : null
   return (
-    <div className="sell-gate">
-      <div className="sg-t">Продажа партий — для членов ассоциации TURAN</div>
-      <div className="gate-list">
+    <div className="mk-offer">
+      <div className="mk-empty-art"><PhIcon name="market" size={46} /></div>
+      <div className="mk-offer-h">Продажа партий — для членов ассоциации TURAN</div>
+      <div className="mk-offer-list">
         {['Покупатели-комбинаты без посредников', 'Справочные цены по категориям', 'Защита сделки ассоциацией'].map((t) => (
-          <div className="gate-row" key={t}><span className="gate-ck"><PhIcon name="check" size={14} color="var(--green)" /></span>{t}</div>
+          <div className="mk-offer-row" key={t}><span className="mk-offer-ck"><PhIcon name="check" size={15} color="var(--green)" /></span>{t}</div>
         ))}
       </div>
       {note
