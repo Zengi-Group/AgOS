@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { T } from '@/lib/auth-ui/tokens'
-import { H1, Lede, Field, inputStyle, StickyDock, CTA } from '@/lib/auth-ui/primitives'
+import { H1, Lede, Field, inputStyle, StickyDock, CTA, AuthAltAction } from '@/lib/auth-ui/primitives'
 import { OtpInput } from '../components/OtpInput'
 import { PhonePicker } from '@/components/PhonePicker'
 import { maskPhoneE164 } from '@/lib/phone'
@@ -188,12 +188,7 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
         <CTA disabled={isSending} onClick={handleSendOtp}>
           {isSending ? 'Отправка…' : 'Получить код'}
         </CTA>
-        <button
-          onClick={() => navigate('/login')}
-          style={{ display: 'block', width: '100%', background: 'transparent', border: 'none', padding: '12px 16px 0', minHeight: 44, color: T.fg2, fontFamily: T.font, fontSize: 15, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
-        >
-          Есть аккаунт? <span style={{ color: T.accent, fontWeight: 500 }}>Войти ›</span>
-        </button>
+        <AuthAltAction prefix="Есть аккаунт?" action="Войти" onClick={() => navigate('/login')} />
       </StickyDock>
     </>
   )
