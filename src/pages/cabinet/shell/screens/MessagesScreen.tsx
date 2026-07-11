@@ -20,7 +20,7 @@ export function MessagesScreen({ env, loading, onOpen }: Props) {
   const threads = buildThreadList(env)
   return (
     <IonShellFrame label="Сообщения · треды">
-      <TabHead title="Сообщения" />
+      <TabHead title="Сообщения" noAccount />
       <div className="mk">
         {loading ? <ScreenSkeleton variant="list" /> : (
           <>
@@ -28,32 +28,25 @@ export function MessagesScreen({ env, loading, onOpen }: Props) {
               {threads.map((th) => {
                 const m = MSG_META[th.tid]
                 return (
-                  <Conversation
-                    key={th.tid}
-                    unreadCnt={th.unread > 0 ? th.unread : undefined}
-                    onClick={() => onOpen(th.tid)}
-                  >
+                  <Conversation key={th.tid} onClick={() => onOpen(th.tid)}>
                     <Avatar><ThreadAv tid={th.tid} /></Avatar>
                     <Conversation.Content>
                       <div className="thr-body">
-                        <div className="thr-top">
+                        <div className="thr-line">
                           <span className="thr-n">{m.n}</span>
                           {th.time && <span className="thr-time">{th.time}</span>}
                         </div>
-                        <div className={'thr-prev' + (th.unread > 0 ? ' unread' : '')}>{th.prev}</div>
-                        {th.interactive && env.h && (
+                        <div className="thr-line2">
+                          <div className={'thr-prev' + (th.unread > 0 ? ' unread' : '')}>{th.prev}</div>
+                          {th.unread > 0 && <span className="thr-badge mono">{th.unread}</span>}
+                        </div>
+                        {th.cta && (
                           <div className="thr-cta-row">
                             <span
-                              className="thr-mini-btn primary" role="button" tabIndex={0}
-                              onClick={(e) => { e.stopPropagation(); env.h.lower(th.interactive!) }}
+                              className="thr-cta" role="button" tabIndex={0}
+                              onClick={(e) => { e.stopPropagation(); th.cta!.fn() }}
                             >
-                              Снизить цену
-                            </span>
-                            <span
-                              className="thr-mini-btn" role="button" tabIndex={0}
-                              onClick={(e) => { e.stopPropagation(); env.h.open(th.interactive!) }}
-                            >
-                              Варианты
+                              {th.cta.t}
                             </span>
                           </div>
                         )}
