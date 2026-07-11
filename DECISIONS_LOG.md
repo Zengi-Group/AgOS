@@ -3626,3 +3626,33 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: tsc чистый; живой прогон preview 375px (QA +77000001999, создан bird-otp, удалён после — оба слоя верифицированы): «Весной» → 4 чипа фев–май; «фев» → амбер-выбор (inset ring подтверждён inspect); «другой месяц» → грид 4×3 с сохранённым выбором; «Осенью» → сен/окт/ноя, месяц сброшен; F1 — без иконки, черновик восстанавливается.
 
 **Files**: `src/pages/cabinet/shell/farm/wizard/{FwStepCalving,FwStepHerd,FwShell}.tsx`, `src/pages/cabinet/shell/market-proto.css`, `Docs/AGOS-Dok6-Slice7-Farm-Wizard.md` (SCR-F3 + §6), `Docs/AGOS-DesignRules-FarmerCabinet.md` (R-16…R-18).
+
+### 2026-07-11: Сообщения кабинета — треды модулей + AI-консультант (ARS-231, Phase 6 редизайна)
+
+**What**: `/cabinet/messages` и `/cabinet/thread/:tid` из заглушек стали рабочими экранами — порт Фазы 03 прототипа (`app/messages.jsx`): 4 треда «каждый модуль — собеседник» (Консультант AI · Рынок · Ферма · TURAN, паттерн Kaspi, D-NAV-11), pinned «ТРЕБУЕТ РЕШЕНИЯ» с хендлерами ярусов Главной («один объект — две поверхности»), дайджест вместо пустого треда, AI-чат с моком aiReply. Тред TURAN = лента; форма обращения выделена в route `turan` (TuranScreen сохранён, доступен из ленты). Бейдж таба «Сообщения» теперь включает decision-партии.
+
+**Why**: слой уведомлений спроектирован (D68, Dok 4, воркер жив), но фермеру негде было читать in-app события; концепция тредов уже была решена в прототипе — G2 подтверждён CEO скриншотом этого экрана. НЕ «центр уведомлений» — осознанное решение прототипа.
+
+**Verify**: tsc + vite build чистые; живой прогон с реальным логином (синтетический QA-аккаунт +77000002311, удалён после): список тредов с бейджами, гашение непрочитанных по входу, тред TURAN (членство/справочные цены с дисклеймером ст. 171/«Написать в TURAN» → форма), AI-чат вопрос→ответ по справочным ценам. Консоль без ошибок.
+
+**Files**: `src/pages/cabinet/shell/{data/threads.ts,screens/{MessagesScreen,ThreadScreen,ConsultantScreen}.tsx,components/ThreadAv.tsx,messages-proto.css,CabinetApp.tsx,nav.ts}`, `Docs/AGOS-Farmer-Redesign-Handoff.md`.
+
+### 2026-07-11: Чат-механика кабинета — Chatscope; транспорт AI — Vercel AI SDK (ARS-231, R-19)
+
+**What**: По фидбеку CEO («дизайн интерфейса чатов очень плохой — смотрим готовые библиотеки») проанализированы 5 вариантов: Chatscope (принят), React Chat Elements (отклонён: peer-гвоздь react-dom 18.2.0 + HugeIcons против Phosphor-only + дизайн 2017), Gifted Chat (отклонён: React Native, у нас Capacitor), Chatbot UI (отклонён: приложение-шаблон Next.js, мертво с 08-2024), Vercel AI SDK (принят НЕ как UI, а как транспорт реального Консультанта — useChat к AI Gateway, отдельная задача). ConsultantScreen переведён на @chatscope/chat-ui-kit-react + тема messages-chatscope.css (cs-* → daylight-токены); FontAwesome-кнопки kit отключены, свои PhIcon; IonShellFrame +noScroll. Правило R-19 в канон фермерской зоны.
+
+**Why**: чат-механика (скролл-полотно, группировка, contenteditable-инпут, typing) — решённая задача; самодельная вёрстка проигрывает по качеству и стоит дороже в поддержке. Kit ставится один раз, доменный слой (pinned-решения, действия, дисклеймеры ст. 171) остаётся нашим.
+
+**Verify**: peer-чек D-DEP-BUMP-01 (react 18.3.1 deduped, invalid только известный v5-остров); живой прогон: диалог вопрос→ответ, маршрутизация мока починена («чем кормить бычков» → кормовой ответ, не ценовой), голубой фон инпута дефолтной темы kit перекрыт (гоча: __content-editor-container). tsc чистый.
+
+**Files**: package.json (+@chatscope/*), `src/pages/cabinet/shell/{screens/ConsultantScreen.tsx,messages-chatscope.css,messages-proto.css,components/IonShellFrame.tsx,data/threads.ts,CabinetApp.tsx}`, `Docs/{AGOS-DesignRules-FarmerCabinet.md (R-19),AGOS-Farmer-Redesign-Handoff.md}`.
+
+### 2026-07-11: Chatscope распространён на список тредов и ленты (ARS-231, R-19 доп.)
+
+**What**: По уточнению CEO («дизайн чатов плохой относился и к спискам/лентам») MessagesScreen переведён на Chatscope ConversationList (Conversation + Conversation.Content: наш превью/mini-CTA/unread), ThreadScreen — на MessageList + MessageSeparator + Message.CustomContent (доменный пузырь; pin «ТРЕБУЕТ РЕШЕНИЯ» = amber через .cs-message.thr-pin). Теперь ВСЕ 3 поверхности сообщений на kit. Мёртвый CSS старой ручной вёрстки (.thr-list/.thr/.thr-badge/.msg/.msg-b/.msg-day) удалён (HS-4).
+
+**Why**: единообразие — вся чат-механика из одного проверенного источника; доменная логика (threads.ts, хендлеры decH, дисклеймеры) не тронута.
+
+**Verify**: tsc + build чистые; живой прогон с реальным логином (QA-аккаунт, удалён после): список на ConversationList визуально идентичен прежнему, лента TURAN (разделитель/пузыри/дисклеймер ст.171/«Написать в TURAN» → форма) работает, действие внутри CustomContent срабатывает, amber-pin подтверждён DOM-пробой (bg #fbfaf6 → amber-tint при .thr-pin). Гоча: MessageList валидирует тип прямых детей — Message рендерим функцией renderBubble(), не компонентом (обёртка даёт варнинг). Консоль чистой вкладки — без ошибок.
+
+**Files**: `src/pages/cabinet/shell/{screens/{MessagesScreen,ThreadScreen}.tsx,messages-chatscope.css,messages-proto.css}`, `Docs/{AGOS-DesignRules-FarmerCabinet.md (R-19 доп.),AGOS-Farmer-Redesign-Handoff.md}`.

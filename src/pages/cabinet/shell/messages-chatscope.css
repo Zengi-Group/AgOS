@@ -1,0 +1,98 @@
+/* AgOS · ARS-231 · Тема Chatscope → daylight-канон фермерской зоны.
+   Базовые стили kit (@chatscope/chat-ui-kit-styles) импортируются в CabinetApp ДО этого
+   файла; здесь — перекраска cs-* в токены .agos-cabinet-stage. FontAwesome-кнопки kit'а
+   не используются (sendButton/attachButton отключены — Phosphor-only, R-2). */
+
+/* каркас чата: экран без ion-скролла, MessageList скроллит сам */
+.agos-cabinet-stage ion-content.ion-noscroll .phone-scroll { height: 100%; padding-bottom: 10px; display: flex; flex-direction: column; }
+.agos-cabinet-stage .ai-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.agos-cabinet-stage .ai-chat .cs-chat-container { flex: 1; min-height: 0; background: transparent; }
+.agos-cabinet-stage .ai-dock { padding-top: 8px; background: var(--bg); }
+
+/* полотно сообщений */
+.agos-cabinet-stage .cs-chat-container .cs-message-list { background: transparent; font-family: inherit; }
+.agos-cabinet-stage .cs-message-list .cs-message-list__scroll-wrapper { padding: 12px 2px 6px; }
+
+/* ═══ список тредов (ConversationList) — R-19 ═══ */
+.agos-cabinet-stage .cs-conversation-list { background: transparent; border: none; font-family: inherit; padding-top: 4px; }
+.agos-cabinet-stage .cs-conversation {
+  background: transparent; border-top: 1px solid var(--bd-s); border-radius: 0;
+  padding: 13px 2px; gap: 12px; align-items: flex-start; transition: opacity 60ms var(--ease);
+}
+.agos-cabinet-stage .cs-conversation:first-child { border-top: none; }
+.agos-cabinet-stage .cs-conversation:hover,
+.agos-cabinet-stage .cs-conversation.cs-conversation:active { background: transparent; }
+.agos-cabinet-stage .cs-conversation:active { opacity: 0.6; }
+/* аватар треда: наш 42px-кружок внутри cs-avatar, без клипа/фона kit */
+.agos-cabinet-stage .cs-conversation .cs-avatar { width: 42px; height: 42px; min-width: 42px; background: transparent; overflow: visible; }
+.agos-cabinet-stage .cs-conversation .cs-conversation__content { margin: 0; }
+/* unread-бейдж kit → красный кружок канона */
+.agos-cabinet-stage .cs-conversation__unread-dot,
+.agos-cabinet-stage .cs-conversation__unread {
+  background: var(--red); color: #fff; box-shadow: none;
+  min-width: 19px; height: 19px; padding: 0 6px; border-radius: var(--r-full);
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; align-self: center;
+}
+
+/* день-разделитель kit → как .msg-day (мелкие капсы, без линий) */
+.agos-cabinet-stage .cs-message-separator {
+  background: transparent; color: var(--fg3); font-family: inherit;
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.07em; padding: 12px 0 9px;
+}
+.agos-cabinet-stage .cs-message-separator::before,
+.agos-cabinet-stage .cs-message-separator::after { display: none; }
+
+/* пузыри лент (CustomContent): база incoming наследуется от .cs-message--incoming;
+   тут — форма «хвостика» и amber-вариант pinned «ТРЕБУЕТ РЕШЕНИЯ» */
+.agos-cabinet-stage .thr-cs .cs-message--incoming .cs-message__content { border-radius: 3px var(--r-xl) var(--r-xl) var(--r-xl); }
+.agos-cabinet-stage .thr-cs .cs-message { max-width: 88%; margin-bottom: 7px; }
+.agos-cabinet-stage .thr-cs .cs-message.thr-pin .cs-message__content {
+  border-color: color-mix(in srgb, var(--amber) 45%, var(--bd));
+  background: color-mix(in srgb, var(--amber) 7%, var(--bg-c));
+}
+.agos-cabinet-stage .thr-cs .cs-message__custom-content { display: block; }
+.agos-cabinet-stage .cs-message-list .cs-message-list__scroll-wrapper > .cs-message { max-width: 88%; }
+
+/* пузыри: incoming — плоская карточка, outgoing — тёмная CTA (как канон) */
+.agos-cabinet-stage .cs-message .cs-message__content {
+  font-family: inherit; font-size: 13px; line-height: 1.5; padding: 10px 13px;
+  border-radius: var(--r-lg);
+}
+.agos-cabinet-stage .cs-message--incoming .cs-message__content {
+  background: var(--bg-c); border: 1px solid var(--bd-s); color: var(--fg); box-shadow: var(--sh-sm);
+}
+.agos-cabinet-stage .cs-message--incoming.cs-message--single .cs-message__content,
+.agos-cabinet-stage .cs-message--incoming.cs-message--last .cs-message__content { border-bottom-left-radius: 4px; }
+.agos-cabinet-stage .cs-message--outgoing .cs-message__content {
+  background: var(--cta); color: var(--cta-fg);
+}
+.agos-cabinet-stage .cs-message--outgoing.cs-message--single .cs-message__content,
+.agos-cabinet-stage .cs-message--outgoing.cs-message--last .cs-message__content { border-bottom-right-radius: 4px; }
+
+/* аватар-звезда у входящих — наш атом внутри cs-avatar */
+.agos-cabinet-stage .cs-message .cs-avatar { width: 20px; height: 20px; min-width: 20px; min-height: 20px; }
+.agos-cabinet-stage .cs-message__avatar-spacer { width: 20px; }
+
+/* «Консультант печатает» */
+.agos-cabinet-stage .cs-typing-indicator { background: transparent; padding: 4px 2px; }
+.agos-cabinet-stage .cs-typing-indicator__dot { background-color: var(--fg3); }
+.agos-cabinet-stage .cs-typing-indicator__text { color: var(--fg3); font-family: inherit; font-size: 11px; }
+
+/* инпут kit'а в нашем доке: пилюля как ai-input */
+.agos-cabinet-stage .ai-inrow .cs-message-input { flex: 1; min-width: 0; border: none; background: transparent; padding: 0; }
+.agos-cabinet-stage .cs-message-input .cs-message-input__content-editor-wrapper {
+  background: var(--bg-s); border: 1px solid var(--bd); border-radius: var(--r-full);
+  padding: 12px 15px; margin: 0; transition: border-color 60ms var(--ease);
+}
+.agos-cabinet-stage .cs-message-input .cs-message-input__content-editor-wrapper:focus-within { border-color: var(--bd-h); }
+.agos-cabinet-stage .cs-message-input .cs-message-input__content-editor-container,
+.agos-cabinet-stage .cs-message-input .cs-message-input__content-editor {
+  background: transparent; color: var(--fg); font-family: inherit; font-size: 13.5px; caret-color: var(--accent);
+}
+.agos-cabinet-stage .cs-message-input .cs-message-input__content-editor[data-placeholder]:empty::before { color: var(--fg3); }
+/* kit после отправки выделяет пустой contenteditable — селекция красила плейсхолдер
+   в браузерный синий; тонируем выделение в акцент и гасим его на пустом инпуте */
+.agos-cabinet-stage .cs-message-input .cs-message-input__content-editor::selection,
+.agos-cabinet-stage .cs-message-input .cs-message-input__content-editor *::selection { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.agos-cabinet-stage .cs-message-input .cs-message-input__content-editor:empty::selection,
+.agos-cabinet-stage .cs-message-input .cs-message-input__content-editor:empty *::selection { background: transparent; }

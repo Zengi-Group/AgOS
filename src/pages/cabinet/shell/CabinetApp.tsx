@@ -20,6 +20,10 @@ import './cabinet.css'
 import './ionic.css'
 import './shell-proto.css'
 import './market-proto.css'
+import './messages-proto.css'
+// ARS-231 (решение CEO): чат-механика — Chatscope; база kit → перекраска в daylight
+import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css'
+import './messages-chatscope.css'
 import { useAuth } from '@/hooks/useAuth'
 import { ShellCtx } from './context'
 import {
@@ -42,6 +46,11 @@ import { ListScreen } from './screens/ListScreen'
 import { BatchScreen } from './screens/BatchScreen'
 import { ReviewScreen } from './screens/ReviewScreen'
 import { TuranScreen } from './screens/TuranScreen'
+// ARS-231: сообщения — треды модулей + AI-консультант (порт Фазы 03 прототипа)
+import { MessagesScreen } from './screens/MessagesScreen'
+import { ThreadScreen } from './screens/ThreadScreen'
+import { ConsultantScreen } from './screens/ConsultantScreen'
+import { aiReply, type ThreadEnv, type ThreadH, type ThreadId } from './data/threads'
 import { LimitSheet } from './components/sheets/LimitSheet'
 import { BatchWizard } from './tsp/wizard/BatchWizard'
 import { PubResult } from './tsp/wizard/PubResult'
@@ -140,6 +149,8 @@ export function CabinetApp() {
   const [farmUnread, setFarmUnread] = useState(init.farmUnread)
   const [turanUnread, setTuranUnread] = useState(init.turanUnread)
   const [aiLog, setAiLog] = useState(init.aiLog)
+  // ARS-231: индикатор «Консультант печатает…» (мок aiReply до подключения AI Gateway)
+  const [aiTyping, setAiTyping] = useState(false)
   // Ферма: по умолчанию демо-сид (для анонима/без бэкенда). Для вошедшего аккаунта
   // ниже подгружается реальная сводка стада (rpc_get_farm_summary) и перекрывает сид.
   const [farm, setFarm] = useState(init.farm)
@@ -331,7 +342,7 @@ export function CabinetApp() {
   // Флоу-страницы (agos-flow-page: TSP-визард, результат публикации, мастер фермы) — полноэкранные,
   // без таб-бара (контракт Slice 5a/7). До P-4 (ARS-220) бар не рендерился внутри их IonPage;
   // с постоянным IonTabBar его надо прятать явно — иначе бар просвечивает под визардом.
-  const hideTabBar = (['p1list', 'batch', 'review', 'turan'] as RouteName[]).includes(route.name)
+  const hideTabBar = (['p1list', 'batch', 'review', 'turan', 'thread'] as RouteName[]).includes(route.name)
     || wizActive || !!pubResult || farmWizActive
 
   const handleLogout = async () => {
@@ -342,7 +353,10 @@ export function CabinetApp() {
   // ---------- бейджи ----------
   const marketDot = batches.some((b) => b.state === 'decision')
   const unread = notifs.filter((n) => n.unread).length
-  const msgBadge = unread + (farmUnread ? 1 : 0) + (turanUnread ? 1 : 0)
+  // ARS-231: решения (decision) считаются в бейдже сообщений — pinned «ТРЕБУЕТ РЕШЕНИЯ»
+  // треда Рынка остаётся непрочитанным, пока фермер не решит (прототип app/messages.jsx).
+  const decCount = batches.filter((b) => b.state === 'decision').length
+  const msgBadge = unread + decCount + (farmUnread ? 1 : 0) + (turanUnread ? 1 : 0)
   const avatarDot = (['approved', 'grace', 'expired'] as MembershipStatus[]).includes(membership)
 
   // ---------- AI: Консультант только с Platform Pro ----------
@@ -505,7 +519,7 @@ export function CabinetApp() {
               setPubResult({ batch, variant })
             }}
             onExit={() => setWizActive(false)}
-            onTuran={() => { setWizActive(false); go({ name: 'thread', tid: 'turan', back: { name: 'market' } }) }}
+            onTuran={() => { setWizActive(false); go({ name: 'turan', back: { name: 'market' } }) }}
           />
         </IonPage>
       )
@@ -585,7 +599,7 @@ export function CabinetApp() {
           setWizActive(true); go({ name: 'market' })
         }}
         onReview={() => go({ name: 'review', batchId: currentBatch.id, back: { name: 'batch', batchId: currentBatch.id } })}
-        onTuran={() => go({ name: 'thread', tid: 'turan', back: { name: 'batch', batchId: currentBatch.id } })}
+        onTuran={() => go({ name: 'turan', back: { name: 'batch', batchId: currentBatch.id } })}
         toast={showToast}
       />
     )
@@ -616,7 +630,7 @@ export function CabinetApp() {
       onNewsToggle={() => setNewsOn((v) => !v)}
       memberAct={memberAct}
       onBack={() => goBackTo({ name: 'home' })}
-      onTuran={() => go({ name: 'thread', tid: 'turan', back: { name: 'cabinet' } })}
+      onTuran={() => go({ name: 'turan', back: { name: 'cabinet' } })}
       onLogout={handleLogout}
       profile={profile}
     />
@@ -628,6 +642,69 @@ export function CabinetApp() {
       toast={showToast}
     />
   )
+
+  // ---------- ARS-231: Сообщения — треды модулей + AI-консультант ----------
+  // Хендлеры тредов = хендлеры ярусов Главной (один объект — две поверхности):
+  // decision решён из треда — погашен и на Главной, и в списке тредов.
+  const threadH: ThreadH = {
+    lower: decH.lower,
+    open: decH.open,
+    openId: (id) => go({ name: 'batch', batchId: id, back: routeRef.current }),
+    dispatch: decH.dispatch,
+    review: decH.review,
+    farm: decH.farm,
+    member: memberAct,
+    writeTuran: () => go({ name: 'turan', back: routeRef.current }),
+  }
+  const threadEnv: ThreadEnv = { batches, notifs, membership, farm, aiLog, farmUnread, turanUnread, newsOn, h: threadH }
+
+  // Мок Консультанта (aiReply по справочным данным TURAN) — до подключения AI Gateway (Dok 5).
+  const sendAi = (text: string) => {
+    setAiLog((l) => [...l, { who: 'u', t: text }])
+    setAiTyping(true)
+    setTimeout(() => {
+      setAiLog((l) => [...l, { who: 'c', t: aiReply(text) }])
+      setAiTyping(false)
+    }, 1100)
+  }
+
+  const renderMessages = () => (
+    <MessagesScreen
+      env={threadEnv}
+      loading={loading}
+      onOpen={(tid) => {
+        // Консультант — через openAI (гейт Platform Pro сохраняется)
+        if (tid === 'consultant') { openAI(); return }
+        go({ name: 'thread', tid, back: { name: 'messages' } })
+      }}
+    />
+  )
+
+  const renderThread = ({ match }: { match: { params: { tid: string } } }) => {
+    const raw = match.params.tid
+    if (raw === 'consultant') {
+      return (
+        <ConsultantScreen
+          aiLog={aiLog}
+          typing={aiTyping}
+          offline={offline}
+          offlineToast={offlineToast}
+          onSend={sendAi}
+          onBack={() => goBackTo(route.back ?? { name: 'messages' })}
+        />
+      )
+    }
+    const tid: Exclude<ThreadId, 'consultant'> =
+      raw === 'market' || raw === 'farm' ? raw : 'turan'
+    return (
+      <ThreadScreen
+        tid={tid}
+        env={threadEnv}
+        onBack={() => goBackTo(route.back ?? { name: 'messages' })}
+        onAsk={() => openAI()}
+      />
+    )
+  }
 
   // ARS-212: таб «Ферма» — F0 (FarmScreen) или флоу-страница мастера (зеркально renderMarket).
   // «Продать через TURAN» с Payoff-1 закрывает мастер и открывает TSP-визард на Рынке (гейт
@@ -689,8 +766,8 @@ export function CabinetApp() {
                   <RouteV5 exact path="/cabinet/farm" render={renderFarm} />
                   <RouteV5 exact path="/cabinet/shop" render={() => <PlaceholderScreen title="Маркет" sub="Дистрибуция и специалисты TURAN" icon="bag" emptySub="Дистрибуция и специалисты TURAN появятся здесь" />} />
                   <RouteV5 exact path="/cabinet/services" render={() => <PlaceholderScreen title="Сервисы" sub="Специалисты и услуги TURAN" icon="grid" emptySub="Специалисты и услуги TURAN появятся здесь" />} />
-                  <RouteV5 exact path="/cabinet/messages" render={() => <PlaceholderScreen tab title="Сообщения" sub="Треды Рынка, Фермы и TURAN" icon="chat" emptySub="Треды Рынка, Фермы и TURAN появятся здесь" />} />
-                  <RouteV5 exact path="/cabinet/thread/:tid" render={() => <PlaceholderScreen title="Сообщения" sub="Треды Рынка, Фермы и TURAN" icon="chat" emptySub="Треды Рынка, Фермы и TURAN появятся здесь" />} />
+                  <RouteV5 exact path="/cabinet/messages" render={renderMessages} />
+                  <RouteV5 exact path="/cabinet/thread/:tid" render={renderThread} />
                   {/* неизвестный под-путь → Главная (первое совпадение выигрывает) */}
                   <RouteV5 render={renderHome} />
                 </IonRouterOutlet>

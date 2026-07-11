@@ -18,13 +18,16 @@ interface Props {
   // Док-футер прототипа (ShellFrame footer/footBare) — sticky CTA над таб-баром.
   footer?: ReactNode
   footBare?: boolean
+  // ARS-231 (Chatscope): экраны со СВОИМ скроллом (MessageList чата) отключают
+  // скролл ion-content — иначе двойной скролл. Контент растягивается на всю высоту.
+  noScroll?: boolean
 }
 
-export function IonShellFrame({ label, children, onRefresh, footer, footBare }: Props) {
+export function IonShellFrame({ label, children, onRefresh, footer, footBare, noScroll }: Props) {
   return (
     <IonPage data-screen-label={label || ''}>
       <OfflineBar />
-      <IonContent className="agos-ion-content">
+      <IonContent scrollY={!noScroll} className={'agos-ion-content' + (noScroll ? ' ion-noscroll' : '')}>
         {onRefresh && (
           <IonRefresher
             slot="fixed"
