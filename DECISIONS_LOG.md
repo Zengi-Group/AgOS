@@ -3706,3 +3706,15 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: tsc чистый; скриншот «Сообщения» — справа в шапке пусто, список без изменений.
 
 **Files**: `src/pages/cabinet/shell/{components/TabHead.tsx,screens/MessagesScreen.tsx}`.
+
+### 2026-07-11: ARS-215 — показ draft-ЦТК фермеру (state C + SCR-F8) + фикс FARM-01-bis
+
+**What**: Payoff Узла 1 «отдал факты → увидел план» доведён до конца. (1) **State C таба «Ферма»** (`FarmScreen`): план есть → карточка плана (имя, период mono, чип «Черновик» у draft) + фазы списком (даты/счётчики задач mono R-9; амбер-чип только у активной фазы — один акцент на блок; `tag` у sale-фазы, R-16) + сводка стада (общий `HerdBox` с F0b) + «Поправить состав»; фаз нет (R4 combined) → graceful note. Чтение — новый `loadFarmPlan()` → `rpc_get_production_plan(p_status='any')` (draft виден до активации FARM-02). (2) **SCR-F8 финал мастера**: `generatePlan()` возвращает `generated:boolean` → F6-лоадер ждёт и таймер и результат (хард-кап 10 с) → план создан → «План работ на год готов» + единственный CTA «Посмотреть план» (R-14); не создан → прежний F7 (D-FW-5, ничего не удалено HS-2). (3) **FARM-01-bis**: задеплоенный `rpc_get_production_plan` падал 42803 `aggregate function calls cannot be nested` (count() внутри jsonb_agg) на ЛЮБОМ существующем плане — ARS-214 чинил только имена колонок, функция ни разу не исполнялась с планом. Фикс в d07 (счётчики → cross join lateral, payload/сигнатура не изменены P7) + накат на прод-Supabase.
+
+**Why**: F-D13 — Job Узла 1 не закрыт без видимого плана (P9); rpc_get_active_plan (легаси /cabinet-legacy/plan) отдаёт только active-план и не годится для draft; легаси plan/* остаются каноном Slice 4 (lucide-зона), state C построен в языке shell (Phosphor-only, D-UI-FARMER-RULES-01) на данных-контракте того же читателя.
+
+**Verify**: rollback-tx e2e на прод-Supabase (E2E-FARM-01, новый кейс в qa/scenarios/08): порог (COW=25 + spring) → `rpc_generate_plan_from_profile` `generated:true`, шаблон BEEF_COW_CALF_KZ, якорь D78=2027-03-01 → задеплоенный читатель вернул draft «ЦТК 2027» с 15 фазами и task_counts (первая «Туровые отёлы», 5 задач) — payload 1:1 с TS-интерфейсом FarmPlan. tsc чистый, vite build ok, unit 8/8, cross_check 0 critical. UI-слой с живым логином — SKIP (нет seed-аккаунта, qa/README §4a); кейсы FARM-TAB-01..04 заведены в новый qa/scenarios/09-farm.md.
+
+**Flagged**: тот же класс дефекта в `rpc_get_aggregated_supply` (42703: `ts.description_ru` не существует) и `rpc_get_aggregated_demand` (42803 вложенные агрегаты) — оба падают при вызове, вне скоупа ARS-215, заведён отдельный Linear-issue.
+
+**Files**: `src/pages/cabinet/shell/{screens/FarmScreen.tsx,farm/data/farm-profile.ts,farm/wizard/{FwResult,FarmWizard}.tsx,market-proto.css}`, `d07_ai_gateway.sql`, `Docs/AGOS-Dok6-Slice7-Farm-Wizard.md (SCR-F8/State C)`, `qa/scenarios/{08-backend-e2e.md,09-farm.md}`, `qa/README.md`.

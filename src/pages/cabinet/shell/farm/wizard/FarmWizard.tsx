@@ -125,6 +125,13 @@ export function FarmWizard({ startAt, onExit, onSell }: Props) {
   const hasUnanswered = branch.some((s) =>
     s === 'calving' ? w.calving === '' : s === 'young' ? w.young === '' : w.housing === '')
 
+  // Хэндофф генерации (ARS-213 → ARS-215): boolean ветвит финал F7/F8. useCallback — эффект
+  // FwResult зависит от identity onGenerate; нестабильная ссылка перезапустила бы генерацию.
+  const handleGenerate = useCallback(async (): Promise<boolean> => {
+    if (ctx?.organizationId && ctx.farmId) return generatePlan(ctx.organizationId, ctx.farmId, w.calvingMonth)
+    return false
+  }, [ctx, w.calvingMonth])
+
   // ---- рендер ----
   if (screen === 'herd') {
     return <FwStepHerd heads={w.heads} setHeads={setHeads} prefilled={prefilled} onNext={herdNext} onExit={exitSaved} />
@@ -147,9 +154,7 @@ export function FarmWizard({ startAt, onExit, onSell }: Props) {
     return (
       <FwResult
         generating={thresholdReached(w)}
-        onGenerate={async () => {
-          if (ctx?.organizationId && ctx.farmId) await generatePlan(ctx.organizationId, ctx.farmId, w.calvingMonth)
-        }}
+        onGenerate={handleGenerate}
         hasUnanswered={hasUnanswered}
         onToFarm={onExit}
         onAnswerNow={() => { setStepIdx(firstUnanswered()); setScreen('step') }}

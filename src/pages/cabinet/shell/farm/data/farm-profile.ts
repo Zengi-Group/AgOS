@@ -183,19 +183,65 @@ export async function saveFarmField(
   } catch (e) { console.warn('rpc_upsert_farm (update) исключение:', e) }
 }
 
-// Точка хэндоффа генерации draft-ЦТК (ARS-213, ветка claude/ars-213-bridge-eb1dd1):
-// rpc_generate_plan_from_profile (порог: маточное>0 + ответ про отёл; year_round легален;
-// ниже порога — graceful). Вызывается только при достигнутом пороге. RPC может отсутствовать в
-// этом деплое (несмёрженная ветка) → любую ошибку глотаем: мастер завершится финалом F7.
-// Показ плана — ARS-215 (вне этого слайса).
-export async function generatePlan(orgId: string, farmId: string, firstCalvingMonth?: number | null): Promise<void> {
+// Точка хэндоффа генерации draft-ЦТК (ARS-213): rpc_generate_plan_from_profile (порог:
+// маточное>0 + ответ про отёл; year_round легален; ниже порога — graceful jsonb
+// {generated:false, reason}). Вызывается только при достигнутом пороге; любая ошибка глотается
+// (мастер завершится финалом F7). Возвращает generated — ARS-215 ветвит финал F7/F8 по нему.
+export async function generatePlan(orgId: string, farmId: string, firstCalvingMonth?: number | null): Promise<boolean> {
   try {
-    const { error } = await supabase.rpc('rpc_generate_plan_from_profile', {
+    const { data, error } = await supabase.rpc('rpc_generate_plan_from_profile', {
       p_organization_id: orgId,
       p_farm_id: farmId,
       // сезонный отёл: без месяца мост берёт дефолт (март/сентябрь) — передаём ответ фермера (D78)
       p_first_calving_month: firstCalvingMonth ?? null,
     })
-    if (error) console.warn('rpc_generate_plan_from_profile (ARS-213) недоступен:', error.message)
-  } catch (e) { console.warn('rpc_generate_plan_from_profile (ARS-213) исключение:', e) }
+    if (error) {
+      console.warn('rpc_generate_plan_from_profile (ARS-213) недоступен:', error.message)
+      return false
+    }
+    return (data as { generated?: boolean } | null)?.generated === true
+  } catch (e) {
+    console.warn('rpc_generate_plan_from_profile (ARS-213) исключение:', e)
+    return false
+  }
+}
+
+// ── ARS-215 · чтение плана (state C таба «Ферма») ──
+// Форма = payload rpc_get_production_plan (d07, читатель FARM-01/ARS-214).
+export interface FarmPlanPhase {
+  phase_id: string
+  name: string
+  status: string          // upcoming | active | completed | skipped
+  start_date: string
+  end_date: string
+  is_sale_phase: boolean
+  task_counts: { total: number; completed: number; overdue: number }
+}
+
+export interface FarmPlan {
+  plan_id: string
+  plan_name: string
+  status: string          // draft | active | completed | cancelled
+  start_date: string
+  end_date: string | null
+  phases: FarmPlanPhase[]
+}
+
+// Последний план фермы независимо от статуса (p_status='any' → draft-ЦТК опросника виден сразу,
+// до активации FARM-02/ARS-172). null = плана нет / RPC недоступен — state C не показывается,
+// таб живёт в F0a/F0b (graceful, P11).
+export async function loadFarmPlan(orgId: string, farmId: string): Promise<FarmPlan | null> {
+  try {
+    const { data, error } = await supabase.rpc('rpc_get_production_plan', {
+      p_organization_id: orgId,
+      p_farm_id: farmId,
+      p_status: 'any',
+    })
+    if (error || !data) return null
+    const p = data as Partial<FarmPlan>
+    if (!p.plan_id) return null
+    return { ...p, phases: Array.isArray(p.phases) ? p.phases : [] } as FarmPlan
+  } catch {
+    return null
+  }
 }

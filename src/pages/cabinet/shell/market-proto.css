@@ -1857,3 +1857,19 @@
 /* — «зачем спрашиваем» (дизайн-ход #2) — */
 .agos-cabinet-stage .fw-why { display:flex; align-items:flex-start; gap:7px; margin-top:14px; padding:10px 12px; border-radius:var(--r-md); background:var(--bg-m); color:var(--fg2); font-size:12px; line-height:1.45; }
 .agos-cabinet-stage .fw-why > svg { color:var(--fg3); margin-top:1px; flex-shrink:0; }
+
+/* — ARS-215 · state C: годовой план на табе «Ферма» (плоские карты r-12, один акцент на блок) — */
+.agos-cabinet-stage .fw-plan-card { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); padding:14px; margin-bottom:10px; }
+.agos-cabinet-stage .fw-plan-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.agos-cabinet-stage .fw-plan-name { font-size:15px; font-weight:700; color:var(--fg); letter-spacing:-.01em; }
+.agos-cabinet-stage .fw-plan-period { font-size:12px; color:var(--fg3); margin-top:3px; }
+.agos-cabinet-stage .fw-plan-chip { flex:none; padding:4px 9px; border-radius:var(--r-full); font-size:12px; font-weight:600; background:var(--bg-m); color:var(--fg2); }
+.agos-cabinet-stage .fw-plan-box { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); overflow:hidden; margin-bottom:16px; }
+.agos-cabinet-stage .fw-ph { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; }
+.agos-cabinet-stage .fw-ph + .fw-ph { border-top:1px solid var(--bd-s); }
+.agos-cabinet-stage .fw-ph-n { display:flex; align-items:center; gap:5px; font-size:14px; font-weight:600; color:var(--fg); }
+.agos-cabinet-stage .fw-ph-n > svg { color:var(--fg3); flex-shrink:0; }
+.agos-cabinet-stage .fw-ph-d { font-size:12px; color:var(--fg3); margin-top:2px; }
+.agos-cabinet-stage .fw-ph-chip { flex:none; padding:3px 8px; border-radius:var(--r-full); font-size:11.5px; font-weight:600; background:var(--bg-m); color:var(--fg2); }
+.agos-cabinet-stage .fw-ph-chip.on { background:color-mix(in srgb, var(--amber) 12%, transparent); color:var(--fg); }
+.agos-cabinet-stage .fw-ph-chip.ok { background:color-mix(in srgb, var(--ok) 12%, transparent); color:var(--fg2); }

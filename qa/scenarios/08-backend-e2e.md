@@ -58,3 +58,15 @@
 `layer:sql` `canon:code` `impl:supabase/functions/bird-otp` `auto:candidate:integration` `status:active`
 - **Шаги:** send (мок Mobizon либо тестовый номер) → check → register → rpc_register_organization.
 - **Ожидание:** созданы auth-пользователь, organizations, users.full_name; повторный register того же телефона → «уже зарегистрирован». Прогонять на staging (env scoping), не на проде — создаёт auth-записи, которые rollback-tx не покрывает.
+
+#### E2E-FARM-01 · HAPPY · Узел 1: порог → генерация draft-ЦТК → читатель плана
+`layer:sql` `canon:F-D11/F-D12/F-D14;D78` `impl:d05_ops_edu.sql;d07_ai_gateway.sql` `auto:candidate:sql` `status:active`
+- **Шаги (rollback-tx):** ферма с записью в user_organization_roles; herd_groups += COW>0
+  (`data_source='platform'`, confidence 75); `farms.calving_system='spring'` →
+  `rpc_generate_plan_from_profile(org, farm, 3, actor)` → `rpc_get_production_plan(org, farm, 'any')`.
+- **Ожидание:** `generated:true`, шаблон `BEEF_COW_CALF_KZ`, `cycle_start_date` = 1-е число
+  месяца отёла (D78); читатель возвращает draft-план (`plan_id`/`plan_name`/`status='draft'`/
+  даты + `phases[]`, каждая с `task_counts{total,completed,overdue}`). Транзакция откатывается.
+- **Регресс-защита:** 42803 `aggregate function calls cannot be nested` в
+  `rpc_get_production_plan` (FARM-01-bis, пофикшен ARS-215) — до фикса читатель падал на
+  ЛЮБОМ существующем плане. Прогон 2026-07-11: PASS (15 фаз, первая «Туровые отёлы», 5 задач).
