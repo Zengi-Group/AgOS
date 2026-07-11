@@ -7,7 +7,8 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Save, RotateCcw, Calculator, Loader2, CheckCircle } from 'lucide-react'
+import { Save, RotateCcw, Calculator, CheckCircle } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { supabase } from '@/lib/supabase'
 import { useRpc } from '@/hooks/useRpc'
 import { useAnimalCategoryMappings } from '@/hooks/useAnimalCategoryMappings'
@@ -825,7 +826,7 @@ export function SimpleRationEditor({
               <Button className="w-full" disabled={suggestLoading || suggestParams.feed_item_ids.length === 0}
                 onClick={handleSuggest}>
                 {suggestLoading
-                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Считаем...</>
+                  ? <><TuranLoader variant="spin" size={16} className="mr-2" />Считаем...</>
                   : `🧮 Подобрать${suggestParams.feed_item_ids.length > 0 ? ` (${suggestParams.feed_item_ids.length})` : ''}`}
               </Button>
 

@@ -8,6 +8,7 @@ import type { Batch, PubVariant } from '../types/batch'
 import { NBSP } from '../data/tsp-dicts'
 import { fmtMoney } from '../data/tsp-utils'
 import { MkCta } from '../components/MkCta'
+import { TuranLoader } from '@/components/TuranLoader'
 import { PhIcon, type PhIconName } from '../../components/icons/PhIcon'
 
 interface PubResultProps {
@@ -49,7 +50,7 @@ export function PubResult({ variant, batch, onToBatch, onToList }: PubResultProp
         <div className="phone-scroll">
           <div className="mk" data-screen-label={'SCR-03 · публикация · поиск · вариант ' + variant}>
             <div className="mk-loader">
-              <div className="mk-spin" />
+              <TuranLoader variant="breathe" size={44} />
               <div>{SEARCH_PHRASES[phraseIdx]}</div>
             </div>
           </div>

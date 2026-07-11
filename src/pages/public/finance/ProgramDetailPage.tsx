@@ -12,10 +12,11 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from '@/components/ui/accordion';
 import {
-  Loader2, ArrowLeft, ArrowRight, Info, Send, Share2, FileDown, ArrowLeftRight,
+  ArrowLeft, ArrowRight, Info, Send, Share2, FileDown, ArrowLeftRight,
   CheckCircle2, XCircle, AlertTriangle, Calculator, FileText,
   HelpCircle, ClipboardList, Layers, Shield, Footprints,
 } from 'lucide-react';
+import { TuranLoader } from '@/components/TuranLoader';
 import { useFinancePrograms } from '@/hooks/finance/useFinancePrograms';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -856,7 +857,7 @@ const ProgramDetailPage = () => {
                   onClick={handleConsultSubmit}
                   disabled={submitting}
                 >
-                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {submitting ? <TuranLoader variant="spin" size={16} /> : <Send className="h-4 w-4" />}
                   Отправить
                 </button>
                 <button

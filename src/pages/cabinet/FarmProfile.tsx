@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSetTopbar } from '@/components/layout/TopbarContext'
+import { TuranLoader } from '@/components/TuranLoader'
 import {
-  Loader2, Plus, Pencil, AlertTriangle, X,
+  Plus, Pencil, AlertTriangle, X,
   Home, Calendar, ChevronRight, Activity, Leaf,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -334,7 +335,7 @@ export function FarmProfile() {
             className="w-full h-11 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 mt-2 transition-opacity disabled:opacity-40"
             style={{ background: 'var(--cta)', color: 'var(--cta-fg)' }}
           >
-            {isSavingFarm && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isSavingFarm && <TuranLoader variant="spin" size={16} />}
             Создать ферму
           </button>
         </div>
@@ -738,7 +739,7 @@ export function FarmProfile() {
                     className="flex-1 h-9 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-opacity disabled:opacity-40 cursor-pointer"
                     style={{ background: 'var(--cta)', color: 'var(--cta-fg)' }}
                   >
-                    {isSavingHerd && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    {isSavingHerd && <TuranLoader variant="spin" size={14} />}
                     {herdForm.id ? 'Обновить' : 'Добавить'}
                   </button>
                   <button
@@ -894,7 +895,7 @@ export function FarmProfile() {
                 className="flex-1 h-9 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 transition-opacity"
                 style={{ background: 'var(--cta)', color: 'var(--cta-fg)' }}
               >
-                {isSavingFarm && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {isSavingFarm && <TuranLoader variant="spin" size={14} />}
                 Сохранить изменения
               </button>
             </div>

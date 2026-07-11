@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2 } from 'lucide-react';
+import { TuranLoader } from '@/components/TuranLoader';
 
 const STATUS_KEYS = [
   'startups.submit.aiStatus1',
@@ -49,7 +49,7 @@ export default function StepAiParsing({ onTimeout }: Props) {
         className="w-16 h-16 rounded-2xl flex items-center justify-center"
         style={{ background: 'rgba(232,115,12,0.08)' }}
       >
-        <Loader2 size={28} className="animate-spin" style={{ color: '#E8730C' }} />
+        <TuranLoader variant="breathe" size={40} />
       </div>
 
       {/* Status text */}

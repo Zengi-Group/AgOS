@@ -6,7 +6,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSetTopbar } from '@/components/layout/TopbarContext'
-import { Loader2, ShoppingCart } from 'lucide-react'
+import { ShoppingCart } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -103,7 +104,7 @@ export function CreateBatch() {
             </div>
             <div className="flex gap-3">
               <Button type="submit" disabled={loading || hasRestrictions} className="flex-1">
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Создать батч
+                {loading && <TuranLoader variant="spin" size={16} className="mr-2" />}Создать батч
               </Button>
               <Button type="button" variant="outline" onClick={() => navigate('/cabinet-legacy/market')}>Отмена</Button>
             </div>

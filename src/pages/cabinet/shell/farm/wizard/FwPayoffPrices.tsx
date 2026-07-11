@@ -13,6 +13,7 @@ import { fmtMoney, fmtDGen, ruPlural, TODAY } from '../../data/fmt'
 import { PRICE_NEXT, stickerData, FARMER_LEAD_CAT } from '../../data/prices'
 import { HERD_FIELDS, type FwState } from '../types'
 import { FwShell } from './FwShell'
+import { TuranLoader } from '@/components/TuranLoader'
 import { MkCta } from '../../tsp/components/MkCta'
 import { PriceBars } from '../../components/PriceBars'
 import { PriceDelta } from '../../components/PriceDelta'
@@ -51,7 +52,7 @@ export function FwPayoffPrices({ heads, region, planQuestions, onBridge, onExit,
     return (
       <FwShell onExit={onExit} exitTop screenLabel="SCR-F2 · Payoff-1 · поиск цен">
         <div className="mk-loader">
-          <div className="mk-spin" />
+          <TuranLoader variant="breathe" size={44} />
           <div>Смотрим цены по вашему стаду…</div>
         </div>
       </FwShell>

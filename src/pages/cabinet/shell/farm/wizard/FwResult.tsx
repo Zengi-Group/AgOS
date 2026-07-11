@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import { IonContent } from '@ionic/react'
 import { MkCta } from '../../tsp/components/MkCta'
+import { TuranLoader } from '@/components/TuranLoader'
 import { PhIcon } from '../../components/icons/PhIcon'
 
 const GEN_MS = 2200
@@ -60,7 +61,7 @@ export function FwResult({ generating, onGenerate, hasUnanswered, onToFarm, onAn
         <div className="phone-scroll">
           <div className="mk" data-screen-label="SCR-F6 · генерация плана">
             <div className="mk-loader">
-              <div className="mk-spin" />
+              <TuranLoader variant="breathe" size={44} />
               <div>{GEN_PHRASES[idx]}</div>
             </div>
           </div>

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSetTopbar } from '@/components/layout/TopbarContext'
-import { Loader2, Send, ChevronDown, ChevronUp, Stethoscope } from 'lucide-react'
+import { Send, ChevronDown, ChevronUp, Stethoscope } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
@@ -272,7 +273,7 @@ export function ReportSick() {
         style={{ background: 'var(--cta)', color: 'var(--cta-fg)' }}
       >
         {isSubmitting ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <TuranLoader variant="spin" size={16} />
         ) : (
           <Send className="h-4 w-4" />
         )}

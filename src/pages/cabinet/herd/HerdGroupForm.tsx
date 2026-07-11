@@ -7,7 +7,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useSetTopbar } from '@/components/layout/TopbarContext'
-import { Loader2, Fence } from 'lucide-react'
+import { Fence } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -179,7 +180,7 @@ export function HerdGroupForm() {
 
             <div className="flex gap-3 pt-2">
               <Button type="submit" disabled={loading} className="flex-1">
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {loading && <TuranLoader variant="spin" size={16} className="mr-2" />}
                 {isEdit ? 'Сохранить' : 'Создать группу'}
               </Button>
               <Button
