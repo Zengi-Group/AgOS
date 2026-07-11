@@ -701,7 +701,6 @@ export function CabinetApp() {
         tid={tid}
         env={threadEnv}
         onBack={() => goBackTo(route.back ?? { name: 'messages' })}
-        onAsk={() => openAI()}
       />
     )
   }
