@@ -5,7 +5,8 @@
  */
 import { useState, useCallback, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Calculator, Check, Beef, Landmark, ToggleLeft, MapPin, Hash, Percent, DollarSign, Users, TrendingUp, TrendingDown, RefreshCcw, Clock, Loader2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Calculator, Check, Beef, Landmark, ToggleLeft, MapPin, Hash, Percent, DollarSign, Users, TrendingUp, TrendingDown, RefreshCcw, Clock } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -817,7 +818,7 @@ export function ProjectWizard() {
                 }}
               >
                 {calculating
-                  ? <Loader2 size={14} className="animate-spin" />
+                  ? <TuranLoader variant="spin" size={14} />
                   : <Calculator size={14} />
                 }
                 {calculating ? 'Расчёт...' : 'Рассчитать'}

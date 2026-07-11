@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { ArrowLeft, ArrowRight, Loader2, Send } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Send } from 'lucide-react';
+import { TuranLoader } from '@/components/TuranLoader';
 import type { SubmitStartupFormData, AiParsedData } from '@/types/startup';
 import { uploadPitchDeck, parsePitchDeck, useSubmitStartup } from '@/hooks/startups/useSubmitStartup';
 import StepBasicInfo from './StepBasicInfo';
@@ -306,7 +307,7 @@ export default function SubmitStartupModal({ open, onOpenChange }: Props) {
                 style={{ backgroundColor: '#E8730C' }}
               >
                 {uploading ? (
-                  <Loader2 size={16} className="animate-spin" />
+                  <TuranLoader variant="spin" size={16} />
                 ) : (
                   <ArrowRight size={16} />
                 )}
@@ -340,7 +341,7 @@ export default function SubmitStartupModal({ open, onOpenChange }: Props) {
                   style={{ backgroundColor: '#3f2407' }}
                 >
                   {submitting ? (
-                    <Loader2 size={16} className="animate-spin" />
+                    <TuranLoader variant="spin" size={16} />
                   ) : (
                     <Send size={16} />
                   )}

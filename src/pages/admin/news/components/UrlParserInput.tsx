@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
-import { Loader2, Link as LinkIcon } from 'lucide-react';
+import { Link as LinkIcon } from 'lucide-react';
+import { TuranLoader } from '@/components/TuranLoader';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -55,7 +56,7 @@ export default function UrlParserInput({ onParsed, onError }: UrlParserInputProp
           className="h-10 px-5 bg-primary text-primary-foreground hover:bg-primary/90"
         >
           {isLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <TuranLoader variant="spin" size={16} />
           ) : (
             'Извлечь'
           )}

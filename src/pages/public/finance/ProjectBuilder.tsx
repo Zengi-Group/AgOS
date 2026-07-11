@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, AlertTriangle, Lock, Loader2, Hammer, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, AlertTriangle, Lock, Hammer, Sparkles } from 'lucide-react';
+import { TuranLoader } from '@/components/TuranLoader';
 import { useFinancePrograms } from '@/hooks/finance/useFinancePrograms';
 import { computeRoadmap, determineSegment } from '@/lib/finance/engine';
 import { useSaveProject } from '@/hooks/finance/useSaveProject';
@@ -166,7 +167,7 @@ const ProjectBuilder = () => {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <TuranLoader variant="breathe" size={40} />
       </div>
     );
   }
@@ -460,7 +461,7 @@ const ProjectBuilder = () => {
               disabled={saveProject.isPending}
               className="gap-1.5 shrink-0 rounded-[9px] text-[13px] h-9 bg-[#3f2407] hover:bg-[#2b1809]"
             >
-              {saveProject.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {saveProject.isPending && <TuranLoader variant="spin" size={14} />}
               {t('finance.save')}
             </Button>
           )}

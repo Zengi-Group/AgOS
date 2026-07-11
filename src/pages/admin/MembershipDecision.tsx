@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, XCircle, Loader2, Building2, MapPin, Hash, Calendar, Users, Users2, Leaf, FileText, Download } from 'lucide-react'
+import { ArrowLeft, CheckCircle, XCircle, Building2, MapPin, Hash, Calendar, Users, Users2, Leaf, FileText, Download } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { useSetTopbar } from '@/components/layout/TopbarContext'
 import { useAuth } from '@/hooks/useAuth'
 import { useRpc, useRpcMutation } from '@/hooks/useRpc'
@@ -454,7 +455,7 @@ export function MembershipDecision() {
               disabled={processMutation.isPending}
               style={{ background: confirmAction === 'approved' ? 'var(--green)' : 'var(--red)', color: '#fff' }}
             >
-              {processMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Подтвердить'}
+              {processMutation.isPending ? <TuranLoader variant="spin" size={16} /> : 'Подтвердить'}
             </Button>
           </DialogFooter>
         </DialogContent>

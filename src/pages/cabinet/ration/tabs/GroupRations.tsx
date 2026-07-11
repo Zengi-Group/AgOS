@@ -6,7 +6,8 @@
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Calculator, ChevronRight, Loader2, AlertCircle, Beef, Wheat, TrendingUp } from 'lucide-react'
+import { Calculator, ChevronRight, AlertCircle, Beef, Wheat, TrendingUp } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { useAuth } from '@/hooks/useAuth'
 import type { HerdGroup } from '@/contexts/AuthContext'
 import { useRpc } from '@/hooks/useRpc'
@@ -127,7 +128,7 @@ function GroupCard({
               whiteSpace: 'nowrap',
             }}
           >
-            {calculating ? <Loader2 size={13} className="animate-spin" /> : <Calculator size={13} />}
+            {calculating ? <TuranLoader variant="spin" size={13} /> : <Calculator size={13} />}
             Рассчитать
           </button>
         )}

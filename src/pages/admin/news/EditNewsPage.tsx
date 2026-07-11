@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Trash2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Trash2 } from 'lucide-react';
+import { TuranLoader } from '@/components/TuranLoader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -226,7 +227,7 @@ export default function EditNewsPage() {
   if (isLoading) {
     return (
       <div className="dark min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <TuranLoader variant="breathe" size={40} />
       </div>
     );
   }

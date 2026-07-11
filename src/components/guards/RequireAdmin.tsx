@@ -2,7 +2,7 @@ import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { useEffect, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { toast } from 'sonner'
 
 /**
@@ -42,7 +42,7 @@ export function RequireAdmin() {
   if (authLoading || checking) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f8f9fa]">
-        <Loader2 className="h-8 w-8 animate-spin text-[#4361ee]" />
+        <TuranLoader variant="breathe" size={40} />
       </div>
     )
   }

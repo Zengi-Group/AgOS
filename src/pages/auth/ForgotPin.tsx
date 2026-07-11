@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { Loader2, Phone } from 'lucide-react'
+import { Phone } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { OtpInput } from '@/pages/registration/components/OtpInput'
@@ -182,7 +183,7 @@ export function ForgotPin() {
               disabled={isLoading}
               className="w-full py-2.5 bg-[hsl(24,73%,54%)] text-white rounded-xl font-medium hover:bg-[hsl(24,73%,44%)] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
             >
-              {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isLoading && <TuranLoader variant="spin" size={16} />}
               {isLoading ? 'Отправка…' : 'Получить код'}
             </button>
           </div>
@@ -207,7 +208,7 @@ export function ForgotPin() {
               disabled={otp.length < 6 || isLoading}
               className="w-full py-2.5 bg-[hsl(24,73%,54%)] text-white rounded-xl font-medium hover:bg-[hsl(24,73%,44%)] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
             >
-              {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isLoading && <TuranLoader variant="spin" size={16} />}
               {isLoading ? 'Проверка…' : 'Подтвердить'}
             </button>
 
@@ -277,7 +278,7 @@ export function ForgotPin() {
                 disabled={pinConfirm.length < 6 || isLoading}
                 className="w-full py-2.5 bg-[hsl(24,73%,54%)] text-white rounded-xl font-medium hover:bg-[hsl(24,73%,44%)] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
               >
-                {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isLoading && <TuranLoader variant="spin" size={16} />}
                 {isLoading ? 'Сохранение…' : 'Сохранить PIN'}
               </button>
             )}

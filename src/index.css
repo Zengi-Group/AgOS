@@ -29,6 +29,20 @@
   to   { transform: none; opacity: 1; }
 }
 
+/* ═══ TURAN brand loader (TuranLoader.tsx) — ЕДИНСТВЕННЫЙ лоадер проекта ═══
+   Namespaced tl-* — не пересекается с border-спиннерами кабинета (.spin/.mk-spin). */
+@keyframes tlSpin { to { transform: rotate(360deg); } }
+@keyframes tlRayBreathe {
+  0%, 100% { opacity: .28; transform: scale(.82); }
+  50%      { opacity: 1;   transform: scale(1); }
+}
+.tl-spin { animation: tlSpin 1.05s linear infinite; transform-origin: 50% 50%; }
+.tl-ray  { animation: tlRayBreathe 1.45s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .tl-spin { animation-duration: 2.6s; }
+  .tl-ray  { animation: none; opacity: .85; }
+}
+
 /* AppShell scrollbar styling */
 .shell-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
 .shell-scrollbar::-webkit-scrollbar-track { background: transparent; }

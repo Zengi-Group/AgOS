@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { CheckCircle2, XCircle, Loader2, ImageIcon, Play } from 'lucide-react';
+import { CheckCircle2, XCircle, ImageIcon, Play } from 'lucide-react';
+import { TuranLoader } from '@/components/TuranLoader';
 
 interface StartupRow {
   id: string;
@@ -103,7 +104,7 @@ export default function BackfillCoversPage() {
     if (status === 'done') return <CheckCircle2 size={16} className="text-[var(--green)]" />;
     if (status === 'error') return <XCircle size={16} className="text-[var(--red)]" />;
     if (status === 'describing' || status === 'generating')
-      return <Loader2 size={16} className="animate-spin" style={{ color: 'var(--brand)' }} />;
+      return <TuranLoader variant="spin" size={16} />;
     if (status === 'skipped') return <CheckCircle2 size={16} className="text-[var(--fg3)]" />;
     return <ImageIcon size={16} className="text-[var(--fg3)] opacity-60" />;
   };
@@ -134,7 +135,7 @@ export default function BackfillCoversPage() {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white disabled:opacity-60"
             style={{ background: 'var(--brand)' }}
           >
-            {running ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
+            {running ? <TuranLoader variant="spin" size={15} /> : <Play size={15} />}
             {running ? 'Обрабатываю...' : `Запустить (${pendingCount})`}
           </button>
         )}
@@ -142,7 +143,7 @@ export default function BackfillCoversPage() {
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <Loader2 size={24} className="animate-spin" style={{ color: 'var(--brand)' }} />
+          <TuranLoader variant="breathe" size={40} />
         </div>
       ) : (
         <div className="flex flex-col gap-3">
