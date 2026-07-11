@@ -352,6 +352,31 @@ fi
 echo ""
 
 # ----------------------------------------------------------
+# CHECK 10: Duplicate R-N ids in farmer design-rules canon
+# Severity: SIGNIFICANT (canon integrity)
+# The registry table is append-only with a monotonic R-N counter. Parallel PRs
+# cut from the same base can pick the SAME R-N; `.gitattributes merge=union`
+# silences the merge conflict, so a duplicate id would otherwise slip in unseen.
+# This guard is the safety net for that union — assign the next free R-N.
+# ----------------------------------------------------------
+echo "--- CHECK 10: Duplicate R-N ids in farmer design canon ---"
+DESIGN_CANON="Docs/AGOS-DesignRules-FarmerCabinet.md"
+if [ -f "$DESIGN_CANON" ]; then
+  dup_rn=$(grep -oE '^\| R-[0-9]+' "$DESIGN_CANON" | sort | uniq -d)
+  if [ -n "$dup_rn" ]; then
+    echo "  SIGNIFICANT: duplicate R-N id(s) in $DESIGN_CANON — renumber to next free:"
+    echo "$dup_rn" | sed 's/^| /    /'
+    ((SIGNIFICANT++))
+  else
+    echo "  OK: R-N ids unique"
+  fi
+else
+  echo "  SKIP: $DESIGN_CANON not found"
+fi
+
+echo ""
+
+# ----------------------------------------------------------
 # SUMMARY
 # ----------------------------------------------------------
 echo "========================================"

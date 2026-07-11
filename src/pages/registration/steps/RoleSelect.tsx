@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { T } from '@/lib/auth-ui/tokens'
-import { H1, Lede } from '@/lib/auth-ui/primitives'
+import { H1, Lede, StickyDock, AuthAltAction } from '@/lib/auth-ui/primitives'
 import type { RoleType } from '../constants'
 
 const ROLES: { value: RoleType; title: string; sub: string; meta: string }[] = [
@@ -50,14 +50,9 @@ export function RoleSelect({ onSelect }: RoleSelectProps) {
         ))}
       </div>
 
-      <div style={{ marginTop: 24, textAlign: 'center' }}>
-        <button
-          onClick={() => navigate('/login')}
-          style={{ background: 'transparent', border: 'none', padding: '12px 16px', minHeight: 44, color: T.fg2, fontFamily: T.font, fontSize: 15, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
-        >
-          Уже есть аккаунт? <span style={{ color: T.accent, fontWeight: 500 }}>Войти ›</span>
-        </button>
-      </div>
+      <StickyDock>
+        <AuthAltAction prefix="Уже есть аккаунт?" action="Войти" onClick={() => navigate('/login')} />
+      </StickyDock>
     </>
   )
 }
