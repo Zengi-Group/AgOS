@@ -962,7 +962,9 @@ begin
             select coalesce(jsonb_agg(jsonb_build_object(
                 'price_grid_id',    pg2.id,
                 'sku_code',         ts.sku_code,
-                'sku_name',         ts.description_ru,
+                -- ARS-232: tsp_skus has no name/description column (schema & canon);
+                -- sku_name carries sku_code until a data-driven label exists (P8, IMPL_DEBT BUG-GETORGBATCHES-01)
+                'sku_name',         ts.sku_code,
                 'base_price_per_kg', pg2.base_price_per_kg,
                 'premium_per_kg',   pg2.premium_per_kg,
                 'total_per_kg',     pg2.base_price_per_kg + pg2.premium_per_kg,
@@ -1016,25 +1018,35 @@ begin
         -- LEGAL 5.9: Individual farm data never visible to competitors
         'legal_note', 'Агрегированные анонимные данные. Детали конкретных ферм не раскрываются.',
         'supply', (
+            -- ARS-232: aggregates pre-computed in inner grouped subquery, then jsonb_agg
+            -- over derived rows — count()/sum()/avg() inside jsonb_agg() = nested aggregates
+            -- (42803, same class as FARM-01-bis/PR#77). sku_name → sku_code (no name column).
             select coalesce(jsonb_agg(jsonb_build_object(
-                'sku_code',         ts.sku_code,
-                'sku_name',         ts.description_ru,
-                'region',           r.name_ru,
-                'target_month',     date_trunc('month', b.target_month),
-                'batch_count',      count(b.id),
-                'total_heads',      sum(b.heads),
-                'avg_weight_kg',    round(avg(b.avg_weight_kg)::numeric, 1)
-            ) order by ts.sku_code, date_trunc('month', b.target_month)), '[]'::jsonb)
-            from   public.batches b
-            join   public.tsp_skus ts on ts.id = b.tsp_sku_id
-            left   join public.regions r on r.id = b.region_id
-            where  b.status = 'published'
-              and  (p_target_month is null
-                    or date_trunc('month', b.target_month) = date_trunc('month', p_target_month))
-              and  (p_region_id is null or b.region_id = p_region_id)
-            group  by ts.sku_code, ts.description_ru, r.name_ru,
-                      date_trunc('month', b.target_month)
-            having count(b.id) >= p_min_count   -- ANTITRUST: min 5 batches for anonymity
+                'sku_code',         agg.sku_code,
+                'sku_name',         agg.sku_code,
+                'region',           agg.region,
+                'target_month',     agg.target_month,
+                'batch_count',      agg.batch_count,
+                'total_heads',      agg.total_heads,
+                'avg_weight_kg',    agg.avg_weight_kg
+            ) order by agg.sku_code, agg.target_month), '[]'::jsonb)
+            from (
+                select ts.sku_code                             as sku_code,
+                       r.name_ru                               as region,
+                       date_trunc('month', b.target_month)     as target_month,
+                       count(b.id)                             as batch_count,
+                       sum(b.heads)                            as total_heads,
+                       round(avg(b.avg_weight_kg)::numeric, 1) as avg_weight_kg
+                from   public.batches b
+                join   public.tsp_skus ts on ts.id = b.tsp_sku_id
+                left   join public.regions r on r.id = b.region_id
+                where  b.status = 'published'
+                  and  (p_target_month is null
+                        or date_trunc('month', b.target_month) = date_trunc('month', p_target_month))
+                  and  (p_region_id is null or b.region_id = p_region_id)
+                group  by ts.sku_code, r.name_ru, date_trunc('month', b.target_month)
+                having count(b.id) >= p_min_count   -- ANTITRUST: min 5 batches for anonymity
+            ) agg
         ),
         'privacy_threshold', p_min_count,
         'note', 'Данные скрыты если источников меньше ' || p_min_count::text
@@ -1070,26 +1082,37 @@ begin
         'legal_note', 'Агрегированные анонимные данные. Детали конкретных МПК не раскрываются.',
         'demand', (
             -- Note: pool_requests.accepted_categories is JSONB — aggregated without SKU breakdown
+            -- ARS-232: aggregates pre-computed in inner grouped subquery, then jsonb_agg over
+            -- derived rows — count()/sum() inside jsonb_agg() = nested aggregates (42803,
+            -- same class as FARM-01-bis/PR#77). Payload keys unchanged (P7).
             select coalesce(jsonb_agg(jsonb_build_object(
-                'region',           r.name_ru,
-                'target_month',     date_trunc('month', pr.target_month),
-                'pool_count',       count(distinct p2.id),
-                'total_heads_needed', sum(p2.target_heads),
-                'status_breakdown', jsonb_build_object(
-                    'filling', count(p2.id) filter (where p2.status = 'filling'),
-                    'filled',  count(p2.id) filter (where p2.status = 'filled')
+                'region',             agg.region,
+                'target_month',       agg.target_month,
+                'pool_count',         agg.pool_count,
+                'total_heads_needed', agg.total_heads_needed,
+                'status_breakdown',   jsonb_build_object(
+                    'filling', agg.filling_count,
+                    'filled',  agg.filled_count
                 )
-            ) order by date_trunc('month', pr.target_month)), '[]'::jsonb)
-            from   public.pools p2
-            join   public.pool_requests pr on pr.id = p2.pool_request_id
-            left   join public.regions r on r.id = pr.region_id
-            where  p2.status in ('filling', 'filled')
-              and  pr.status = 'active'
-              and  (p_target_month is null
-                    or date_trunc('month', pr.target_month) = date_trunc('month', p_target_month))
-              and  (p_region_id is null or pr.region_id = p_region_id)
-            group  by r.name_ru, date_trunc('month', pr.target_month)
-            having count(distinct p2.id) >= p_min_count
+            ) order by agg.target_month), '[]'::jsonb)
+            from (
+                select r.name_ru                                        as region,
+                       date_trunc('month', pr.target_month)             as target_month,
+                       count(distinct p2.id)                            as pool_count,
+                       sum(p2.target_heads)                             as total_heads_needed,
+                       count(p2.id) filter (where p2.status = 'filling') as filling_count,
+                       count(p2.id) filter (where p2.status = 'filled')  as filled_count
+                from   public.pools p2
+                join   public.pool_requests pr on pr.id = p2.pool_request_id
+                left   join public.regions r on r.id = pr.region_id
+                where  p2.status in ('filling', 'filled')
+                  and  pr.status = 'active'
+                  and  (p_target_month is null
+                        or date_trunc('month', pr.target_month) = date_trunc('month', p_target_month))
+                  and  (p_region_id is null or pr.region_id = p_region_id)
+                group  by r.name_ru, date_trunc('month', pr.target_month)
+                having count(distinct p2.id) >= p_min_count
+            ) agg
         ),
         'privacy_threshold', p_min_count
     );
@@ -1135,7 +1158,9 @@ begin
             select coalesce(jsonb_agg(jsonb_build_object(
                 'batch_id',      b.id,
                 'sku_code',      ts.sku_code,
-                'sku_name',      ts.description_ru,
+                -- ARS-232: tsp_skus has no name/description column (schema & canon);
+                -- sku_name carries sku_code until a data-driven label exists (P8, IMPL_DEBT BUG-GETORGBATCHES-01)
+                'sku_name',      ts.sku_code,
                 'heads',         b.heads,
                 'avg_weight_kg', b.avg_weight_kg,
                 'target_month',  b.target_month,
