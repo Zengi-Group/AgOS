@@ -3,6 +3,18 @@
 > Maintained by: Architect & Coordinator Agent
 > Format: WHAT was decided → WHY (alternatives considered) → CONSEQUENCES (what becomes easy/hard)
 
+### 2026-07-11: Рынок — оффер вступления (гейт не-члена) в блоб-язык empty-state (R-24)
+
+**What**: `SellGate` (заглушка вкладки «Рынок» для не-члена, скриншот CEO) переведён из старой пунктирной прямоугольной рамки (`.sell-gate`) в канонический блоб-язык empty-state: органичный блоб `.mk-empty-art` + PhIcon `market`, заголовок 18px/700, контент по центру, флаг-чеки в центрированной колонке, тёмный CTA. Новые классы `.mk-offer*` в `market-proto.css`; `.gate-list/.gate-row/.gate-ck` (осиротели) удалены из `cabinet.css`. `.sell-gate` сохранён — им ещё пользуется `ApprovedPlate` (транзакционная плашка «оплатите взнос»), которая осознанно остаётся компактной. Все состояния членства (pending/rejected/note/CTA) и пропсы — без изменений (HS-2/HS-5, аддитивно).
+
+**Why**: правка CEO «улучши Empty State вкладки Рынок → офер на вступление». Экран был портом прототипа и не получил daylight-редизайн — пунктирная рамка прямо нарушала R-6/UI-EMPTYSTATE-01 («рамка → блоб») и §4 канона. Применено уже принятое правило R-6 к пропущенному экрану; зафиксировано новым правилом R-24 (гейты/оферы = блоб, не рамка), чтобы не повторилось.
+
+**Verify**: dev-preview (порт 5188, mobile 375×812) через временный демо-роут `/cabinet-demo` + `INITIAL_STATE.membership='none'` (оба отката сделаны) — гейт рендерится с блобом, заголовком, чек-листом и тёмным CTA, консистентно с members-empty ниже. Временный `npm install` в воркри подтянул объявленный, но не установленный `@chatscope/*` (#73) — не бамп, синхронизация. SQL не тронут → `cross_check.sh` не нужен.
+
+**Files**: `src/pages/cabinet/shell/screens/MarketScreen.tsx`, `src/pages/cabinet/shell/market-proto.css`, `src/pages/cabinet/shell/cabinet.css`, `Docs/AGOS-DesignRules-FarmerCabinet.md` (R-24). Ветка `claude/market-offers-empty-state-903207` (worktree `phone-field-design-0cc909`).
+
+---
+
 ### 2026-07-10: Плавность и восприятие скорости нативного фермера — 4 слайса (ARS-216 · P-1..P-4)
 
 **What**: Аудит (/feature, 4 параллельных агента) показал, что «тормозит» = 3 явления. Пофикшено 4 аддитивными слайсами: **P-1 (ARS-217)** — весь admin/expert/consulting/legacy-cabinet + `MpkApp` переведены в `lazy()` в `App.tsx` (было eager static-import → падали в entry-чанк фермера; гейт `!IS_NATIVE` рантайм, код не вырезал); `manualChunks` в `vite.config.ts` (recharts/ionic/radix/supabase/i18n); шрифты 9→7 семейств из render-blocking `@import` (index.css) в `<link>` (index.html), убраны неиспользуемые Cormorant/DM Sans. **P-2 (ARS-218)** — `BootScreen` (брендовая марка + фон-токен `--boot-bg=#fdf6ee`) заменил белые провалы `null`/голый Loader2 на всём пути в кабинет (`NativeEntry`, `Suspense` /cabinet+/mpk, `RequireAuth`, `profileLoading`); инлайн-плейсхолдер в `#root` (index.html) — первый кадр не пустой. **P-3 (ARS-219)** — `ScreenSkeleton` (силуэты home/market/list/batch, переиспользует `.skel-blk`) вместо дженерик `SkeletonBlocks` (удалён); `ListScreen` получил `loading` (скелет вместо ложного «Партий нет»); `renderBatch`/`renderReview` — скелет при `loading && !found` вместо ложного «не найдена»; Home gated на `farmLoaded` (нет вспышки демо-сида). **P-4 (ARS-220)** — единый постоянный `IonTabs`+`IonTabBar` (CabinetApp) вместо per-page таб-бара в `IonShellFrame` (хрома не пересобирается при переходах); бар скрыт на детальных экранах через `hideTabBar` (route-based) — прежний фуллскрин-UX сохранён (решение CEO); `ShellTabBarIon` удалён.
