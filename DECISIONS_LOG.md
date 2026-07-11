@@ -3738,3 +3738,15 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: `bash -n cross_check.sh` ок; `git check-attr merge` → union на обоих журналах; CHECK 10 на текущем каноне → «R-N уникальны». Данный PR перенумерован R-24→R-25 (R-24 занят #75).
 
 **Files**: `.gitattributes`, `cross_check.sh` (CHECK 10).
+
+### 2026-07-11: ARS-232 — фикс rpc_get_aggregated_supply/demand (+price_grid/org_batches); sku_name→sku_code
+
+**What**: Два класса дефекта в `d07_ai_gateway.sql`, оба падали при любом вызове. (1) `42703`: `ts.description_ru` — колонки нет в `tsp_skus` (проверено на проде `mwtbozflyldcadypherr`) и нет в каноне (Microstep 4 не определяет имя/описание SKU). Затрагивал 3 RPC: `rpc_get_price_grid`, `rpc_get_aggregated_supply`, `rpc_get_org_batches` — все пофикшены в одном PR (L-2). (2) `42803` (вложенные агрегаты `count/sum/avg` внутри `jsonb_agg`): `rpc_get_aggregated_supply` + `rpc_get_aggregated_demand` — реструктуризация в grouped-подзапрос + `jsonb_agg` поверх производных строк (класс FARM-01-bis/PR#77). По ruling'у Architect'а: payload-ключ `sku_name` несёт `ts.sku_code` (не описательное имя).
+
+**Why**: Композицию RU-лейбла в SQL отклонили — P8 (нет таблицы-справочника для breed/sex/age → это был бы хардкод reference-строк) и P4 (лейблы уже единственно живут во фронте `RulesTab.tsx`; дубль в SQL = гарантированный разъезд). Фронт уже терпит `sku_name` как опциональный (`sku_name || tsp_sku_id`), `sku_code` строго лучше фолбэка и никогда не пуст. tier:mechanical → zero-invention.
+
+**Consequences**: Легко — RPC возвращают jsonb без ошибок, AI-Gateway market-tools работают. Трудно (Phase-2, залогировано в IMPL_DEBT BUG-GETORGBATCHES-01) — богатый лейбл SKU требует data-driven источника (`tsp_skus.name_ru` или вью `tsp_sku_labels`); до тех пор `sku_name == sku_code` by design. Сигнатуры/payload-ключи не менялись (P7). Канон Dok 1/3/5 не трогали — поле `sku_name` там на уровне полей не специфицировалось.
+
+**Verify**: Прямой вызов на проде rollback-tx-паттерном (`execute_sql`): supply/demand/price_grid → `is not null`=true, supply 1 ряд, demand 1 ряд, `sku_name`="TSP-0003"/"TSP-0013"; org_batches тело прогнано с реальным org (guard SEC-RPC-ORGTRUST-01 не задет). `cross_check.sh` зелёный.
+
+**Files**: `d07_ai_gateway.sql` (4 RPC), `IMPL_DEBT.md` (BUG-GETORGBATCHES-01 + BUG-AGGSUPPLYDEMAND-01), `DECISIONS_LOG.md`.
