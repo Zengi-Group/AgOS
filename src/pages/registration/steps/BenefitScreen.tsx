@@ -1,14 +1,8 @@
+import { Check } from '@phosphor-icons/react'
 import { T } from '@/lib/auth-ui/tokens'
 import { StickyDock, CTA } from '@/lib/auth-ui/primitives'
+import { ROLE_ICONS } from '../roleIcons'
 import type { RoleType } from '../constants'
-
-const ROLE_ILLOS: Record<RoleType, string> = {
-  farmer: '🐄',
-  mpk: '🏭',
-  services: '🔧',
-  feed_producer: '🌾',
-  expert: '👨‍⚕️',
-}
 
 const BENEFIT_CONTENT: Record<
   RoleType,
@@ -131,6 +125,7 @@ export function BenefitScreen({ role, step, onNext }: BenefitScreenProps) {
   const content = step === 1
     ? BENEFIT_CONTENT[role].step1
     : BENEFIT_CONTENT[role].step2
+  const RoleIcon = ROLE_ICONS[role]
 
   return (
     <div style={{ fontFamily: T.font }}>
@@ -142,14 +137,13 @@ export function BenefitScreen({ role, step, onNext }: BenefitScreenProps) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 48,
             background: `linear-gradient(135deg, ${T.bgS} 0%, ${T.bgM} 100%)`,
           }}
         >
-          {ROLE_ILLOS[role]}
+          <RoleIcon size={44} weight="light" color={T.accent} />
         </div>
         <div style={{ padding: '14px 16px 16px', background: T.bgC }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, color: T.fg, lineHeight: 1.3, letterSpacing: '-0.01em', margin: 0 }}>
+          <h2 style={{ fontFamily: T.font, fontSize: 18, fontWeight: 600, color: T.fg, lineHeight: 1.3, letterSpacing: '-0.01em', margin: 0 }}>
             {content.title}
           </h2>
         </div>
@@ -160,9 +154,7 @@ export function BenefitScreen({ role, step, onNext }: BenefitScreenProps) {
         {content.items.map((item, idx) => (
           <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ width: 20, height: 20, borderRadius: 999, background: T.bgM, display: 'grid', placeItems: 'center', flexShrink: 0, marginTop: 2 }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 13l4 4L19 7" />
-              </svg>
+              <Check size={12} weight="bold" color={T.accent} />
             </div>
             <p style={{ fontSize: 14, color: T.fg2, lineHeight: 1.5, margin: 0 }}>{item}</p>
           </div>
