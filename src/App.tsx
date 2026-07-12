@@ -8,6 +8,7 @@ import { HostProvider } from '@/platform/host/HostContext'
 import { RequireAuth } from '@/components/guards/RequireAuth'
 import { PushDeepLinkBridge } from '@/components/PushDeepLinkBridge'
 import { BootScreen } from '@/components/BootScreen'
+import { ShellBackGuard } from '@/pages/cabinet/shell/backGuard'
 
 import { RequireExpert } from '@/components/guards/RequireExpert'
 import { PublicLanding } from '@/components/guards/PublicLanding'
@@ -182,6 +183,9 @@ function App() {
       <AuthProvider>
         <BrowserRouter>
           <PushDeepLinkBridge />
+          {/* Граница истории оболочек: системный back/edge-swipe не выкидывает
+              авторизованного из /cabinet|/mpk на auth-экран (см. backGuard.ts). */}
+          <ShellBackGuard />
           <Routes>
             {/* Native: корень встречает неавторизованных тёмным Welcome, авторизованных — кабинетом. */}
             <Route path="/" element={IS_NATIVE ? <NativeEntry /> : <PublicLanding />} />
