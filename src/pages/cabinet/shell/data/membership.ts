@@ -38,7 +38,7 @@ export function buildDecisions({ batches, membership, h }: BuildArgs): DecisionC
     t: catName(b) + ' · ' + b.heads + ' голов',
     m: 'Покупатели не согласились по ' + fmtMoney(b.price as number) + NBSP + '₸/кг',
     actions: [
-      { t: 'Снизить цену', kind: 'primary', fn: () => h.lower(b) },
+      { t: 'Снизить', kind: 'primary', fn: () => h.lower(b) },
       { t: 'Варианты', kind: 'ghost', fn: () => h.open(b) },
     ],
   }))
