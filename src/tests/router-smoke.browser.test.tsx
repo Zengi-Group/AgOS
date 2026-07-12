@@ -91,3 +91,28 @@ it('v6+v5 сосуществуют: /mpk (v6-роут) рендерит обол
   // Демо-фолбэк МПК: баннер проверки типа организации (typeStatus='under_review').
   await expect.element(page.getByText('Проверяем тип организации'), T).toBeInTheDocument()
 })
+
+// Регрессия: авторизованный фермер на Главной кабинета. Системный back (Android edge-swipe
+// слева-направо / кнопка «назад» / browser-back) = window.history.back() на ОБЩЕЙ истории
+// v6+v5-острова. До фикса это выкидывало из /cabinet на pre-mount auth-запись (/welcome),
+// выглядело как разлогин. Ожидаем: остаёмся в кабинете, auth-экран не показывается.
+it('back из кабинета НЕ выкидывает авторизованного на экран авторизации', async () => {
+  // Воспроизводим историю входа: под /cabinet лежит auth-запись (как после /welcome→/login→/cabinet).
+  window.history.replaceState(null, '', '/welcome')
+  window.history.pushState(null, '', '/cabinet')
+  mountEl = document.createElement('div')
+  document.body.appendChild(mountEl)
+  root = createRoot(mountEl)
+  root.render(<App />)
+
+  await expect.poll(() => document.querySelector('[data-screen-label^="Главная"]'), T).not.toBeNull()
+
+  // Системный back / edge-swipe.
+  window.history.back()
+
+  // Даём роутерам отреагировать на popstate, затем убеждаемся, что auth-экран не всплыл
+  // и мы всё ещё в /cabinet.
+  await new Promise((r) => setTimeout(r, 400))
+  expect(document.body.textContent).not.toContain('Работа с рынком')
+  expect(window.location.pathname.startsWith('/cabinet')).toBe(true)
+})
