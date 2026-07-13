@@ -112,10 +112,10 @@
 
 ## 3. Events (Dok 4)
 
-- **Новое событие:** `comm.message.created` (namespace domain.entity.action). Payload: `{channel_id, message_id, organization_id, author_user_id, author_actor_type, preview}` (preview — короткий срез, НЕ полный текст).
-- **Консьюмер:** channel-agnostic диспетчер уведомлений (ARS-142). Новый notif-шаблон `new_message` (in_app + push), канал по `user_notification_preferences`.
-- **Адресаты:** все активные участники канала, **КРОМЕ автора**.
-- **Инвариант notif (d01_kernel.sql:1102):** template-only сохраняется — `notifications.params` несёт только `{channel_id, preview}` и deep-link, полный контент НЕ дублируется.
+- **Новое событие:** `comm.message.created` (namespace domain.entity.action). Payload: `{channel_id, message_id, author_user_id, author_actor_type, preview}` (preview — короткий срез в payload события, для потенциальных консьюмеров; НЕ утекает в notifications).
+- **Fan-out (реализация ARS-224):** делается синхронно в `rpc_send_message` через SQL-хелпер `fn_fanout_comm_notifications` (паттерн membership-RPC: атомарно, надёжно, бизнес-логика в SQL). Вставляет строки `notifications` по каналам **in_app + push** для всех активных участников канала **КРОМЕ автора**, с учётом `user_notification_preferences` (default-on: `coalesce(is_enabled,true)`). Идемпотентно по `message_id`.
+- **Доставка:** существующий channel-agnostic воркер (ARS-142, `ai_gateway/notification_worker.py`) — забирает `new_message`-строки и шлёт in_app/push. Шаблон `new_message` + deep-link `/cabinet/messages` добавлены туда.
+- **Инвариант notif (d01_kernel.sql:1102, строгий по ARS-224):** template-only — текст сообщения **НЕ дублируется**. `notifications.params = {channel_id, message_id}` (без preview); рендерится generic-текст «Новое сообщение…»; контент читается из `comm_messages` при открытии треда. preview живёт ТОЛЬКО в payload события.
 
 ---
 

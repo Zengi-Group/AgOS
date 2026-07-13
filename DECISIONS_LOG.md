@@ -3818,3 +3818,15 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: `bash cross_check.sh` → RESULT 0 critical errors; d12 сканируется (513 строк), CHECK 3/5/7 зелёные для новых RPC. RLS-тесты + событийный тест — на деплое.
 
 **Files**: `d12_messaging.sql` (new), `cross_check.sh` (SQL_FILES + CHECK 5 exceptions), `deploy_sql.py` (apply-order + docstring), `Docs/AGOS-Messaging-EngSpec-v0_1.md` (d14→d12).
+
+### 2026-07-13: Messaging — событие comm.message.created → notif-транспорт (ARS-224)
+
+**What**: Подключил fan-out уведомлений к отправке сообщения. Новый SQL-хелпер `fn_fanout_comm_notifications(p_message_id)` (SECURITY DEFINER, внутренний fn_, не API): вставляет строки `notifications` по каналам in_app+push для всех активных участников канала КРОМЕ автора, с учётом `user_notification_preferences` (default-on, `coalesce(is_enabled,true)`), идемпотентно по message_id. Вызывается синхронно из `rpc_send_message` (после публикации события) — паттерн membership-RPC. В `ai_gateway/notification_worker.py` добавлен шаблон `new_message` («Новое сообщение в чате поддержки TURAN…») + deep-link `/cabinet/messages`.
+
+**Why**: ARS-224 (Dok4 dispatcher). Fan-out в SQL, а не в Python-поллере: (1) бизнес-логика в RPC (CLAUDE.md), (2) атомарно с сообщением и не зависит от того, подключён ли поллер к cron (Slice-4 поллер ещё «future»), (3) переиспользование в broadcast-слайсе 2. Доставку делает существующий channel-agnostic воркер (ARS-142) — его не трогаем, только учим шаблон. Строгий инвариант ARS-224: notif template-only, текст НЕ дублируется — `params={channel_id, message_id}` без preview; preview остаётся только в payload события. Каналы in_app+push (не whatsapp) — по eng-spec §3.
+
+**Consequences**: Легко — участник (кроме автора) получает in_app/push при новом сообщении; выключенный канал в prefs не шлётся (LEFT JOIN). Аккуратно — идемпотентность fan-out через скан notifications по params->>message_id (без индекса; ок на Phase-1 масштабе, при росте — частичный индекс). broadcast 'all' (org=null) пропускается (notifications.org NOT NULL) — делается в слайсе 2. Боевой тест (send → участники получают, автор нет, disabled-канал молчит) — на задеплоенной БД + запущенном воркере (G3).
+
+**Verify**: `bash cross_check.sh` → 0 critical (3 significant = преждний TSP-adapter PGRST203). `python -c ast.parse` worker → OK. fn_fanout определён ДО rpc_send_message (check_function_bodies).
+
+**Files**: `d12_messaging.sql` (fn_fanout_comm_notifications + perform в rpc_send_message), `ai_gateway/notification_worker.py` (TEMPLATES + PUSH_DEEP_LINKS new_message), `Docs/AGOS-Messaging-EngSpec-v0_1.md` (§3).

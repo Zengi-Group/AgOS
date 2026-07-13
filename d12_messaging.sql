@@ -262,8 +262,72 @@ comment on function public.rpc_get_or_create_support_channel(uuid) is
      participants. Authz: член орг либо админ. Idempotent (get-or-create).';
 
 -- -------------------------------------------------------
+-- fn_fanout_comm_notifications — ARS-224: событие comm.message.created →
+-- notif-транспорт. Внутренний хелпер (fn_, не API): вставляет notifications-строки
+-- для КАЖДОГО активного участника канала КРОМЕ автора, по каналам in_app+push,
+-- с учётом user_notification_preferences (default-on: coalesce(is_enabled,true)).
+-- Инвариант notif template-only (d01_kernel.sql:1102, ARS-224): текст сообщения НЕ
+-- дублируется — params несёт только {channel_id, message_id} + deep-link у воркера;
+-- preview остаётся в payload события (не в notifications). Идемпотентно (повторный
+-- fan-out того же message_id → 0 строк). SECURITY DEFINER: обходит RLS notifications.
+-- -------------------------------------------------------
+create or replace function public.fn_fanout_comm_notifications(
+    p_message_id uuid
+)
+returns integer
+language plpgsql security definer
+set search_path = public, pg_temp as $$
+declare
+    v_msg public.comm_messages%rowtype;
+    v_count int := 0;
+begin
+    select * into v_msg from public.comm_messages where id = p_message_id;
+    if not found then
+        return 0;
+    end if;
+    -- broadcast 'all' (org=null) обрабатывается в слайсе 2 (notifications.org NOT NULL).
+    if v_msg.organization_id is null then
+        return 0;
+    end if;
+    -- Идемпотентность: не дублируем при повторной доставке события.
+    if exists (
+        select 1 from public.notifications
+        where template_id = 'new_message'
+          and (params->>'message_id')::uuid = p_message_id
+    ) then
+        return 0;
+    end if;
+
+    insert into public.notifications (
+        user_id, organization_id, channel, template_id, params, delivery_status
+    )
+    select p.user_id,
+           v_msg.organization_id,
+           ch.channel,
+           'new_message',
+           jsonb_build_object('channel_id', v_msg.channel_id, 'message_id', v_msg.id),
+           'pending'
+    from public.comm_participants p
+    cross join (values ('in_app'), ('push')) as ch(channel)
+    left join public.user_notification_preferences np
+        on np.user_id = p.user_id and np.channel = ch.channel
+    where p.channel_id = v_msg.channel_id
+      and p.is_active
+      and (v_msg.author_user_id is null or p.user_id <> v_msg.author_user_id)
+      and coalesce(np.is_enabled, true) = true;
+
+    get diagnostics v_count = row_count;
+    return v_count;
+end;
+$$;
+comment on function public.fn_fanout_comm_notifications(uuid) is
+    'ARS-224: fan-out comm.message.created → notifications (in_app+push) всем участникам
+     канала кроме автора, с учётом user_notification_preferences (default-on). Template-only
+     (params = {channel_id, message_id}, без текста — d01:1102/ARS-224). Идемпотентно.';
+
+-- -------------------------------------------------------
 -- rpc_send_message — вставить сообщение, обновить last_message_at, un-archive,
--- опубликовать platform_event comm.message.created.
+-- опубликовать platform_event comm.message.created + fan-out уведомлений.
 -- (org_id выводится из канала — CHECK 5 exception, web-JWT класс.)
 -- -------------------------------------------------------
 create or replace function public.rpc_send_message(
@@ -352,6 +416,11 @@ begin
         ),
         false
     );
+
+    -- ARS-224: fan-out в notifications (in_app+push) всем участникам кроме автора,
+    -- с учётом preferences. Синхронно и атомарно с сообщением (паттерн membership RPC),
+    -- воркер ARS-142 (notification_worker) доставит строки по каналам.
+    perform public.fn_fanout_comm_notifications(v_msg.id);
 
     return v_msg;
 end;
