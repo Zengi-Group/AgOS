@@ -13,7 +13,7 @@ set -uo pipefail
 CRITICAL=0
 SIGNIFICANT=0
 MINOR=0
-SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql)
+SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d12_messaging.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql)
 # TSP canonical trade layer = self-serve adapter migration (D-TSP-CANON-01, 2026-06-23).
 # Brought into cross_check scope per convergence Slice A. The adapter intentionally
 # redefines rpc_create_batch / rpc_get_org_batches (text-sig) over the d07 uuid-sig —
@@ -196,7 +196,12 @@ rpc_lower_price|rpc_update_price|rpc_submit_review|rpc_self_review_due_batches|\
 rpc_self_auto_match_batch|rpc_get_market_batches|rpc_self_activate_pool_request|\
 rpc_self_match_batch_to_pool|rpc_self_advance_pool_status|rpc_get_pool_matches|\
 rpc_get_my_pools|rpc_self_close_due_pools|rpc_self_accept_offer|\
-rpc_get_incoming_offers|rpc_self_reject_offer|rpc_self_confirm_delivery"
+rpc_get_incoming_offers|rpc_self_reject_offer|rpc_self_confirm_delivery|\
+rpc_send_message|rpc_list_channels|rpc_list_messages|rpc_mark_channel_read|rpc_archive_channel"
+# Messaging (d12): channel-scoped RPCs derive organization_id from the channel row and
+# enforce isolation via fn_my_org_ids()/comm_participants membership (web-JWT access
+# class), not via an organization_id parameter. rpc_get_or_create_support_channel DOES
+# take p_organization_id and is validated normally. rpc_archive_channel is admin-guarded.
 # TSP self-serve adapter RPCs (D-TSP-CANON-01): web-JWT access class — org scoping is
 # enforced inside via fn_my_org_ids(), not via an organization_id parameter (P-AI-2 is
 # satisfied for the AI path by the canonical uuid-sig RPCs, which DO take org_id).
