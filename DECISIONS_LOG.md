@@ -3,6 +3,18 @@
 > Maintained by: Architect & Coordinator Agent
 > Format: WHAT was decided → WHY (alternatives considered) → CONSEQUENCES (what becomes easy/hard)
 
+### 2026-07-13: Кабинет фермера — тред TURAN на реальном канале поддержки (ARS-225)
+
+**What**: раздел «Сообщения» → тред `turan` стал реальным двусторонним каналом (фермер ↔ админ) поверх d12_messaging.sql. **(1)** Новый data-loader `messages-load.ts` по образцу `farm-load.ts` (graceful `null` → мок): `loadSupportThread(orgId)` = `rpc_get_or_create_support_channel` + `rpc_list_messages`; `sendSupportMessage`, `markSupportRead`. **(2)** `threads.ts` аддитивно: `ThreadMsg.dir` (свои отправки = `outgoing`); `ThreadEnv.turanReal?`/`myUserId?`; реальные `comm_messages` вставляются в тред TURAN **после** дайджестов (членство/цены/новости НЕ удалены — HS-2), перед CTA «Написать в TURAN»; превью/время строки списка берутся из последнего реального сообщения (fallback на плашку членства). **(3)** `ThreadScreen` чтит `m.dir`. **(4)** `CabinetApp`: state канала + поллинг 30с, эффективный `turanUnread` (реальный: ответ TURAN новее `last_read_at`; иначе мок), авто-mark-read + reload при входе в тред, изоляция канала при смене аккаунта. **(5)** `TuranScreen`: форма обращения (тема+текст) шлёт через `rpc_send_message` (проп `onSend`); успех → экран «принято», иначе мок-фолбэк.
+
+**Why**: MVP-ось фермер↔админ (eng-spec §4.1). Синхронная модель «реальное поверх мока с null-фолбэком» = проверенный паттерн `farm-load.ts`: до боевого деплоя d12 (G3, человек) тред живёт на дайджестах, после — оживает без правок UI. Аддитивно (P7): ни один дайджест/экран не удалён.
+
+**Verify**: `tsc -b` = 0. Боевая проверка (реальные сообщения, unread, mark-read, e2e-нотификации) — deploy-gated: требует применения d12_messaging.sql + воркера (ARS-142). SQL не менялся в этом коммите → `cross_check.sh` уже прогонялся на d12 (ARS-223).
+
+**Files**: `src/pages/cabinet/shell/data/messages-load.ts` (new), `data/threads.ts`, `screens/ThreadScreen.tsx`, `screens/TuranScreen.tsx`, `CabinetApp.tsx`. Ветка `kernuree/ars-222-eng-spec-slice-messaging`.
+
+---
+
 ### 2026-07-12: Мастер фермы — карточки-опции не сливаются + чистый док (R-27)
 
 **What**: правки CEO по экранам ветки «План» мастера фермы (SCR-F3 отёл / SCR-F4 телята / SCR-F5 содержание). **(1)** Карточки `BigRadio` сливались в одну плиту: у невыбранной `.mk-big-radio` граница `transparent`, а обёртка `.mk-stack8` в мастере наследует `gap:0` (общий с лентой партий Рынка — трогать глобально нельзя). Добавлен скоуп-класс `fw-opts` на три `mk-stack8`-обёртки + CSS: `gap:8px`, `border-color:var(--bd)` у `:not(.sel)`, паддинг `16px→12×14` (компактнее). TSP-мастер и лента партий не тронуты. **(2)** Под главным CTA было 2 строки микрокопи (skip-ссылка «Пропустить вопрос» + note «сохраняется после каждого ответа») — CEO: «так нигде и никогда не делай». Обе сняты с F3/F4/F5; `onSkip` удалён из пропсов трёх шагов и из `FarmWizard` (не осталось мёртвого кода, HS-4). `DraftNote` сохранён (используют FwStepHerd и мастер TSP — там по одной строке, правило соблюдено).

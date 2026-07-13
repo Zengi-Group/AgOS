@@ -10,6 +10,7 @@ import { CATS, PRICE_DELTA, HERD_FOR_CAT, SHORT_CAT } from './prices'
 import type { FarmState } from './farm-seed'
 import type { AiMsg, Batch, MembershipStatus, Notif } from '../types'
 import type { PhIconName } from '../components/icons/PhIcon'
+import type { CommMessage } from './messages-load'
 
 // ═══ семантика тредов · цвет аватара фиксирован (§16 прототипа) ═══
 // Консультант — звезда (accent, единственный оранжевый) · Рынок — янтарный ·
@@ -52,6 +53,9 @@ export interface ThreadMsg {
   pin?: boolean
   actions?: ThreadMsgAction[]
   open?: () => void
+  // ARS-225: сторона пузыря. По умолчанию 'incoming' (левый) — как у дайджестов.
+  // Реальные сообщения фермера (его отправки) — 'outgoing' (правый).
+  dir?: 'incoming' | 'outgoing'
 }
 
 export interface ThreadEnv {
@@ -64,6 +68,11 @@ export interface ThreadEnv {
   turanUnread: boolean
   newsOn: boolean
   h: ThreadH
+  // ARS-225: реальные сообщения канала поддержки (comm_messages), хронологически.
+  // undefined = канал не загружен (аноним / RPC не задеплоен) → только дайджесты (мок).
+  turanReal?: CommMessage[]
+  // id текущего пользователя — чтобы отличить свои отправки (outgoing) от ответов TURAN.
+  myUserId?: string | null
 }
 
 // Дисклеймер ст. 171 — слово в слово с PriceSheet (антитраст, показывается со справочными ценами).
@@ -71,6 +80,38 @@ export const PRICES_DISCLAIMER =
   'Справочная информация ассоциации TURAN. Не является обязательной — цену вы назначаете сами.'
 
 const NEWS_ITEM = { t: 'Сезон отёла: 5 ошибок первых часов телёнка.', s: 'Курс TURAN · 15 минут' }
+
+// ARS-225: короткое время сообщения. Сегодня → «ЧЧ:ММ», иначе → «5 июл».
+function fmtMsgTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const now = new Date()
+  const sameDay = d.toDateString() === now.toDateString()
+  return sameDay
+    ? new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(d)
+    : new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(d)
+}
+
+// Подпись автора для входящих сообщений (ответы TURAN). Свои — без подписи.
+const ACTOR_LABEL: Record<CommMessage['author_actor_type'], string> = {
+  farmer: '', admin: 'TURAN', expert: 'Специалист TURAN', system: 'TURAN',
+}
+
+// Проекция реальных comm_messages в пузыри треда (ARS-225). Свои отправки — outgoing,
+// ответы TURAN/специалиста — incoming с подписью автора.
+function realTuranMsgs(real: CommMessage[], myUserId: string | null | undefined): ThreadMsg[] {
+  return real.map((m) => {
+    const mine = m.author_actor_type === 'farmer'
+      && (!!myUserId ? m.author_user_id === myUserId : true)
+    return {
+      id: 'cm-' + m.id,
+      t: m.body,
+      s: mine ? undefined : (ACTOR_LABEL[m.author_actor_type] || undefined),
+      time: fmtMsgTime(m.created_at),
+      dir: mine ? 'outgoing' : 'incoming',
+    } as ThreadMsg
+  })
+}
 
 const activeTasksN = (farm: FarmState): number =>
   farm.tasks.filter((t) => !t.done && !t.dismissed && !t.postponed).length
@@ -176,7 +217,7 @@ function farmThreadMsgs({ farm, h }: ThreadEnv): ThreadMsg[] {
   return msgs
 }
 
-function turanThreadMsgs({ membership, newsOn, h }: ThreadEnv): ThreadMsg[] {
+function turanThreadMsgs({ membership, newsOn, h, turanReal, myUserId }: ThreadEnv): ThreadMsg[] {
   const msgs: ThreadMsg[] = []
   const entry = MEMBERSHIP_DICT[membership]
   const p = entry.plate
@@ -201,6 +242,11 @@ function turanThreadMsgs({ membership, newsOn, h }: ThreadEnv): ThreadMsg[] {
     })
   }
   if (newsOn) msgs.push({ id: 't-news', time: 'вчера', t: NEWS_ITEM.t, s: NEWS_ITEM.s })
+  // ARS-225: реальная двусторонняя переписка канала поддержки ДОБАВЛЯЕТСЯ к дайджестам
+  // (HS-2: дайджесты выше не удаляются). Порядок: контекст (членство/цены/новости) → диалог → CTA.
+  if (turanReal && turanReal.length > 0) {
+    msgs.push(...realTuranMsgs(turanReal, myUserId))
+  }
   msgs.push({
     id: 't-write',
     t: 'Вопрос ассоциации? Напишите нам — ответим в течение 1 рабочего дня.',
@@ -228,7 +274,7 @@ export interface ThreadListItem {
 }
 
 export function buildThreadList(env: ThreadEnv): ThreadListItem[] {
-  const { batches, notifs, membership, farm, aiLog, farmUnread, turanUnread, h } = env
+  const { batches, notifs, membership, farm, aiLog, farmUnread, h } = env
   const dec = batches.filter((b) => b.state === 'decision')
   const lastAi = aiLog.length ? aiLog[aiLog.length - 1] : null
   const unreadN = notifs.filter((n) => n.unread).length
@@ -259,12 +305,36 @@ export function buildThreadList(env: ThreadEnv): ThreadListItem[] {
           + tasksN + ' ' + ruPlural(tasksN, 'задача', 'задачи', 'задач') + ' на сегодня'
         : 'Заполните профиль фермы — брифинги появятся здесь',
     },
-    {
-      tid: 'turan', unread: turanUnread ? 1 : 0, time: 'сегодня',
-      prev: p ? p.t : MEMBERSHIP_DICT[membership].cab,
-      cta: p && p.cta ? { t: p.cta, fn: () => h.member(p.act ?? 'apply') } : undefined,
-    },
+    turanListItem(env, p, membership),
   ]
+}
+
+// ARS-225: строка списка для TURAN. Если есть реальные сообщения канала — превью и время
+// берём из последнего сообщения (живой диалог важнее статичного дайджеста); иначе — как раньше
+// (плашка членства / кабинетная подпись). CTA членства сохраняется (одно действие — две поверхности).
+function turanListItem(
+  env: ThreadEnv,
+  p: (typeof MEMBERSHIP_DICT)[MembershipStatus]['plate'],
+  membership: MembershipStatus
+): ThreadListItem {
+  const { turanReal, turanUnread, h } = env
+  const last = turanReal && turanReal.length > 0 ? turanReal[turanReal.length - 1] : null
+  const cta = p && p.cta ? { t: p.cta, fn: () => h.member(p.act ?? 'apply') } : undefined
+  if (last) {
+    const mine = last.author_actor_type === 'farmer'
+    return {
+      tid: 'turan',
+      unread: turanUnread ? 1 : 0,
+      time: fmtMsgTime(last.created_at) || 'сегодня',
+      prev: (mine ? 'Вы: ' : '') + last.body,
+      cta,
+    }
+  }
+  return {
+    tid: 'turan', unread: turanUnread ? 1 : 0, time: 'сегодня',
+    prev: p ? p.t : MEMBERSHIP_DICT[membership].cab,
+    cta,
+  }
 }
 
 // ═══ AI · стартовая реплика и замоканные ответы (до подключения AI Gateway) ═══
