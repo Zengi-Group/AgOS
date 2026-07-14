@@ -23,11 +23,14 @@ interface Props {
   noScroll?: boolean
 }
 
-export function IonShellFrame({ label, children, onRefresh, footer, footBare, noScroll }: Props) {
+export function IonShellFrame({ label, children, noTabs, onRefresh, footer, footBare, noScroll }: Props) {
   return (
     <IonPage data-screen-label={label || ''}>
       <OfflineBar />
-      <IonContent scrollY={!noScroll} className={'agos-ion-content' + (noScroll ? ' ion-noscroll' : '')}>
+      {/* C6 (ARS-220): постоянный таб-бар выведен из потока (position:absolute) и прячется
+          transform-ом. Баровые экраны (4 таб-корня НЕ передают noTabs) резервируют высоту
+          бара статично на весь срок жизни страницы — резерв не меняется при переходах, рывка нет. */}
+      <IonContent scrollY={!noScroll} className={'agos-ion-content' + (noScroll ? ' ion-noscroll' : '') + (noTabs ? '' : ' has-tabbar')}>
         {onRefresh && (
           <IonRefresher
             slot="fixed"

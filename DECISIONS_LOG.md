@@ -3,6 +3,18 @@
 > Maintained by: Architect & Coordinator Agent
 > Format: WHAT was decided → WHY (alternatives considered) → CONSEQUENCES (what becomes easy/hard)
 
+### 2026-07-14: Таб-бар — плавное скрытие трансформом вместо display:none (C6, ARS-220)
+
+**What**: постоянный `IonTabBar` (P-4) прятался на детальных экранах через `display:none` → мгновенный ресайз outlet посреди slide-перехода = двойной рывок раскладки (на уходе и возврате). Бар выведен из flex-потока `IonTabs` (`position:absolute; bottom:0; z-index:10`, offsetParent = `ion-tabs`) и прячется `transform:translateY(100%)+opacity:0+pointer-events:none` с `transition .28s` (замена `display:none` в `.agos-tabbar--hidden`). Т.к. бар теперь оверлеит контент, добавлен резерв под него — но **статичный на весь срок жизни страницы, а не глобально переключаемый**: `IonShellFrame` при `!noTabs` вешает класс `has-tabbar` на `IonContent` → `--padding-bottom: var(--tabbar-h)` (`60px + safe-area`). 4 таб-корня (без `noTabs`) резервируют, детальные (`noTabs`) — нет. Оживлён «мёртвый» проп `noTabs` (был no-op с P-4). Разметка `IonTabs`/роуты/`hideTabBar`-логика не тронуты (HS-5, аддитивно).
+
+**Why**: `display:none` не анимируется и, пока бар в потоке `IonTabs`, его исчезновение мгновенно ресайзит `ion-router-outlet` → рывок. Рассмотрены и отклонены: **(а)** анимировать height бара в потоке — всё равно непрерывно ресайзит outlet, джанк; **(б)** всегда держать резерв — оставляет пустую полосу на деталях и отжимает композер чата вверх. Выбран out-of-flow + per-page-static резерв: рывка нет **by design** (ни у одной страницы резерв не меняется при переходе), пустой полосы нет (детали без резерва), чат цел (`noScroll` + `noTabs` → 0). Ключ резерва — существующий сигнал `noTabs` (bar-hidden экраны уже все его передают), без нового состояния.
+
+**Verify**: dev-preview (mobile 375×812, реальный бэкенд, seed-фермер +77010000001) — computed-стили: таб-экран бар `position:absolute` height 59px, контент с резервом 60px (перекрытие +1px); детальный `/cabinet/thread/market` бар `translateY(59px)` за экран (`barTop=812=winH`), `opacity:0`, `pointer-events:none`, контент детали `--padding-bottom:0` (полная высота, пустой полосы нет), таб-экран в стеке держит свой резерв; `transition-duration 0.28s` на transform+opacity. **Нативный клиппинг/safe-area — только на устройстве → DEBT-NATIVE-VERIFY-01.** Чистый фронт, SQL не тронут → `cross_check.sh` не нужен.
+
+**Files**: `src/pages/cabinet/shell/ionic.css`, `shell-proto.css`, `components/IonShellFrame.tsx`. Ветка `claude/tab-bar-hide-animation-9b156e`.
+
+---
+
 ### 2026-07-12: Мастер фермы — карточки-опции не сливаются + чистый док (R-27)
 
 **What**: правки CEO по экранам ветки «План» мастера фермы (SCR-F3 отёл / SCR-F4 телята / SCR-F5 содержание). **(1)** Карточки `BigRadio` сливались в одну плиту: у невыбранной `.mk-big-radio` граница `transparent`, а обёртка `.mk-stack8` в мастере наследует `gap:0` (общий с лентой партий Рынка — трогать глобально нельзя). Добавлен скоуп-класс `fw-opts` на три `mk-stack8`-обёртки + CSS: `gap:8px`, `border-color:var(--bd)` у `:not(.sel)`, паддинг `16px→12×14` (компактнее). TSP-мастер и лента партий не тронуты. **(2)** Под главным CTA было 2 строки микрокопи (skip-ссылка «Пропустить вопрос» + note «сохраняется после каждого ответа») — CEO: «так нигде и никогда не делай». Обе сняты с F3/F4/F5; `onSkip` удалён из пропсов трёх шагов и из `FarmWizard` (не осталось мёртвого кода, HS-4). `DraftNote` сохранён (используют FwStepHerd и мастер TSP — там по одной строке, правило соблюдено).
