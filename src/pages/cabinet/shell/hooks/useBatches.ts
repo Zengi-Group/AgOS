@@ -66,7 +66,12 @@ export function useBatches(accountId?: string | null): UseBatchesResult {
     } catch {
       // Нет backend (схема не задеплоена / офлайн) — работаем на localStorage,
       // не падать с белым экраном. Ключ скоуплен по аккаунту.
-      setBatches(loadLocal(lsKey))
+      const cached = loadLocal(lsKey)
+      setBatches(cached)
+      // D2 (офлайн-чтение): пустой кеш + сбой загрузки — это НЕ «партий нет», а ошибка.
+      // Взводим error, чтобы экран показал «Не удалось загрузить • Повторить» вместо
+      // ложного empty-state. Есть кеш — показываем его молча (последнее известное).
+      if (cached.length === 0) setError('Не удалось загрузить партии')
     } finally {
       if (!silent) setLoading(false)
     }
