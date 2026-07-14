@@ -51,6 +51,22 @@
   --color-selected: var(--green-d);
   border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
+  /* C6 (ARS-220): бар выведен из flex-потока ion-tabs — иначе show/hide через display
+     мгновенно ресайзил outlet (двойной рывок раскладки посреди slide-перехода). Теперь
+     он абсолютен у низа рамки, а прячется transform-ом (см. .agos-tabbar--hidden). */
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 10;
+  transform: translateY(0); opacity: 1;
+  will-change: transform;
+  transition: transform .28s var(--ease, cubic-bezier(.4, 0, .2, 1)), opacity .28s var(--ease, cubic-bezier(.4, 0, .2, 1));
+}
+/* Резерв под абсолютным баром — только на баровых экранах (IonShellFrame без noTabs →
+   .has-tabbar). Статичен на весь срок жизни страницы: детальные (noTabs) резерва не имеют
+   → нет пустой полосы; чат (noScroll) не отжимается. Высота бара ≈ контент + safe-area. */
+.agos-cabinet-stage {
+  --tabbar-h: calc(60px + env(safe-area-inset-bottom, 0px));
+}
+.agos-cabinet-stage ion-content.agos-ion-content.has-tabbar {
+  --padding-bottom: var(--tabbar-h);
 }
 .agos-cabinet-stage ion-tab-bar.agos-tabbar ion-tab-button {
   --padding-start: 2px;
