@@ -423,6 +423,9 @@ export function CabinetApp() {
   // registered→observer — переживает перезагрузку И виден админу; (2) локальный флаг PAID_KEY —
   // фолбэк, чтобы оплата не запрашивалась повторно даже если RPC недоступен (миграция не применена).
   const payVznosDone = async () => {
+    // S4=A · C4: оплата взноса — серверное действие; офлайн честно блокируем
+    // (у него своя оптимистичная setMembership мимо patchBatch, поэтому гейт здесь).
+    if (offline) { offlineToast(); return }
     // Этап 2 · D9: отклик мгновенный — членство активно ДО сетевого вызова. Раньше
     // setMembership('active') стоял ПОСЛЕ await: секунды «ничего не произошло», а плашка
     // «Оплатить взнос» оставалась и была повторно нажимаема. Сервер — источник правды,
@@ -454,24 +457,31 @@ export function CabinetApp() {
   const bannerVariant = (membership === 'none' || membership === 'terminated') ? 'join' : 'season'
   const sticker = stickerData(FARMER_LEAD_CAT, 'auto')
 
-  const patchBatch = (id: string, patch: Partial<Batch>) => {
-    patchBatchAsync(id, patch).catch((e: unknown) => {
-      const msg = e instanceof Error ? e.message : 'Ошибка'
-      showToast(msg)
-    })
+  // S4=A · C4+D7 (единый источник фидбека мутаций партий). Все действия через onPatch
+  // (снятие/отгрузка/цена/отзыв/отмена) сходятся сюда.
+  //  - C4: офлайн → честный гейт, БЕЗ локальной мутации и без ложного «успеха».
+  //  - D7: тост успеха показываем ТОЛЬКО после сетевого round-trip (patchBatchAsync
+  //    резолвится после попытки RPC), а не оптимистично до отправки. Копия тоста
+  //    приходит из call-site как successToast (контекст остаётся у вызывающего).
+  const patchBatch = (id: string, patch: Partial<Batch>, successToast?: string) => {
+    if (offline) { offlineToast(); return }
+    patchBatchAsync(id, patch)
+      .then(() => { if (successToast) showToast(successToast) })
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : 'Ошибка'
+        showToast(msg)
+      })
   }
 
   // обработчики ярусов и тредов (один объект — две поверхности)
   const decH: DecH = {
     lower: (b) => {
-      patchBatch(b.id, { state: 'offering', deadlineLabel: 'завтра, 14:30' })
-      showToast('Предложение отправлено покупателям по новой цене')
+      patchBatch(b.id, { state: 'offering', deadlineLabel: 'завтра, 14:30' }, 'Предложение отправлено покупателям по новой цене')
     },
     open: () => go({ name: 'market' }),
     dispatch: (b) => {
-      patchBatch(b.id, { state: 'dispatched' })
+      patchBatch(b.id, { state: 'dispatched' }, 'Покупатель получил уведомление об отгрузке')
       host.haptics('medium')   // S2.1: отгрузка — ключевое действие
-      showToast('Покупатель получил уведомление об отгрузке')
     },
     review: (b) => go({ name: 'review', batchId: b.id, back: { name: 'home' } }),
     pay: () => memberAct('pay'),
@@ -627,7 +637,7 @@ export function CabinetApp() {
         account={profile ? { name: profile.name, bin: profile.bin, phone: profile.phone, district: profile.district } : null}
         onBack={() => goBackTo(route.back ?? { name: 'p1list' })}
         backLabel={backLabelFor(route.back)}
-        onPatch={(patch) => patchBatch(currentBatch.id, patch)}
+        onPatch={(patch, successToast) => patchBatch(currentBatch.id, patch, successToast)}
         onNew={() => {
           // S2.1 (ARS-157): визард только на market-роуте — уводим туда (решение CEO: починить).
           setWizActive(true); go({ name: 'market' })
@@ -650,8 +660,7 @@ export function CabinetApp() {
       <ReviewScreen
         batch={reviewBatch}
         onBack={() => goBackTo(route.back ?? { name: 'batch', batchId: reviewBatch.id })}
-        onPatch={(patch) => patchBatch(reviewBatch.id, patch)}
-        toast={showToast}
+        onPatch={(patch, successToast) => patchBatch(reviewBatch.id, patch, successToast)}
       />
     )
   }
