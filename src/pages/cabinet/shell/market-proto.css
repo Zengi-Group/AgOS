@@ -779,10 +779,11 @@
   content:none;
 }
 
-@keyframes mk-pulse {
-  0% { transform:scale(.9); opacity:.6; }
-  100% { transform:scale(1.5); opacity:0; }
-}
+/* УДАЛЁН дубликат @keyframes mk-pulse (аудит 2026-07-13, M1 / урок L-1): здесь стоял
+   второй `mk-pulse` (scale .9→1.5, opacity .6→0) — остаток убранного кольца .mk-trkh-bul::before
+   (content:none выше). Будучи позже в каскаде, он молча перебивал НАМЕРЕННЫЙ opacity-пульс
+   (market-proto.css:133) — статус-дот «торги идут» раздувался и исчезал вместо мягкого дыхания.
+   Единственное валидное определение mk-pulse теперь одно (opacity 1↔.5). */
 .agos-cabinet-stage .mk-trkh-line {
   flex:1; height:1.5px;
   background:var(--bd-s);
@@ -1900,3 +1901,19 @@
 .agos-cabinet-stage .fw-ph-chip { flex:none; padding:3px 8px; border-radius:var(--r-full); font-size:11.5px; font-weight:600; background:var(--bg-m); color:var(--fg2); }
 .agos-cabinet-stage .fw-ph-chip.on { background:color-mix(in srgb, var(--amber) 12%, transparent); color:var(--fg); }
 .agos-cabinet-stage .fw-ph-chip.ok { background:color-mix(in srgb, var(--ok) 12%, transparent); color:var(--fg2); }
+
+/* ═══ Этап 2 · Отклик на касание — Рынок/Партия/payoff (аудит 2026-07-13, аддитивно).
+   Wizard-контролы (.mk-cta/.mk-stp-b/.mk-kebab/.mk-card…) уже имеют :active; тут —
+   дозаполнение поверхностей рынка/сделки, что жили только на :hover (T2). ═══ */
+/* площадные (меню действий, шапки аккордеонов, альтернативы решения) — подложка */
+.agos-cabinet-stage .mk-menu-item:active,
+.agos-cabinet-stage .mk-acc-head:active,
+.agos-cabinet-stage .mk-dec-alt:active { background:var(--bg-m); }
+/* текстовые (табы-фильтры, ссылки, «изменить», «отмена») — приглушение */
+.agos-cabinet-stage .mk-tab:active,
+.agos-cabinet-stage .mk-link:active,
+.agos-cabinet-stage .mk-dec-cancel:active,
+.agos-cabinet-stage .mk-prose-edit:active { opacity:.6; }
+/* «Продать через TURAN» в payoff-карте фермы */
+.agos-cabinet-stage .fw-pay-sell { transition:background 90ms var(--ease), transform 90ms var(--ease); }
+.agos-cabinet-stage .fw-pay-sell:active { background:color-mix(in srgb, var(--green) 20%, transparent); transform:scale(.99); }

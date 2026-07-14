@@ -32,6 +32,13 @@
 }
 /* Страховка: сама ion-page тоже непрозрачна (короткий контент / момент до пейнта). */
 .agos-cabinet-stage .ion-page { background: var(--bg); }
+/* iOS safe-area сверху (аудит 2026-07-13, C2): sticky-шапки/OfflineBar уходили под
+   чёлку/статус-бар. env() = 0 на web/desktop/Android(overlaysWebView:false) → no-op,
+   регрессии нет; на iOS WKWebView (viewport-fit=cover) сдвигает контент из-под выреза.
+   Sticky top:0 остаётся top:0 внутри отпаддингованной страницы — работает корректно. */
+.agos-cabinet-stage .ion-page { padding-top: env(safe-area-inset-top, 0px); }
+/* Полноэкранные МПК-модалы (absolute inset:0, не .ion-page) — тот же верхний инсет. */
+.agos-cabinet-stage ion-modal.agos-mpk-modal .mpk-modal { padding-top: env(safe-area-inset-top, 0px); }
 .agos-cabinet-stage ion-content.agos-ion-content .phone-scroll {
   flex: none;
   overflow-y: visible;

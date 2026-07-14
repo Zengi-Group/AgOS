@@ -97,7 +97,7 @@ async function configureChrome(): Promise<void> {
   try {
     await StatusBar.setStyle({ style: Style.Light })
     if (Capacitor.getPlatform() === 'android') {
-      await StatusBar.setBackgroundColor({ color: '#fdf6ee' })
+      await StatusBar.setBackgroundColor({ color: '#f6f3ed' }) // = --bg кабинета (L5): без шва статус-бар↔контент
       await StatusBar.setOverlaysWebView({ overlay: false })
     }
   } catch {
@@ -114,10 +114,11 @@ export async function createCapacitorHost(): Promise<AgOSHost> {
   // Deep-link cold-start: ловим стартовый URL и ранние appUrlOpen в буфер, пока
   // ядро (§6, S5-роутер) не подпишется через onDeepLink — иначе холодная ссылка теряется.
   let pendingDeepLink: string | null = null
-  let deepLinkHandler: ((path: string) => void) | null = null
+  // C10 (аудит 2026-07-13): несколько подписчиков (PushDeepLinkBridge + v5-остров CabinetApp).
+  const deepLinkHandlers = new Set<(path: string) => void>()
   const emitDeepLink = (path: string | null) => {
     if (!path) return
-    if (deepLinkHandler) deepLinkHandler(path)
+    if (deepLinkHandlers.size) deepLinkHandlers.forEach((h) => h(path))
     else pendingDeepLink = path
   }
   try {
@@ -199,11 +200,14 @@ export async function createCapacitorHost(): Promise<AgOSHost> {
     },
 
     onDeepLink(handler) {
-      deepLinkHandler = handler
+      deepLinkHandlers.add(handler)
+      // Буфер холодного старта отдаём первому подписчику (обычно PushDeepLinkBridge);
+      // остальные получают только рантайм-события.
       if (pendingDeepLink) {
         handler(pendingDeepLink)
         pendingDeepLink = null
       }
+      return () => deepLinkHandlers.delete(handler)
     },
 
     caps: { haptics: true, camera: true, secureStorage: true, statusBar: true },
