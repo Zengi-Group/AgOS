@@ -91,8 +91,11 @@ export function useBatches(accountId?: string | null): UseBatchesResult {
     return () => clearInterval(id)
   }, [reviewDue, fetch])
 
+  // Этап 2 · C5: pull-to-refresh (и retry при восстановлении сети) — тихий рефетч.
+  // IonRefresher уже показывает свой спиннер сверху; loading НЕ взводим, иначе весь
+  // экран схлопывается в скелет и обратно поверх живого контента.
   const refetch = useCallback(async () => {
-    await fetch()
+    await fetch({ silent: true })
   }, [fetch])
 
   // После onDone визарда — добавить batch оптимистично + рефетч для синхронизации
@@ -104,8 +107,9 @@ export function useBatches(accountId?: string | null): UseBatchesResult {
       saveLocal(lsKey, next)   // сохранить локально (демо без backend)
       return next
     })
-    // Рефетч в фоне для синхронизации с сервером (если backend есть)
-    fetch()
+    // Рефетч в фоне для синхронизации с сервером (если backend есть).
+    // Этап 2 · C5: тихо — экран успеха (PubResult) уже показан, скелет тут = регресс.
+    fetch({ silent: true })
   }, [fetch, lsKey])
 
   const patchBatch = useCallback(async (id: string, patch: Partial<Batch>) => {

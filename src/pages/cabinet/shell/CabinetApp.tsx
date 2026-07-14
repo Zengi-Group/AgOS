@@ -423,8 +423,15 @@ export function CabinetApp() {
   // registered→observer — переживает перезагрузку И виден админу; (2) локальный флаг PAID_KEY —
   // фолбэк, чтобы оплата не запрашивалась повторно даже если RPC недоступен (миграция не применена).
   const payVznosDone = async () => {
+    // Этап 2 · D9: отклик мгновенный — членство активно ДО сетевого вызова. Раньше
+    // setMembership('active') стоял ПОСЛЕ await: секунды «ничего не произошло», а плашка
+    // «Оплатить взнос» оставалась и была повторно нажимаема. Сервер — источник правды,
+    // синхронизируется в фоне; фолбэк на локальный флаг делает оптимизм безопасным.
     setSheet(null)
     setTuranUnread(false)
+    setMembership('active')
+    host.haptics('medium')   // S2.1: оплата взноса — ключевое действие
+    showToast('Взнос оплачен · членство активно')
     // Источник истины — сервер: rpc_pay_membership_dues поднимает memberships.level
     // registered→observer (переживает перезагрузку И виден админу). Локальный флаг ставим
     // ТОЛЬКО если серверный вызов не прошёл — иначе клиент и БД расходятся (UI «оплачено»,
@@ -436,9 +443,6 @@ export function CabinetApp() {
       else console.warn('rpc_pay_membership_dues не прошёл, локальный фолбэк:', error.message)
     }
     if (!serverOk && profile?.userId) appStorage.setItem(PAID_KEY(profile.userId), '1')
-    setMembership('active')
-    host.haptics('medium')   // S2.1: оплата взноса — ключевое действие
-    showToast('Взнос оплачен · членство активно')
   }
   const payProDone = () => {
     setIsPro(true); setSheet(null)

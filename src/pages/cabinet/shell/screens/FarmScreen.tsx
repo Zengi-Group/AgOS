@@ -4,7 +4,7 @@
 // State C · План есть (ARS-215): годовой план (draft-ЦТК) + фазы + сводка стада — payoff Узла 1.
 // Каркас — IonShellFrame + TabHead (у shell свой заголовок, Topbar-принцип не применяется).
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { IonShellFrame } from '../components/IonShellFrame'
 import { TabHead } from '../components/TabHead'
 import { PhIcon } from '../components/icons/PhIcon'
@@ -23,31 +23,33 @@ export function FarmScreen({ onStart, onResume }: Props) {
   const [plan, setPlan] = useState<FarmPlan | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Этап 2 · D3: загрузка вынесена в reload — переиспользуется pull-to-refresh
+  // (единственный экран данных, у которого раньше не было НИ PTR, НИ поллинга).
+  // silent=true — тихое обновление без скелета поверх живого контента (паттерн C5).
+  const reload = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true)
+    // План читается после ctx (нужны org/farm id) — state C приоритетнее F0b (ARS-215).
+    const c = await loadFarmCtx()
+    setCtx(c)
+    setPlan(c?.organizationId && c.farmId ? await loadFarmPlan(c.organizationId, c.farmId) : null)
+    setLoading(false)
+  }, [])
+
   useEffect(() => {
     let alive = true
-    // План читается после ctx (нужны org/farm id) — state C приоритетнее F0b (ARS-215).
-    loadFarmCtx().then(async (c) => {
-      if (!alive) return
-      setCtx(c)
-      if (c?.organizationId && c.farmId) {
-        const p = await loadFarmPlan(c.organizationId, c.farmId)
-        if (!alive) return
-        setPlan(p)
-      }
-      setLoading(false)
-    })
+    reload().catch(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [])
+  }, [reload])
 
   const heads = ctx?.heads ?? { cows: 0, calves: 0, heifers: 0, steers: 0, bull: 0 }
   const total = (Object.values(heads) as number[]).reduce((s, n) => s + n, 0)
   const hasHerd = ctx?.hasHerd ?? false
 
   return (
-    <IonShellFrame label="Ферма">
+    <IonShellFrame label="Ферма" onRefresh={() => reload({ silent: true })}>
       <TabHead title="Ферма" />
       <div className="mk">
-        {loading ? (
+        {loading && !ctx ? (
           <ScreenSkeleton variant="farm" />
         ) : plan ? (
           // ── State C · План есть (ARS-215) ──
