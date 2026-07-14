@@ -2,9 +2,10 @@
  * A-CAT-01 — Категории скота (CRUD livestock_categories).
  * RPC: AR-1 rpc_admin_list_categories_with_stats · AC-1 upsert · AC-2 deactivate.
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Plus, Pencil, MoreHorizontal } from 'lucide-react'
 import { useRpc, useRpcMutation } from '@/hooks/useRpc'
+import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -23,6 +24,13 @@ interface CategoryRow {
   sku_mapped_count: number
   has_minimum_price: boolean
   has_reference_price: boolean
+}
+
+// AR-4 rpc_admin_list_prices row (subset used for prefill of national row).
+interface PriceRow {
+  category_id: string
+  region_id: string | null
+  price_per_kg: number
 }
 
 const CODE_RE = /^[A-Z][A-Z0-9_]*$/
@@ -164,11 +172,63 @@ function CategoryDialog({
   const [descRu, setDescRu] = useState(item?.description_ru ?? '')
   const [sortOrder, setSortOrder] = useState(String(item?.sort_order ?? 0))
 
+  // ── Цены (только в режиме правки — нужен category_id) ─────────────────────
+  // Упрощение карточки: национальная цена (region_id = null), valid_from = сегодня.
+  // Регионы/история/версии — в полном экране A-CAT-04 (Phase 2).
+  const today = new Date().toISOString().slice(0, 10)
+  const { data: minRows } = useRpc<PriceRow[]>('rpc_admin_list_prices', { p_kind: 'minimum' }, { enabled: isEdit })
+  const { data: refRows } = useRpc<PriceRow[]>('rpc_admin_list_prices', { p_kind: 'reference' }, { enabled: isEdit })
+  const curMin = isEdit ? (minRows?.find(r => r.category_id === item!.id && r.region_id === null)?.price_per_kg ?? null) : null
+  const curRef = isEdit ? (refRows?.find(r => r.category_id === item!.id && r.region_id === null)?.price_per_kg ?? null) : null
+
+  const [minPrice, setMinPrice] = useState('')
+  const [refPrice, setRefPrice] = useState('')
+  const [primed, setPrimed] = useState(false)
+  useEffect(() => {
+    if (isEdit && !primed && minRows && refRows) {
+      setMinPrice(curMin != null ? String(curMin) : '')
+      setRefPrice(curRef != null ? String(curRef) : '')
+      setPrimed(true)
+    }
+  }, [isEdit, primed, minRows, refRows, curMin, curRef])
+
+  const [savingPrices, setSavingPrices] = useState(false)
+
+  // Пишем цену только если поле заполнено и значение изменилось (AC-6/AC-7).
+  // RPC возвращают jsonb {ok, error}; бизнес-ошибку (FORBIDDEN/INVALID_*) не бросают —
+  // проверяем результат явно и превращаем в throw для общего catch.
+  async function setPrice(fn: string, price: number) {
+    const { data, error } = await supabase.rpc(fn, {
+      p_category_id: item!.id, p_region_id: null, p_price_per_kg: price, p_valid_from: today,
+    })
+    if (error) throw error
+    const res = data as { ok?: boolean; error?: string } | null
+    if (!res?.ok) throw new Error(ERR[res?.error ?? ''] ?? res?.error ?? 'Ошибка сохранения цены')
+  }
+
+  async function persistPrices() {
+    if (!isEdit) return
+    const min = minPrice.trim()
+    const ref = refPrice.trim()
+    if (min !== '' && Number(min) !== curMin) await setPrice('rpc_admin_set_minimum_price', Number(min))
+    if (ref !== '' && Number(ref) !== curRef) await setPrice('rpc_admin_set_reference_price', Number(ref))
+  }
+
   const upsert = useRpcMutation<Record<string, unknown>, { ok: boolean; error?: string }>(
     'rpc_admin_upsert_livestock_category',
     {
-      onSuccess: (data) => {
+      onSuccess: async (data) => {
         if (!data?.ok) { toast.error(ERR[data?.error ?? ''] ?? data?.error ?? 'Ошибка'); return }
+        try {
+          setSavingPrices(true)
+          await persistPrices()
+        } catch (e) {
+          toast.error('Категория сохранена, но цену сохранить не удалось: ' + ((e as Error)?.message ?? ''))
+          onSaved()
+          return
+        } finally {
+          setSavingPrices(false)
+        }
         toast.success('Категория сохранена')
         onSaved()
       },
@@ -178,6 +238,8 @@ function CategoryDialog({
   function handleSave() {
     if (!CODE_RE.test(code)) { toast.error('Код: заглавные латинские буквы, цифры, _ (напр. YOUNG_MEAT_ELITE)'); return }
     if (!nameRu.trim()) { toast.error('Укажите название'); return }
+    if (minPrice.trim() !== '' && Number(minPrice) <= 0) { toast.error('Минимальная цена должна быть больше 0'); return }
+    if (refPrice.trim() !== '' && Number(refPrice) <= 0) { toast.error('Рекомендованная цена должна быть больше 0'); return }
     upsert.mutate({
       p_code: code,
       p_name_ru: nameRu.trim(),
@@ -208,14 +270,51 @@ function CategoryDialog({
             <Label className="text-sm">Порядок сортировки</Label>
             <Input type="number" value={sortOrder} onChange={e => setSortOrder(e.target.value)} min={0} />
           </div>
+
+          {isEdit && (
+            <div className="space-y-3 pt-3 mt-1 border-t border-border/60">
+              <p className="text-[11px] font-medium" style={{ color: 'var(--fg2)' }}>
+                Цены (национальные, ₸/кг живого веса)
+              </p>
+              <div>
+                <Label className="text-sm">Минимальная (защитная) цена</Label>
+                <Input
+                  type="number"
+                  value={minPrice}
+                  onChange={e => setMinPrice(e.target.value)}
+                  placeholder="напр. 1500"
+                  min={0}
+                  step="50"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Защитный стандарт ассоциации. Пусто = не задавать.
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm">Рекомендованная (индикативная) цена</Label>
+                <Input
+                  type="number"
+                  value={refPrice}
+                  onChange={e => setRefPrice(e.target.value)}
+                  placeholder="напр. 1800"
+                  min={0}
+                  step="50"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1 leading-snug">
+                  Ст. 171 ПК РК: справочные цены являются индикативными рыночными ориентирами.
+                  TURAN не устанавливает и не гарантирует цены сделок.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
         <DialogFooter className="gap-2">
           {onDeactivate && (
             <Button variant="outline" onClick={onDeactivate} className="mr-auto text-destructive">Деактивировать</Button>
           )}
           <Button variant="outline" onClick={onClose}>Отмена</Button>
-          <Button onClick={handleSave} disabled={upsert.isPending}>
-            {upsert.isPending ? 'Сохранение…' : isEdit ? 'Сохранить' : 'Создать'}
+          <Button onClick={handleSave} disabled={upsert.isPending || savingPrices}>
+            {upsert.isPending || savingPrices ? 'Сохранение…' : isEdit ? 'Сохранить' : 'Создать'}
           </Button>
         </DialogFooter>
       </DialogContent>
