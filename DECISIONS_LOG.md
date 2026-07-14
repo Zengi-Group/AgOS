@@ -3,6 +3,32 @@
 > Maintained by: Architect & Coordinator Agent
 > Format: WHAT was decided → WHY (alternatives considered) → CONSEQUENCES (what becomes easy/hard)
 
+### 2026-07-15: Лоадер запуска — только иконка + фикс пересечения лучей (R-29)
+
+**What**: правки CEO по лоадеру при загрузке приложения. **(1)** `BootScreen` очищен до одной иконки-марки: убрана slim-полоса индикатора (`agosBootBar` keyframes + бар-div) и текстовая подпись под маркой; `label` остаётся только как `aria-label` обёртки (доступность). **(2)** Пересечение лучей у `breathe`-анимации `TuranLoader` исправлено: причина — у `.tl-ray` отсутствовал `transform-box: fill-box`, поэтому `transform-origin` луча считался от общего viewBox (или border-box), лучи расходились и пересекались при scale. Приняли готовый веб-сниппет анимации от дизайнера (`turan-loader-web.html`, 2026-07-14): геометрия 1:1 из оригинального `public/turan-icon.svg` (viewBox `42.88 -0.13 130 130`), `.tl-ray { transform-box: fill-box }`, keyframes `tlSpin` (вращение 90°) / `tlBreatheSpin` (синхронное дыхание лучей у spin) / `tlBreathe` (фазовый сдвиг у breathe); цвет — фирменный `#F7931E` (дизайнерский `#C8A24B` заменён на бренд по запросу CEO). Компонентный API (`variant`/`size`/`color`/`label`) не менялся — все вызовы (46 мест) работают без правок.
+
+**Why**: `transform-box` по умолчанию (`view-box`/`border-box` в зависимости от браузера) ломал per-ray origin — отсюда «лучи пересекаются». Дизайнер прислал проверенный сниппет с `fill-box` — взяли его 1:1 (аналогично R-19/R-20: сложную анимацию не изобретаем, берём готовое и перекрашиваем в бренд). Boot-полоса и подпись убраны как лишние (CEO: «оставь только иконку»).
+
+**Verify**: dev-preview (5173) — рендер обоих вариантов (breathe/spin) на кремовом boot-фоне через изолированный harness: чистая 4-лучевая звезда `#F7931E`, лучи НЕ пересекаются, оба варианта анимируются. `tsc -b` чисто; `npm run test:routers` — 4/4. Чистый фронт, SQL не тронут → `cross_check.sh` не нужен.
+
+**Files**: `src/components/BootScreen.tsx`, `src/components/TuranLoader.tsx`, `src/index.css`, `Docs/AGOS-DesignRules-FarmerCabinet.md` (§7 + R-29). Ветка `claude/app-loader-icon-fixes-3352ed`.
+
+---
+
+### 2026-07-15: issue #4 — «назад» из треда двоил вход экрана (C11, блокировка «назад» на время forward-анимации)
+
+**What**: баг «web при свайпе/‹ назад из треда — экран списка чатов въезжает дважды». Воспроизведён browser-тестом (`src/tests/messages-back.browser.test.tsx`, реальный v5-остров в chromium, сеть замокана): «назад», пойманный ПОКА идёт forward-переход открытия треда (окно ≈0–550мс = вся длительность iOS push/pop-анимации), заставляет `StackManager` Ionic проиграть вход целевого экрана ДВАЖДЫ. Устоявшийся «назад» (после анимации) — чисто. **Фикс (C11 в `CabinetApp.tsx`):** `go()` при forward-push ставит метку `navBusyUntilRef = now + 650мс`; `goBackTo()` ИГНОРИРУЕТ вызов, пока `navBusy()` (нативное поведение iOS — «назад» недоступен, пока экран въезжает). Тап в анимацию гасится, реальный возврат (после чтения треда, ≫650мс) не задевается.
+
+**Why (что отвергнуто, с доказательством тестом)**: **(а)** гипотеза «виноваты пересоздаваемые `render={()=>...}`-замыкания роутов» — стабилизировал identity render-пропов через ref (экраны на живых данных) → **тест показал: двоит по-прежнему**. Значит дело не в React-churn, а в самом `StackManager`. **(б)** заморозка outlet через `useMemo([])` — ломает данные экранов (0 диалогов). **(в)** отложить `ion.goBack()` до конца анимации (сериализация тайм-аутом) — двоит даже при отложенном pop: важен сам факт навигации во время незавершённого forward-перехода, а не момент goBack. Единственное надёжное — не пускать «назад» в окно анимации.
+
+**Swipe**: edge-swipe идёт мимо `goBackTo` (внутренний жест Ionic → history pop → `syncFromPath`). Жест Ionic НЕ стартует во время активного перехода (встроенный guard), поэтому swipe физически не накладывается на forward-push так, как быстрый ТАП. Кнопочный/программный путь (реально воспроизводимый) закрыт и покрыт тестом; если swipe-двоение всплывёт на устройстве — нужен явный gesture-gating (рискованно, проверять на девайсе).
+
+**Verify**: `npm run test:routers` — 5/5 (вкл. новый регресс-тест issue #4). Свип окна гонки `VITE_BACK_DELAY=0/150/250/450/550` — все чисто (до фикса — 2 входа). `tsc -b` чисто. Реальный бэкенд/жест-свайп — проверить на устройстве (нет `.env` в worktree). Чистый фронт, SQL не тронут.
+
+**Files**: `src/pages/cabinet/shell/CabinetApp.tsx` (C11: `navBusyUntilRef`/`navBusy()` в `go`/`goBackTo`), `src/tests/messages-back.browser.test.tsx` (новый регресс-тест). Ветка `claude/app-loader-icon-fixes-3352ed`.
+
+---
+
 ### 2026-07-14: Таб-бар — плавное скрытие трансформом вместо display:none (C6, ARS-220)
 
 **What**: постоянный `IonTabBar` (P-4) прятался на детальных экранах через `display:none` → мгновенный ресайз outlet посреди slide-перехода = двойной рывок раскладки (на уходе и возврате). Бар выведен из flex-потока `IonTabs` (`position:absolute; bottom:0; z-index:10`, offsetParent = `ion-tabs`) и прячется `transform:translateY(100%)+opacity:0+pointer-events:none` с `transition .28s` (замена `display:none` в `.agos-tabbar--hidden`). Т.к. бар теперь оверлеит контент, добавлен резерв под него — но **статичный на весь срок жизни страницы, а не глобально переключаемый**: `IonShellFrame` при `!noTabs` вешает класс `has-tabbar` на `IonContent` → `--padding-bottom: var(--tabbar-h)` (`60px + safe-area`). 4 таб-корня (без `noTabs`) резервируют, детальные (`noTabs`) — нет. Оживлён «мёртвый» проп `noTabs` (был no-op с P-4). Разметка `IonTabs`/роуты/`hideTabBar`-логика не тронуты (HS-5, аддитивно).

@@ -301,6 +301,14 @@ export function CabinetApp() {
   const ionRef = useRef<UseIonRouterResult | null>(null)
   const routeRef = useRef(route)
   routeRef.current = route
+  // C11 (issue #4, 2026-07-15): iOS-mode push/pop ≈ 540мс. «Назад», пойманный ПОКА идёт
+  // forward-переход (открытие треда), заставляет StackManager Ionic проиграть вход целевого
+  // экрана ДВАЖДЫ («список чатов въезжал дважды»). Отложить pop не помогает — важен сам факт
+  // навигации во время незавершённого forward-перехода. Поэтому, как в нативном iOS, «назад»
+  // на время анимации ЗАБЛОКИРОВАН (тап игнорируется). navBusyUntil — метка конца forward-анимации.
+  const NAV_ANIM_MS = 650
+  const navBusyUntilRef = useRef(0)
+  const navBusy = () => performance.now() < navBusyUntilRef.current
   const go = (r: Route) => {
     const from = routeRef.current
     setRoute(r)
@@ -309,6 +317,8 @@ export function CabinetApp() {
     if (!ion) return
     const dir = dirFor(from, r)
     const url = routeToUrl(r)
+    // Метку «переход занят» ставим ДО push (чтобы «назад» в тот же тик уже видел занятость).
+    navBusyUntilRef.current = performance.now() + NAV_ANIM_MS
     // C8 (аудит 2026-07-13): go() НИКОГДА не поппит историю — 'back' здесь только направление
     // анимации (push с back-slide). Реальный pop делает goBackTo (кнопки ‹). Прежняя pop-ветка
     // уводила cross-nav (карточка партии → «Обратитесь в TURAN», dir=back по глубине 2→1) назад
@@ -320,11 +330,16 @@ export function CabinetApp() {
   // таб-корень анимировался как смена корня (ревью PR #27, SIG-2). Холодный deep-link
   // (стек пуст) → push с back-анимацией; URL→Route-синк выправит состояние при расхождении.
   const goBackTo = (r: Route) => {
+    // C11: пока forward-переход анимируется — игнорируем «назад» (иначе двойной вход экрана).
+    // Нативное поведение iOS: «назад» недоступен, пока экран въезжает. Окно ≤650мс — реальный
+    // возврат (после чтения треда) не задевается; гасится только сверх-быстрый тап в анимацию.
+    if (navBusy()) return
     setRoute(r)
     const ion = ionRef.current
     if (!ion) return
     if (ion.canGoBack()) ion.goBack()
     else ion.push(routeToUrl(r), 'back')
+    navBusyUntilRef.current = performance.now() + NAV_ANIM_MS
   }
   // Подпись к «‹ назад» в SubHead внутренних страниц — из имени back-роута (нативный iOS-стиль).
   const backLabelFor = (r?: Route): string => {
