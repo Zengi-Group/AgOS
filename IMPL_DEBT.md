@@ -188,7 +188,7 @@
 
 > **Note on VET-02:** ✅ FIXED on branch `fix/vet-f11-isolation` (commit `4a961c9`) — ownership guard added, single definition confirmed, cross_check 0/0/0. **NOT YET DEPLOYED** — apply via `python3 deploy_sql.py <DB_PASSWORD>` to Supabase `mwtbozflyldcadypherr` before prod is safe.
 
-## 🟢 Native app (design-tracked, 1)
+## 🟢 Native app (design-tracked, 4)
 
 ### DEBT-NATIVE-ROUTER-01 — dual react-router (v5-остров для Ionic-оболочек) ИЛИ отложенный edge-swipe
 **Context:** ADR-NATIVE-ROUTER-01 AMEND-1 (2026-07-03). v6-совместимого Ionic-роутера не существует; движок стека страниц/переходов Ionic React (`StackManager`) шипится ТОЛЬКО в `@ionic/react-router`, который статически импортирует v5-only API (спайк: standalone outlet на v6 = белый экран). Решение: вариант A = изолированное поддерево react-router **v5** для `/cabinet/*` + `/mpk/*` через Vite resolve.alias (остальное приложение v6), за гейт-спайком сосуществования; фолбэк — вариант C = плоский Ionic на v6 без edge-swipe.
@@ -212,6 +212,14 @@
 **Context:** (1) `public/.well-known/apple-app-site-association` `TEAMID` и `assetlinks.json` `REPLACE_WITH_SIGNING_CERT_SHA256` — плейсхолдеры до определения store-аккаунта (открытый вопрос: TURAN vs Zengi, Apple D-U-N-S). (2) iOS `pod install` + сборка + прогон на устройствах не выполнены в песочнице (нет CocoaPods/полного Xcode) — шаг acceptance на настроенной Mac-build-машине. (3) iOS Associated Domains capability и `google-services.json`/APNs (push, S5) заводятся вручную при первой настройке подписи.
 **Retire-when:** store-аккаунт определён → подставить Team ID + signing SHA256; прогон TestFlight/Internal testing зелёный (ARS-156 E2E push). См. `Docs/AGOS-NativeApp-S4-BuildAndAcceptance.md`.
 **Severity:** medium (блокирует финальный deep-link + публикацию, НЕ блокирует сборку). **Owner surface:** `public/.well-known/*`, `ios/`, `android/app/`. Связ.: ARS-156 (S5.4), C-серия push.
+
+### DEBT-NATIVE-VERIFY-01 — нативно-специфичные правки Этапа 2 не проверены на устройстве (аудит нативности 2026-07-13)
+**Context:** Пакет нативной полировки `/cabinet` (Этап 2) содержит правки, которые в web-превью НЕ наблюдаемы (`env(safe-area-*)`=0, `WebHost.onDeepLink`=no-op, статус-бар — только Capacitor). Code-verified (tsc+build зелёные), но требуют device smoke-test:
+- **C10** — тёплый deep-link: тап по push при открытом приложении переключает экран ВНУТРИ острова (`host.onDeepLink` мультиподписка → `CabinetApp.go(urlToRoute)`). Проверка: открыть /cabinet, push с `data.path='/cabinet/batch/:id'`, тап → экран партии открывается без холодного рестарта; не-остров путь (напр. /membership) по-прежнему через PushDeepLinkBridge.
+- **C2** — `padding-top: env(safe-area-inset-top)` на `.ion-page`+MPK-модал: на iPhone с чёлкой шапки/OfflineBar не под статус-баром.
+- **L1/L2** — `env(safe-area-inset-bottom)` чат-док + тост: не в зоне home-indicator.
+- **L5** — цвет статус-бара `#f6f3ed` = фон кабинета: нет Android-шва статус-бар↔контент.
+**Retire-when:** прогон на iOS+Android устройствах/симуляторах (Mac-build-машина, см. DEBT-NATIVE-STORE-01) — все пункты зелёные. **Severity:** low (правки аддитивны/безопасны; деградация = косметика на устройстве, не краш). **Owner surface:** `src/platform/host/{AgOSHost,WebHost,CapacitorHost}.ts`, `src/pages/cabinet/shell/{CabinetApp.tsx, ionic.css, cabinet.css, messages-chatscope.css}`, `capacitor.config.ts`. Связ.: аудит нативности 2026-07-13, DECISIONS_LOG 2026-07-14.
 
 ## 🐄 Farm module (ARS-169 reconciliation, 2)
 

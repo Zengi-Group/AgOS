@@ -309,8 +309,11 @@ export function CabinetApp() {
     if (!ion) return
     const dir = dirFor(from, r)
     const url = routeToUrl(r)
-    if (dir === 'back' && ion.canGoBack()) ion.goBack()
-    else if (dir === 'root') ion.push(url, 'root', 'replace')
+    // C8 (аудит 2026-07-13): go() НИКОГДА не поппит историю — 'back' здесь только направление
+    // анимации (push с back-slide). Реальный pop делает goBackTo (кнопки ‹). Прежняя pop-ветка
+    // уводила cross-nav (карточка партии → «Обратитесь в TURAN», dir=back по глубине 2→1) назад
+    // в список вместо открытия экрана TURAN.
+    if (dir === 'root') ion.push(url, 'root', 'replace')
     else ion.push(url, dir)
   }
   // Явный «назад» (кнопки ←): настоящий pop, когда стек позволяет — иначе возврат на
@@ -336,14 +339,41 @@ export function CabinetApp() {
     const r = urlToRoute(path)
     setRoute((cur) => (routeKey(cur) === routeKey(r) ? cur : r))
   }, [])
+  // C10 (аудит 2026-07-13): тёплый deep-link (тап по push при открытом приложении) должен
+  // переключать экран ВНУТРИ v5-острова. v6-navigate (PushDeepLinkBridge) меняет внешний URL,
+  // но остров с собственным history-инстансом его не слышит. Подписываемся на host.onDeepLink
+  // напрямую и гоним /cabinet-пути через go(); пути вне острова остаются за PushDeepLinkBridge.
+  // goRef — чтобы подписка ставилась один раз, а не пересоздавалась на каждый рендер go.
+  const goRef = useRef(go)
+  goRef.current = go
+  useEffect(() => {
+    const unsub = host.onDeepLink((path) => {
+      if (path.startsWith('/cabinet')) goRef.current(urlToRoute(path))
+    })
+    return unsub
+  }, [host])
   const tab = tabOf(route)
   // P-4 (ARS-220): единый постоянный IonTabBar (не пересобирается при переходах). На
   // детальных экранах он скрыт — как было при per-page noTabs (решение CEO: сохранить UX).
   // Флоу-страницы (agos-flow-page: TSP-визард, результат публикации, мастер фермы) — полноэкранные,
   // без таб-бара (контракт Slice 5a/7). До P-4 (ARS-220) бар не рендерился внутри их IonPage;
   // с постоянным IonTabBar его надо прятать явно — иначе бар просвечивает под визардом.
+  // C9 (аудит 2026-07-13): флаги флоу скоупим на владеющий роут — иначе оставшийся true флаг
+  // (после system-back/edge-swipe из визарда мимо URL) прятал таб-бар глобально на чужом экране.
   const hideTabBar = (['p1list', 'batch', 'review', 'turan', 'thread'] as RouteName[]).includes(route.name)
-    || wizActive || !!pubResult || farmWizActive
+    || (route.name === 'market' && (wizActive || !!pubResult))
+    || (route.name === 'farm' && farmWizActive)
+
+  // C9 (аудит 2026-07-13): флоу живут в state мимо URL — system-back/edge-swipe/browser-back
+  // меняют URL, но флаг оставался true → «призрачное» переоткрытие визарда при возврате на таб.
+  // Сбрасываем флаг, когда роут ушёл с владеющего им экрана (market — визард/публикация; farm — мастер).
+  useEffect(() => {
+    if (route.name !== 'market') {
+      setWizActive((v) => (v ? false : v))
+      setPubResult((v) => (v ? null : v))
+    }
+    if (route.name !== 'farm') setFarmWizActive((v) => (v ? false : v))
+  }, [route.name])
 
   const handleLogout = async () => {
     await signOut()

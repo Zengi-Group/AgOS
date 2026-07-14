@@ -32,7 +32,7 @@ const config: CapacitorConfig = {
     // Стиль/цвет также форсируется рантаймом в CapacitorHost (переживает тему WebView).
     StatusBar: {
       style: 'LIGHT', // Style.Light = ТЁМНЫЙ текст на светлом фоне (iOS-нейминг)
-      backgroundColor: '#fdf6ee',
+      backgroundColor: '#f6f3ed', // = --bg кабинета (L5, аудит 2026-07-13): убираем Android-шов статус-бар↔контент
       overlaysWebView: false,
     },
     Keyboard: {

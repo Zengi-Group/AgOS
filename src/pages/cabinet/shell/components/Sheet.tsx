@@ -18,6 +18,7 @@ export function Sheet({ open, onClose, children }: SheetProps) {
       onDidDismiss={onClose}
       breakpoints={[0, 1]}
       initialBreakpoint={1}
+      handle={false}
       className="agos-sheet-modal"
     >
       <div className="sheet">
