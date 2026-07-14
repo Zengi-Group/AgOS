@@ -4,6 +4,7 @@
 
 import { useState } from 'react'
 import type { Batch } from '../types'
+import { useShell } from '../context'
 import { IonShellFrame } from '../components/IonShellFrame'
 import { SubHead } from '../components/SubHead'
 import { PhIcon } from '../components/icons/PhIcon'
@@ -16,11 +17,12 @@ import { InfoNote } from '../tsp/components/InfoNote'
 interface Props {
   batch: Batch
   onBack: () => void
-  onPatch: (patch: Partial<Batch>) => void
-  toast: (text: string) => void
+  // S4=A · C4+D7: successToast показывается в CabinetApp.patchBatch ПОСЛЕ round-trip.
+  onPatch: (patch: Partial<Batch>, successToast?: string) => void
 }
 
-export function ReviewScreen({ batch, onBack, onPatch, toast }: Props) {
+export function ReviewScreen({ batch, onBack, onPatch }: Props) {
+  const { offline, offlineToast } = useShell()
   const [rating1, setRating1] = useState(0)
   const [rating2, setRating2] = useState(0)
   const [comment, setComment] = useState('')
@@ -31,8 +33,9 @@ export function ReviewScreen({ batch, onBack, onPatch, toast }: Props) {
   // а не на «К партии». Раньше уход с экрана-спасибо back/свайпом терял отзыв, хотя экран
   // уже сказал «отправлен». Контракт review = {r1,r2,comment} — useBatches.
   const submit = () => {
-    onPatch({ review: { r1: rating1, r2: rating2, comment, date: 'сегодня' } })
-    toast('Отзыв сохранён · спасибо')
+    // S4=A · C4: офлайн — гейт ДО setSent, иначе экран скажет «отправлено» без сохранения.
+    if (offline) { offlineToast(); return }
+    onPatch({ review: { r1: rating1, r2: rating2, comment, date: 'сегодня' } }, 'Отзыв сохранён · спасибо')
     setSent(true)
   }
 

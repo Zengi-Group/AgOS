@@ -34,7 +34,9 @@ interface Props {
   account?: FarmerAccount | null
   onBack: () => void
   backLabel?: string
-  onPatch: (patch: Partial<Batch>) => void
+  // S4=A · C4+D7: successToast — тост показывается в CabinetApp.patchBatch ПОСЛЕ
+  // сетевого round-trip (не оптимистично); офлайн действие гейтится там же.
+  onPatch: (patch: Partial<Batch>, successToast?: string) => void
   onNew: () => void
   onReview: () => void
   onTuran: () => void
@@ -290,7 +292,7 @@ function SplitPanel({ batch }: { batch: Batch }) {
 
 // ── DecisionActions (state=decision) — .mk-rec + .dec-act. Логика/prot сохранены ──
 function DecisionActions({ batch, onPatch, toast }: {
-  batch: Batch; onPatch: (p: Partial<Batch>) => void; toast: (t: string) => void
+  batch: Batch; onPatch: (p: Partial<Batch>, successToast?: string) => void; toast: (t: string) => void
 }) {
   const [customOn, setCustomOn] = useState(false)
   const [custom, setCustom] = useState('')
@@ -299,8 +301,7 @@ function DecisionActions({ batch, onPatch, toast }: {
   const lowered = cur - 100
   const lowerBlocked = prot != null && lowered < prot
   const applyPrice = (newPrice: number) => {
-    onPatch({ state: 'offering', price: newPrice, deadlineLabel: 'завтра, 14:30' })
-    toast('Предложение отправлено покупателям по новой цене')
+    onPatch({ state: 'offering', price: newPrice, deadlineLabel: 'завтра, 14:30' }, 'Предложение отправлено покупателям по новой цене')
   }
   const customNum = parseInt(custom, 10)
   const customValid = !Number.isNaN(customNum) && customNum > 0 && (prot == null || customNum >= prot)
@@ -431,7 +432,7 @@ export function BatchScreen({ batch, account, onBack, backLabel = 'Мои пар
   if (st === 'draft') {
     caption = 'Продолжите заполнение, чтобы выставить партию на продажу.'
     primary = { t: 'Продолжить заполнение', fn: () => toast('Заполнение черновика откроется в следующем обновлении') }
-    menu.push({ t: 'Удалить черновик', icon: 'trash', danger: true, fn: () => { onPatch({ state: 'cancelled' }); toast('Черновик удалён') } })
+    menu.push({ t: 'Удалить черновик', icon: 'trash', danger: true, fn: () => onPatch({ state: 'cancelled' }, 'Черновик удалён') })
   } else if (st === 'scheduled') {
     caption = 'Изменить данные можно до выхода в продажу.'
     menu.push({ t: 'Изменить партию', icon: 'pencil', fn: () => toast('Редактирование откроется в следующем обновлении') })
@@ -601,8 +602,8 @@ export function BatchScreen({ batch, account, onBack, backLabel = 'Мои пар
         onClose={() => setSheet((s) => (s === 'withdraw' ? null : s))}
         onConfirm={(includeMatched) => {
           const hasSold = (typeof batch.matchedHeads === 'number' ? batch.matchedHeads : 0) > 0
-          onPatch({ _withdraw: includeMatched ? 'matched' : 'remainder' })
-          toast(
+          onPatch(
+            { _withdraw: includeMatched ? 'matched' : 'remainder' },
             includeMatched ? 'Партия снята — отмена проданного отмечена'
             : hasSold        ? 'Остаток снят с продажи'
             :                  'Партия снята с продажи',
@@ -615,9 +616,8 @@ export function BatchScreen({ batch, account, onBack, backLabel = 'Мои пар
         open={sheet === 'dispatch'}
         onClose={() => setSheet((s) => (s === 'dispatch' ? null : s))}
         onConfirm={() => {
-          onPatch({ _dispatchReady: true, dispatchedLabel: 'сегодня' })
+          onPatch({ _dispatchReady: true, dispatchedLabel: 'сегодня' }, 'Покупатель уведомлён об отгрузке')
           host.haptics('medium')   // S2.1: отгрузка — ключевое действие
-          toast('Покупатель уведомлён об отгрузке')
           setSheet(null)
         }}
       />
@@ -625,7 +625,7 @@ export function BatchScreen({ batch, account, onBack, backLabel = 'Мои пар
         batch={batch}
         open={sheet === 'price'}
         onClose={() => setSheet((s) => (s === 'price' ? null : s))}
-        onConfirm={(newPrice) => { onPatch({ price: newPrice }); toast('Цена обновлена'); setSheet(null) }}
+        onConfirm={(newPrice) => { onPatch({ price: newPrice }, 'Цена обновлена'); setSheet(null) }}
       />
     </IonShellFrame>
   )
