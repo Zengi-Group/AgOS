@@ -41,12 +41,21 @@ export async function loadSupportThread(orgId: string): Promise<SupportThread | 
       p_organization_id: orgId,
     })
     const channel = ch as CommChannel | null
-    if (chErr || !channel?.id) return null
+    if (chErr || !channel?.id) {
+      if (chErr) console.warn('[messages-load] rpc_get_or_create_support_channel failed:', chErr)
+      return null
+    }
 
     const { data: rows, error: msgErr } = await supabase.rpc('rpc_list_messages', {
       p_channel_id: channel.id,
     })
-    if (msgErr) return null
+    // Канал уже создан (get-or-create успешен). Если лента не загрузилась — НЕ теряем
+    // channelId (иначе отправка упадёт в мок-фолбэк): отдаём канал с пустой лентой,
+    // сообщения подтянутся следующим poll.
+    if (msgErr) {
+      console.warn('[messages-load] rpc_list_messages failed:', msgErr)
+      return { channelId: channel.id, messages: [] }
+    }
     const list = Array.isArray(rows) ? (rows as CommMessage[]) : []
     // rpc_list_messages отдаёт свежие сверху (created_at desc, keyset) — для ленты
     // разворачиваем в хронологический порядок (старые сверху, новые снизу).
@@ -64,13 +73,18 @@ export async function sendSupportMessage(
   attachments: unknown[] = []
 ): Promise<boolean> {
   try {
+    // p_attachments — jsonb. supabase-js сам сериализует params в JSON, поэтому передаём
+    // массив КАК ЕСТЬ (JSON.stringify здесь давал бы скалярную строку "[]" вместо []
+    // → jsonb_array_length падал бы на скаляре в rpc_send_message).
     const { error } = await supabase.rpc('rpc_send_message', {
       p_channel_id: channelId,
       p_body: body,
-      p_attachments: JSON.stringify(attachments),
+      p_attachments: attachments,
     })
+    if (error) console.warn('[messages-load] rpc_send_message failed:', error)
     return !error
-  } catch {
+  } catch (e) {
+    console.warn('[messages-load] rpc_send_message threw:', e)
     return false
   }
 }
