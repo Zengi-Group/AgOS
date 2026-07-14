@@ -3,6 +3,18 @@
 > Maintained by: Architect & Coordinator Agent
 > Format: WHAT was decided → WHY (alternatives considered) → CONSEQUENCES (what becomes easy/hard)
 
+### 2026-07-14: Fix — отправка в support-канал падала в мок-фолбэк (ARS-225, живой тест)
+
+**What**: боевой тест на Vercel-preview показал: канал создаётся (`comm_channels` 1 строка), но сообщение не сохраняется (`last_message_at` NULL, `comm_messages` пусто) — форма молча уходила в мок-подтверждение. Две независимые причины в `messages-load.ts`, любая роняла живую отправку в мок: **(1)** `sendSupportMessage` слал `p_attachments: JSON.stringify(attachments)` — supabase-js сам сериализует params, поэтому `rpc_send_message` получал jsonb-**скаляр** `"[]"` вместо массива `[]`; `jsonb_array_length` на скаляре кидает исключение → RPC-ошибка → мок. Передаём массив как есть. **(2)** `loadSupportThread` при ошибке `rpc_list_messages` возвращал `null`, **теряя `channelId`**, который get-or-create уже создал → `supportChannelId` оставался `null` → `sendTuran` возвращал `false`, не дойдя до RPC. Теперь при ошибке ленты канал отдаётся с пустым списком (сообщения подтянутся следующим поллом). Плюс `console.warn` на всех RPC-ошибках для живой диагностики.
+
+**Why**: класс дефектов, вылезающих только вживую после деплоя (jsonb-кодировка PostgREST, порядок вычисления `AND` в plpgsql) — статический `tsc`/`cross_check` их не ловит. Оба симптома идентичны (канал есть, сообщения нет), поэтому исправлены оба.
+
+**Verify**: `tsc -b` = 0. Боевая перепроверка на preview после ре-деплоя ветки; SQL не менялся.
+
+**Files**: `src/pages/cabinet/shell/data/messages-load.ts`. Ветка `kernuree/messaging-support-channel` (коммит `245a33a`).
+
+---
+
 ### 2026-07-13: Кабинет фермера — тред TURAN на реальном канале поддержки (ARS-225)
 
 **What**: раздел «Сообщения» → тред `turan` стал реальным двусторонним каналом (фермер ↔ админ) поверх d12_messaging.sql. **(1)** Новый data-loader `messages-load.ts` по образцу `farm-load.ts` (graceful `null` → мок): `loadSupportThread(orgId)` = `rpc_get_or_create_support_channel` + `rpc_list_messages`; `sendSupportMessage`, `markSupportRead`. **(2)** `threads.ts` аддитивно: `ThreadMsg.dir` (свои отправки = `outgoing`); `ThreadEnv.turanReal?`/`myUserId?`; реальные `comm_messages` вставляются в тред TURAN **после** дайджестов (членство/цены/новости НЕ удалены — HS-2), перед CTA «Написать в TURAN»; превью/время строки списка берутся из последнего реального сообщения (fallback на плашку членства). **(3)** `ThreadScreen` чтит `m.dir`. **(4)** `CabinetApp`: state канала + поллинг 30с, эффективный `turanUnread` (реальный: ответ TURAN новее `last_read_at`; иначе мок), авто-mark-read + reload при входе в тред, изоляция канала при смене аккаунта. **(5)** `TuranScreen`: форма обращения (тема+текст) шлёт через `rpc_send_message` (проп `onSend`); успех → экран «принято», иначе мок-фолбэк.
