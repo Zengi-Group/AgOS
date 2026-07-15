@@ -10,7 +10,7 @@ const TAB_ROOTS: RouteName[] = ['home', 'farm', 'market', 'shop', 'messages']
 // Глубина роута — для направления анимации (forward/back), когда это не таб-корень.
 const DEPTH: Record<RouteName, number> = {
   home: 0, farm: 0, market: 0, shop: 0, messages: 0,
-  cabinet: 1, p1list: 1, thread: 1, turan: 1, services: 1, farmwiz: 1,
+  cabinet: 1, p1list: 1, thread: 1, turan: 1, services: 1, farmwiz: 1, batchwiz: 1, pub: 1,
   batch: 2,
   review: 3,
 }
@@ -20,6 +20,8 @@ export function routeToUrl(r: Route): string {
     case 'home': return '/cabinet'
     case 'services': return '/cabinet/services'
     case 'market': return '/cabinet/market'
+    case 'batchwiz': return '/cabinet/market/new'
+    case 'pub': return `/cabinet/pub/${r.batchId ?? ''}`
     case 'p1list': return '/cabinet/list'
     case 'batch': return `/cabinet/batch/${r.batchId ?? ''}`
     case 'review': return `/cabinet/review/${r.batchId ?? ''}`
@@ -43,7 +45,8 @@ export function urlToRoute(pathname: string): Route {
   if (p === '/cabinet' || p === '') return { name: 'home' }
   const seg = p.replace(/^\/cabinet\/?/, '').split('/')
   switch (seg[0]) {
-    case 'market': return { name: 'market' }
+    case 'market': return seg[1] === 'new' ? { name: 'batchwiz' } : { name: 'market' }
+    case 'pub': return { name: 'pub', batchId: seg[1] }
     case 'list': return { name: 'p1list' }
     case 'batch': return { name: 'batch', batchId: seg[1] }
     case 'review': return { name: 'review', batchId: seg[1] }

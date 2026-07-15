@@ -3,6 +3,18 @@
 > Maintained by: Architect & Coordinator Agent
 > Format: WHAT was decided → WHY (alternatives considered) → CONSEQUENCES (what becomes easy/hard)
 
+### 2026-07-15: Аудит нативности — роутер-остров, Increment 1b (BatchWizard + PubResult → роуты)
+
+**What**: Продолжение «остров полностью». TSP-визард публикации партии (`BatchWizard`) и экран результата (`PubResult`) переведены из state-оверлея (`wizActive`/`pubResult`) в **реальные роуты острова** `/cabinet/market/new` и `/cabinet/pub/:id`. Тот же выигрыш, что у 1a: нативный push/pop, edge-swipe, exit-анимация, system-back шагает внутрь флоу (N-3/N-5/M4/M5). Аддитивно, компоненты `BatchWizard`/`PubResult` не тронуты:
+- `types.ts`: +`RouteName 'batchwiz' | 'pub'`. `nav.ts`: `batchwiz→/cabinet/market/new`, `pub→/cabinet/pub/:id`; `urlToRoute` `market/new→batchwiz`, `pub→pub{batchId}`; `DEPTH` обоих =1.
+- `CabinetApp.tsx`: удалены state `wizActive`/`pubResult` + их сброс-эффект (C9 больше не нужен — флагов мимо URL нет). `renderMarket` теперь только `MarketScreen`; новые `renderBatchWiz` (onDone→addBatch+haptics+`go(pub)`, onExit→`goBackTo(market)`) и `renderPub` (батч из `:id`, вариант из нового `pubVariantRef` по id, фолбэк 'D'). Все входы «+Новая» (Рынок/Список/Карточка/`sellFromFarm`) → `go({name:'batchwiz'})` вместо `setWizActive(true)`. `hideTabBar` включает `batchwiz`/`pub` по имени роута. `<RouteV5>` `/cabinet/market/new` + `/cabinet/pub/:id`.
+
+**Why**: те же N-3/N-5/M4/M5 для revenue-флоу публикации. **PubVariant** (транзиентная UI-подсказка searching-анимации, не хранится на партии) держим в `pubVariantRef` по id батча — роут не тащит объект-вариант в URL; deep-link/reload на `pub` → фолбэк 'D' (без searching, безопасно). **Поведенческий нюанс (осознанно):** «+Новая» со Списка/Карточки теперь навигирует ПРЯМО в визард-роут, а не «market + оверлей»; выход из визарда нативно возвращает на источник (Список/Карточка), а не форс-Рынок. Это native-correct и лечит квирк S2.1/ARS-157 (мёртвый тап). PubResult onToBatch/onToList — прежняя навигация (уже `go`).
+
+**Verify**: `tsc -b` — 0 ошибок; ноль оставшихся `wizActive`/`pubResult`-ссылок. `npm run test:routers` — 5/5 (гейт DEBT-NATIVE-ROUTER-01). Boot-превью `/cabinet/market` (dev, mobile) — редирект на вход, 0 ошибок консоли. Живой проход публикации (визард слайдом → результат → карточка) + edge-swipe/system-back — на устройстве под member-сидом (revenue-флоу за гейтом членства). Чистый фронт, SQL не тронут.
+
+**Files**: `src/pages/cabinet/shell/{types.ts, nav.ts, CabinetApp.tsx}`. Ветка `claude/roadmap-audit-status-19bdc0` (PR #95). Канон-эхо: [[projects/agos/specs/native-farmer-app]].
+
 ### 2026-07-15: Аудит нативности — роутер-остров, флоу как реальные роуты (Increment 1a: FarmWizard → N-3/N-5/M4/M5)
 
 **What**: Первый инкремент «роутер-остров полностью» (решение CEO). Мастер профиля фермы (`FarmWizard`) переведён из state-оверлея (`farmWizActive`) в **реальный роут острова** `/cabinet/farm/wizard` в `IonRouterOutlet`. Теперь у него свой стек-энтри → нативный push/pop, edge-swipe-назад, exit-анимация, и system-back/edge-swipe шагает ВНУТРЬ флоу (возврат на «Ферму»), а не выкидывает наружу. Аддитивно, компонент `FarmWizard` не тронут:
