@@ -4886,6 +4886,9 @@ update public.livestock_grade_formula set recommended_price = 1050 where sort_ke
 update public.livestock_grade_formula set recommended_price = 950  where sort_key = 'mrs_perv'  and recommended_price is null;
 
 -- AG-R1: rpc_get_grade_formula — публичное чтение формулы (фермер, МПК, админ).
+-- DROP перед CREATE: forma returns table изменилась (+recommended_price, ARS-235),
+-- а CREATE OR REPLACE не меняет тип возврата существующей функции (42P13 на редеплое живой БД).
+drop function if exists public.rpc_get_grade_formula();
 create or replace function public.rpc_get_grade_formula()
 returns table (
     sort_key      text,
