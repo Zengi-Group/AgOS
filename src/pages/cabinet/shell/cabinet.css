@@ -200,16 +200,24 @@
 
 /* ---------- офлайн / back ---------- */
 /* L3 (аудит 2026-07-13): баннер всегда смонтирован, появление/уход — плавная анимация
-   высоты (grid-rows 0fr↔1fr) + opacity; было mount/unmount → скачок всего экрана на ~30px. */
+   высоты (grid-rows 0fr↔1fr) + opacity; было mount/unmount → скачок всего экрана на ~30px.
+   L3-a11y (2026-07-15): в скрытом состоянии добавлен visibility:hidden — иначе всегда
+   смонтированный баннер (grid 0fr + opacity:0, но display:grid/visibility:visible) утекает
+   текстом «Нет связи» в document.innerText и в дерево доступности (screen reader читает
+   «Нет связи» при онлайне). visibility переключается 0s с задержкой .22s на скрытие —
+   элемент остаётся видимым всю анимацию сворачивания, прячется после (анимация L3 цела). */
 .agos-cabinet-stage .offline-bar-wrap {
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
-  transition: grid-template-rows .22s ease, opacity .22s ease;
+  visibility: hidden;
+  transition: grid-template-rows .22s ease, opacity .22s ease, visibility 0s linear .22s;
 }
 .agos-cabinet-stage .offline-bar-wrap.is-on {
   grid-template-rows: 1fr;
   opacity: 1;
+  visibility: visible;
+  transition: grid-template-rows .22s ease, opacity .22s ease, visibility 0s linear 0s;
 }
 .agos-cabinet-stage .offline-bar-wrap > .offline-bar {
   overflow: hidden;
