@@ -4056,3 +4056,16 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: `bash cross_check.sh` → 0 critical (4 significant = пред-существующие: TSP-adapter PGRST203 ×3, дубль R-29 в DesignRules — не связаны с messaging, файлы не в merge). Диф в src/ vs main = пусто (фронт идентичен проду). Боевой RLS/событийный тест — на деплое d12 (G3, человек).
 
 **Files**: `d12_messaging.sql` (+`fn_my_channel_ids`, exception-guard), `ai_gateway/notification_worker.py`, `cross_check.sh`, `deploy_sql.py`, `Docs/AGOS-Messaging-EngSpec-v0_1.md`, `IMPL_DEBT.md`. Фронт не тронут (HS-1/HS-5).
+
+### 2026-07-16: A-GRADE ARS-235 — merge в main + деплой на прод (обновляет запись 2026-07-15)
+
+**What**: ARS-235 (рекоменд. цена на уровне сорта) отревьюен архитектором, смержен в `main` и задеплоен на прод `mwtbozflyldcadypherr`. Обновляет запись 2026-07-15, где стояло «в main не пушил».
+- **Merge**: PR #99 (squash, commit `5cd796d`). Ветку `kernuree/...` предварительно актуализировал через merge origin/main (без конфликтов). `tsc -b` 0 ошибок; `cross_check.sh` 0 critical (4 significant — пред-существующий долг, не связаны).
+- **Deploy**: применён дельта-миграцией `ars235_grade_recommended_price` через Supabase MCP (не полный deploy_sql.py — БД живая, дельта идемпотентна). Проверено: `rpc_get_grade_formula()` возвращает 6 строк с `recommended_price`; `rpc_admin_upsert_grade_formula` — сигнатура 8 арг.; constraint `grade_formula_rec_price_positive` на месте. `get_advisors` security — 0 новых ERROR (4 WARN у наших функций = общий проектный паттерн SECURITY DEFINER, не регрессия).
+- **Канон-фикс (PR #100, commit `05ae94d`)**: при деплое всплыл латентный дефект — `rpc_get_grade_formula` в `d02_tsp.sql` через `CREATE OR REPLACE` при изменившейся форме `returns table` падает на редеплое живой БД (42P13). Добавлен `drop function if exists` перед create (зеркально `rpc_admin_upsert_grade_formula`). В проде DROP уже применён миграцией.
+
+**Why**: CEO поручил выполнить деплой. Дельта-миграция вместо полного прогона d-файлов — минимальное вмешательство в живую схему при идемпотентности изменения.
+
+**Note**: стартовые `recommended_price` (premium 2000 / vysshaya 1800 / pervaya 1650 / vtoraya 1500 / mrs_vyssh 1050 / mrs_perv 950) — заглушки; CEO уточняет через админку «Формула сорта».
+
+**Files**: изменений в репо нет сверх PR #99/#100; запись фиксирует статус деплоя.
