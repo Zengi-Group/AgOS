@@ -330,12 +330,14 @@ export function CabinetApp() {
   // следующую, уже открытую (переход progate→paypro).
   const closeSheet = (kind: SheetKind) => setSheet((cur) => (cur?.kind === kind ? null : cur))
 
-  // ---------- TSP-1: визард «Новая партия» + результат публикации ----------
-  const [wizActive, setWizActive] = useState(false)
-  const [pubResult, setPubResult] = useState<{ batch: Batch; variant: PubVariant } | null>(null)
+  // ---------- TSP-1: визард «Новая партия» + результат публикации (роуты 'batchwiz'/'pub') ----------
+  // N-3/N-5/M4/M5: визард и результат — реальные роуты острова, не state-оверлей. PubVariant —
+  // транзиентная UI-подсказка (searching-анимация), на партии не хранится → держим в ref по id
+  // батча на время флоу (deep-link/reload → фолбэк 'D', без searching).
+  const pubVariantRef = useRef<Record<string, PubVariant>>({})
 
-  // ---------- ARS-212: мастер профиля фермы (флоу-страница на табе Ферма) ----------
-  const [farmWizActive, setFarmWizActive] = useState(false)
+  // ---------- ARS-212: мастер профиля фермы (теперь роут 'farmwiz', не state-оверлей) ----------
+  // startAt держится в state (какой ярус открыть); сам показ мастера — навигацией на роут.
   const [farmWizStart, setFarmWizStart] = useState<'herd' | 'plan'>('herd')
 
   // ---------- persistence ----------
@@ -441,22 +443,9 @@ export function CabinetApp() {
   // Флоу-страницы (agos-flow-page: TSP-визард, результат публикации, мастер фермы) — полноэкранные,
   // без таб-бара (контракт Slice 5a/7). До P-4 (ARS-220) бар не рендерился внутри их IonPage;
   // с постоянным IonTabBar его надо прятать явно — иначе бар просвечивает под визардом.
-  // C9 (аудит 2026-07-13): флаги флоу скоупим на владеющий роут — иначе оставшийся true флаг
-  // (после system-back/edge-swipe из визарда мимо URL) прятал таб-бар глобально на чужом экране.
-  const hideTabBar = (['p1list', 'batch', 'review', 'turan', 'thread'] as RouteName[]).includes(route.name)
-    || (route.name === 'market' && (wizActive || !!pubResult))
-    || (route.name === 'farm' && farmWizActive)
-
-  // C9 (аудит 2026-07-13): флоу живут в state мимо URL — system-back/edge-swipe/browser-back
-  // меняют URL, но флаг оставался true → «призрачное» переоткрытие визарда при возврате на таб.
-  // Сбрасываем флаг, когда роут ушёл с владеющего им экрана (market — визард/публикация; farm — мастер).
-  useEffect(() => {
-    if (route.name !== 'market') {
-      setWizActive((v) => (v ? false : v))
-      setPubResult((v) => (v ? null : v))
-    }
-    if (route.name !== 'farm') setFarmWizActive((v) => (v ? false : v))
-  }, [route.name])
+  // Флоу-страницы теперь реальные роуты (farmwiz/batchwiz/pub) — таб-бар прячется по имени роута,
+  // без state-флагов (ушла и причина C9-«призрачного» переоткрытия: нет флагов мимо URL).
+  const hideTabBar = (['p1list', 'batch', 'review', 'turan', 'thread', 'farmwiz', 'batchwiz', 'pub'] as RouteName[]).includes(route.name)
 
   const handleLogout = async () => {
     await signOut()
@@ -634,56 +623,58 @@ export function CabinetApp() {
     />
   )
 
-  const renderMarket = () => {
-    if (wizActive) {
-      return (
-        <IonPage className="agos-flow-page">
-          <BatchWizard
-            onDone={(batch, variant) => {
-              addBatch(batch)
-              setWizActive(false)
-              host.haptics('heavy')   // S2.1: публикация партии — крупное действие
-              setPubResult({ batch, variant })
-            }}
-            onExit={() => setWizActive(false)}
-            onTuran={() => { setWizActive(false); go({ name: 'turan', back: { name: 'market' } }) }}
-          />
-        </IonPage>
-      )
-    }
-    if (pubResult) {
-      return (
-        <IonPage className="agos-flow-page">
-          <PubResult
-            variant={pubResult.variant}
-            batch={pubResult.batch}
-            onToBatch={() => { const id = pubResult.batch.id; setPubResult(null); go({ name: 'batch', batchId: id }) }}
-            onToList={() => { setPubResult(null); go({ name: 'p1list' }) }}
-          />
-        </IonPage>
-      )
-    }
-    return (
-      <MarketScreen
-        membership={membership}
-        batches={batches}
-        loading={loading}
-        error={batchesError}
-        onRetry={refetchBatches}
-        onNew={() => {
-          // Лимит 5 активных партий (совпадает с renderList): «Продать» на табе рынка —
-          // теперь основной вход в визард, поэтому guard тоже здесь.
-          const activeCount = batches.filter((b) =>
-            ['scheduled', 'published', 'offering', 'decision', 'matched', 'confirmed', 'dispatched'].includes(b.state)
-          ).length
-          if (activeCount >= 5) { setSheet({ kind: 'limit' }); return }
-          setWizActive(true)
+  const renderMarket = () => (
+    <MarketScreen
+      membership={membership}
+      batches={batches}
+      loading={loading}
+      error={batchesError}
+      onRetry={refetchBatches}
+      onNew={() => {
+        // Лимит 5 активных партий (совпадает с renderList): «Продать» на табе рынка —
+        // основной вход в визард, поэтому guard тоже здесь.
+        const activeCount = batches.filter((b) =>
+          ['scheduled', 'published', 'offering', 'decision', 'matched', 'confirmed', 'dispatched'].includes(b.state)
+        ).length
+        if (activeCount >= 5) { setSheet({ kind: 'limit' }); return }
+        go({ name: 'batchwiz' })
+      }}
+      onApply={() => memberAct('apply')}
+      onPay={() => memberAct('pay')}
+      go={go}
+      onRefresh={refetchBatches}
+    />
+  )
+  // N-3/N-5/M4/M5: визард публикации и результат — реальные роуты острова (как farmwiz). Свой
+  // стек-энтри → нативный push/pop + edge-swipe + exit-анимация; system-back шагает внутрь флоу.
+  const renderBatchWiz = () => (
+    <IonPage className="agos-flow-page">
+      <BatchWizard
+        onDone={(batch, variant) => {
+          addBatch(batch)
+          host.haptics('heavy')   // S2.1: публикация партии — крупное действие
+          pubVariantRef.current[batch.id] = variant
+          go({ name: 'pub', batchId: batch.id })
         }}
-        onApply={() => memberAct('apply')}
-        onPay={() => memberAct('pay')}
-        go={go}
-        onRefresh={refetchBatches}
+        onExit={() => goBackTo({ name: 'market' })}
+        onTuran={() => go({ name: 'turan', back: { name: 'market' } })}
       />
+    </IonPage>
+  )
+  const renderPub = ({ match }: { match: { params: { id: string } } }) => {
+    const batch = batches.find((b) => b.id === match.params.id)
+    // Партия только что создана addBatch — есть в batches. Фолбэк (deep-link/reload на pub):
+    // партии нет локально → уводим на карточку (реальные данные подъедут поллингом).
+    if (!batch) return <PlaceholderScreen title="Партия опубликована" sub="Открываю карточку…" />
+    return (
+      <IonPage className="agos-flow-page">
+        <PubResult
+          variant={pubVariantRef.current[batch.id] ?? 'D'}
+          batch={batch}
+          onToBatch={() => go({ name: 'batch', batchId: batch.id })}
+          onToList={() => go({ name: 'p1list' })}
+        />
+      </IonPage>
     )
   }
 
@@ -701,9 +692,10 @@ export function CabinetApp() {
         onBatch={(id) => go({ name: 'batch', batchId: id, back: { name: 'p1list' } })}
         onNew={() => {
           if (activeCount >= ACTIVE_COUNT_LIMIT) { setSheet({ kind: 'limit' }); return }
-          // S2.1 (ARS-157): визард рендерится только на market-роуте — уводим туда,
-          // иначе тап «+Новая» со Списка визуально ничего не делал (решение CEO: починить).
-          setWizActive(true); go({ name: 'market' })
+          // Визард публикации — свой роут (1b): «+Новая» со Списка навигирует прямо в него;
+          // system-back вернёт на Список (нативный pop к источнику). Прежний квирк (тап ничего
+          // не делал, S2.1/ARS-157) закрыт роутом.
+          go({ name: 'batchwiz' })
         }}
         onBack={() => goBackTo({ name: 'market' })}
       />
@@ -726,8 +718,8 @@ export function CabinetApp() {
         backLabel={backLabelFor(route.back)}
         onPatch={(patch, successToast) => patchBatch(currentBatch.id, patch, successToast)}
         onNew={() => {
-          // S2.1 (ARS-157): визард только на market-роуте — уводим туда (решение CEO: починить).
-          setWizActive(true); go({ name: 'market' })
+          // Визард публикации — свой роут (1b): «+Новая» с карточки навигирует прямо в него.
+          go({ name: 'batchwiz' })
         }}
         onReview={() => go({ name: 'review', batchId: currentBatch.id, back: { name: 'batch', batchId: currentBatch.id } })}
         onTuran={() => go({ name: 'turan', back: { name: 'batch', batchId: currentBatch.id } })}
@@ -840,32 +832,31 @@ export function CabinetApp() {
   // членства — существующие правила Рынка; кнопку показываем только продающим статусам).
   const farmCanSell = (['active', 'grace', 'expiring'] as MembershipStatus[]).includes(membership)
   const sellFromFarm = () => {
-    setFarmWizActive(false)
+    // Мастер фермы теперь роут — уход на Рынок (go) сам покидает 'farmwiz', флаг не нужен.
     const activeCount = batches.filter((b) =>
       ['scheduled', 'published', 'offering', 'decision', 'matched', 'confirmed', 'dispatched'].includes(b.state)
     ).length
     if (activeCount >= 5) { go({ name: 'market' }); setSheet({ kind: 'limit' }); return }
-    setWizActive(true); go({ name: 'market' })
+    go({ name: 'batchwiz' })
   }
-  const renderFarm = () => {
-    if (farmWizActive) {
-      return (
-        <IonPage className="agos-flow-page">
-          <FarmWizard
-            startAt={farmWizStart}
-            onExit={() => setFarmWizActive(false)}
-            onSell={farmCanSell ? sellFromFarm : undefined}
-          />
-        </IonPage>
-      )
-    }
-    return (
-      <FarmScreen
-        onStart={() => { setFarmWizStart('herd'); setFarmWizActive(true) }}
-        onResume={() => { setFarmWizStart('plan'); setFarmWizActive(true) }}
+  const renderFarm = () => (
+    <FarmScreen
+      onStart={() => { setFarmWizStart('herd'); go({ name: 'farmwiz' }) }}
+      onResume={() => { setFarmWizStart('plan'); go({ name: 'farmwiz' }) }}
+    />
+  )
+  // N-3/N-5/M4/M5 (аудит нативности): мастер фермы — реальный роут острова, а не state-оверлей.
+  // Свой стек-энтри → нативный push/pop + edge-swipe + exit-анимация; system-back/edge-swipe
+  // возвращает на «Ферму», не выкидывает из флоу. Компонент FarmWizard не тронут; startAt в state.
+  const renderFarmWiz = () => (
+    <IonPage className="agos-flow-page">
+      <FarmWizard
+        startAt={farmWizStart}
+        onExit={() => goBackTo({ name: 'farm' })}
+        onSell={farmCanSell ? sellFromFarm : undefined}
       />
-    )
-  }
+    </IonPage>
+  )
 
   // Пока грузится реальный профиль — брендовый boot (а не голый спиннер/демо-экран).
   // P-2 (ARS-218): единый BootScreen на всём пути в кабинет. См. profileLoading выше.
@@ -887,12 +878,15 @@ export function CabinetApp() {
                 <IonRouterOutlet>
                   <RouteV5 exact path="/cabinet" render={renderHome} />
                   <RouteV5 exact path="/cabinet/market" render={renderMarket} />
+                  <RouteV5 exact path="/cabinet/market/new" render={renderBatchWiz} />
+                  <RouteV5 exact path="/cabinet/pub/:id" render={renderPub} />
                   <RouteV5 exact path="/cabinet/list" render={renderList} />
                   <RouteV5 exact path="/cabinet/batch/:id" render={renderBatch} />
                   <RouteV5 exact path="/cabinet/review/:id" render={renderReview} />
                   <RouteV5 exact path="/cabinet/account" render={renderCabinet} />
                   <RouteV5 exact path="/cabinet/turan" render={renderTuran} />
                   <RouteV5 exact path="/cabinet/farm" render={renderFarm} />
+                  <RouteV5 exact path="/cabinet/farm/wizard" render={renderFarmWiz} />
                   <RouteV5 exact path="/cabinet/shop" render={() => <PlaceholderScreen title="Маркет" sub="Дистрибуция и специалисты TURAN" icon="bag" emptySub="Дистрибуция и специалисты TURAN появятся здесь" />} />
                   <RouteV5 exact path="/cabinet/services" render={() => <PlaceholderScreen title="Сервисы" sub="Специалисты и услуги TURAN" icon="grid" emptySub="Специалисты и услуги TURAN появятся здесь" />} />
                   <RouteV5 exact path="/cabinet/messages" render={renderMessages} />

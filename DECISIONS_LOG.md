@@ -3,6 +3,39 @@
 > Maintained by: Architect & Coordinator Agent
 > Format: WHAT was decided → WHY (alternatives considered) → CONSEQUENCES (what becomes easy/hard)
 
+### 2026-07-15: Аудит нативности — роутер-остров, Increment 1b (BatchWizard + PubResult → роуты)
+
+**What**: Продолжение «остров полностью». TSP-визард публикации партии (`BatchWizard`) и экран результата (`PubResult`) переведены из state-оверлея (`wizActive`/`pubResult`) в **реальные роуты острова** `/cabinet/market/new` и `/cabinet/pub/:id`. Тот же выигрыш, что у 1a: нативный push/pop, edge-swipe, exit-анимация, system-back шагает внутрь флоу (N-3/N-5/M4/M5). Аддитивно, компоненты `BatchWizard`/`PubResult` не тронуты:
+- `types.ts`: +`RouteName 'batchwiz' | 'pub'`. `nav.ts`: `batchwiz→/cabinet/market/new`, `pub→/cabinet/pub/:id`; `urlToRoute` `market/new→batchwiz`, `pub→pub{batchId}`; `DEPTH` обоих =1.
+- `CabinetApp.tsx`: удалены state `wizActive`/`pubResult` + их сброс-эффект (C9 больше не нужен — флагов мимо URL нет). `renderMarket` теперь только `MarketScreen`; новые `renderBatchWiz` (onDone→addBatch+haptics+`go(pub)`, onExit→`goBackTo(market)`) и `renderPub` (батч из `:id`, вариант из нового `pubVariantRef` по id, фолбэк 'D'). Все входы «+Новая» (Рынок/Список/Карточка/`sellFromFarm`) → `go({name:'batchwiz'})` вместо `setWizActive(true)`. `hideTabBar` включает `batchwiz`/`pub` по имени роута. `<RouteV5>` `/cabinet/market/new` + `/cabinet/pub/:id`.
+
+**Why**: те же N-3/N-5/M4/M5 для revenue-флоу публикации. **PubVariant** (транзиентная UI-подсказка searching-анимации, не хранится на партии) держим в `pubVariantRef` по id батча — роут не тащит объект-вариант в URL; deep-link/reload на `pub` → фолбэк 'D' (без searching, безопасно). **Поведенческий нюанс (осознанно):** «+Новая» со Списка/Карточки теперь навигирует ПРЯМО в визард-роут, а не «market + оверлей»; выход из визарда нативно возвращает на источник (Список/Карточка), а не форс-Рынок. Это native-correct и лечит квирк S2.1/ARS-157 (мёртвый тап). PubResult onToBatch/onToList — прежняя навигация (уже `go`).
+
+**Verify**: `tsc -b` — 0 ошибок; ноль оставшихся `wizActive`/`pubResult`-ссылок. `npm run test:routers` — 5/5 (гейт DEBT-NATIVE-ROUTER-01). Boot-превью `/cabinet/market` (dev, mobile) — редирект на вход, 0 ошибок консоли. Живой проход публикации (визард слайдом → результат → карточка) + edge-swipe/system-back — на устройстве под member-сидом (revenue-флоу за гейтом членства). Чистый фронт, SQL не тронут.
+
+**Files**: `src/pages/cabinet/shell/{types.ts, nav.ts, CabinetApp.tsx}`. Ветка `claude/roadmap-audit-status-19bdc0` (PR #95). Канон-эхо: [[projects/agos/specs/native-farmer-app]].
+
+### 2026-07-15: Аудит нативности — роутер-остров, флоу как реальные роуты (Increment 1a: FarmWizard → N-3/N-5/M4/M5)
+
+**What**: Первый инкремент «роутер-остров полностью» (решение CEO). Мастер профиля фермы (`FarmWizard`) переведён из state-оверлея (`farmWizActive`) в **реальный роут острова** `/cabinet/farm/wizard` в `IonRouterOutlet`. Теперь у него свой стек-энтри → нативный push/pop, edge-swipe-назад, exit-анимация, и system-back/edge-swipe шагает ВНУТРЬ флоу (возврат на «Ферму»), а не выкидывает наружу. Аддитивно, компонент `FarmWizard` не тронут:
+- `types.ts`: +`RouteName 'farmwiz'`.
+- `nav.ts`: `routeToUrl farmwiz→/cabinet/farm/wizard`; `urlToRoute` `farm/wizard→farmwiz` (deep-link/edge-swipe/reload); `DEPTH.farmwiz=1` (farm 0→farmwiz 1 = forward, назад = back).
+- `CabinetApp.tsx`: `renderFarm` теперь только `FarmScreen` (onStart/onResume → `go({name:'farmwiz'})`); новый `renderFarmWiz` (IonPage+FarmWizard, `onExit→goBackTo({farm})`); `<RouteV5 path="/cabinet/farm/wizard">`; `hideTabBar` включает `farmwiz` (убрана state-ветка `farm&&farmWizActive`); удалён `farmWizActive` state + его сброс-эффект + строка в `sellFromFarm` (HS-4, `startAt` остался в state).
+
+**Why**: N-3/N-5/M4/M5 из аудита — визарды жили в локальном state внутри роута таба → мгновенный свап без анимации, system-back/edge-swipe выкидывал из середины флоу. Реальный роут отдаёт StackManager Ionic весь нативный переход бесплатно. FarmWizard взят первым (самый чистый: нет возвратных данных как у PubResult batch/variant, таб «Ферма» доступен без членства). BatchWizard+PubResult (цепочка публикации, вариант→query/ref) и per-tab стеки N-2 — следующие инкременты, отдельно (revenue-флоу, нужна live-проверка под member-сидом).
+
+**Verify**: `tsc -b` — 0 ошибок. `npm run test:routers` — 5/5 (гейт DEBT-NATIVE-ROUTER-01, v5-остров цел). Прод-превью (dev 5173, mobile 375×812, реальный бэкенд): `/cabinet/farm` → чистый редирект на вход, **0 ошибок в консоли** (только benign React-Router-v7 future-flag warnings) — остров с новым роутом монтируется без белого экрана. Живой проход самого мастера (открытие слайдом / возврат) — под member-сидом на устройстве (сид-логин упирается в прод-бэкенд, граница сида). Чистый фронт, SQL не тронут.
+
+**Files**: `src/pages/cabinet/shell/{types.ts, nav.ts, CabinetApp.tsx}`. Ветка `claude/roadmap-audit-status-19bdc0`. Канон-эхо в мозге: [[projects/agos/specs/native-farmer-app]].
+
+### 2026-07-15: Аудит нативности — read-side офлайн (C3/D1/D2/D4/D12) — СВЁРНУТО в пользу PR #93 при мерже
+
+**What**: Эта ветка (roadmap-audit-status) сначала закрыла C3/D2/D4/D12 своей реализацией. При мерже main в ветку (перед PR #95) выяснилось: параллельный **PR #93 «пакет Read-side офлайн (C3, D1, D2, D4, D12)»** (`d623ab5`; запись-канон ниже в этом логе) уже реализовал тот же набор — **полнее** (symbol-race `withTimeout` для D4, `settleOffline`+один retry, `firstLoad`-`emptyFarm` для D1/D2, проброшенный `batchesError`/`onRetry` в MarketScreen/ListScreen под D-err). При resolve конфликта в `CabinetApp.tsx` мой дубль R1 **снят целиком** — на main остаётся реализация #93. Уникальный вклад ветки = **роутер-остров (Increment 1a/1b)**, записи выше.
+
+**Why**: одна реализация одного факта (P4). #93 влит в main первым и покрывает больше (включая задел D-err), поэтому main выигрывает; мой R1 не тащим параллельно. Противоречие зафиксировано, не форкнуто (CLAUDE.md «конфликт — флагай, не резолвь молча»). Мерж-резолюшн: R1-регионы `CabinetApp.tsx` = версия #93; островные регионы = версия ветки; `error`/`onRetry`-пропсы #93 привиты в островной `renderMarket`.
+
+**Verify**: после resolve — `tsc -b` 0 ошибок; `npm run test:routers` 5/5; ноль конфликт-маркеров и ноль остаточных `wizActive`/`pubResult`/`bootTimeout`. Ветка `claude/roadmap-audit-status-19bdc0` (PR #95).
+
 ### 2026-07-15: Лоадер запуска — только иконка + фикс пересечения лучей (R-29)
 
 **What**: правки CEO по лоадеру при загрузке приложения. **(1)** `BootScreen` очищен до одной иконки-марки: убрана slim-полоса индикатора (`agosBootBar` keyframes + бар-div) и текстовая подпись под маркой; `label` остаётся только как `aria-label` обёртки (доступность). **(2)** Пересечение лучей у `breathe`-анимации `TuranLoader` исправлено: причина — у `.tl-ray` отсутствовал `transform-box: fill-box`, поэтому `transform-origin` луча считался от общего viewBox (или border-box), лучи расходились и пересекались при scale. Приняли готовый веб-сниппет анимации от дизайнера (`turan-loader-web.html`, 2026-07-14): геометрия 1:1 из оригинального `public/turan-icon.svg` (viewBox `42.88 -0.13 130 130`), `.tl-ray { transform-box: fill-box }`, keyframes `tlSpin` (вращение 90°) / `tlBreatheSpin` (синхронное дыхание лучей у spin) / `tlBreathe` (фазовый сдвиг у breathe); цвет — фирменный `#F7931E` (дизайнерский `#C8A24B` заменён на бренд по запросу CEO). Компонентный API (`variant`/`size`/`color`/`label`) не менялся — все вызовы (46 мест) работают без правок.
