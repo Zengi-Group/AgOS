@@ -18,6 +18,9 @@ interface Props {
   onBack: () => void
   /** P-3 (ARS-219): пока грузятся партии — скелет, а НЕ ложный empty-state «Партий нет». */
   loading?: boolean
+  /** D2 (офлайн-чтение): сбой загрузки при пустом кеше — показать ошибку+retry, не «нет партий». */
+  error?: string | null
+  onRetry?: () => void
 }
 
 const FILTERS: { k: ListFilter; t: string }[] = [
@@ -26,7 +29,7 @@ const FILTERS: { k: ListFilter; t: string }[] = [
   { k: 'done', t: 'Завершённые' },
 ]
 
-export function ListScreen({ batches, onBatch, onNew, onBack, loading }: Props) {
+export function ListScreen({ batches, onBatch, onNew, onBack, loading, error, onRetry }: Props) {
   const [filter, setFilter] = useState<ListFilter>('all')
   const list = filterBatches(batches, filter)
   const dec = list.filter((b) => b.state === 'decision')
@@ -58,6 +61,15 @@ export function ListScreen({ batches, onBatch, onNew, onBack, loading }: Props) 
         {loading && batches.length === 0 ? (
           // P-3 (ARS-219): первичная загрузка — скелет вместо ложного «Партий нет».
           <ScreenSkeleton variant="list" />
+        ) : error && batches.length === 0 ? (
+          // D2 (офлайн-чтение): сбой загрузки при пустом кеше — честная ошибка + «Повторить»,
+          // а не ложное «Партий пока нет» (иначе фермер думает, что данные потеряны).
+          <div className="mk-empty">
+            <div className="mk-empty-art"><PhIcon name="alert" size={46} /></div>
+            <div className="mk-empty-h">Не удалось загрузить партии</div>
+            <div className="mk-empty-t">Проверьте связь и попробуйте ещё раз.</div>
+            {onRetry && <button className="mk-cta primary" onClick={onRetry}>Повторить</button>}
+          </div>
         ) : (
           <>
             <div className="mk-tabs">
