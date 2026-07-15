@@ -270,6 +270,79 @@ comment on column public.batches.target_month is
      expires_at set to last day of target_month + 7 days buffer by RPC publish_batch.';
 
 -- -------------------------------------------------------
+-- batch_media (ARS-227)
+-- Photo/video attachments for a batch. Separate table (not array column) — P6.
+-- organization_id denormalised from batches for RLS/storage-path scoping.
+-- Visibility (CEO 2026-07-10, Art.171 aggregate-only): owner + admin only (ARS-227).
+--   MPK read after contact reveal is DEFERRED to ARS-229 (correct reveal = closed_filled/
+--   closed_partial per D-M6-5/12, not executing; D40 superseded).
+-- Storage: private bucket 'batch-media', path {organization_id}/{batch_id}/{uuid}.{ext}
+--   (bucket + storage.objects policies live in d10_public_site.sql alongside fn_storage_org_id).
+-- -------------------------------------------------------
+create table if not exists public.batch_media (
+    id                  uuid    primary key default gen_random_uuid(),
+    batch_id            uuid    not null references public.batches(id) on delete cascade,
+    organization_id     uuid    not null references public.organizations(id),  -- denorm for RLS
+    media_type          text    not null check (media_type in ('photo','video')),
+    storage_path        text    not null,   -- object name in private 'batch-media' bucket
+    sort_order          int     not null default 0,
+    created_by          uuid    references public.users(id),
+    created_at          timestamptz not null default now(),
+    unique (storage_path)
+);
+comment on table public.batch_media is
+    'ARS-227: photo/video attachments per batch. Separate table (P6, not array column).
+     organization_id denormalised from parent batch for RLS + storage-path scoping.
+     Visibility (Art.171 aggregate-only): owner + admin only (ARS-227); MPK read deferred to ARS-229.
+     storage_path = object name in private bucket batch-media ({org}/{batch}/{uuid}.{ext}).
+     on delete cascade: media dies with its batch (orphan storage objects cleaned client-side/cron).';
+
+-- -------------------------------------------------------
+-- batch_animals (ARS-228)
+-- Per-batch animal detail: one row per individual head with ИНЖ (individual animal
+-- number / ear-tag) + optional attributes. STRICTLY per-batch — this is a SALE MANIFEST,
+-- NOT a herd-level Animal registry.
+--   D20 BOUNDARY (d01_kernel.sql:840) UPHELD: AGOS operates at group level; individual
+--   animals live in ERP. batch_animals does NOT reopen D20 — it is supplementary sale
+--   detail scoped to one marketing batch, never the source of truth for the herd.
+--   The group aggregate (batches.heads) stays authoritative (P3/P4, CEO 2026-07-15):
+--   rows are OPTIONAL and MAY be fewer than heads (partial detail, P11). heads is NOT
+--   derived from rows; no DB constraint ties row-count to heads (soft UI hint only).
+-- Fill is OPTIONAL (CEO 2026-07-10): a batch is valid with zero rows.
+-- Visibility (Art.171 aggregate-only): owner + admin only (ARS-228); MPK read after
+--   contact reveal DEFERRED to ARS-229 (correct reveal = closed_filled/closed_partial
+--   per D-M6-5/12, not "after match"; D40 superseded).
+-- Uniqueness (CEO 2026-07-15): soft — partial unique on (batch_id, inzh_number) WHERE set;
+--   many NULL allowed (optional). No ИНЖ format check (farmer enters legacy tags as-is).
+-- -------------------------------------------------------
+create table if not exists public.batch_animals (
+    id                  uuid    primary key default gen_random_uuid(),
+    batch_id            uuid    not null references public.batches(id) on delete cascade,
+    organization_id     uuid    not null references public.organizations(id),  -- denorm for RLS
+    inzh_number         text,                        -- ИНЖ / бирка; nullable (P11 optional)
+    weight_kg           numeric(6,2) check (weight_kg > 0 and weight_kg < 2000),
+    sex                 text    check (sex in ('m','f')),
+    age_months          int     check (age_months >= 0 and age_months < 600),
+    notes               text,
+    sort_order          int     not null default 0,
+    created_by          uuid    references public.users(id),
+    created_at          timestamptz not null default now(),
+    updated_at          timestamptz not null default now()
+);
+-- Soft uniqueness: no duplicate ИНЖ within one batch, but unlimited NULL (optional fill).
+create unique index if not exists batch_animals_inzh_uq
+    on public.batch_animals (batch_id, inzh_number)
+    where inzh_number is not null and btrim(inzh_number) <> '';
+create index if not exists batch_animals_batch_idx on public.batch_animals (batch_id);
+comment on table public.batch_animals is
+    'ARS-228: per-batch animal detail (sale manifest), one row per head with ИНЖ + optional
+     attrs. Separate table (P6, not JSONB). STRICTLY per-batch — NOT a herd Animal registry.
+     D20 UPHELD: AGOS = group level; batches.heads (aggregate) stays authoritative (P3/P4);
+     rows OPTIONAL and MAY be < heads (P11); heads NOT derived from rows.
+     Visibility (Art.171): owner + admin only (ARS-228); MPK read deferred to ARS-229.
+     Soft-unique ИНЖ per batch (many NULL allowed); no format check.';
+
+-- -------------------------------------------------------
 -- pool_requests
 -- D33: PoolRequest 1:1 Pool (one request = one pool, auto-created on activation)
 -- FSM 5.7: draft → active → closed | expired
@@ -706,6 +779,72 @@ create policy "batches_read_own"    on public.batches for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 drop policy if exists "batches_write_own" on public.batches;
 create policy "batches_write_own"   on public.batches for all
+    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+
+-- ARS-229 · MPK-after-reveal READ predicate (D-M6-5/12).
+-- Returns true iff the batch is linked (pool_line_id → pool_lines → pools) to a Pool owned
+-- by one of the caller's orgs AND the batch has reached a revealed status. Reveal moment =
+-- pool close → batch 'confirmed' (D-M6-5/12 supersedes D40's 'executing'). Read widens to
+-- dispatched/delivered too (still post-reveal). SECURITY DEFINER: must see the farmer's
+-- batch↔pool linkage across org boundary (bypasses RLS) — but ONLY exposes the boolean.
+-- plpgsql (not sql) so the reference to pool_lines resolves at RUNTIME: pool_lines is
+-- created later in this file (Section 7.4), after this point.
+create or replace function public.fn_batch_revealed_to_me(p_batch_id uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_ok boolean;
+begin
+    select exists (
+        select 1
+        from public.batches b
+        join public.pool_lines pl on pl.id = b.pool_line_id
+        join public.pools      p  on p.id  = pl.pool_id
+        where b.id = p_batch_id
+          and b.status in ('confirmed', 'dispatched', 'delivered')
+          and p.organization_id = any(public.fn_my_org_ids())
+    ) into v_ok;
+    return coalesce(v_ok, false);
+end;
+$$;
+comment on function public.fn_batch_revealed_to_me(uuid) is
+    'ARS-229 | True iff batch is matched into a Pool owned by the caller''s org AND the batch
+     has reached a revealed status (confirmed|dispatched|delivered). Reveal = pool close
+     (D-M6-5/12, supersedes D40). Used to widen batch_media/batch_animals READ (and storage
+     select) for the matched MPK after the deal — never before (Art.171 aggregate-only).';
+grant execute on function public.fn_batch_revealed_to_me(uuid) to authenticated;
+
+-- Batch media (ARS-227 + ARS-229 reveal): owner + admin always; matched MPK READ after reveal.
+-- Pre-reveal, MPK still gets NO access ("MPK does not see media before the deal", Art.171).
+-- Write stays owner + admin only.
+alter table public.batch_media enable row level security;
+drop policy if exists "batch_media_read" on public.batch_media;
+create policy "batch_media_read"    on public.batch_media for select
+    using (
+        organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or public.fn_batch_revealed_to_me(batch_id)      -- ARS-229: matched MPK, post-reveal
+    );
+drop policy if exists "batch_media_write_own" on public.batch_media;
+create policy "batch_media_write_own" on public.batch_media for all
+    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+
+-- batch_animals (ARS-228 + ARS-229 reveal): owner + admin always; matched MPK READ after reveal.
+-- Same reveal predicate as batch_media. Write stays owner + admin only.
+alter table public.batch_animals enable row level security;
+drop policy if exists "batch_animals_read" on public.batch_animals;
+create policy "batch_animals_read"    on public.batch_animals for select
+    using (
+        organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or public.fn_batch_revealed_to_me(batch_id)      -- ARS-229: matched MPK, post-reveal
+    );
+drop policy if exists "batch_animals_write_own" on public.batch_animals;
+create policy "batch_animals_write_own" on public.batch_animals for all
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 
 -- Pool requests: MPK sees own; admin sees all
@@ -6172,4 +6311,447 @@ revoke execute on function public.rpc_admin_advance_pool_status(uuid, text)   fr
 
 -- ============================================================
 -- END SECTION 11 (ADMIN TSP WRITE RPCs)
+-- ============================================================
+
+
+-- ============================================================
+-- SECTION 12: BATCH MEDIA (ARS-227 — фото/видео партии)
+-- Writes go through RPC (P-AI-1); reads via RLS-protected select + client signed URL.
+-- Bucket 'batch-media' + storage.objects policies live in d10_public_site.sql.
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- rpc_add_batch_media
+-- Register an uploaded object as batch media. Client uploads the file to the private
+-- 'batch-media' bucket first (storage RLS enforces org-scoped path), then calls this RPC
+-- to persist the metadata row.
+-- ------------------------------------------------------------
+create or replace function public.rpc_add_batch_media(
+    p_organization_id   uuid,
+    p_batch_id          uuid,
+    p_media_type        text,
+    p_storage_path      text,
+    p_sort_order        int         default 0
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_batch record;
+    v_media_id uuid;
+begin
+    -- OWNERSHIP GUARD (SEC-RPC-ORGTRUST-01): SECURITY DEFINER bypasses RLS —
+    -- p_organization_id is client-supplied and must be verified against the caller.
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    if p_media_type not in ('photo','video') then
+        raise exception 'INVALID_MEDIA_TYPE: % (expected photo|video)', p_media_type
+            using errcode = 'P0001';
+    end if;
+    if coalesce(trim(p_storage_path), '') = '' then
+        raise exception 'MISSING_STORAGE_PATH' using errcode = 'P0001';
+    end if;
+
+    -- Batch must exist and belong to the org.
+    select * into v_batch
+    from public.batches
+    where id = p_batch_id and organization_id = p_organization_id;
+    if v_batch is null then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    -- Media editable only while batch is farmer-controlled (draft|published).
+    if v_batch.status not in ('draft','published') then
+        raise exception 'INVALID_STATUS: cannot edit media in status %', v_batch.status
+            using errcode = 'P0001';
+    end if;
+
+    insert into public.batch_media (
+        batch_id, organization_id, media_type, storage_path, sort_order, created_by
+    ) values (
+        p_batch_id, p_organization_id, p_media_type, p_storage_path, coalesce(p_sort_order, 0),
+        public.fn_current_user_id()
+    )
+    returning id into v_media_id;
+
+    return v_media_id;
+end;
+$$;
+comment on function public.rpc_add_batch_media(uuid, uuid, text, text, int) is
+    'ARS-227 | Register uploaded photo/video for a batch. Owner/admin/service_role only
+     (SEC-RPC-ORGTRUST-01). Editable only in status draft|published. Additive (P7).';
+
+-- ------------------------------------------------------------
+-- rpc_remove_batch_media
+-- Delete a media metadata row (owner/admin). The storage object is removed client-side
+-- (storage RLS permits owner delete); a cron/cleanup handles any orphaned objects.
+-- ------------------------------------------------------------
+create or replace function public.rpc_remove_batch_media(
+    p_organization_id   uuid,
+    p_media_id          uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_media record;
+begin
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    select * into v_media
+    from public.batch_media
+    where id = p_media_id and organization_id = p_organization_id;
+    if v_media is null then
+        return true;  -- idempotent (already gone / not owned)
+    end if;
+
+    delete from public.batch_media where id = p_media_id;
+    return true;
+end;
+$$;
+comment on function public.rpc_remove_batch_media(uuid, uuid) is
+    'ARS-227 | Delete a batch media row. Owner/admin/service_role only. Idempotent. Additive (P7).';
+
+-- Registry
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
+    ('rpc_add_batch_media',    'rpc_add_batch_media',    null, 'd02_tsp.sql (Section 12 / ARS-227)', 'Register uploaded photo/video for a batch; owner/admin; status draft|published'),
+    ('rpc_remove_batch_media', 'rpc_remove_batch_media', null, 'd02_tsp.sql (Section 12 / ARS-227)', 'Delete a batch media row; owner/admin; idempotent')
+on conflict (sql_name) do update
+    set dok3_name = excluded.dok3_name, notes = excluded.notes, created_in = excluded.created_in;
+
+grant execute on function public.rpc_add_batch_media(uuid, uuid, text, text, int) to authenticated;
+grant execute on function public.rpc_remove_batch_media(uuid, uuid)               to authenticated;
+revoke execute on function public.rpc_add_batch_media(uuid, uuid, text, text, int) from anon;
+revoke execute on function public.rpc_remove_batch_media(uuid, uuid)               from anon;
+
+-- ============================================================
+-- END SECTION 12 (BATCH MEDIA — ARS-227)
+-- ============================================================
+
+-- ============================================================
+-- SECTION 13 · BATCH ANIMALS (ARS-228)
+-- Per-batch animal detail (sale manifest) with ИНЖ. All RPC SECURITY DEFINER with
+-- ownership guard (SEC-RPC-ORGTRUST-01); add/update gated to status draft|published
+-- (farmer-controlled window). heads aggregate stays authoritative — these RPC never
+-- touch batches.heads (P3/P4/D20). Additive only (P7).
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- rpc_add_batch_animal
+-- ------------------------------------------------------------
+create or replace function public.rpc_add_batch_animal(
+    p_organization_id   uuid,
+    p_batch_id          uuid,
+    p_inzh_number       text        default null,
+    p_weight_kg         numeric     default null,
+    p_sex               text        default null,
+    p_age_months        int         default null,
+    p_notes             text        default null,
+    p_sort_order        int         default 0
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_batch record;
+    v_animal_id uuid;
+begin
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    if p_sex is not null and p_sex not in ('m','f') then
+        raise exception 'INVALID_SEX: % (expected m|f)', p_sex using errcode = 'P0001';
+    end if;
+
+    select * into v_batch
+    from public.batches
+    where id = p_batch_id and organization_id = p_organization_id;
+    if v_batch is null then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    -- Detail editable only while batch is farmer-controlled (draft|published).
+    if v_batch.status not in ('draft','published') then
+        raise exception 'INVALID_STATUS: cannot edit animal detail in status %', v_batch.status
+            using errcode = 'P0001';
+    end if;
+
+    insert into public.batch_animals (
+        batch_id, organization_id, inzh_number, weight_kg, sex, age_months, notes,
+        sort_order, created_by
+    ) values (
+        p_batch_id, p_organization_id,
+        nullif(btrim(p_inzh_number), ''), p_weight_kg, p_sex, p_age_months, p_notes,
+        coalesce(p_sort_order, 0), public.fn_current_user_id()
+    )
+    returning id into v_animal_id;
+
+    return v_animal_id;
+end;
+$$;
+comment on function public.rpc_add_batch_animal(uuid, uuid, text, numeric, text, int, text, int) is
+    'ARS-228 | Add one animal-detail row (ИНЖ + optional attrs) to a batch. Owner/admin/
+     service_role only (SEC-RPC-ORGTRUST-01). Editable only in status draft|published.
+     Fill optional (P11). Never touches batches.heads (P3/P4/D20). Additive (P7).';
+
+-- ------------------------------------------------------------
+-- rpc_update_batch_animal
+-- Full-row update (all optional attrs). Pass current values for fields you keep.
+-- ------------------------------------------------------------
+create or replace function public.rpc_update_batch_animal(
+    p_organization_id   uuid,
+    p_animal_id         uuid,
+    p_inzh_number       text        default null,
+    p_weight_kg         numeric     default null,
+    p_sex               text        default null,
+    p_age_months        int         default null,
+    p_notes             text        default null
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_animal record;
+    v_batch  record;
+begin
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    if p_sex is not null and p_sex not in ('m','f') then
+        raise exception 'INVALID_SEX: % (expected m|f)', p_sex using errcode = 'P0001';
+    end if;
+
+    select * into v_animal
+    from public.batch_animals
+    where id = p_animal_id and organization_id = p_organization_id;
+    if v_animal is null then
+        raise exception 'ANIMAL_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    select * into v_batch from public.batches where id = v_animal.batch_id;
+    if v_batch.status not in ('draft','published') then
+        raise exception 'INVALID_STATUS: cannot edit animal detail in status %', v_batch.status
+            using errcode = 'P0001';
+    end if;
+
+    update public.batch_animals set
+        inzh_number = nullif(btrim(p_inzh_number), ''),
+        weight_kg   = p_weight_kg,
+        sex         = p_sex,
+        age_months  = p_age_months,
+        notes       = p_notes,
+        updated_at  = now()
+    where id = p_animal_id;
+
+    return true;
+end;
+$$;
+comment on function public.rpc_update_batch_animal(uuid, uuid, text, numeric, text, int, text) is
+    'ARS-228 | Update one animal-detail row (full replace of optional attrs). Owner/admin/
+     service_role only. Editable only in status draft|published. Additive (P7).';
+
+-- ------------------------------------------------------------
+-- rpc_remove_batch_animal
+-- ------------------------------------------------------------
+create or replace function public.rpc_remove_batch_animal(
+    p_organization_id   uuid,
+    p_animal_id         uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_animal record;
+begin
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    select * into v_animal
+    from public.batch_animals
+    where id = p_animal_id and organization_id = p_organization_id;
+    if v_animal is null then
+        return true;  -- idempotent (already gone / not owned)
+    end if;
+
+    delete from public.batch_animals where id = p_animal_id;
+    return true;
+end;
+$$;
+comment on function public.rpc_remove_batch_animal(uuid, uuid) is
+    'ARS-228 | Delete one animal-detail row. Owner/admin/service_role only. Idempotent. Additive (P7).';
+
+-- Registry
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
+    ('rpc_add_batch_animal',    'rpc_add_batch_animal',    null, 'd02_tsp.sql (Section 13 / ARS-228)', 'Add animal-detail row (ИНЖ + optional attrs) to a batch; owner/admin; status draft|published'),
+    ('rpc_update_batch_animal', 'rpc_update_batch_animal', null, 'd02_tsp.sql (Section 13 / ARS-228)', 'Update animal-detail row; owner/admin; status draft|published'),
+    ('rpc_remove_batch_animal', 'rpc_remove_batch_animal', null, 'd02_tsp.sql (Section 13 / ARS-228)', 'Delete animal-detail row; owner/admin; idempotent')
+on conflict (sql_name) do update
+    set dok3_name = excluded.dok3_name, notes = excluded.notes, created_in = excluded.created_in;
+
+grant execute on function public.rpc_add_batch_animal(uuid, uuid, text, numeric, text, int, text, int) to authenticated;
+grant execute on function public.rpc_update_batch_animal(uuid, uuid, text, numeric, text, int, text)    to authenticated;
+grant execute on function public.rpc_remove_batch_animal(uuid, uuid)                                     to authenticated;
+revoke execute on function public.rpc_add_batch_animal(uuid, uuid, text, numeric, text, int, text, int) from anon;
+revoke execute on function public.rpc_update_batch_animal(uuid, uuid, text, numeric, text, int, text)    from anon;
+revoke execute on function public.rpc_remove_batch_animal(uuid, uuid)                                     from anon;
+
+-- ============================================================
+-- END SECTION 13 (BATCH ANIMALS — ARS-228)
+-- ============================================================
+
+
+-- ============================================================
+-- SECTION 14 · MARKET BOARD — DEMAND (ARS-229)
+-- Farmer-facing anonymous aggregate of active MPK demand, built on the M6 surface
+-- (pools + pool_lines + pool_regions), NOT the deprecated pre-M6 pool_requests that
+-- rpc_get_market_summary reads (two-surface drift, ARS-194). Anonymous by construction:
+-- never exposes pools.organization_id / MPK identity — only category, region (rolled up
+-- to oblast for anti-de-anonymisation), indicative price range, and volume. MANDATORY
+-- disclaimer_text (Art.171 PK RK). Additive (P7): does not touch rpc_get_market_summary.
+-- ============================================================
+create or replace function public.rpc_get_demand_board(
+    p_organization_id   uuid,
+    p_region_id         uuid    default null    -- optional oblast/rayon filter
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_rows jsonb;
+begin
+    -- Org-scoped access (P-AI-2 pattern). Board content is anonymous, but access still
+    -- requires the caller to belong to an org (or be admin/service) — no anon scraping.
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    with lines as (
+        select
+            -- pool_lines.category_label = метка, введённая МПК (у tsp_skus нет name_ru).
+            coalesce(pl.category_label, 'Категория')            as category_name,
+            pl.mpk_price_per_kg                                 as price,
+            pl.max_volume_kg,
+            p.delivery_from,
+            p.delivery_to,
+            -- roll city up to its oblast for anonymity; oblast stays as-is; null = all regions
+            -- (иерархия regions: country → oblast → city; уровня 'rayon' в справочнике нет)
+            coalesce(ob.id, r.id)                               as region_id,
+            coalesce(ob.name_ru, r.name_ru)                     as region_name
+        from public.pools p
+        join public.pool_lines pl        on pl.pool_id = p.id and pl.is_active
+        left join public.pool_regions preg on preg.pool_id = p.id
+        left join public.regions r       on r.id = preg.region_id
+        left join public.regions ob      on ob.id = r.parent_id and r.level = 'city'
+        where p.status = 'filling'
+          and (
+              p_region_id is null
+              or preg.region_id = p_region_id
+              or r.parent_id   = p_region_id
+          )
+    ),
+    grouped as (
+        select
+            category_name,
+            region_id,
+            region_name,
+            count(*)                            as line_count,
+            min(price)                          as price_min,
+            max(price)                          as price_max,
+            round(avg(price))                   as price_avg,
+            nullif(sum(coalesce(max_volume_kg, 0)), 0) as target_volume_kg,
+            min(delivery_from)                  as delivery_from,
+            max(delivery_to)                    as delivery_to
+        from lines
+        group by category_name, region_id, region_name
+    )
+    select coalesce(jsonb_agg(jsonb_build_object(
+        'category_name',    category_name,
+        'region_id',        region_id,
+        'region_name',      region_name,
+        'line_count',       line_count,
+        'price_min',        price_min,
+        'price_max',        price_max,
+        'price_avg',        price_avg,
+        'target_volume_kg', target_volume_kg,
+        'delivery_from',    delivery_from,
+        'delivery_to',      delivery_to
+    ) order by category_name, region_name), '[]'::jsonb)
+    into v_rows
+    from grouped;
+
+    return jsonb_build_object(
+        'demand', v_rows,
+        'disclaimer_text', 'Справочные цены являются индикативными рыночными ориентирами и не являются обязательными для применения. Участие добровольное.'
+    );
+end;
+$$;
+comment on function public.rpc_get_demand_board(uuid, uuid) is
+    'ARS-229 | Farmer-facing anonymous demand board. Aggregates active MPK demand from the M6
+     surface (pools status=filling + pool_lines + pool_regions) by category × region (city
+     rolled up to oblast). Exposes ONLY category, region, indicative price range/avg, active
+     line count, target volume, delivery window — never MPK identity (Art.171, aggregate-only).
+     MANDATORY disclaimer_text. Additive to rpc_get_market_summary (which reads deprecated
+     pre-M6 pool_requests). Callers: [WEB farmer].';
+
+-- Registry
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
+    ('rpc_get_demand_board', 'rpc_get_demand_board', null, 'd02_tsp.sql (Section 14 / ARS-229)', 'Anonymous farmer-facing demand board over M6 pools/pool_lines/pool_regions; mandatory disclaimer')
+on conflict (sql_name) do update
+    set dok3_name = excluded.dok3_name, notes = excluded.notes, created_in = excluded.created_in;
+
+grant execute on function public.rpc_get_demand_board(uuid, uuid) to authenticated;
+revoke execute on function public.rpc_get_demand_board(uuid, uuid) from anon;
+
+-- ============================================================
+-- END SECTION 14 (MARKET BOARD — DEMAND — ARS-229)
 -- ============================================================

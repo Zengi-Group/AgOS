@@ -11,6 +11,8 @@ import { IonShellFrame } from '../components/IonShellFrame'
 import { SubHead } from '../components/SubHead'
 import { Sheet } from '../components/Sheet'
 import { PhIcon, type PhIconName } from '../components/icons/PhIcon'
+import { BatchMedia } from '../components/BatchMedia'
+import { BatchAnimals } from '../components/BatchAnimals'
 import { WithdrawSheet } from '../components/sheets/WithdrawSheet'
 import { DispatchSheet } from '../components/sheets/DispatchSheet'
 import { BatchPriceSheet } from '../components/sheets/BatchPriceSheet'
@@ -32,6 +34,8 @@ interface FarmerAccount {
 interface Props {
   batch: Batch
   account?: FarmerAccount | null
+  // ARS-227: org фермера — для загрузки/чтения медиа партии (rpc_*_batch_media + бакет).
+  orgId?: string | null
   onBack: () => void
   backLabel?: string
   // S4=A · C4+D7: successToast — тост показывается в CabinetApp.patchBatch ПОСЛЕ
@@ -413,7 +417,7 @@ function ActionMenu({ open, onClose, items }: { open: boolean; onClose: () => vo
 
 type LocalSheet = null | 'withdraw' | 'dispatch' | 'price'
 
-export function BatchScreen({ batch, account, onBack, backLabel = 'Мои партии', onPatch, onNew, onReview, onTuran, toast }: Props) {
+export function BatchScreen({ batch, account, orgId, onBack, backLabel = 'Мои партии', onPatch, onNew, onReview, onTuran, toast }: Props) {
   const [sheet, setSheet] = useState<LocalSheet>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const host = useHost()   // S2.1: тактильный отклик на отгрузке (web no-op)
@@ -567,6 +571,25 @@ export function BatchScreen({ batch, account, onBack, backLabel = 'Мои пар
               <div className="mk-infonote"><div className="mk-infonote-b">Ваш отзыв сохранён. Спасибо — это помогает другим фермерам.</div></div>
             </div>
           )}
+
+          {/* ARS-227 · Фото и видео — редактируемо владельцем в draft|published,
+              иначе только просмотр. Само-скрывается, если показывать нечего. */}
+          <BatchMedia
+            batchId={batch.id}
+            orgId={orgId}
+            editable={st === 'draft' || st === 'published'}
+            toast={toast}
+          />
+
+          {/* ARS-228 · Детализация по животным (ИНЖ) — опционально, редактируемо
+              владельцем в draft|published; heads остаётся источником правды (P3/P4/D20). */}
+          <BatchAnimals
+            batchId={batch.id}
+            orgId={orgId}
+            editable={st === 'draft' || st === 'published'}
+            heads={batch.heads}
+            toast={toast}
+          />
 
           {st !== 'draft' && detailRows.length > 0 && (
             <div className="blk">

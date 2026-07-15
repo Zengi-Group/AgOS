@@ -60,6 +60,9 @@
 - `Offer` — новая сущность для broadcast-механики.
 - `LivestockCategoryRule` — правила derive_category. Раньше предполагалось, что категория = свободный enum или fk без правил вывода.
 - `MinimumPrice` — отдельно от `ReferencePrice`. Hard floor и индикатив — два разных значения.
+- `batch_media` (ARS-227) — фото/видео партии. Вложение к `Batch`, приватный bucket `batch-media`, подписанные URL. many → Batch. Владелец+админ до раскрытия; МПК-чтение отложено на ARS-229.
+- `batch_animals` (ARS-228) — **пофакторная детализация по животным (ИНЖ), строго per-batch манифест продажи, НЕ herd-реестр Animal.** many → Batch. **D20 сохранён**: AGOS работает на групповом уровне, индивидуальные животные = уровень ERP. Агрегат `batches.heads` остаётся источником правды (P3/P4); строки `batch_animals` **опциональны** (P11) и МОГУТ быть меньше `heads` — `heads` НЕ выводится из строк (без DB-констрейнта, только мягкая UI-подсказка о дрейфе). `inzh_number` мягко-уникален в рамках партии (partial unique index, допускает много NULL). Владелец+админ, редактирование в статусах `draft`\|`published`; МПК-чтение отложено на ARS-229.
+- **ARS-229 — доска спроса + раскрытие (D-ARS229).** (1) Фермер видит **обезличенный агрегат спроса МПК** через `rpc_get_demand_board` над M6-поверхностью (`pools` status=`filling` + `pool_lines` + `pool_regions`): категория · регион (район свёрнут до области) · индикативная цена (min/max/avg) · объём. Личность МПК не раскрывается никогда (Art.171 aggregate-only + обязательный дисклеймер). (2) Отложенное с ARS-227/228 **МПК-чтение** `batch_media`+`batch_animals` включено: read-only через `fn_batch_revealed_to_me`, reveal = **D-M6-5/12** (`batches.status ∈ confirmed`/`dispatched`/`delivered` = пул закрыт), НЕ D40 (`executing`). Write остаётся у владельца+админа.
 
 ---
 

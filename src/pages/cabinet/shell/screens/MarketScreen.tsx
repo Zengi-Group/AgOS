@@ -12,6 +12,7 @@ import { TabHead } from '../components/TabHead'
 import { PhIcon } from '../components/icons/PhIcon'
 import { BatchCard } from '../components/BatchListCard'
 import { ScreenSkeleton } from '../components/ScreenSkeleton'
+import { DemandBoard } from '../components/DemandBoard'
 
 // тизер-гейт «Продаю» (shell/market.jsx SellGate) — для не-членов; вне прототипа, стиль сохранён
 function SellGate({ membership, onApply }: { membership: MembershipStatus; onApply: () => void }) {
@@ -56,12 +57,13 @@ interface Props {
   onPay: () => void
   go: (r: Route) => void
   onRefresh?: () => Promise<unknown>   // S2: pull-to-refresh (spec §7)
+  orgId?: string | null                // ARS-229: доска спроса МПК (обезличенный агрегат)
   /** D2 (офлайн-чтение): сбой загрузки при пустом кеше — ошибка+retry, не «нет партий». */
   error?: string | null
   onRetry?: () => void
 }
 
-export function MarketScreen({ membership, batches, loading, onNew, onApply, onPay, go, onRefresh, error, onRetry }: Props) {
+export function MarketScreen({ membership, batches, loading, onNew, onApply, onPay, go, onRefresh, orgId, error, onRetry }: Props) {
   const isGate = gated(membership)
   const approved = membership === 'approved'
   const expired = membership === 'expired'
@@ -114,6 +116,8 @@ export function MarketScreen({ membership, batches, loading, onNew, onApply, onP
                 <button className="mk-grace-b" onClick={onPay}>Продлить членство</button>
               </div>
             )}
+
+            <DemandBoard orgId={orgId} />
 
             {nAll > 0 && (
               <div className="mk-tabs">

@@ -644,6 +644,7 @@ export function CabinetApp() {
       onPay={() => memberAct('pay')}
       go={go}
       onRefresh={refetchBatches}
+      orgId={profile?.orgId ?? null}
     />
   )
   // N-3/N-5/M4/M5: визард публикации и результат — реальные роуты острова (как farmwiz). Свой
@@ -715,6 +716,7 @@ export function CabinetApp() {
       <BatchScreen
         batch={currentBatch}
         account={profile ? { name: profile.name, bin: profile.bin, phone: profile.phone, district: profile.district } : null}
+        orgId={profile?.orgId ?? null}
         onBack={() => goBackTo(route.back ?? { name: 'p1list' })}
         backLabel={backLabelFor(route.back)}
         onPatch={(patch, successToast) => patchBatch(currentBatch.id, patch, successToast)}

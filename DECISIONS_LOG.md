@@ -3,6 +3,18 @@
 > Maintained by: Architect & Coordinator Agent
 > Format: WHAT was decided → WHY (alternatives considered) → CONSEQUENCES (what becomes easy/hard)
 
+### 2026-07-15: ARS-229 — доска спроса МПК (агрегат-only) + раскрытие медиа/ИНЖ после закрытия пула (D-ARS229)
+
+**What**: Два аддитивных пакета под «Рынок TSP». **Часть 1 (спрос фермеру):** новый `rpc_get_demand_board(p_organization_id, p_region_id default null)` в d02 Section 14 — обезличенный агрегат активного спроса МПК над M6-поверхностью (`pools` status=`filling` + `pool_lines` is_active + `pool_regions` + `tsp_skus` + `regions`), НЕ pre-M6 `pool_requests`. Возвращает `jsonb {demand:[…], disclaimer_text}`: категория · регион · индикативная цена (min/max/avg) · объём (Σ max_volume_kg) · число заявок. Район свёрнут до области (`coalesce(ob.id, r.id)`), чтобы одинокий МПК в районе не деанонимизировался. Личность МПК не раскрывается никогда (Art.171 aggregate-only). Клиент: хук `useDemandBoard` + компонент `DemandBoard` (секция «СПРОС КОМБИНАТОВ» на экране Рынка фермера, только для членов, PhIcon-only, обязательный дисклеймер под списком). **Часть 2 (раскрытие ARS-227/228):** включено отложенное МПК-чтение `batch_media` + `batch_animals`. Новая `fn_batch_revealed_to_me(batch_id)` (plpgsql, security definer — pool_lines создаётся позже в файле, резолв имени отложен на runtime) расширяет read-политики обеих таблиц (d02) и storage-политику `batch_media_select_org` (d10, через новую `fn_storage_batch_id`). Reveal = **D-M6-5/12** (`batches.status ∈ confirmed`/`dispatched`/`delivered`), НЕ D40 (`executing`). МПК видит фото/ИНЖ read-only в `PoolMonitorModal` (сворачиваемая секция «Фото и детализация» у строк поставщика в раскрытых статусах); write остаётся у владельца+админа.
+
+**Why**: G2-скоуп одобрен CEO (фермер-доска + раскрытие; reveal D-M6-5/12; поверхность M6; строим за дисклеймером). Отклонён D40 (`executing`) как reveal-точка — устарел, канон MS6 перенёс раскрытие на закрытие пула. Отклонён pre-M6 `pool_requests` как источник спроса — это deprecated-поверхность (ARS-194 two-surface drift); строим на M6. Свёртка района до области выбрана вместо показа точного района, т.к. один МПК в редком районе иначе идентифицируем по региону+категории (антитраст-риск). Юр. sign-off (ARS-10) — гейт перед публичным запуском доски, не перед кодом: строим за существующим дисклеймером.
+
+**Verify**: `npx tsc --noEmit` зелёный (0 ошибок). SQL тронут (d02, d10) → требуется `cross_check.sh` (проверить: `rpc_get_demand_board` в реестре + есть `organization_id`; `fn_batch_revealed_to_me`/`fn_storage_batch_id` без дублей; порядок применения d02→d10 сохраняет предикат до ссылки в d10). Живой прогон раскрытия seed-заблокирован (нужен закрытый пул с матч-МПК); доска спроса требует активных `pools`.
+
+**Files**: `d02_tsp.sql` (fn_batch_revealed_to_me + RLS read batch_media/batch_animals + Section 14 rpc_get_demand_board), `d10_public_site.sql` (fn_storage_batch_id + batch_media_select_org), `src/pages/cabinet/shell/hooks/useDemandBoard.ts` (new), `components/DemandBoard.tsx` (new), `screens/MarketScreen.tsx`, `CabinetApp.tsx`, `market-proto.css`, `mpk/data/revealed-batch.ts` (new), `mpk/modals/PoolMonitorModal.tsx`, `cabinet.css`. Канон: Dok1 D-ARS229, Microstep4 §1.3. Ветка `kernuree/ars-229-tsp-market-board-sprospredlozhenie-ahrehat-only`.
+
+---
+
 ### 2026-07-15: Аудит нативности — роутер-остров, Increment 2 (per-tab стеки N-2) + N-6/N-7/N-8; N-4 = как есть
 
 **What**: «Остров полностью», самый глубокий инкремент. Фермерский остров переведён с **single-outlet + root-replace** на **независимый навигационный стек на каждую вкладку** (нативная модель IonTabs). Также закрыты мелкие back-правки N-6/N-7/N-8; N-4 — решением CEO оставлен как есть.
@@ -3976,6 +3988,30 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 
 **Files**: `src/pages/cabinet/shell/CabinetApp.tsx`, `src/platform/host/{AgOSHost.ts, WebHost.ts, CapacitorHost.ts}`. Аддитивно (HS-1/HS-5), SQL/canon не тронуты → `cross_check.sh` не требуется.
 
+### 2026-07-15: ARS-227 — Фото/видео партии (TSP batch media)
+
+**What**: Первая из трёх TSP-задач (ARS-227/228/229). Партия получает фото/видео:
+- **d02_tsp.sql** — таблица `batch_media` (P6: отдельная таблица, не array-колонка; `organization_id` денормализован из `batches` для RLS/storage-path); RLS `batch_media_read`/`batch_media_write_own` = **владелец + админ ТОЛЬКО** (ARS-227); Section 12 — RPC `rpc_add_batch_media(p_organization_id, p_batch_id, p_media_type, p_storage_path, p_sort_order)` / `rpc_remove_batch_media(p_organization_id, p_media_id)`, оба SECURITY DEFINER + ownership guard (SEC-RPC-ORGTRUST-01), add гейтит статус `draft|published`; registry + grants.
+- **d10_public_site.sql** — приватный бакет `batch-media` + 4 policy на `storage.objects` (insert/select/update/delete, org-scoped через `fn_storage_org_id(name)`; путь `{org}/{batch}/{uuid}.{ext}`). В d10 (не d02), т.к. `fn_storage_org_id` определён здесь (порядок применения d02→d10).
+- **UI** (фермерская зона, канон соблюдён): хук `src/pages/cabinet/shell/hooks/useBatchMedia.ts` (стиль useBatches — без react-query, мягкая деградация: нет backend / локальная демо-партия `local-*` → пусто); компонент `components/BatchMedia.tsx` (`.blk` + tier-h «ФОТО И ВИДЕО», PhIcon-only, плоские тайлы-чипы R-18, тактильный отклик R-28, TuranLoader spin при загрузке); вшит в `screens/BatchScreen.tsx` перед «ДАННЫЕ ПАРТИИ» (`editable = draft|published`); `orgId` проброшен из `CabinetApp.tsx` (`profile.orgId`). CSS `.mk-media-*` дописан в `market-proto.css` (аддитивно). Загрузка: storage.upload → `rpc_add_batch_media`; чтение: select по RLS + `createSignedUrls`; удаление: `rpc_remove_batch_media` → storage.remove.
+
+**Why**: Визуальная оценка животных покупателем. **Видимость (Art.171 aggregate-only + D-M6-5/12):** для ARS-227 медиа видит ТОЛЬКО владелец+админ. Чтение МПК после раскрытия контактов **отложено на ARS-229** — корректный момент раскрытия = `closed_filled`/`closed_partial` (D-M6-5/12), НЕ `executing` (D40 superseded); плюс двойная связка batch↔pool (ARS-194 drift) требует отдельного кросс-surface предиката. Меньше видимости = безопаснее для антимонополии. `batch_id` существует только после `rpc_create_batch` (публикация) → медиа крепится на карточке партии (BatchScreen), а не в середине визарда. Всё аддитивно (P6/P7/HS-1/HS-5): RPC-сигнатуры не меняли, функционал не удаляли.
+
+**Verify**: `npx tsc --noEmit` — 0 ошибок; `cross_check.sh` — 0 critical (3 significant предсуществующие — adapter/canonical overload rpc_create_batch/get_org_batches/cancel_batch, Slice D convergence, не связаны с ARS-227); новые RPC зарегистрированы (CHECK 7 OK), org_id во всех rpc_* (CHECK 5 OK). `graphify update` выполнен. **НЕ мержено/деплоено — G3 человек.** Ветка `kernuree/ars-227-tsp-media-partii-fotovideo-batcha`.
+
+**Files**: `d02_tsp.sql`, `d10_public_site.sql`, `src/pages/cabinet/shell/hooks/useBatchMedia.ts` (new), `src/pages/cabinet/shell/components/BatchMedia.tsx` (new), `src/pages/cabinet/shell/screens/BatchScreen.tsx`, `src/pages/cabinet/shell/CabinetApp.tsx`, `src/pages/cabinet/shell/market-proto.css`.
+
+### 2026-07-15: ARS-228 — Пофакторная детализация по животным (ИНЖ, опционально)
+
+**What**: Вторая из трёх TSP-задач. Партия получает опциональный список животных по ИНЖ:
+- **d02_tsp.sql** — таблица `batch_animals` (`inzh_number`, `weight_kg`, `sex m|f`, `age_months`, `notes`, `sort_order`; `organization_id` денормализован из `batches` для RLS; FK на `batches` c `on delete cascade`). Partial unique index `batch_animals_inzh_uq (batch_id, inzh_number) where inzh_number is not null and btrim <> ''` — **мягкая уникальность ИНЖ** (много NULL допустимо). RLS `batch_animals_read`/`batch_animals_write_own` = **владелец + админ ТОЛЬКО**. Section 13 — RPC `rpc_add_batch_animal` / `rpc_update_batch_animal` / `rpc_remove_batch_animal`, все SECURITY DEFINER + ownership guard (SEC-RPC-ORGTRUST-01), add/update гейтят статус `draft|published`; registry + grants.
+- **UI** (фермерская зона, канон соблюдён): хук `hooks/useBatchAnimals.ts` (стиль useBatches/useBatchMedia — без react-query, мягкая деградация `local-*`/нет backend → пусто); компонент `components/BatchAnimals.tsx` (`.blk` + tier-h «ДЕТАЛИЗАЦИЯ ПО ЖИВОТНЫМ» + счётчик, плоские строки `.mk-anml-row` с cow-PhIcon, ИНЖ mono или «без ИНЖ», строка атрибутов вес·пол·возраст, заметка, кнопка удаления; add-кнопка; шторка `AnimalSheet` add/edit на базе `Sheet` с полями ИНЖ/вес/пол-чипы/возраст/заметка; мягкая подсказка `overCount` когда строк больше `heads`). Вшит в `screens/BatchScreen.tsx` после `BatchMedia` (`editable = draft|published`, `heads={batch.heads}`). CSS `.mk-anml-*` дописан в `market-proto.css` (аддитивно, R-18/R-28).
+
+**Why**: Индивидуальная идентификация животных по ИНЖ для покупателя. **Ключевое решение D-ARS228 (Dok1 + Microstep4 §1.3):** `batch_animals` = **манифест продажи per-batch, НЕ herd-реестр Animal** → **D20 сохранён** (AGOS = групповой уровень, индивидуальные животные = ERP). Агрегат `batches.heads` остаётся источником правды (P3/P4); строки опциональны (P11) и МОГУТ быть меньше `heads` — `heads` НЕ выводится из строк (без DB-констрейнта, только мягкая UI-подсказка о дрейфе). ИНЖ мягко-уникален (partial unique, много NULL). **Видимость (Art.171 + D-M6-5/12):** владелец+админ; МПК-чтение после раскрытия контактов **отложено на ARS-229** (тот же аргумент, что ARS-227). Всё аддитивно (P6/P7/HS-1/HS-5): RPC-сигнатуры не меняли, функционал не удаляли. **G2 (дизайн, человек) одобрен CEO:** мягкий unique / heads-источник-правды / владелец+админ,draft|published.
+
+**Verify**: `npx tsc --noEmit` — 0 ошибок; `cross_check.sh` — 0 critical; новые RPC зарегистрированы + org_id во всех. `graphify update` выполнен. **НЕ мержено/деплоено — G3 человек.** Ветка `kernuree/ars-228-tsp-pofaktornaya-detalizaciya-po-zhivotnim-inzh-opcionalno`.
+
+**Files**: `d02_tsp.sql`, `src/pages/cabinet/shell/hooks/useBatchAnimals.ts` (new), `src/pages/cabinet/shell/components/BatchAnimals.tsx` (new), `src/pages/cabinet/shell/screens/BatchScreen.tsx`, `src/pages/cabinet/shell/market-proto.css`, `Docs/AGOS-Dok1-v1_9.md`, `Docs/AGOS-TSP-Flow-Microsteps/AGOS-Microstep4-BatchPoolOffer-v1_0.md`.
 ### 2026-07-15: A-GRADE — рекомендованная цена на уровне сорта + «Категории скота» из навигации (ARS-235)
 
 **What**: Рекомендованная (индикативная) цена перенесена с уровня категории на уровень СОРТА (`livestock_grade_formula`), где защитный `floor_price` уже жил. Отменил ARS-230 (был на неверном уровне — карточка категории).
@@ -4069,3 +4105,15 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Note**: стартовые `recommended_price` (premium 2000 / vysshaya 1800 / pervaya 1650 / vtoraya 1500 / mrs_vyssh 1050 / mrs_perv 950) — заглушки; CEO уточняет через админку «Формула сорта».
 
 **Files**: изменений в репо нет сверх PR #99/#100; запись фиксирует статус деплоя.
+
+### 2026-07-16: ARS-229 — code-review фикс demand board перед мерджем (architect)
+
+**What**: При ревью ветки `kernuree/tsp-batch-features-ars227-228-229` (перед мерджем в main) найдены и исправлены 2 дефекта в `rpc_get_demand_board` (d02 Section 14), оба в одном CTE `lines`:
+- **CRITICAL**: `coalesce(s.name_ru, …)` ссылался на `tsp_skus.name_ru`, которого НЕТ (колонки: id, sku_code, grade_id, breed_group, sex, age_group, …). `plpgsql` откладывает резолв имён на runtime → CREATE/`cross_check.sh`/`tsc` проходят, но ПЕРВЫЙ вызов падает `column s.name_ru does not exist`. Живьём не поймали (нет сид-пулов M6). Фикс: убран join `tsp_skus`, метка = `coalesce(pl.category_label, 'Категория')`.
+- **SIGNIFICANT**: свёртка анти-деанонимизации `left join regions ob on ob.id=r.parent_id and r.level='rayon'` — no-op: в справочнике уровни `country/oblast/city`, уровня `rayon` нет → join не срабатывал, `city`-регион показывался как city (без свёртки до области, ослабление ст.171-меры). Фикс: `r.level = 'city'`.
+
+**Why**: CRITICAL блокировал мердж (High-priority фича ARS-229 нефункциональна). Правка точечная (один CTE), поверхность RPC не изменена (сигнатура/returns те же), аддитивность и антитраст-инвариант (identity МПК не раскрывается) сохранены. ARS-227/228 (batch_media/batch_animals, RLS, RPC, reveal-предикат `fn_batch_revealed_to_me`) — проверены против живой схемы, дефектов нет.
+
+**Verify**: `npx tsc --noEmit` — 0 ошибок; `cross_check.sh` — 0 critical. Дельта задеплоена на прод миграцией (см. запись деплоя ниже/Linear). Ветка предварительно смержена с origin/main (конфликты d10/CabinetApp/MarketScreen разрешены: batch-media policies + home_banners оба сохранены; BatchWizard — router-island интерфейс main; MarketScreen — orgId+error/onRetry вместе; orgId восстановлен в renderMarket).
+
+**Files**: `d02_tsp.sql` (rpc_get_demand_board CTE), + разрешение мердж-конфликтов в `d10_public_site.sql`, `src/pages/cabinet/shell/CabinetApp.tsx`, `src/pages/cabinet/shell/screens/MarketScreen.tsx`.
