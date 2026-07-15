@@ -635,6 +635,7 @@ export function CabinetApp() {
       <BatchScreen
         batch={currentBatch}
         account={profile ? { name: profile.name, bin: profile.bin, phone: profile.phone, district: profile.district } : null}
+        orgId={profile?.orgId ?? null}
         onBack={() => goBackTo(route.back ?? { name: 'p1list' })}
         backLabel={backLabelFor(route.back)}
         onPatch={(patch, successToast) => patchBatch(currentBatch.id, patch, successToast)}

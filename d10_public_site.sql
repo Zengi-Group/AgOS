@@ -881,7 +881,8 @@ insert into storage.buckets (id, name, public)
 values
   ('news-covers',           'news-covers',           true),
   ('startup-decks',         'startup-decks',         false),
-  ('membership-documents',  'membership-documents',  false)
+  ('membership-documents',  'membership-documents',  false),
+  ('batch-media',           'batch-media',           false)
 on conflict (id) do nothing;
 
 -- news-covers: public read, authenticated write
@@ -972,3 +973,47 @@ create policy "membership_documents_delete_admin"
   on storage.objects for delete
   to authenticated
   using (bucket_id = 'membership-documents' and public.fn_is_admin());
+
+-- batch-media (ARS-227): private, org-scoped read/write/delete; admin full access.
+-- Path convention: batch-media/{orgId}/{batchId}/{uuid}.{ext} — first segment = owner org.
+-- Reuses fn_storage_org_id (defined above). Visibility = owner + admin only (aggregate-only,
+-- Art.171); matched-MPK read is deferred to ARS-229 with correct reveal semantics (D-M6-5/12).
+drop policy if exists "batch_media_insert_org" on storage.objects;
+create policy "batch_media_insert_org"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'batch-media'
+    and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
+  );
+
+drop policy if exists "batch_media_select_org" on storage.objects;
+create policy "batch_media_select_org"
+  on storage.objects for select
+  to authenticated
+  using (
+    bucket_id = 'batch-media'
+    and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
+  );
+
+drop policy if exists "batch_media_update_org" on storage.objects;
+create policy "batch_media_update_org"
+  on storage.objects for update
+  to authenticated
+  using (
+    bucket_id = 'batch-media'
+    and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
+  )
+  with check (
+    bucket_id = 'batch-media'
+    and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
+  );
+
+drop policy if exists "batch_media_delete_org" on storage.objects;
+create policy "batch_media_delete_org"
+  on storage.objects for delete
+  to authenticated
+  using (
+    bucket_id = 'batch-media'
+    and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
+  );

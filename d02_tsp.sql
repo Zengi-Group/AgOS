@@ -270,6 +270,34 @@ comment on column public.batches.target_month is
      expires_at set to last day of target_month + 7 days buffer by RPC publish_batch.';
 
 -- -------------------------------------------------------
+-- batch_media (ARS-227)
+-- Photo/video attachments for a batch. Separate table (not array column) — P6.
+-- organization_id denormalised from batches for RLS/storage-path scoping.
+-- Visibility (CEO 2026-07-10, Art.171 aggregate-only): owner + admin only (ARS-227).
+--   MPK read after contact reveal is DEFERRED to ARS-229 (correct reveal = closed_filled/
+--   closed_partial per D-M6-5/12, not executing; D40 superseded).
+-- Storage: private bucket 'batch-media', path {organization_id}/{batch_id}/{uuid}.{ext}
+--   (bucket + storage.objects policies live in d10_public_site.sql alongside fn_storage_org_id).
+-- -------------------------------------------------------
+create table if not exists public.batch_media (
+    id                  uuid    primary key default gen_random_uuid(),
+    batch_id            uuid    not null references public.batches(id) on delete cascade,
+    organization_id     uuid    not null references public.organizations(id),  -- denorm for RLS
+    media_type          text    not null check (media_type in ('photo','video')),
+    storage_path        text    not null,   -- object name in private 'batch-media' bucket
+    sort_order          int     not null default 0,
+    created_by          uuid    references public.users(id),
+    created_at          timestamptz not null default now(),
+    unique (storage_path)
+);
+comment on table public.batch_media is
+    'ARS-227: photo/video attachments per batch. Separate table (P6, not array column).
+     organization_id denormalised from parent batch for RLS + storage-path scoping.
+     Visibility (Art.171 aggregate-only): owner + admin only (ARS-227); MPK read deferred to ARS-229.
+     storage_path = object name in private bucket batch-media ({org}/{batch}/{uuid}.{ext}).
+     on delete cascade: media dies with its batch (orphan storage objects cleaned client-side/cron).';
+
+-- -------------------------------------------------------
 -- pool_requests
 -- D33: PoolRequest 1:1 Pool (one request = one pool, auto-created on activation)
 -- FSM 5.7: draft → active → closed | expired
@@ -706,6 +734,21 @@ create policy "batches_read_own"    on public.batches for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 drop policy if exists "batches_write_own" on public.batches;
 create policy "batches_write_own"   on public.batches for all
+    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+
+-- Batch media (ARS-227): owner + admin ONLY (read + write). MPK gets NO access here —
+-- this fully satisfies "MPK does not see media before the deal" (Art.171 + aggregate-only).
+-- The matched-MPK-after-reveal READ is DEFERRED to ARS-229 (market board / MPK batch detail),
+-- where the correct reveal semantics are decided: reveal is at closed_filled/closed_partial,
+-- NOT executing (D-M6-5/12 supersedes D40), and the live batch↔pool linkage (pool_lines vs
+-- pool_matches, two-surface drift, ARS-194) is resolved. Not baking a guessed cross-surface
+-- predicate into an antitrust-sensitive policy.
+alter table public.batch_media enable row level security;
+drop policy if exists "batch_media_read" on public.batch_media;
+create policy "batch_media_read"    on public.batch_media for select
+    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+drop policy if exists "batch_media_write_own" on public.batch_media;
+create policy "batch_media_write_own" on public.batch_media for all
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 
 -- Pool requests: MPK sees own; admin sees all
@@ -6141,4 +6184,137 @@ revoke execute on function public.rpc_admin_advance_pool_status(uuid, text)   fr
 
 -- ============================================================
 -- END SECTION 11 (ADMIN TSP WRITE RPCs)
+-- ============================================================
+
+
+-- ============================================================
+-- SECTION 12: BATCH MEDIA (ARS-227 — фото/видео партии)
+-- Writes go through RPC (P-AI-1); reads via RLS-protected select + client signed URL.
+-- Bucket 'batch-media' + storage.objects policies live in d10_public_site.sql.
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- rpc_add_batch_media
+-- Register an uploaded object as batch media. Client uploads the file to the private
+-- 'batch-media' bucket first (storage RLS enforces org-scoped path), then calls this RPC
+-- to persist the metadata row.
+-- ------------------------------------------------------------
+create or replace function public.rpc_add_batch_media(
+    p_organization_id   uuid,
+    p_batch_id          uuid,
+    p_media_type        text,
+    p_storage_path      text,
+    p_sort_order        int         default 0
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_batch record;
+    v_media_id uuid;
+begin
+    -- OWNERSHIP GUARD (SEC-RPC-ORGTRUST-01): SECURITY DEFINER bypasses RLS —
+    -- p_organization_id is client-supplied and must be verified against the caller.
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    if p_media_type not in ('photo','video') then
+        raise exception 'INVALID_MEDIA_TYPE: % (expected photo|video)', p_media_type
+            using errcode = 'P0001';
+    end if;
+    if coalesce(trim(p_storage_path), '') = '' then
+        raise exception 'MISSING_STORAGE_PATH' using errcode = 'P0001';
+    end if;
+
+    -- Batch must exist and belong to the org.
+    select * into v_batch
+    from public.batches
+    where id = p_batch_id and organization_id = p_organization_id;
+    if v_batch is null then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    -- Media editable only while batch is farmer-controlled (draft|published).
+    if v_batch.status not in ('draft','published') then
+        raise exception 'INVALID_STATUS: cannot edit media in status %', v_batch.status
+            using errcode = 'P0001';
+    end if;
+
+    insert into public.batch_media (
+        batch_id, organization_id, media_type, storage_path, sort_order, created_by
+    ) values (
+        p_batch_id, p_organization_id, p_media_type, p_storage_path, coalesce(p_sort_order, 0),
+        public.fn_current_user_id()
+    )
+    returning id into v_media_id;
+
+    return v_media_id;
+end;
+$$;
+comment on function public.rpc_add_batch_media(uuid, uuid, text, text, int) is
+    'ARS-227 | Register uploaded photo/video for a batch. Owner/admin/service_role only
+     (SEC-RPC-ORGTRUST-01). Editable only in status draft|published. Additive (P7).';
+
+-- ------------------------------------------------------------
+-- rpc_remove_batch_media
+-- Delete a media metadata row (owner/admin). The storage object is removed client-side
+-- (storage RLS permits owner delete); a cron/cleanup handles any orphaned objects.
+-- ------------------------------------------------------------
+create or replace function public.rpc_remove_batch_media(
+    p_organization_id   uuid,
+    p_media_id          uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_media record;
+begin
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    select * into v_media
+    from public.batch_media
+    where id = p_media_id and organization_id = p_organization_id;
+    if v_media is null then
+        return true;  -- idempotent (already gone / not owned)
+    end if;
+
+    delete from public.batch_media where id = p_media_id;
+    return true;
+end;
+$$;
+comment on function public.rpc_remove_batch_media(uuid, uuid) is
+    'ARS-227 | Delete a batch media row. Owner/admin/service_role only. Idempotent. Additive (P7).';
+
+-- Registry
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
+    ('rpc_add_batch_media',    'rpc_add_batch_media',    null, 'd02_tsp.sql (Section 12 / ARS-227)', 'Register uploaded photo/video for a batch; owner/admin; status draft|published'),
+    ('rpc_remove_batch_media', 'rpc_remove_batch_media', null, 'd02_tsp.sql (Section 12 / ARS-227)', 'Delete a batch media row; owner/admin; idempotent')
+on conflict (sql_name) do update
+    set dok3_name = excluded.dok3_name, notes = excluded.notes, created_in = excluded.created_in;
+
+grant execute on function public.rpc_add_batch_media(uuid, uuid, text, text, int) to authenticated;
+grant execute on function public.rpc_remove_batch_media(uuid, uuid)               to authenticated;
+revoke execute on function public.rpc_add_batch_media(uuid, uuid, text, text, int) from anon;
+revoke execute on function public.rpc_remove_batch_media(uuid, uuid)               from anon;
+
+-- ============================================================
+-- END SECTION 12 (BATCH MEDIA — ARS-227)
 -- ============================================================
