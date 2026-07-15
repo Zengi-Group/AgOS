@@ -4117,3 +4117,17 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: `npx tsc --noEmit` — 0 ошибок; `cross_check.sh` — 0 critical. Дельта задеплоена на прод миграцией (см. запись деплоя ниже/Linear). Ветка предварительно смержена с origin/main (конфликты d10/CabinetApp/MarketScreen разрешены: batch-media policies + home_banners оба сохранены; BatchWizard — router-island интерфейс main; MarketScreen — orgId+error/onRetry вместе; orgId восстановлен в renderMarket).
 
 **Files**: `d02_tsp.sql` (rpc_get_demand_board CTE), + разрешение мердж-конфликтов в `d10_public_site.sql`, `src/pages/cabinet/shell/CabinetApp.tsx`, `src/pages/cabinet/shell/screens/MarketScreen.tsx`.
+
+### 2026-07-16: ARS-227/228/229 — merge в main + деплой на прод (architect)
+
+**What**: Ветка `kernuree/tsp-batch-features-ars227-228-229` (медиа партии + пофакторная детализация ИНЖ + доска спроса) отревьюена, смержена (PR #102, squash `51539d0`) и задеплоена на прод `mwtbozflyldcadypherr`.
+- **Ревью-фикс (перед мерджем):** в `rpc_get_demand_board` — CRITICAL (`tsp_skus.name_ru` не существует → RPC падал на каждом вызове; runtime-резолв plpgsql, статические проверки не ловят) + SIGNIFICANT (свёртка район→область no-op: уровня `rayon` нет, реально `city`). Оба исправлены в d02 (метка = `coalesce(pl.category_label,'Категория')`; `r.level='city'`).
+- **Деплой (3 идемпотентные миграции через Supabase MCP):** `ars227_228_batch_tables_rls` (batch_media/batch_animals + RLS + `fn_batch_revealed_to_me`), `ars227_228_229_rpcs` (6 RPC), `ars227_batch_media_storage` (бакет `batch-media` + 4 storage-policy + `fn_storage_batch_id`). Дельта, не полный deploy_sql.py (живая БД, изменение аддитивно-идемпотентно).
+
+**Why**: CEO поручил ревью+мердж+деплой. CRITICAL блокировал — согласовано «починю на ветке → мердж → деплой» (fix минимальный, поверхность RPC/сигнатуры не изменены, антитраст-инвариант identity-МПК сохранён).
+
+**Verify**: `tsc -b` 0; `cross_check.sh` 0 critical (4 significant = пред-существующий долг). На живой БД: 2 таблицы, 4+4 policy, бакет, 8 функций, 6 registry-строк. Исправленный CTE доски спроса выполнен напрямую → 6 строк (6 `filling`-пулов на проде), CRITICAL устранён. `get_advisors` security: 12 ERROR = baseline, 0 новых (batch_media/batch_animals RLS включён). Мердж-конфликты (d10/CabinetApp/MarketScreen) разрешены: batch-media policies + home_banners оба; BatchWizard = router-island интерфейс main; MarketScreen = orgId+error/onRetry; orgId восстановлен в renderMarket.
+
+**Note**: доска спроса — гейт публичного запуска ARS-10 (юр. sign-off); дисклеймер ст.171 в ответе RPC. МПК-раскрытие медиа/ИНЖ = закрытие пула (D-M6-5/12), живьём seed-заблокировано (нужен закрытый пул с матч-МПК).
+
+**Files**: код — PR #102. Эта запись фиксирует статус мерджа+деплоя.
