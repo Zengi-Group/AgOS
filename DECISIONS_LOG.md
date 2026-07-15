@@ -3999,3 +3999,45 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify** (dev-превью 5199, сид +77010000001, tsc+build зелёные): **D12** — live: dispatch `visibilitychange` (visibilityState=visible) дал ровно 1×`rpc_get_org_batches` + 1×`rpc_get_farm_summary` + 1×review-due (счётчик fetch). **D2** — live: блокировка RPC + пустой кеш на `/cabinet/list` → экран сменился с «Партий пока нет» на «Не удалось загрузить партии • Повторить» (скриншот); «Повторить» при восстановлении сети → возврат к норме. **Холодная загрузка online** — BootScreen не зависает, реальное стадо («Ферма · 25»), демо-задач нет (D1 позитивный путь). **Ноль ошибок в консоли.** **Ограничения (флаги владельцу):** (1) честный network-offline cold-start (C3/D1-negative/D4) в этом харнессе не эмулируется (нет DevTools-throttling; SW отдаёт shell, реальная сеть всегда up) → C3/D1-neg/D4 — code+tsc-verified, требуют device/throttle smoke-test. (2) **Предсуществующий дефект (A/B-подтверждён, НЕ регресс):** на прямой загрузке `/cabinet` в preview-браузере OfflineBar «Нет связи» показывается при `navigator.onLine===true` — воспроизводится и на коммит-базе (правки в `git stash`); источник — `useOnline`/first-snapshot, НЕ мой файл-сет.
 
 **Files**: `src/pages/cabinet/shell/CabinetApp.tsx`, `src/pages/cabinet/shell/hooks/useBatches.ts`, `src/pages/cabinet/shell/screens/ListScreen.tsx`, `src/pages/cabinet/shell/screens/MarketScreen.tsx`. Аддитивно (HS-1/HS-5), SQL/RPC/canon не тронуты → `cross_check.sh` не требуется.
+
+---
+
+### 2026-07-13: Messaging-домен — DB-слой d12_messaging.sql (ARS-223)
+
+**What**: Стартована разработка фичи «внутриплатформенное общение каналами» (ARS-221, эпик ARS-112). Создан новый канонический домен-файл `d12_messaging.sql` (apply-order после d11; в eng-spec ошибочно значился d14 — исправлено, т.к. наивысший существующий d-файл = d11, d12/d13 нигде не зарезервированы). Три таблицы: `comm_channels` (support/system_broadcast, status active/archived, partial-unique один support-канал на орг), `comm_participants` (role member/admin, last_read_at), `comm_messages` (append-only, author_actor_type, attachments jsonb). RLS на всех трёх (орг A ≠ орг B) через d01-хелперы `fn_my_org_ids/fn_is_admin/fn_current_user_id/fn_is_expert`. 6 MVP-RPC (SECURITY DEFINER): get_or_create_support_channel, send_message (публикует `comm.message.created`, обновляет last_message_at, archived→active), list_channels, list_messages, mark_channel_read, archive_channel. Все зарегистрированы в rpc_name_registry. `d12` добавлен в `cross_check.sh` SQL_FILES + `deploy_sql.py` apply-order; 5 channel-scoped RPC внесены в CHECK 5 exceptions (org выводится из канала — web-JWT класс, как TSP-adapter).
+
+**Why**: G2 утвердил новый домен `messaging` (префикс comm_), notifications = транспорт (P4). P1 (data-model первым, до UI). Статус active/archived без `closed` (реш. CEO 2026-07-13) — support-канал это постоянный Kaspi-диалог, не тикет. Инвариант «один support-канал на орг» реализован partial unique index → опора get-or-create.
+
+**Consequences**: Легко — UI-задачи (ARS-225 кабинет / ARS-226 admin) и события (ARS-224) садятся на готовые RPC; broadcast (ARS-233, слайс 2) добавляется аддитивно (тип канала уже в CHECK). Аккуратно — RLS проверена только статически (cross_check), боевой RLS-тест орг A ≠ орг B возможен лишь на задеплоенной БД (G3, человеческий деплой; не пушим/не деплоим сами).
+
+**Verify**: `bash cross_check.sh` → RESULT 0 critical errors; d12 сканируется, CHECK 3/5/7 зелёные для новых RPC. RLS-тесты + событийный тест — на деплое.
+
+**Files**: `d12_messaging.sql` (new), `cross_check.sh` (SQL_FILES + CHECK 5 exceptions), `deploy_sql.py` (apply-order + docstring), `Docs/AGOS-Messaging-EngSpec-v0_1.md` (d14→d12).
+
+---
+
+### 2026-07-13: Messaging — событие comm.message.created → notif-транспорт (ARS-224)
+
+**What**: Подключил fan-out уведомлений к отправке сообщения. Новый SQL-хелпер `fn_fanout_comm_notifications(p_message_id)` (SECURITY DEFINER, внутренний fn_, не API): вставляет строки `notifications` по каналам in_app+push для всех активных участников канала КРОМЕ автора, с учётом `user_notification_preferences` (default-on, `coalesce(is_enabled,true)`), идемпотентно по message_id. Вызывается синхронно из `rpc_send_message` (после публикации события) — паттерн membership-RPC. В `ai_gateway/notification_worker.py` добавлен шаблон `new_message` («Новое сообщение в чате поддержки TURAN…») + deep-link `/cabinet/messages`.
+
+**Why**: ARS-224 (Dok4 dispatcher). Fan-out в SQL, а не в Python-поллере: (1) бизнес-логика в RPC (CLAUDE.md), (2) атомарно с сообщением, (3) переиспользование в broadcast-слайсе 2. Строгий инвариант ARS-224: notif template-only, текст НЕ дублируется — `params={channel_id, message_id}` без preview; preview остаётся только в payload события. Каналы in_app+push (не whatsapp) — по eng-spec §3.
+
+**Consequences**: Легко — участник (кроме автора) получает in_app/push при новом сообщении; выключенный канал в prefs не шлётся. Аккуратно — админ техподдержки получает уведомление только если он участник канала (в MVP админ работает через inbox `rpc_list_channels`, а не push — by-design, eng-spec ARS-226). broadcast 'all' (org=null) пропускается (notifications.org NOT NULL) — слайс 2.
+
+**Verify**: `bash cross_check.sh` → 0 critical. `python -c ast.parse` worker → OK. fn_fanout определён ДО rpc_send_message (check_function_bodies).
+
+**Files**: `d12_messaging.sql` (fn_fanout_comm_notifications + perform в rpc_send_message), `ai_gateway/notification_worker.py` (TEMPLATES + PUSH_DEEP_LINKS new_message), `Docs/AGOS-Messaging-EngSpec-v0_1.md` (§3).
+
+---
+
+### 2026-07-16: Merge ветки messaging в main — только бэкенд + 2 фикса ревью (архитектор)
+
+**What**: Смёрджена ветка `kernuree/messaging-support-channel` в `main` в режиме **backend-only** (реш. CEO 2026-07-16). Взяты: `d12_messaging.sql`, `ai_gateway/notification_worker.py`, `cross_check.sh`, `deploy_sql.py`, `Docs/AGOS-Messaging-EngSpec-v0_1.md`, backend-записи DECISIONS_LOG. **Фронт (`src/pages/cabinet/shell/*`) НЕ мёрджится — остаётся как на проде** (CabinetApp.tsx / threads.ts / ThreadScreen.tsx / TuranScreen.tsx восстановлены до main; новый `messages-load.ts` не внесён). Конфликт CabinetApp.tsx снят автоматически (берём версию main). До merge применены 2 фикса по код-ревью: **(#1 High)** взаимно-рекурсивные RLS-политики comm_channels↔comm_participants↔comm_messages → Postgres 42P17 на прямом PostgREST-select/Realtime; введён SECURITY DEFINER-хелпер `fn_my_channel_ids()`, три read-политики переписаны на него (цикл разорван). **(#2 Medium)** гонка check-then-insert в `rpc_get_or_create_support_channel` → ловим `unique_violation` и перечитываем канал (идемпотентность сохранена).
+
+**Why**: CEO решил ввести бэковый слой messaging (dark-ship) без изменения боевого фронта. RLS-рекурсия иначе заблокировала бы Realtime/admin-direct-read; гонка давала фермеру сырой exception при одновременном первом входе. Фронт-находки (#3 null-body preview, #4 лексикографическое сравнение времени unread) относятся к невнесённым файлам — уедут вместе с фронтом ARS-225.
+
+**Consequences**: Легко — бэкенд готов; ARS-225 (кабинет) / ARS-226 (admin inbox) садятся на готовые задеплоенные RPC без правок схемы. Аккуратно — `new_message`-уведомления фактически не генерируются, пока не подключён фронт/admin (нет источника send) — dark до тех пор. #5 (idempotency-скан fan-out без индекса) → IMPL_DEBT MSG-FANOUT-IDX-01.
+
+**Verify**: `bash cross_check.sh` → 0 critical (4 significant = пред-существующие: TSP-adapter PGRST203 ×3, дубль R-29 в DesignRules — не связаны с messaging, файлы не в merge). Диф в src/ vs main = пусто (фронт идентичен проду). Боевой RLS/событийный тест — на деплое d12 (G3, человек).
+
+**Files**: `d12_messaging.sql` (+`fn_my_channel_ids`, exception-guard), `ai_gateway/notification_worker.py`, `cross_check.sh`, `deploy_sql.py`, `Docs/AGOS-Messaging-EngSpec-v0_1.md`, `IMPL_DEBT.md`. Фронт не тронут (HS-1/HS-5).
