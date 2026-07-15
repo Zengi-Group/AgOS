@@ -11,6 +11,7 @@ import {
   Wheat,
   Users,
   BookOpen,
+  Megaphone,
   Calculator,
   ClipboardList,
   ShoppingCart,
@@ -32,7 +33,6 @@ import {
   Briefcase,
   User,
   Library,
-  Tags,
   SlidersHorizontal,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -137,13 +137,15 @@ const ADMIN_GROUPS: NavGroup[] = [
     label: 'Платформа',
     items: [
       { id: 'knowledge', icon: BookOpen, label: 'База знаний', route: '/admin/knowledge' },
+      { id: 'content-banners', icon: Megaphone, label: 'Контент', route: '/admin/content/banners' },
       { id: 'audit', icon: FileText, label: 'Аудит', route: '/admin/audit' },
       { id: 'marketplace', icon: Store, label: 'Торговая площадка', route: '/admin/marketplace' },
       // '/admin/pools' (pre-M6 write-UI) выведён из основной навигации — ARS-200.
       // Управление ТСП живёт в «Торговой площадке» (/admin/marketplace, M6-канон).
       // Роут и компоненты сохранены (HS-2), экран несёт баннер deprecated.
       { id: 'pricing', icon: DollarSign, label: 'Цены', route: '/admin/pricing' },
-      { id: 'livestock-categories', icon: Tags, label: 'Категории скота', route: '/admin/livestock-categories' },
+      // A-CAT «Категории скота» выведены из навигации (ARS-235): цены перенесены на
+      // уровень сорта (/admin/grade-formula). Роут и компоненты сохранены (HS-2), откат = вернуть пункт.
       { id: 'grade-formula', icon: SlidersHorizontal, label: 'Формула сорта', route: '/admin/grade-formula' },
       { id: 'settings', icon: Settings, label: 'Настройки', route: '/admin/settings' },
       { id: 'consulting', icon: Briefcase, label: 'Консалтинг', route: '/admin/consulting' },

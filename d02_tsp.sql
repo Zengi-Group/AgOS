@@ -4970,6 +4970,7 @@ create table if not exists public.livestock_grade_formula (
     fatness_match text,                       -- Хорошая|Средняя|Ниже средней (NULL = premium overlay)
     grade_code    text    references public.grade_standards(code),  -- VS|S|NS (NULL для МРС)
     floor_price   int     not null,          -- ₸/кг — жёсткий минимум, блокирует публикацию
+    recommended_price int,                    -- ₸/кг — индикативный ориентир (ст.171: справочно, не мандат)
     elite_only    boolean not null default false,  -- premium: только элитные породы
     min_weight_kg int,                        -- premium: порог веса (450)
     elite_breeds  text[],                     -- premium: фрагменты названий элитных пород
@@ -4980,7 +4981,18 @@ create table if not exists public.livestock_grade_formula (
 comment on table public.livestock_grade_formula is
     'A-GRADE | Data-driven формула сорта МПК. Единый источник для фронта (deriveMpkGrade
      через rpc_get_grade_formula) и бэка (fn_tsp_grade_id_from_fatness). P8/P4.
-     floor_price — жёсткий пол, блокирует публикацию (Legal 5.9: стандарт, не мандат цены).';
+     floor_price — жёсткий пол, блокирует публикацию (Legal 5.9: стандарт, не мандат цены).
+     recommended_price — индикативный ориентир, показывается клиентам (ст.171: справочно).';
+
+-- Идемпотентно для уже развёрнутой БД (create table if not exists не добавит колонку).
+alter table public.livestock_grade_formula add column if not exists recommended_price int;
+do $$ begin
+    if not exists (select 1 from pg_constraint where conname = 'grade_formula_rec_price_positive') then
+        alter table public.livestock_grade_formula
+            add constraint grade_formula_rec_price_positive
+            check (recommended_price is null or recommended_price > 0);
+    end if;
+end $$;
 
 create index if not exists idx_grade_formula_active on public.livestock_grade_formula (is_active, sort_order);
 
@@ -4992,18 +5004,30 @@ create policy "grade_formula_admin_write" on public.livestock_grade_formula for 
 
 -- Сид: 6 сортов = текущие захардкоженные значения (tsp-utils.ts + mpk/types.ts).
 insert into public.livestock_grade_formula
-    (sort_key, species, name_ru, fatness_match, grade_code, floor_price, elite_only, min_weight_kg, elite_breeds, sort_order)
+    (sort_key, species, name_ru, fatness_match, grade_code, floor_price, recommended_price, elite_only, min_weight_kg, elite_breeds, sort_order)
 values
-    ('premium',   'КРС', 'КРС · Премиум', 'Хорошая',      'VS', 1850, true,  450,
+    ('premium',   'КРС', 'КРС · Премиум', 'Хорошая',      'VS', 1850, 2000, true,  450,
         array['ангус','герефорд','абердин','вагю','wagyu','angus','hereford','шароле','лимузин','limousin','charolais','симмент'], 1),
-    ('vysshaya',  'КРС', 'КРС · Высшая',  'Хорошая',      'VS', 1650, false, null, null, 2),
-    ('pervaya',   'КРС', 'КРС · Первая',  'Средняя',      'S',  1500, false, null, null, 3),
-    ('vtoraya',   'КРС', 'КРС · Вторая',  'Ниже средней', 'NS', 1350, false, null, null, 4),
-    ('mrs_vyssh', 'МРС', 'МРС · Высшая',  'Хорошая',      null, 950,  false, null, null, 5),
-    ('mrs_perv',  'МРС', 'МРС · Первая',  'Средняя',      null, 850,  false, null, null, 6)
+    ('vysshaya',  'КРС', 'КРС · Высшая',  'Хорошая',      'VS', 1650, 1800, false, null, null, 2),
+    ('pervaya',   'КРС', 'КРС · Первая',  'Средняя',      'S',  1500, 1650, false, null, null, 3),
+    ('vtoraya',   'КРС', 'КРС · Вторая',  'Ниже средней', 'NS', 1350, 1500, false, null, null, 4),
+    ('mrs_vyssh', 'МРС', 'МРС · Высшая',  'Хорошая',      null, 950,  1050, false, null, null, 5),
+    ('mrs_perv',  'МРС', 'МРС · Первая',  'Средняя',      null, 850,  950,  false, null, null, 6)
 on conflict (sort_key) do nothing;
 
+-- Бэкфилл рекоменд. цены для уже засеянных строк (стартовые ориентиры +~8–10% над floor).
+-- Только где ещё не задано — админ правит через rpc_admin_upsert_grade_formula.
+update public.livestock_grade_formula set recommended_price = 2000 where sort_key = 'premium'   and recommended_price is null;
+update public.livestock_grade_formula set recommended_price = 1800 where sort_key = 'vysshaya'  and recommended_price is null;
+update public.livestock_grade_formula set recommended_price = 1650 where sort_key = 'pervaya'   and recommended_price is null;
+update public.livestock_grade_formula set recommended_price = 1500 where sort_key = 'vtoraya'   and recommended_price is null;
+update public.livestock_grade_formula set recommended_price = 1050 where sort_key = 'mrs_vyssh' and recommended_price is null;
+update public.livestock_grade_formula set recommended_price = 950  where sort_key = 'mrs_perv'  and recommended_price is null;
+
 -- AG-R1: rpc_get_grade_formula — публичное чтение формулы (фермер, МПК, админ).
+-- DROP перед CREATE: forma returns table изменилась (+recommended_price, ARS-235),
+-- а CREATE OR REPLACE не меняет тип возврата существующей функции (42P13 на редеплое живой БД).
+drop function if exists public.rpc_get_grade_formula();
 create or replace function public.rpc_get_grade_formula()
 returns table (
     sort_key      text,
@@ -5012,6 +5036,7 @@ returns table (
     fatness_match text,
     grade_code    text,
     floor_price   int,
+    recommended_price int,
     elite_only    boolean,
     min_weight_kg int,
     elite_breeds  text[],
@@ -5023,7 +5048,7 @@ security definer
 set search_path = public, pg_temp
 as $$
     select gf.sort_key, gf.species, gf.name_ru, gf.fatness_match, gf.grade_code,
-           gf.floor_price, gf.elite_only, gf.min_weight_kg, gf.elite_breeds, gf.sort_order
+           gf.floor_price, gf.recommended_price, gf.elite_only, gf.min_weight_kg, gf.elite_breeds, gf.sort_order
       from public.livestock_grade_formula gf
      where gf.is_active = true
      order by gf.sort_order, gf.sort_key;
@@ -5034,15 +5059,18 @@ comment on function public.rpc_get_grade_formula() is
 
 -- AG-1: rpc_admin_upsert_grade_formula — правка формулы из админки.
 -- Структурные поля (species, grade_code, elite_only) не меняются — форма формулы
--- стабильна; админ правит маппинг упитанности, floor-цену, порог веса, список пород.
+-- стабильна; админ правит маппинг упитанности, floor-цену, рекоменд. цену, порог веса, породы.
+-- Смена сигнатуры (добавлен p_recommended_price) → DROP+CREATE (нельзя REPLACE с новым аргументом).
+drop function if exists public.rpc_admin_upsert_grade_formula(text, text, text, int, int, text[], int);
 create or replace function public.rpc_admin_upsert_grade_formula(
-    p_sort_key      text,
-    p_name_ru       text,
-    p_fatness_match text  default null,
-    p_floor_price   int   default null,
-    p_min_weight_kg int   default null,
-    p_elite_breeds  text[] default null,
-    p_sort_order    int   default null
+    p_sort_key          text,
+    p_name_ru           text,
+    p_fatness_match     text   default null,
+    p_floor_price       int    default null,
+    p_min_weight_kg     int    default null,
+    p_elite_breeds      text[] default null,
+    p_sort_order        int    default null,
+    p_recommended_price int    default null
 )
 returns jsonb
 language plpgsql
@@ -5070,6 +5098,9 @@ begin
                                 when btrim(p_fatness_match) = '' then null
                                 else p_fatness_match end,
            floor_price   = coalesce(p_floor_price, gf.floor_price),
+           recommended_price = case when p_recommended_price is null then gf.recommended_price
+                                    when p_recommended_price <= 0 then null
+                                    else p_recommended_price end,
            min_weight_kg = case when p_min_weight_kg is null then gf.min_weight_kg
                                 when p_min_weight_kg <= 0 then null
                                 else p_min_weight_kg end,
@@ -5082,8 +5113,8 @@ begin
     return jsonb_build_object('ok', true, 'id', v_id);
 end; $$;
 
-comment on function public.rpc_admin_upsert_grade_formula(text, text, text, int, int, text[], int) is
-    'A-GRADE AG-1 | Admin правка формулы сорта по sort_key. floor_price>0. Структура строки фиксирована.';
+comment on function public.rpc_admin_upsert_grade_formula(text, text, text, int, int, text[], int, int) is
+    'A-GRADE AG-1 | Admin правка формулы сорта по sort_key. floor_price>0, recommended_price>0 (≤0 очищает). Структура строки фиксирована.';
 
 -- fn_tsp_grade_id_from_fatness — КАНОН: теперь читает маппинг из livestock_grade_formula
 -- (базовые строки elite_only=false). Раньше — хардкод-CASE в миграции 20260701150000.
@@ -5113,9 +5144,9 @@ comment on function public.fn_tsp_grade_id_from_fatness(text) is
      КАНОН d02 (перевыпуск из миграции 20260701150000). Единая формула сорта с фронтом.';
 
 grant execute on function public.rpc_get_grade_formula()        to authenticated;
-grant execute on function public.rpc_admin_upsert_grade_formula(text, text, text, int, int, text[], int) to authenticated;
+grant execute on function public.rpc_admin_upsert_grade_formula(text, text, text, int, int, text[], int, int) to authenticated;
 revoke execute on function public.rpc_get_grade_formula()        from anon;
-revoke execute on function public.rpc_admin_upsert_grade_formula(text, text, text, int, int, text[], int) from anon;
+revoke execute on function public.rpc_admin_upsert_grade_formula(text, text, text, int, int, text[], int, int) from anon;
 revoke execute on function public.fn_tsp_grade_id_from_fatness(text) from anon;
 
 insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
@@ -6646,20 +6677,21 @@ begin
 
     with lines as (
         select
-            coalesce(s.name_ru, pl.category_label, 'Категория') as category_name,
+            -- pool_lines.category_label = метка, введённая МПК (у tsp_skus нет name_ru).
+            coalesce(pl.category_label, 'Категория')            as category_name,
             pl.mpk_price_per_kg                                 as price,
             pl.max_volume_kg,
             p.delivery_from,
             p.delivery_to,
-            -- roll rayon up to its oblast for anonymity; oblast stays as-is; null = all regions
+            -- roll city up to its oblast for anonymity; oblast stays as-is; null = all regions
+            -- (иерархия regions: country → oblast → city; уровня 'rayon' в справочнике нет)
             coalesce(ob.id, r.id)                               as region_id,
             coalesce(ob.name_ru, r.name_ru)                     as region_name
         from public.pools p
         join public.pool_lines pl        on pl.pool_id = p.id and pl.is_active
-        left join public.tsp_skus s      on s.id = pl.tsp_sku_id
         left join public.pool_regions preg on preg.pool_id = p.id
         left join public.regions r       on r.id = preg.region_id
-        left join public.regions ob      on ob.id = r.parent_id and r.level = 'rayon'
+        left join public.regions ob      on ob.id = r.parent_id and r.level = 'city'
         where p.status = 'filling'
           and (
               p_region_id is null
@@ -6705,7 +6737,7 @@ end;
 $$;
 comment on function public.rpc_get_demand_board(uuid, uuid) is
     'ARS-229 | Farmer-facing anonymous demand board. Aggregates active MPK demand from the M6
-     surface (pools status=filling + pool_lines + pool_regions) by category × region (rayon
+     surface (pools status=filling + pool_lines + pool_regions) by category × region (city
      rolled up to oblast). Exposes ONLY category, region, indicative price range/avg, active
      line count, target volume, delivery window — never MPK identity (Art.171, aggregate-only).
      MANDATORY disclaimer_text. Additive to rpc_get_market_summary (which reads deprecated

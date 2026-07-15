@@ -3,7 +3,19 @@
 // S6 (ARS-152): IonShellFrame вместо ShellFrame — IonPage + нативный скролл + refresher.
 import { IonShellFrame } from '../../components/IonShellFrame'
 import { Cta } from '../../components/Cta'
+import { useRpc } from '@/hooks/useRpc'
 import type { MpkMembership, MpkTypeStatus, Pool, PoolStatus } from '../types'
+
+// Строка из rpc_list_home_banners (см. Docs/AGOS-Slice-AppBanners.md).
+interface BannerRow {
+  id: string
+  title: string
+  subtitle?: string | null
+  kicker?: string | null
+  tone?: 'gold' | 'green' | 'neutral'
+  action_type: 'internal' | 'external' | 'none'
+  action_target?: string | null
+}
 
 interface Props {
   typeStatus: MpkTypeStatus
@@ -94,6 +106,45 @@ function MpkMemberBanner({ membership, realAccount, onSimulateMember }: {
   )
 }
 
+// 4.3b — Промо-плейсмент МПК (управляемый из админки, app='mpk').
+// Пустой список → ничего не рендерим (без пустой рамки). Статус-баннеры выше не трогаем.
+function MpkPromoBanner({ onOpenTsp, onOpenOffers, onOpenContactTuran }: {
+  onOpenTsp: () => void
+  onOpenOffers: () => void
+  onOpenContactTuran: (topic?: string) => void
+}) {
+  const { data } = useRpc<BannerRow[]>('rpc_list_home_banners', { p_app: 'mpk', p_membership_variant: 'all' })
+  if (!data || data.length === 0) return null
+
+  const onClick = (row: BannerRow): (() => void) | undefined => {
+    if (row.action_type === 'external' && row.action_target) {
+      const url = row.action_target
+      return () => window.open(url, '_blank', 'noopener,noreferrer')
+    }
+    if (row.action_type === 'internal') {
+      switch (row.action_target) {
+        case 'open_tsp':    return onOpenTsp
+        case 'open_market': return onOpenTsp
+        case 'open_offers': return onOpenOffers
+        default:            return () => onOpenContactTuran(row.title)
+      }
+    }
+    return undefined
+  }
+
+  return (
+    <div style={{ margin: '10px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {data.map((row) => (
+        <button key={row.id} className="pool-card" onClick={onClick(row)}>
+          {row.kicker && <div className="pool-card-sub" style={{ textTransform: 'uppercase', letterSpacing: '.04em' }}>{row.kicker}</div>}
+          <div className="pool-card-t">{row.title}</div>
+          {row.subtitle && <div className="pool-card-sub">{row.subtitle}</div>}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function MpkHomeScreen({
   typeStatus, membership, pools, tspOpen, orgName, region, bin,
   onOpenTsp, onOpenOffers, offersCount, onOpenPool, onOpenContactTuran, realAccount, onSimulateApprove, onSimulateMember,
@@ -138,6 +189,9 @@ export function MpkHomeScreen({
 
       {/* 4.3 — Баннер членства */}
       <MpkMemberBanner membership={membership} realAccount={realAccount} onSimulateMember={onSimulateMember} />
+
+      {/* 4.3b — Промо-плейсмент (управляемый из админки) */}
+      <MpkPromoBanner onOpenTsp={onOpenTsp} onOpenOffers={onOpenOffers} onOpenContactTuran={onOpenContactTuran} />
 
       {/* 4.4 — TSP замок / вход */}
       {!tspOpen ? (

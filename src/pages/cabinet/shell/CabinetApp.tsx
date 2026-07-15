@@ -13,8 +13,9 @@ import type { UseIonRouterResult } from '@ionic/react'
 import { useIonRouter } from '@ionic/react'
 import { IonReactRouter } from '@ionic/react-router'
 // @ts-expect-error v5-alias пакет без @types — импорты v5-острова (спайк-проверено).
-// RouteV5 — иначе конфликт имён с типом Route из './types'.
-import { Route as RouteV5, useLocation } from 'react-router-dom-v5'
+// RouteV5 — иначе конфликт имён с типом Route из './types'. RedirectV5 — нормализация
+// старых плоских deep-link/push-путей в канонический таб-URL (N-2 backward-compat).
+import { Route as RouteV5, Redirect as RedirectV5, useLocation } from 'react-router-dom-v5'
 import '@ionic/react/css/core.css'
 import './cabinet.css'
 import './ionic.css'
@@ -97,6 +98,18 @@ const PAID_KEY = (userId: string) => 'agos.memb.paid.' + userId
 const isPaidLocally = (userId: string | undefined | null) =>
   !!userId && appStorage.getItem(PAID_KEY(userId)) === '1'
 
+// D4 (офлайн-чтение): страж от вечного BootScreen. rpc_get_my_context / getUser могут
+// подвиснуть без ответа (медленная/пропавшая сеть) — гонка с таймаутом даёт кабинету
+// сорваться с загрузки на персистнутый стейт и повторить в фоне.
+const BOOT_TIMEOUT_MS = 8000
+const TIMED_OUT = Symbol('boot-timeout')
+function withTimeout<T>(p: Promise<T>): Promise<T | typeof TIMED_OUT> {
+  return Promise.race([
+    p,
+    new Promise<typeof TIMED_OUT>((res) => setTimeout(() => res(TIMED_OUT), BOOT_TIMEOUT_MS)),
+  ])
+}
+
 function loadState(): ShellState {
   try {
     const raw = appStorage.getItem(STORAGE_KEY)
@@ -142,7 +155,7 @@ export function CabinetApp() {
   const [profileLoading, setProfileLoading] = useState(true)
   // Партии скоупятся по аккаунту (userId): backend фильтрует по org (fn_my_org_ids), а
   // localStorage-кеш — по ключу с userId, поэтому партии одного владельца не видны другому.
-  const { batches, loading: batchesLoading, addBatch, patchBatch: patchBatchAsync, refetch: refetchBatches } = useBatches(profile?.userId)
+  const { batches, loading: batchesLoading, error: batchesError, addBatch, patchBatch: patchBatchAsync, refetch: refetchBatches } = useBatches(profile?.userId)
   const [notifs, setNotifs] = useState(init.notifs)
   const [newsOn, setNewsOn] = useState(init.newsOn)
   const [profileIncomplete] = useState(init.profileIncomplete)
@@ -171,26 +184,67 @@ export function CabinetApp() {
 
   // Реальная сводка фермы (стадо + задачи) перекрывает демо-сид. Хойстнута из эффекта
   // (S2): переиспользуется pull-to-refresh на Главной (IonRefresher, spec §7).
+  // D1 (офлайн-чтение): реальная сводка перекрывает демо-сид. fs===null при живой сессии
+  // НЕ должен оставлять демо-«Отёл, день 34» — на ПЕРВОМ заходе показываем честный emptyFarm();
+  // на фоновых поллингах при null держим последнее хорошее (не перетираем реальное стадо
+  // транзиентным сбоем summary/сети). /cabinet всегда за RequireAuth — демо-сид тут не легитимен.
   const pullFarm = useCallback(
-    () => loadFarmState().then((fs) => { if (fs) setFarm(fs) }),
+    (opts?: { firstLoad?: boolean }) => loadFarmState().then((fs) => {
+      if (fs) setFarm(fs)
+      else if (opts?.firstLoad) setFarm(emptyFarm())
+    }),
     []
   )
 
   useEffect(() => {
     let alive = true
-    loadAccountProfile('farmer').then(async (p) => {
+    let retried = false
+
+    // C3 (офлайн-чтение): сессия жива (/cabinet за RequireAuth), но контекст не загрузился.
+    // Сервер недоступен/офлайн → НЕ трогаем membership (активный член остаётся членом на
+    // персистнутом init.membership, Рынок не закрывается гейтом), ферму показываем честным
+    // пусто вместо демо-сида. Профиль (имя орг/инициалы) освежится при возврате связи/маунте.
+    function settleOffline() {
       if (!alive) return
+      setFarm(emptyFarm())
+      setProfileLoading(false)
+      // D4: один фоновый повтор через 5с (реконнект отдельно ловит wasOffline-эффект ниже).
+      if (!retried) {
+        retried = true
+        setTimeout(() => { if (alive) loadProfile() }, 5000)
+      }
+    }
+
+    async function loadProfile() {
+      const p = await withTimeout(loadAccountProfile('farmer'))
+      if (!alive) return
+      if (p === TIMED_OUT) { settleOffline(); return }   // D4: подвисло — на персист
       if (p) { setProfile(p); setProfileLoading(false); return }
       // Профиль пуст при наличии сессии: возможна «осиротевшая» сессия (пользователь удалён
       // из БД, но JWT остался в браузере). Проверяем на сервере через getUser() — он обращается
       // к Auth и возвращает 401/403, если пользователя больше нет. Тогда выходим и уводим на
       // лендинг, чтобы не залипать в демо-кабинете. Сетевые сбои (без статуса) НЕ разлогиниваем.
-      const { data, error } = await supabase.auth.getUser()
+      let userData: Awaited<ReturnType<typeof supabase.auth.getUser>>['data'] | null = null
+      let getErr: unknown = null
+      try {
+        const r = await withTimeout(supabase.auth.getUser())
+        if (!alive) return
+        if (r === TIMED_OUT) { settleOffline(); return }  // D4
+        userData = r.data; getErr = r.error
+      } catch (e) {
+        getErr = e   // сетевой бросок (fetch failed) — трактуем как офлайн ниже
+      }
       if (!alive) return
-      const orphaned = (!!error && (error.status === 401 || error.status === 403)) || (!error && !data?.user)
+      const status = (getErr as { status?: number } | null)?.status
+      const orphaned = (status === 401 || status === 403) || (!getErr && !userData?.user)
       if (orphaned) {
         await signOut()
         navigate('/', { replace: true })
+        return
+      }
+      if (getErr) {
+        // C3: getUser не подтвердил сессию не из-за 401/403 → сеть/сервер недоступны → офлайн.
+        settleOffline()
         return
       }
       // Сессия валидна (getUser прошёл), но контекста нет — напр. зарегистрирован, ещё нет
@@ -200,11 +254,13 @@ export function CabinetApp() {
       setMembership('none')
       setFarm(emptyFarm())
       setProfileLoading(false)
-    })
+    }
+
+    loadProfile()
     // Поллинг 30с — стадо/задачи обновляются без перезагрузки после правок в профиле (D-SYNC-01).
-    // loadFarmState: контекст есть, но фермы нет → emptyFarm(); аноним/сбой сети → null (сид не трогаем).
-    pullFarm().finally(() => { if (alive) setFarmLoaded(true) })
-    const id = setInterval(pullFarm, 30000)
+    // D1: firstLoad=true — сбой первой сводки при живой сессии даёт emptyFarm(), не демо-сид.
+    pullFarm({ firstLoad: true }).finally(() => { if (alive) setFarmLoaded(true) })
+    const id = setInterval(() => pullFarm(), 30000)
     return () => { alive = false; clearInterval(id) }
   }, [pullFarm])
 
@@ -218,6 +274,19 @@ export function CabinetApp() {
     pullFarm()
     refetchBatches()
   }, [offline, pullFarm, refetchBatches])
+
+  // D12 (офлайн-чтение): возврат из фона (разблокировка/переключение вкладки) — сразу
+  // тихо освежаем стадо и партии, чтобы не показывать до 30с/20с устаревшие данные.
+  // На нативе appStateChange уже покрыт S4-хостом; здесь web-путь через visibilitychange.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      pullFarm()
+      refetchBatches()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [pullFarm, refetchBatches])
 
   // Изоляция по аккаунту: при входе под другим userId не наследуем кабинет предыдущего.
   useEffect(() => {
@@ -262,12 +331,14 @@ export function CabinetApp() {
   // следующую, уже открытую (переход progate→paypro).
   const closeSheet = (kind: SheetKind) => setSheet((cur) => (cur?.kind === kind ? null : cur))
 
-  // ---------- TSP-1: визард «Новая партия» + результат публикации ----------
-  const [wizActive, setWizActive] = useState(false)
-  const [pubResult, setPubResult] = useState<{ batch: Batch; variant: PubVariant } | null>(null)
+  // ---------- TSP-1: визард «Новая партия» + результат публикации (роуты 'batchwiz'/'pub') ----------
+  // N-3/N-5/M4/M5: визард и результат — реальные роуты острова, не state-оверлей. PubVariant —
+  // транзиентная UI-подсказка (searching-анимация), на партии не хранится → держим в ref по id
+  // батча на время флоу (deep-link/reload → фолбэк 'D', без searching).
+  const pubVariantRef = useRef<Record<string, PubVariant>>({})
 
-  // ---------- ARS-212: мастер профиля фермы (флоу-страница на табе Ферма) ----------
-  const [farmWizActive, setFarmWizActive] = useState(false)
+  // ---------- ARS-212: мастер профиля фермы (теперь роут 'farmwiz', не state-оверлей) ----------
+  // startAt держится в state (какой ярус открыть); сам показ мастера — навигацией на роут.
   const [farmWizStart, setFarmWizStart] = useState<'herd' | 'plan'>('herd')
 
   // ---------- persistence ----------
@@ -301,6 +372,14 @@ export function CabinetApp() {
   const ionRef = useRef<UseIonRouterResult | null>(null)
   const routeRef = useRef(route)
   routeRef.current = route
+  // C11 (issue #4, 2026-07-15): iOS-mode push/pop ≈ 540мс. «Назад», пойманный ПОКА идёт
+  // forward-переход (открытие треда), заставляет StackManager Ionic проиграть вход целевого
+  // экрана ДВАЖДЫ («список чатов въезжал дважды»). Отложить pop не помогает — важен сам факт
+  // навигации во время незавершённого forward-перехода. Поэтому, как в нативном iOS, «назад»
+  // на время анимации ЗАБЛОКИРОВАН (тап игнорируется). navBusyUntil — метка конца forward-анимации.
+  const NAV_ANIM_MS = 650
+  const navBusyUntilRef = useRef(0)
+  const navBusy = () => performance.now() < navBusyUntilRef.current
   const go = (r: Route) => {
     const from = routeRef.current
     setRoute(r)
@@ -309,6 +388,8 @@ export function CabinetApp() {
     if (!ion) return
     const dir = dirFor(from, r)
     const url = routeToUrl(r)
+    // Метку «переход занят» ставим ДО push (чтобы «назад» в тот же тик уже видел занятость).
+    navBusyUntilRef.current = performance.now() + NAV_ANIM_MS
     // C8 (аудит 2026-07-13): go() НИКОГДА не поппит историю — 'back' здесь только направление
     // анимации (push с back-slide). Реальный pop делает goBackTo (кнопки ‹). Прежняя pop-ветка
     // уводила cross-nav (карточка партии → «Обратитесь в TURAN», dir=back по глубине 2→1) назад
@@ -320,11 +401,16 @@ export function CabinetApp() {
   // таб-корень анимировался как смена корня (ревью PR #27, SIG-2). Холодный deep-link
   // (стек пуст) → push с back-анимацией; URL→Route-синк выправит состояние при расхождении.
   const goBackTo = (r: Route) => {
+    // C11: пока forward-переход анимируется — игнорируем «назад» (иначе двойной вход экрана).
+    // Нативное поведение iOS: «назад» недоступен, пока экран въезжает. Окно ≤650мс — реальный
+    // возврат (после чтения треда) не задевается; гасится только сверх-быстрый тап в анимацию.
+    if (navBusy()) return
     setRoute(r)
     const ion = ionRef.current
     if (!ion) return
     if (ion.canGoBack()) ion.goBack()
     else ion.push(routeToUrl(r), 'back')
+    navBusyUntilRef.current = performance.now() + NAV_ANIM_MS
   }
   // Подпись к «‹ назад» в SubHead внутренних страниц — из имени back-роута (нативный iOS-стиль).
   const backLabelFor = (r?: Route): string => {
@@ -358,22 +444,9 @@ export function CabinetApp() {
   // Флоу-страницы (agos-flow-page: TSP-визард, результат публикации, мастер фермы) — полноэкранные,
   // без таб-бара (контракт Slice 5a/7). До P-4 (ARS-220) бар не рендерился внутри их IonPage;
   // с постоянным IonTabBar его надо прятать явно — иначе бар просвечивает под визардом.
-  // C9 (аудит 2026-07-13): флаги флоу скоупим на владеющий роут — иначе оставшийся true флаг
-  // (после system-back/edge-swipe из визарда мимо URL) прятал таб-бар глобально на чужом экране.
-  const hideTabBar = (['p1list', 'batch', 'review', 'turan', 'thread'] as RouteName[]).includes(route.name)
-    || (route.name === 'market' && (wizActive || !!pubResult))
-    || (route.name === 'farm' && farmWizActive)
-
-  // C9 (аудит 2026-07-13): флоу живут в state мимо URL — system-back/edge-swipe/browser-back
-  // меняют URL, но флаг оставался true → «призрачное» переоткрытие визарда при возврате на таб.
-  // Сбрасываем флаг, когда роут ушёл с владеющего им экрана (market — визард/публикация; farm — мастер).
-  useEffect(() => {
-    if (route.name !== 'market') {
-      setWizActive((v) => (v ? false : v))
-      setPubResult((v) => (v ? null : v))
-    }
-    if (route.name !== 'farm') setFarmWizActive((v) => (v ? false : v))
-  }, [route.name])
+  // Флоу-страницы теперь реальные роуты (farmwiz/batchwiz/pub) — таб-бар прячется по имени роута,
+  // без state-флагов (ушла и причина C9-«призрачного» переоткрытия: нет флагов мимо URL).
+  const hideTabBar = (['p1list', 'batch', 'review', 'turan', 'thread', 'farmwiz', 'batchwiz', 'pub'] as RouteName[]).includes(route.name)
 
   const handleLogout = async () => {
     await signOut()
@@ -551,55 +624,59 @@ export function CabinetApp() {
     />
   )
 
-  const renderMarket = () => {
-    if (wizActive) {
-      return (
-        <IonPage className="agos-flow-page">
-          <BatchWizard
-            onDone={(batch, variant) => {
-              addBatch(batch)
-              setWizActive(false)
-              host.haptics('heavy')   // S2.1: публикация партии — крупное действие
-              setPubResult({ batch, variant })
-            }}
-            onExit={() => setWizActive(false)}
-            onTuran={() => { setWizActive(false); go({ name: 'turan', back: { name: 'market' } }) }}
-          />
-        </IonPage>
-      )
-    }
-    if (pubResult) {
-      return (
-        <IonPage className="agos-flow-page">
-          <PubResult
-            variant={pubResult.variant}
-            batch={pubResult.batch}
-            onToBatch={() => { const id = pubResult.batch.id; setPubResult(null); go({ name: 'batch', batchId: id }) }}
-            onToList={() => { setPubResult(null); go({ name: 'p1list' }) }}
-          />
-        </IonPage>
-      )
-    }
-    return (
-      <MarketScreen
-        membership={membership}
-        batches={batches}
-        loading={loading}
-        onNew={() => {
-          // Лимит 5 активных партий (совпадает с renderList): «Продать» на табе рынка —
-          // теперь основной вход в визард, поэтому guard тоже здесь.
-          const activeCount = batches.filter((b) =>
-            ['scheduled', 'published', 'offering', 'decision', 'matched', 'confirmed', 'dispatched'].includes(b.state)
-          ).length
-          if (activeCount >= 5) { setSheet({ kind: 'limit' }); return }
-          setWizActive(true)
+  const renderMarket = () => (
+    <MarketScreen
+      membership={membership}
+      batches={batches}
+      loading={loading}
+      error={batchesError}
+      onRetry={refetchBatches}
+      onNew={() => {
+        // Лимит 5 активных партий (совпадает с renderList): «Продать» на табе рынка —
+        // основной вход в визард, поэтому guard тоже здесь.
+        const activeCount = batches.filter((b) =>
+          ['scheduled', 'published', 'offering', 'decision', 'matched', 'confirmed', 'dispatched'].includes(b.state)
+        ).length
+        if (activeCount >= 5) { setSheet({ kind: 'limit' }); return }
+        go({ name: 'batchwiz' })
+      }}
+      onApply={() => memberAct('apply')}
+      onPay={() => memberAct('pay')}
+      go={go}
+      onRefresh={refetchBatches}
+      orgId={profile?.orgId ?? null}
+    />
+  )
+  // N-3/N-5/M4/M5: визард публикации и результат — реальные роуты острова (как farmwiz). Свой
+  // стек-энтри → нативный push/pop + edge-swipe + exit-анимация; system-back шагает внутрь флоу.
+  const renderBatchWiz = () => (
+    <IonPage className="agos-flow-page">
+      <BatchWizard
+        onDone={(batch, variant) => {
+          addBatch(batch)
+          host.haptics('heavy')   // S2.1: публикация партии — крупное действие
+          pubVariantRef.current[batch.id] = variant
+          go({ name: 'pub', batchId: batch.id })
         }}
-        onApply={() => memberAct('apply')}
-        onPay={() => memberAct('pay')}
-        go={go}
-        onRefresh={refetchBatches}
-        orgId={profile?.orgId ?? null}
+        onExit={() => goBackTo({ name: 'market' })}
+        onTuran={() => go({ name: 'turan', back: { name: 'market' } })}
       />
+    </IonPage>
+  )
+  const renderPub = ({ match }: { match: { params: { id: string } } }) => {
+    const batch = batches.find((b) => b.id === match.params.id)
+    // Партия только что создана addBatch — есть в batches. Фолбэк (deep-link/reload на pub):
+    // партии нет локально → уводим на карточку (реальные данные подъедут поллингом).
+    if (!batch) return <PlaceholderScreen title="Партия опубликована" sub="Открываю карточку…" />
+    return (
+      <IonPage className="agos-flow-page">
+        <PubResult
+          variant={pubVariantRef.current[batch.id] ?? 'D'}
+          batch={batch}
+          onToBatch={() => go({ name: 'batch', batchId: batch.id })}
+          onToList={() => go({ name: 'p1list' })}
+        />
+      </IonPage>
     )
   }
 
@@ -612,12 +689,15 @@ export function CabinetApp() {
       <ListScreen
         batches={batches}
         loading={loading}
+        error={batchesError}
+        onRetry={refetchBatches}
         onBatch={(id) => go({ name: 'batch', batchId: id, back: { name: 'p1list' } })}
         onNew={() => {
           if (activeCount >= ACTIVE_COUNT_LIMIT) { setSheet({ kind: 'limit' }); return }
-          // S2.1 (ARS-157): визард рендерится только на market-роуте — уводим туда,
-          // иначе тап «+Новая» со Списка визуально ничего не делал (решение CEO: починить).
-          setWizActive(true); go({ name: 'market' })
+          // Визард публикации — свой роут (1b): «+Новая» со Списка навигирует прямо в него;
+          // system-back вернёт на Список (нативный pop к источнику). Прежний квирк (тап ничего
+          // не делал, S2.1/ARS-157) закрыт роутом.
+          go({ name: 'batchwiz' })
         }}
         onBack={() => goBackTo({ name: 'market' })}
       />
@@ -641,8 +721,8 @@ export function CabinetApp() {
         backLabel={backLabelFor(route.back)}
         onPatch={(patch, successToast) => patchBatch(currentBatch.id, patch, successToast)}
         onNew={() => {
-          // S2.1 (ARS-157): визард только на market-роуте — уводим туда (решение CEO: починить).
-          setWizActive(true); go({ name: 'market' })
+          // Визард публикации — свой роут (1b): «+Новая» с карточки навигирует прямо в него.
+          go({ name: 'batchwiz' })
         }}
         onReview={() => go({ name: 'review', batchId: currentBatch.id, back: { name: 'batch', batchId: currentBatch.id } })}
         onTuran={() => go({ name: 'turan', back: { name: 'batch', batchId: currentBatch.id } })}
@@ -755,32 +835,31 @@ export function CabinetApp() {
   // членства — существующие правила Рынка; кнопку показываем только продающим статусам).
   const farmCanSell = (['active', 'grace', 'expiring'] as MembershipStatus[]).includes(membership)
   const sellFromFarm = () => {
-    setFarmWizActive(false)
+    // Мастер фермы теперь роут — уход на Рынок (go) сам покидает 'farmwiz', флаг не нужен.
     const activeCount = batches.filter((b) =>
       ['scheduled', 'published', 'offering', 'decision', 'matched', 'confirmed', 'dispatched'].includes(b.state)
     ).length
     if (activeCount >= 5) { go({ name: 'market' }); setSheet({ kind: 'limit' }); return }
-    setWizActive(true); go({ name: 'market' })
+    go({ name: 'batchwiz' })
   }
-  const renderFarm = () => {
-    if (farmWizActive) {
-      return (
-        <IonPage className="agos-flow-page">
-          <FarmWizard
-            startAt={farmWizStart}
-            onExit={() => setFarmWizActive(false)}
-            onSell={farmCanSell ? sellFromFarm : undefined}
-          />
-        </IonPage>
-      )
-    }
-    return (
-      <FarmScreen
-        onStart={() => { setFarmWizStart('herd'); setFarmWizActive(true) }}
-        onResume={() => { setFarmWizStart('plan'); setFarmWizActive(true) }}
+  const renderFarm = () => (
+    <FarmScreen
+      onStart={() => { setFarmWizStart('herd'); go({ name: 'farmwiz' }) }}
+      onResume={() => { setFarmWizStart('plan'); go({ name: 'farmwiz' }) }}
+    />
+  )
+  // N-3/N-5/M4/M5 (аудит нативности): мастер фермы — реальный роут острова, а не state-оверлей.
+  // Свой стек-энтри → нативный push/pop + edge-swipe + exit-анимация; system-back/edge-swipe
+  // возвращает на «Ферму», не выкидывает из флоу. Компонент FarmWizard не тронут; startAt в state.
+  const renderFarmWiz = () => (
+    <IonPage className="agos-flow-page">
+      <FarmWizard
+        startAt={farmWizStart}
+        onExit={() => goBackTo({ name: 'farm' })}
+        onSell={farmCanSell ? sellFromFarm : undefined}
       />
-    )
-  }
+    </IonPage>
+  )
 
   // Пока грузится реальный профиль — брендовый boot (а не голый спиннер/демо-экран).
   // P-2 (ARS-218): единый BootScreen на всём пути в кабинет. См. profileLoading выше.
@@ -800,41 +879,68 @@ export function CabinetApp() {
                   страницы через IonShellFrame). Роуты в outlet не изменены. */}
               <IonTabs>
                 <IonRouterOutlet>
-                  <RouteV5 exact path="/cabinet" render={renderHome} />
-                  <RouteV5 exact path="/cabinet/market" render={renderMarket} />
-                  <RouteV5 exact path="/cabinet/list" render={renderList} />
-                  <RouteV5 exact path="/cabinet/batch/:id" render={renderBatch} />
-                  <RouteV5 exact path="/cabinet/review/:id" render={renderReview} />
-                  <RouteV5 exact path="/cabinet/account" render={renderCabinet} />
-                  <RouteV5 exact path="/cabinet/turan" render={renderTuran} />
+                  {/* N-2: роуты сгруппированы по табам (sibling-префиксы /cabinet/{home,farm,
+                      market,messages}/…). Каждый под-экран под URL-префиксом своего таба →
+                      Ionic держит независимый стек+скролл на вкладку и подсвечивает таб по
+                      совпадению href-префикса. */}
+                  {/* --- таб «Главная» --- */}
+                  <RouteV5 exact path="/cabinet/home" render={renderHome} />
+                  <RouteV5 exact path="/cabinet/home/account" render={renderCabinet} />
+                  <RouteV5 exact path="/cabinet/home/turan" render={renderTuran} />
+                  <RouteV5 exact path="/cabinet/home/shop" render={() => <PlaceholderScreen title="Маркет" sub="Дистрибуция и специалисты TURAN" icon="bag" emptySub="Дистрибуция и специалисты TURAN появятся здесь" />} />
+                  <RouteV5 exact path="/cabinet/home/services" render={() => <PlaceholderScreen title="Сервисы" sub="Специалисты и услуги TURAN" icon="grid" emptySub="Специалисты и услуги TURAN появятся здесь" />} />
+                  {/* --- таб «Ферма» --- */}
                   <RouteV5 exact path="/cabinet/farm" render={renderFarm} />
-                  <RouteV5 exact path="/cabinet/shop" render={() => <PlaceholderScreen title="Маркет" sub="Дистрибуция и специалисты TURAN" icon="bag" emptySub="Дистрибуция и специалисты TURAN появятся здесь" />} />
-                  <RouteV5 exact path="/cabinet/services" render={() => <PlaceholderScreen title="Сервисы" sub="Специалисты и услуги TURAN" icon="grid" emptySub="Специалисты и услуги TURAN появятся здесь" />} />
+                  <RouteV5 exact path="/cabinet/farm/wizard" render={renderFarmWiz} />
+                  {/* --- таб «Рынок» --- */}
+                  <RouteV5 exact path="/cabinet/market" render={renderMarket} />
+                  <RouteV5 exact path="/cabinet/market/new" render={renderBatchWiz} />
+                  <RouteV5 exact path="/cabinet/market/list" render={renderList} />
+                  <RouteV5 exact path="/cabinet/market/batch/:id" render={renderBatch} />
+                  <RouteV5 exact path="/cabinet/market/review/:id" render={renderReview} />
+                  <RouteV5 exact path="/cabinet/market/pub/:id" render={renderPub} />
+                  {/* --- таб «Сообщения» --- */}
                   <RouteV5 exact path="/cabinet/messages" render={renderMessages} />
-                  <RouteV5 exact path="/cabinet/thread/:tid" render={renderThread} />
-                  {/* неизвестный под-путь → Главная (первое совпадение выигрывает) */}
+                  <RouteV5 exact path="/cabinet/messages/thread/:tid" render={renderThread} />
+                  {/* N-2 backward-compat: старые плоские deep-link/push-пути (до N-2, C10/IMPL_DEBT)
+                      → канонический таб-URL. Декларативные Redirect (НЕ морфят persistent pathless-вью
+                      → без churn вью-стека, в отличие от условного рендера в fallback). market/new и
+                      farm/wizard уже сгруппированы — редирект не нужен. Ретайрится с островом. */}
+                  <RedirectV5 exact from="/cabinet" to="/cabinet/home" />
+                  <RedirectV5 exact from="/cabinet/account" to="/cabinet/home/account" />
+                  <RedirectV5 exact from="/cabinet/turan" to="/cabinet/home/turan" />
+                  <RedirectV5 exact from="/cabinet/shop" to="/cabinet/home/shop" />
+                  <RedirectV5 exact from="/cabinet/services" to="/cabinet/home/services" />
+                  <RedirectV5 exact from="/cabinet/list" to="/cabinet/market/list" />
+                  <RedirectV5 exact from="/cabinet/batch/:id" to="/cabinet/market/batch/:id" />
+                  <RedirectV5 exact from="/cabinet/review/:id" to="/cabinet/market/review/:id" />
+                  <RedirectV5 exact from="/cabinet/pub/:id" to="/cabinet/market/pub/:id" />
+                  <RedirectV5 exact from="/cabinet/thread/:tid" to="/cabinet/messages/thread/:tid" />
+                  {/* неизвестный под-путь → Главная (стабильный контент — без churn) */}
                   <RouteV5 render={renderHome} />
                 </IonRouterOutlet>
-                {/* Постоянный таб-бар. selected/onClick — прежняя схема (ctx.go), href нет:
-                    навигация идёт через go()→ion.push, как и раньше. hideTabBar скрывает бар
-                    на детальных экранах (сохранение UX, решение CEO). */}
+                {/* Постоянный таб-бар. N-2: кнопки навигируют через href (нативный таб-свитч
+                    Ionic) — свой стек на вкладку восстанавливается, повторный тап по активному
+                    табу поппит к корню и скроллит вверх (N-6, из коробки). Подсветка активного
+                    таба — авто по совпадению href-префикса с URL (ручной selected убран).
+                    hideTabBar скрывает бар на детальных/флоу-экранах (сохранение UX, решение CEO). */}
                 <IonTabBar slot="bottom" className={'agos-tabbar' + (hideTabBar ? ' agos-tabbar--hidden' : '')}>
-                  <IonTabButton tab="home" selected={tab === 'home'} onClick={() => go({ name: 'home' })}>
+                  <IonTabButton tab="home" href="/cabinet/home">
                     <span className="bn-ic"><PhIcon name="home" size={22} /></span>
                     <span className="bn-t">Главная</span>
                   </IonTabButton>
-                  <IonTabButton tab="farm" selected={tab === 'farm'} onClick={() => go({ name: 'farm' })}>
+                  <IonTabButton tab="farm" href="/cabinet/farm">
                     <span className="bn-ic"><PhIcon name="sprout" size={22} /></span>
                     <span className="bn-t">Ферма</span>
                   </IonTabButton>
-                  <IonTabButton tab="market" selected={tab === 'market'} onClick={() => go({ name: 'market' })}>
+                  <IonTabButton tab="market" href="/cabinet/market">
                     <span className="bn-ic">
                       <PhIcon name="market" size={22} />
                       {marketDot && <i className="tb-dot" />}
                     </span>
                     <span className="bn-t">Рынок</span>
                   </IonTabButton>
-                  <IonTabButton tab="messages" selected={tab === 'messages'} onClick={() => go({ name: 'messages' })}>
+                  <IonTabButton tab="messages" href="/cabinet/messages">
                     <span className="bn-ic">
                       <PhIcon name="chat" size={22} />
                       {msgBadge > 0 && <i className="tb-badge mono">{msgBadge}</i>}

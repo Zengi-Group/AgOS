@@ -6,7 +6,7 @@
 // Ответы — мок aiReply по справочным данным TURAN; реальный AI Gateway (Dok 5)
 // подключается отдельной задачей (кандидат: @ai-sdk/react useChat) — контракт не меняется.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChatContainer, MessageList, Message, MessageInput, TypingIndicator } from '@chatscope/chat-ui-kit-react'
 import { IonShellFrame } from '../components/IonShellFrame'
 import { PhIcon } from '../components/icons/PhIcon'
@@ -28,7 +28,18 @@ interface Props {
 export function ConsultantScreen({ aiLog, typing, offline, offlineToast, onSend, onBack }: Props) {
   const [val, setVal] = useState('')
   const [rec, setRec] = useState(false)
+  const dockRef = useRef<HTMLDivElement>(null)
   const shown: AiMsg[] = aiLog.length ? aiLog : [{ who: 'c', t: AI_FIRST }]
+
+  // P-серия: MessageInput kit'а — contenteditable, enterKeyHint пропом не берётся.
+  // Ставим атрибут на подлежащий редактор → клавиатура показывает клавишу «Отправить»
+  // (Enter уже шлёт сообщение через onSend). Перевыполняется при возврате из mic-режима.
+  useEffect(() => {
+    if (rec) return
+    dockRef.current
+      ?.querySelector<HTMLElement>('[contenteditable]')
+      ?.setAttribute('enterkeyhint', 'send')
+  }, [rec])
 
   // мок голосового ввода: волна → распознанный текст
   useEffect(() => {
@@ -80,7 +91,7 @@ export function ConsultantScreen({ aiLog, typing, offline, offlineToast, onSend,
             ))}
           </MessageList>
         </ChatContainer>
-        <div className="ai-dock">
+        <div className="ai-dock" ref={dockRef}>
           {rec ? (
             <div className="ai-inrow">
               <div className="ai-wave">{Array.from({ length: 16 }).map((_, i) => <i key={i} style={{ animationDelay: (i * 60) + 'ms' }} />)}</div>
