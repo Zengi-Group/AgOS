@@ -235,3 +235,12 @@
 **Context:** `farm_production_plans.status` = draft/active/completed/cancelled (d05:372). Draft создаётся `rpc_start_production_plan` (d05:3159); активация в `active` происходит **только при создании** через `p_auto_activate:=true`. Отдельного `rpc_activate_production_plan` (draft→active после создания) НЕТ — существующие `rpc_activate_*` принадлежат другим доменам (d02 pool, d04 vaccination). Self-service петля F-D12 (фермер → draft → просмотр → активация) собрана только на 1/3.
 **Retire-when:** добавить аддитивный `rpc_activate_production_plan(p_organization_id, p_plan_id, …)` с проверкой `idx_farm_plan_one_active` (один active на ферму) + emit события. Реализовать в ARS-172.
 **Severity:** medium (блокирует self-service активацию из фермерского кабинета; сейчас активировать может только auto-путь при создании или эксперт вручную в консоли). **Owner surface:** `d05_ops_edu.sql` (RPC-слой ЦТК), `rpc_name_registry`.
+
+## 💬 Messaging (d12, ARS-223/224 — backend merge 2026-07-16)
+
+> Найдено код-ревью при backend-only merge ветки `kernuree/messaging-support-channel`. RLS-рекурсия (#1) и гонка get-or-create (#2) исправлены В ТОМ ЖЕ merge; ниже — отложенный perf-пункт. Фронт-находки (#3 null-body preview, #4 сравнение времени unread) относятся к невнесённому фронту ARS-225 и уедут вместе с ним.
+
+### MSG-FANOUT-IDX-01 — idempotency-guard fan-out сканирует notifications без индекса
+**Context:** `d12_messaging.sql` `fn_fanout_comm_notifications` перед вставкой делает `exists(select 1 from notifications where template_id='new_message' and (params->>'message_id')::uuid = p_message_id)`. Индекса на `params->>'message_id'` нет → по мере роста `notifications` это O(N) фильтр-скан, выполняемый синхронно внутри каждого `rpc_send_message`.
+**Retire-when:** добавить partial expression index `on notifications (((params->>'message_id'))) where template_id='new_message'`, либо перевести идемпотентность на `platform_event_id`. Аддитивно.
+**Severity:** low (на Phase-1 объёмах незаметно; всплывёт при масштабе). **Owner surface:** `d12_messaging.sql` (fn_fanout_comm_notifications), `d01_kernel.sql` (notifications).
