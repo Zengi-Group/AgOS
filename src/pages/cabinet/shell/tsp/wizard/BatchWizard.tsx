@@ -79,6 +79,9 @@ export function BatchWizard({ onDone, onExit, onTuran, initialStep, initialWiz }
   const handleExit = () => { onExit() }
 
   const handlePublish = async () => {
+    // S4=A · C4: публикация — серверное действие (rpc_create_batch мимо patchBatch);
+    // офлайн честно блокируем ДО старта сабмита, без ложного «поиска покупателя».
+    if (ctx.offline) { ctx.offlineToast(); return }
     setIsSubmitting(true)
     try {
       const win = wizWindow(w)!

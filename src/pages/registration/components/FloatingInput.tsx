@@ -11,6 +11,12 @@ interface FloatingInputProps {
   disabled?: boolean
   className?: string
   autoAdvanceAt?: number // blur input when value reaches this length
+  // Клавиатура/автозаполнение (P-серия): пробрасываются как есть на <input>.
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
+  enterKeyHint?: React.HTMLAttributes<HTMLInputElement>['enterKeyHint']
+  autoComplete?: string
+  autoCapitalize?: string
+  autoCorrect?: string
 }
 
 /**
@@ -27,6 +33,11 @@ export function FloatingInput({
   disabled,
   className,
   autoAdvanceAt,
+  inputMode,
+  enterKeyHint,
+  autoComplete,
+  autoCapitalize,
+  autoCorrect,
 }: FloatingInputProps) {
   const [focused, setFocused] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -46,6 +57,11 @@ export function FloatingInput({
       <input
         ref={inputRef}
         type={type}
+        inputMode={inputMode}
+        enterKeyHint={enterKeyHint}
+        autoComplete={autoComplete}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={autoCorrect}
         value={value}
         onChange={handleChange}
         onFocus={() => setFocused(true)}

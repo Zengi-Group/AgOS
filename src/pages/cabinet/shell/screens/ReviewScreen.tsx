@@ -4,6 +4,7 @@
 
 import { useState } from 'react'
 import type { Batch } from '../types'
+import { useShell } from '../context'
 import { IonShellFrame } from '../components/IonShellFrame'
 import { SubHead } from '../components/SubHead'
 import { PhIcon } from '../components/icons/PhIcon'
@@ -16,27 +17,31 @@ import { InfoNote } from '../tsp/components/InfoNote'
 interface Props {
   batch: Batch
   onBack: () => void
-  onPatch: (patch: Partial<Batch>) => void
-  toast: (text: string) => void
+  // S4=A · C4+D7: successToast показывается в CabinetApp.patchBatch ПОСЛЕ round-trip.
+  onPatch: (patch: Partial<Batch>, successToast?: string) => void
 }
 
-export function ReviewScreen({ batch, onBack, onPatch, toast }: Props) {
+export function ReviewScreen({ batch, onBack, onPatch }: Props) {
+  const { offline, offlineToast } = useShell()
   const [rating1, setRating1] = useState(0)
   const [rating2, setRating2] = useState(0)
   const [comment, setComment] = useState('')
   const [sent, setSent] = useState(false)
   const canSubmit = rating1 > 0 && rating2 > 0
 
-  // Сохранение отзыва — rpc_submit_review через onPatch (форма {r1,r2,comment} = контракт useBatches).
-  const finish = () => {
-    onPatch({ review: { r1: rating1, r2: rating2, comment, date: 'сегодня' } })
-    toast('Отзыв сохранён · спасибо')
-    onBack()
+  // Этап 2 · D5: отзыв фиксируется в МОМЕНТ «Отправить» (rpc_submit_review через onPatch),
+  // а не на «К партии». Раньше уход с экрана-спасибо back/свайпом терял отзыв, хотя экран
+  // уже сказал «отправлен». Контракт review = {r1,r2,comment} — useBatches.
+  const submit = () => {
+    // S4=A · C4: офлайн — гейт ДО setSent, иначе экран скажет «отправлено» без сохранения.
+    if (offline) { offlineToast(); return }
+    onPatch({ review: { r1: rating1, r2: rating2, comment, date: 'сегодня' } }, 'Отзыв сохранён · спасибо')
+    setSent(true)
   }
 
   if (sent) {
     return (
-      <IonShellFrame noTabs label="Отзыв · отправлен" footer={<MkCta onClick={finish}>К партии</MkCta>}>
+      <IonShellFrame noTabs label="Отзыв · отправлен" footer={<MkCta onClick={onBack}>К партии</MkCta>}>
         <SubHead onBack={onBack} backLabel="Партия" />
         <div className="mk">
           <div className="mk-res">
@@ -52,7 +57,7 @@ export function ReviewScreen({ batch, onBack, onPatch, toast }: Props) {
   }
 
   return (
-    <IonShellFrame noTabs label="Отзыв" footer={<MkCta disabled={!canSubmit} onClick={() => setSent(true)}>Отправить отзыв</MkCta>}>
+    <IonShellFrame noTabs label="Отзыв" footer={<MkCta disabled={!canSubmit} onClick={submit}>Отправить отзыв</MkCta>}>
       <SubHead onBack={onBack} backLabel="Партия" />
       <div className="mk mk-pt">
         <h1 className="mk-h1">Покупатель принял вашу партию</h1>
