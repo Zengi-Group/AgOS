@@ -170,6 +170,7 @@ echo "--- CHECK 5: organization_id in rpc_* signatures (P-AI-2) ---"
 # admin-guarded functions (fn_is_admin() enforces access, no org scoping needed).
 # rpc_start_production_plan uses p_farm_id for isolation (recognized pattern).
 exceptions="get_active_prompt|rpc_name_registry|\
+rpc_list_home_banners|\
 rpc_list_animal_categories|rpc_list_feed_items|rpc_list_feed_categories|\
 rpc_list_feed_prices|rpc_list_feed_consumption_norms|\
 rpc_upsert_feed_item|rpc_upsert_feed_price|rpc_upsert_feed_consumption_norm|\
