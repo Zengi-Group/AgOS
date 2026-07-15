@@ -97,6 +97,18 @@ const PAID_KEY = (userId: string) => 'agos.memb.paid.' + userId
 const isPaidLocally = (userId: string | undefined | null) =>
   !!userId && appStorage.getItem(PAID_KEY(userId)) === '1'
 
+// D4 (офлайн-чтение): страж от вечного BootScreen. rpc_get_my_context / getUser могут
+// подвиснуть без ответа (медленная/пропавшая сеть) — гонка с таймаутом даёт кабинету
+// сорваться с загрузки на персистнутый стейт и повторить в фоне.
+const BOOT_TIMEOUT_MS = 8000
+const TIMED_OUT = Symbol('boot-timeout')
+function withTimeout<T>(p: Promise<T>): Promise<T | typeof TIMED_OUT> {
+  return Promise.race([
+    p,
+    new Promise<typeof TIMED_OUT>((res) => setTimeout(() => res(TIMED_OUT), BOOT_TIMEOUT_MS)),
+  ])
+}
+
 function loadState(): ShellState {
   try {
     const raw = appStorage.getItem(STORAGE_KEY)
@@ -142,7 +154,7 @@ export function CabinetApp() {
   const [profileLoading, setProfileLoading] = useState(true)
   // Партии скоупятся по аккаунту (userId): backend фильтрует по org (fn_my_org_ids), а
   // localStorage-кеш — по ключу с userId, поэтому партии одного владельца не видны другому.
-  const { batches, loading: batchesLoading, addBatch, patchBatch: patchBatchAsync, refetch: refetchBatches } = useBatches(profile?.userId)
+  const { batches, loading: batchesLoading, error: batchesError, addBatch, patchBatch: patchBatchAsync, refetch: refetchBatches } = useBatches(profile?.userId)
   const [notifs, setNotifs] = useState(init.notifs)
   const [newsOn, setNewsOn] = useState(init.newsOn)
   const [profileIncomplete] = useState(init.profileIncomplete)
@@ -171,26 +183,67 @@ export function CabinetApp() {
 
   // Реальная сводка фермы (стадо + задачи) перекрывает демо-сид. Хойстнута из эффекта
   // (S2): переиспользуется pull-to-refresh на Главной (IonRefresher, spec §7).
+  // D1 (офлайн-чтение): реальная сводка перекрывает демо-сид. fs===null при живой сессии
+  // НЕ должен оставлять демо-«Отёл, день 34» — на ПЕРВОМ заходе показываем честный emptyFarm();
+  // на фоновых поллингах при null держим последнее хорошее (не перетираем реальное стадо
+  // транзиентным сбоем summary/сети). /cabinet всегда за RequireAuth — демо-сид тут не легитимен.
   const pullFarm = useCallback(
-    () => loadFarmState().then((fs) => { if (fs) setFarm(fs) }),
+    (opts?: { firstLoad?: boolean }) => loadFarmState().then((fs) => {
+      if (fs) setFarm(fs)
+      else if (opts?.firstLoad) setFarm(emptyFarm())
+    }),
     []
   )
 
   useEffect(() => {
     let alive = true
-    loadAccountProfile('farmer').then(async (p) => {
+    let retried = false
+
+    // C3 (офлайн-чтение): сессия жива (/cabinet за RequireAuth), но контекст не загрузился.
+    // Сервер недоступен/офлайн → НЕ трогаем membership (активный член остаётся членом на
+    // персистнутом init.membership, Рынок не закрывается гейтом), ферму показываем честным
+    // пусто вместо демо-сида. Профиль (имя орг/инициалы) освежится при возврате связи/маунте.
+    function settleOffline() {
       if (!alive) return
+      setFarm(emptyFarm())
+      setProfileLoading(false)
+      // D4: один фоновый повтор через 5с (реконнект отдельно ловит wasOffline-эффект ниже).
+      if (!retried) {
+        retried = true
+        setTimeout(() => { if (alive) loadProfile() }, 5000)
+      }
+    }
+
+    async function loadProfile() {
+      const p = await withTimeout(loadAccountProfile('farmer'))
+      if (!alive) return
+      if (p === TIMED_OUT) { settleOffline(); return }   // D4: подвисло — на персист
       if (p) { setProfile(p); setProfileLoading(false); return }
       // Профиль пуст при наличии сессии: возможна «осиротевшая» сессия (пользователь удалён
       // из БД, но JWT остался в браузере). Проверяем на сервере через getUser() — он обращается
       // к Auth и возвращает 401/403, если пользователя больше нет. Тогда выходим и уводим на
       // лендинг, чтобы не залипать в демо-кабинете. Сетевые сбои (без статуса) НЕ разлогиниваем.
-      const { data, error } = await supabase.auth.getUser()
+      let userData: Awaited<ReturnType<typeof supabase.auth.getUser>>['data'] | null = null
+      let getErr: unknown = null
+      try {
+        const r = await withTimeout(supabase.auth.getUser())
+        if (!alive) return
+        if (r === TIMED_OUT) { settleOffline(); return }  // D4
+        userData = r.data; getErr = r.error
+      } catch (e) {
+        getErr = e   // сетевой бросок (fetch failed) — трактуем как офлайн ниже
+      }
       if (!alive) return
-      const orphaned = (!!error && (error.status === 401 || error.status === 403)) || (!error && !data?.user)
+      const status = (getErr as { status?: number } | null)?.status
+      const orphaned = (status === 401 || status === 403) || (!getErr && !userData?.user)
       if (orphaned) {
         await signOut()
         navigate('/', { replace: true })
+        return
+      }
+      if (getErr) {
+        // C3: getUser не подтвердил сессию не из-за 401/403 → сеть/сервер недоступны → офлайн.
+        settleOffline()
         return
       }
       // Сессия валидна (getUser прошёл), но контекста нет — напр. зарегистрирован, ещё нет
@@ -200,11 +253,13 @@ export function CabinetApp() {
       setMembership('none')
       setFarm(emptyFarm())
       setProfileLoading(false)
-    })
+    }
+
+    loadProfile()
     // Поллинг 30с — стадо/задачи обновляются без перезагрузки после правок в профиле (D-SYNC-01).
-    // loadFarmState: контекст есть, но фермы нет → emptyFarm(); аноним/сбой сети → null (сид не трогаем).
-    pullFarm().finally(() => { if (alive) setFarmLoaded(true) })
-    const id = setInterval(pullFarm, 30000)
+    // D1: firstLoad=true — сбой первой сводки при живой сессии даёт emptyFarm(), не демо-сид.
+    pullFarm({ firstLoad: true }).finally(() => { if (alive) setFarmLoaded(true) })
+    const id = setInterval(() => pullFarm(), 30000)
     return () => { alive = false; clearInterval(id) }
   }, [pullFarm])
 
@@ -218,6 +273,19 @@ export function CabinetApp() {
     pullFarm()
     refetchBatches()
   }, [offline, pullFarm, refetchBatches])
+
+  // D12 (офлайн-чтение): возврат из фона (разблокировка/переключение вкладки) — сразу
+  // тихо освежаем стадо и партии, чтобы не показывать до 30с/20с устаревшие данные.
+  // На нативе appStateChange уже покрыт S4-хостом; здесь web-путь через visibilitychange.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      pullFarm()
+      refetchBatches()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [pullFarm, refetchBatches])
 
   // Изоляция по аккаунту: при входе под другим userId не наследуем кабинет предыдущего.
   useEffect(() => {
@@ -600,6 +668,8 @@ export function CabinetApp() {
         membership={membership}
         batches={batches}
         loading={loading}
+        error={batchesError}
+        onRetry={refetchBatches}
         onNew={() => {
           // Лимит 5 активных партий (совпадает с renderList): «Продать» на табе рынка —
           // теперь основной вход в визард, поэтому guard тоже здесь.
@@ -626,6 +696,8 @@ export function CabinetApp() {
       <ListScreen
         batches={batches}
         loading={loading}
+        error={batchesError}
+        onRetry={refetchBatches}
         onBatch={(id) => go({ name: 'batch', batchId: id, back: { name: 'p1list' } })}
         onNew={() => {
           if (activeCount >= ACTIVE_COUNT_LIMIT) { setSheet({ kind: 'limit' }); return }

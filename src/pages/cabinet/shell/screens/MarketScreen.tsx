@@ -56,9 +56,12 @@ interface Props {
   onPay: () => void
   go: (r: Route) => void
   onRefresh?: () => Promise<unknown>   // S2: pull-to-refresh (spec §7)
+  /** D2 (офлайн-чтение): сбой загрузки при пустом кеше — ошибка+retry, не «нет партий». */
+  error?: string | null
+  onRetry?: () => void
 }
 
-export function MarketScreen({ membership, batches, loading, onNew, onApply, onPay, go, onRefresh }: Props) {
+export function MarketScreen({ membership, batches, loading, onNew, onApply, onPay, go, onRefresh, error, onRetry }: Props) {
   const isGate = gated(membership)
   const approved = membership === 'approved'
   const expired = membership === 'expired'
@@ -122,7 +125,16 @@ export function MarketScreen({ membership, batches, loading, onNew, onApply, onP
               </div>
             )}
 
-            {nAll === 0 ? (
+            {nAll === 0 && error ? (
+              // D2 (офлайн-чтение): пустой кеш из-за сбоя — честная ошибка + «Повторить»,
+              // а не ложное «Пока нет ни одной партии».
+              <div className="mk-empty">
+                <div className="mk-empty-art"><PhIcon name="alert" size={46} /></div>
+                <div className="mk-empty-h">Не удалось загрузить партии</div>
+                <div className="mk-empty-t">Проверьте связь и попробуйте ещё раз.</div>
+                {onRetry && <button className="mk-cta primary" onClick={onRetry}>Повторить</button>}
+              </div>
+            ) : nAll === 0 ? (
               <div className="mk-empty">
                 <div className="mk-empty-art"><PhIcon name="market" size={46} /></div>
                 <div className="mk-empty-h">Пока нет ни одной партии</div>
