@@ -2039,3 +2039,37 @@
   background:color-mix(in srgb, var(--accent) 12%, transparent);
   color:var(--fg);
 }
+/* ─── 14. Доска спроса МПК (ARS-229) — обезличенный агрегат, ledger-rows ── */
+.agos-cabinet-stage .mk-demand { display:flex; flex-direction:column; }
+.agos-cabinet-stage .mk-demand-row {
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  column-gap:12px;
+  padding:14px 0;
+  border-bottom:1px solid var(--bd-s);
+}
+.agos-cabinet-stage .mk-demand-row:last-of-type { border-bottom:0; }
+.agos-cabinet-stage .mk-demand-ic {
+  display:grid; place-items:center;
+  width:34px; height:34px;
+  border-radius:var(--r-md);
+  background:var(--bg-m);
+  color:var(--fg2);
+  flex-shrink:0;
+}
+.agos-cabinet-stage .mk-demand-bd { min-width:0; }
+.agos-cabinet-stage .mk-demand-t {
+  font-size:14.5px; font-weight:600; color:var(--fg);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.agos-cabinet-stage .mk-demand-m { font-size:12px; color:var(--fg3); margin-top:2px; }
+.agos-cabinet-stage .mk-demand-price {
+  font-size:14px; font-weight:600; color:var(--fg);
+  white-space:nowrap; text-align:right;
+}
+.agos-cabinet-stage .mk-demand-note {
+  font-size:11px; color:var(--fg3); line-height:1.45;
+  padding-top:12px; margin-top:2px;
+  border-top:1px solid var(--bd-s);
+}

@@ -929,6 +929,20 @@ set search_path = public, pg_temp as $$
     end;
 $$;
 
+-- fn_storage_batch_id: SECOND path segment of a Storage object name, as uuid (ARS-229).
+-- For batch-media the convention is {orgId}/{batchId}/{uuid}.{ext} → segment [2] = batchId.
+-- Fails closed (null on malformed) like fn_storage_org_id, so RLS can't be tripped into error.
+create or replace function public.fn_storage_batch_id(object_name text)
+returns uuid language sql immutable
+set search_path = public, pg_temp as $$
+    select case
+        when (storage.foldername(object_name))[2] ~
+             '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        then (storage.foldername(object_name))[2]::uuid
+        else null
+    end;
+$$;
+
 -- membership-documents: org-scoped read/write (SEC-STORAGE-01), admin full access.
 -- Path convention: membership-documents/{orgId}/... — first segment must match caller's org.
 drop policy if exists "membership_documents_insert_auth" on storage.objects;
@@ -974,10 +988,10 @@ create policy "membership_documents_delete_admin"
   to authenticated
   using (bucket_id = 'membership-documents' and public.fn_is_admin());
 
--- batch-media (ARS-227): private, org-scoped read/write/delete; admin full access.
--- Path convention: batch-media/{orgId}/{batchId}/{uuid}.{ext} — first segment = owner org.
--- Reuses fn_storage_org_id (defined above). Visibility = owner + admin only (aggregate-only,
--- Art.171); matched-MPK read is deferred to ARS-229 with correct reveal semantics (D-M6-5/12).
+-- batch-media (ARS-227 + ARS-229 reveal): private, org-scoped write/delete; admin full access.
+-- Path convention: batch-media/{orgId}/{batchId}/{uuid}.{ext} — segment[1]=owner org, [2]=batch.
+-- Write/delete = owner + admin only (aggregate-only, Art.171). READ additionally allows the
+-- matched MPK AFTER reveal (fn_batch_revealed_to_me, d02, D-M6-5/12) — never before the deal.
 drop policy if exists "batch_media_insert_org" on storage.objects;
 create policy "batch_media_insert_org"
   on storage.objects for insert
@@ -993,7 +1007,11 @@ create policy "batch_media_select_org"
   to authenticated
   using (
     bucket_id = 'batch-media'
-    and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
+    and (
+      public.fn_is_admin()
+      or public.fn_storage_org_id(name) = any(public.fn_my_org_ids())
+      or public.fn_batch_revealed_to_me(public.fn_storage_batch_id(name))  -- ARS-229: matched MPK, post-reveal
+    )
   );
 
 drop policy if exists "batch_media_update_org" on storage.objects;

@@ -598,6 +598,7 @@ export function CabinetApp() {
         onPay={() => memberAct('pay')}
         go={go}
         onRefresh={refetchBatches}
+        orgId={profile?.orgId ?? null}
       />
     )
   }

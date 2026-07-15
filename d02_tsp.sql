@@ -781,29 +781,68 @@ drop policy if exists "batches_write_own" on public.batches;
 create policy "batches_write_own"   on public.batches for all
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 
--- Batch media (ARS-227): owner + admin ONLY (read + write). MPK gets NO access here —
--- this fully satisfies "MPK does not see media before the deal" (Art.171 + aggregate-only).
--- The matched-MPK-after-reveal READ is DEFERRED to ARS-229 (market board / MPK batch detail),
--- where the correct reveal semantics are decided: reveal is at closed_filled/closed_partial,
--- NOT executing (D-M6-5/12 supersedes D40), and the live batch↔pool linkage (pool_lines vs
--- pool_matches, two-surface drift, ARS-194) is resolved. Not baking a guessed cross-surface
--- predicate into an antitrust-sensitive policy.
+-- ARS-229 · MPK-after-reveal READ predicate (D-M6-5/12).
+-- Returns true iff the batch is linked (pool_line_id → pool_lines → pools) to a Pool owned
+-- by one of the caller's orgs AND the batch has reached a revealed status. Reveal moment =
+-- pool close → batch 'confirmed' (D-M6-5/12 supersedes D40's 'executing'). Read widens to
+-- dispatched/delivered too (still post-reveal). SECURITY DEFINER: must see the farmer's
+-- batch↔pool linkage across org boundary (bypasses RLS) — but ONLY exposes the boolean.
+-- plpgsql (not sql) so the reference to pool_lines resolves at RUNTIME: pool_lines is
+-- created later in this file (Section 7.4), after this point.
+create or replace function public.fn_batch_revealed_to_me(p_batch_id uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_ok boolean;
+begin
+    select exists (
+        select 1
+        from public.batches b
+        join public.pool_lines pl on pl.id = b.pool_line_id
+        join public.pools      p  on p.id  = pl.pool_id
+        where b.id = p_batch_id
+          and b.status in ('confirmed', 'dispatched', 'delivered')
+          and p.organization_id = any(public.fn_my_org_ids())
+    ) into v_ok;
+    return coalesce(v_ok, false);
+end;
+$$;
+comment on function public.fn_batch_revealed_to_me(uuid) is
+    'ARS-229 | True iff batch is matched into a Pool owned by the caller''s org AND the batch
+     has reached a revealed status (confirmed|dispatched|delivered). Reveal = pool close
+     (D-M6-5/12, supersedes D40). Used to widen batch_media/batch_animals READ (and storage
+     select) for the matched MPK after the deal — never before (Art.171 aggregate-only).';
+grant execute on function public.fn_batch_revealed_to_me(uuid) to authenticated;
+
+-- Batch media (ARS-227 + ARS-229 reveal): owner + admin always; matched MPK READ after reveal.
+-- Pre-reveal, MPK still gets NO access ("MPK does not see media before the deal", Art.171).
+-- Write stays owner + admin only.
 alter table public.batch_media enable row level security;
 drop policy if exists "batch_media_read" on public.batch_media;
 create policy "batch_media_read"    on public.batch_media for select
-    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+    using (
+        organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or public.fn_batch_revealed_to_me(batch_id)      -- ARS-229: matched MPK, post-reveal
+    );
 drop policy if exists "batch_media_write_own" on public.batch_media;
 create policy "batch_media_write_own" on public.batch_media for all
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 
--- batch_animals (ARS-228): owner + admin only. MPK read after reveal deferred to ARS-229
--- (correct reveal = closed_filled/closed_partial per D-M6-5/12, not executing). Same
--- rationale as batch_media above: not baking a guessed cross-surface predicate into an
--- antitrust-sensitive policy while the two-surface pool drift (ARS-194) is unresolved.
+-- batch_animals (ARS-228 + ARS-229 reveal): owner + admin always; matched MPK READ after reveal.
+-- Same reveal predicate as batch_media. Write stays owner + admin only.
 alter table public.batch_animals enable row level security;
 drop policy if exists "batch_animals_read" on public.batch_animals;
 create policy "batch_animals_read"    on public.batch_animals for select
-    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+    using (
+        organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or public.fn_batch_revealed_to_me(batch_id)      -- ARS-229: matched MPK, post-reveal
+    );
 drop policy if exists "batch_animals_write_own" on public.batch_animals;
 create policy "batch_animals_write_own" on public.batch_animals for all
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
@@ -6569,4 +6608,118 @@ revoke execute on function public.rpc_remove_batch_animal(uuid, uuid)           
 
 -- ============================================================
 -- END SECTION 13 (BATCH ANIMALS — ARS-228)
+-- ============================================================
+
+
+-- ============================================================
+-- SECTION 14 · MARKET BOARD — DEMAND (ARS-229)
+-- Farmer-facing anonymous aggregate of active MPK demand, built on the M6 surface
+-- (pools + pool_lines + pool_regions), NOT the deprecated pre-M6 pool_requests that
+-- rpc_get_market_summary reads (two-surface drift, ARS-194). Anonymous by construction:
+-- never exposes pools.organization_id / MPK identity — only category, region (rolled up
+-- to oblast for anti-de-anonymisation), indicative price range, and volume. MANDATORY
+-- disclaimer_text (Art.171 PK RK). Additive (P7): does not touch rpc_get_market_summary.
+-- ============================================================
+create or replace function public.rpc_get_demand_board(
+    p_organization_id   uuid,
+    p_region_id         uuid    default null    -- optional oblast/rayon filter
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_rows jsonb;
+begin
+    -- Org-scoped access (P-AI-2 pattern). Board content is anonymous, but access still
+    -- requires the caller to belong to an org (or be admin/service) — no anon scraping.
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    with lines as (
+        select
+            coalesce(s.name_ru, pl.category_label, 'Категория') as category_name,
+            pl.mpk_price_per_kg                                 as price,
+            pl.max_volume_kg,
+            p.delivery_from,
+            p.delivery_to,
+            -- roll rayon up to its oblast for anonymity; oblast stays as-is; null = all regions
+            coalesce(ob.id, r.id)                               as region_id,
+            coalesce(ob.name_ru, r.name_ru)                     as region_name
+        from public.pools p
+        join public.pool_lines pl        on pl.pool_id = p.id and pl.is_active
+        left join public.tsp_skus s      on s.id = pl.tsp_sku_id
+        left join public.pool_regions preg on preg.pool_id = p.id
+        left join public.regions r       on r.id = preg.region_id
+        left join public.regions ob      on ob.id = r.parent_id and r.level = 'rayon'
+        where p.status = 'filling'
+          and (
+              p_region_id is null
+              or preg.region_id = p_region_id
+              or r.parent_id   = p_region_id
+          )
+    ),
+    grouped as (
+        select
+            category_name,
+            region_id,
+            region_name,
+            count(*)                            as line_count,
+            min(price)                          as price_min,
+            max(price)                          as price_max,
+            round(avg(price))                   as price_avg,
+            nullif(sum(coalesce(max_volume_kg, 0)), 0) as target_volume_kg,
+            min(delivery_from)                  as delivery_from,
+            max(delivery_to)                    as delivery_to
+        from lines
+        group by category_name, region_id, region_name
+    )
+    select coalesce(jsonb_agg(jsonb_build_object(
+        'category_name',    category_name,
+        'region_id',        region_id,
+        'region_name',      region_name,
+        'line_count',       line_count,
+        'price_min',        price_min,
+        'price_max',        price_max,
+        'price_avg',        price_avg,
+        'target_volume_kg', target_volume_kg,
+        'delivery_from',    delivery_from,
+        'delivery_to',      delivery_to
+    ) order by category_name, region_name), '[]'::jsonb)
+    into v_rows
+    from grouped;
+
+    return jsonb_build_object(
+        'demand', v_rows,
+        'disclaimer_text', 'Справочные цены являются индикативными рыночными ориентирами и не являются обязательными для применения. Участие добровольное.'
+    );
+end;
+$$;
+comment on function public.rpc_get_demand_board(uuid, uuid) is
+    'ARS-229 | Farmer-facing anonymous demand board. Aggregates active MPK demand from the M6
+     surface (pools status=filling + pool_lines + pool_regions) by category × region (rayon
+     rolled up to oblast). Exposes ONLY category, region, indicative price range/avg, active
+     line count, target volume, delivery window — never MPK identity (Art.171, aggregate-only).
+     MANDATORY disclaimer_text. Additive to rpc_get_market_summary (which reads deprecated
+     pre-M6 pool_requests). Callers: [WEB farmer].';
+
+-- Registry
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
+    ('rpc_get_demand_board', 'rpc_get_demand_board', null, 'd02_tsp.sql (Section 14 / ARS-229)', 'Anonymous farmer-facing demand board over M6 pools/pool_lines/pool_regions; mandatory disclaimer')
+on conflict (sql_name) do update
+    set dok3_name = excluded.dok3_name, notes = excluded.notes, created_in = excluded.created_in;
+
+grant execute on function public.rpc_get_demand_board(uuid, uuid) to authenticated;
+revoke execute on function public.rpc_get_demand_board(uuid, uuid) from anon;
+
+-- ============================================================
+-- END SECTION 14 (MARKET BOARD — DEMAND — ARS-229)
 -- ============================================================
