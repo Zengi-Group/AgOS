@@ -53,6 +53,15 @@ export const MPK_SORT_FLOOR: Record<MpkSort, number> = {
   vtoraya:  1350,
 }
 
+// Рекомендованная (индикативная) цена по сорту — ориентир, который видит клиент.
+// Фолбэк = стартовый сид livestock_grade_formula.recommended_price (ст.171: справочно).
+export const MPK_SORT_REC: Record<MpkSort, number> = {
+  premium:  2000,
+  vysshaya: 1800,
+  pervaya:  1650,
+  vtoraya:  1500,
+}
+
 // Элитные мясные породы — синхронно с fn_tsp_resolve_sku (breed_group='elite_meat').
 // Фолбэк, если формула из БД (rpc_get_grade_formula) ещё не загружена.
 const ELITE_BREED_RE = /ангус|герефорд|абердин|вагю|wagyu|angus|hereford|шароле|лимузин|limousin|charolais|симмент/i
@@ -67,6 +76,7 @@ export interface GradeFormulaRow {
   fatness_match: string | null
   grade_code: string | null
   floor_price: number
+  recommended_price: number | null
   elite_only: boolean
   min_weight_kg: number | null
   elite_breeds: string[] | null
@@ -124,6 +134,12 @@ export function mpkSortLabel(sort: MpkSort): string {
 }
 export function mpkSortFloor(sort: MpkSort): number {
   return _formula?.find((r) => r.sort_key === sort)?.floor_price ?? MPK_SORT_FLOOR[sort]
+}
+// Рекомендованная цена сорта из БД-формулы, иначе фолбэк. null → сорту цена не задана.
+export function mpkSortRec(sort: MpkSort): number | null {
+  const row = _formula?.find((r) => r.sort_key === sort)
+  if (row) return row.recommended_price ?? null
+  return MPK_SORT_REC[sort] ?? null
 }
 
 // Пресеты окна готовности

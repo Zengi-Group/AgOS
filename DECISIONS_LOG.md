@@ -3976,6 +3976,21 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 
 **Files**: `src/pages/cabinet/shell/CabinetApp.tsx`, `src/platform/host/{AgOSHost.ts, WebHost.ts, CapacitorHost.ts}`. Аддитивно (HS-1/HS-5), SQL/canon не тронуты → `cross_check.sh` не требуется.
 
+### 2026-07-15: A-GRADE — рекомендованная цена на уровне сорта + «Категории скота» из навигации (ARS-235)
+
+**What**: Рекомендованная (индикативная) цена перенесена с уровня категории на уровень СОРТА (`livestock_grade_formula`), где защитный `floor_price` уже жил. Отменил ARS-230 (был на неверном уровне — карточка категории).
+- **DB** (`d02_tsp.sql`, Section 8b): +колонка `recommended_price int` nullable (`check null or >0`, `ADD COLUMN IF NOT EXISTS` + именованный constraint через `do $$`); бэкфилл сида (premium 2000 / vysshaya 1800 / pervaya 1650 / vtoraya 1500 / mrs_vyssh 1050 / mrs_perv 950 — стартовые, CEO уточнит); `rpc_get_grade_formula` (AG-R1) +поле в returns/select (CREATE OR REPLACE, вызов не изменён); `rpc_admin_upsert_grade_formula` (AG-1) +параметр `p_recommended_price` через **DROP+CREATE** (добавочный опц. параметр, семантика: null=не менять, ≤0=очистить); GRANT/REVOKE/comment под новую сигнатуру `(text,text,text,int,int,text[],int,int)`.
+- **Admin** (`GradeFormulaAdmin.tsx`): поле «Рекомендованная цена» + колонка таблицы + дисклеймер ст.171; пусто→0 очищает.
+- **Client** (`tsp-utils.ts`, `WizStep4Price.tsx`): `mpkSortRec()` + `MPK_SORT_REC` фолбэк; шаг 4 мастера показывает рекоменд. цену сорта (фолбэк на категорию `cat.rec`, если сорт не определён/цена не задана), дисклеймер сохранён.
+- **Nav** (`Sidebar.tsx`): пункт «Категории скота» убран из навигации + удалён неиспользуемый импорт `Tags`. Роут (`App.tsx`), компоненты (CategoriesTab/RulesTab/Layout) и таблицы НЕ тронуты (HS-2, откат = вернуть пункт).
+
+**Why**: CEO уточнил — мин/рекоменд цены относятся к сорту КРС/МРС, не к категории; понятие категории убирается из UI. Аддитивно (P7/HS-5): структура строки формулы стабильна, добавлен только опц. параметр; MPK-сторона (`mpk/types.ts` `GradeFormulaLite`) не тронута — структурный супертип, TS чист.
+
+**Legal (ст.171)**: защитная = стандарт (легально, блок публикации); рекомендованная = индикатив → дисклеймер обязателен везде у клиента; максимальная цена НЕ добавлялась (риск price-fixing).
+
+**Verify**: `npx tsc -b` — 0 ошибок. Ветка `kernuree/ars-235-a-grade-recommended-price` от свежего origin/main, запушена; PR/merge/deploy — человек (G3), в main не пушил. **SQL изменён → напомнить прогнать `cross_check.sh`.**
+
+**Files**: `d02_tsp.sql`, `src/pages/admin/grade-formula/GradeFormulaAdmin.tsx`, `src/pages/cabinet/shell/tsp/data/tsp-utils.ts`, `src/pages/cabinet/shell/tsp/wizard/WizStep4Price.tsx`, `src/components/layout/Sidebar.tsx`.
 ### 2026-07-15: Управляемые баннеры Главной (Фермер + МПК) — ARS-193 первый срез
 
 **What**: Промо-баннеры «Актуальное» переведены из хардкода в управляемый из админки контент (P8). Новая таблица `home_banners` (`d10_public_site.sql` §8, калька `news_articles`) + RLS (expert/admin на запись, is_active-read) + 4 RPC (`rpc_list_home_banners` клиент; `admin_list/save/toggle_home_banner` с внутренним guard) + сид текущих 4 фермер-баннеров (HS-2) + запись в `rpc_name_registry`. Клиент: `HomeBanner.tsx` рендерит карусель из `rpc_list_home_banners('farmer', variant)` с фолбэком на прежний хардкод (нулевой регресс, офлайн-safe); механика (snap/точки/автосмена/реакция первой плитки на членство) сохранена; variant-логика перенесена из `CabinetApp.tsx` в данные. МПК: новый промо-плейсмент на `MpkHomeScreen` (`'mpk'`), статус-баннеры не тронуты, пустой список → не рендерится. Админка: `/admin/content/banners` (`BannersAdmin.tsx` + `useAdminHomeBanners.ts`) + пункт Sidebar «Контент» (группа «Платформа»). Мёртвый `NEWS_ITEM` удалён. Ссылки: `action_type` internal-enum (open_prices/open_market/join_membership/pay_membership/open_course/open_tsp/open_offers) ИЛИ external https-URL. Таргетинг: вариант членства (all/season/campaign/join) + окно `active_from/until`. Аналитика показов/кликов отложена.
