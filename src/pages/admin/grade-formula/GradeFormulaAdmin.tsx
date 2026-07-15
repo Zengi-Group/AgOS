@@ -25,6 +25,7 @@ interface GradeFormulaRow {
   fatness_match: string | null
   grade_code: string | null
   floor_price: number
+  recommended_price: number | null
   elite_only: boolean
   min_weight_kg: number | null
   elite_breeds: string[] | null
@@ -47,7 +48,7 @@ export function GradeFormulaAdmin() {
   if (checking) return <div className="page"><Skeleton className="h-48 w-full" /></div>
   if (!isAdmin) return null
 
-  const COL = 'minmax(160px,1.6fr) 70px minmax(120px,1fr) 110px minmax(160px,1.4fr) 44px'
+  const COL = 'minmax(150px,1.5fr) 60px minmax(110px,1fr) 105px 120px minmax(140px,1.3fr) 44px'
 
   return (
     <div className="page space-y-4">
@@ -71,6 +72,7 @@ export function GradeFormulaAdmin() {
               { label: 'Вид' },
               { label: 'Упитанность' },
               { label: 'Защ. цена (₸/кг)', right: true },
+              { label: 'Реком. цена (₸/кг)', right: true },
               { label: 'Условие' },
               { label: '' },
             ].map((h, i) => (
@@ -106,6 +108,9 @@ export function GradeFormulaAdmin() {
               </div>
               <div className="h-[40px] px-3 flex items-center justify-end border-r border-border/60 font-mono text-[13px] font-medium">
                 {r.floor_price.toLocaleString('ru-RU')}
+              </div>
+              <div className="h-[40px] px-3 flex items-center justify-end border-r border-border/60 font-mono text-[13px]" style={{ color: 'var(--fg2)' }}>
+                {r.recommended_price != null ? r.recommended_price.toLocaleString('ru-RU') : '—'}
               </div>
               <div className="h-[40px] px-3 flex items-center border-r border-border/60 text-[11px] truncate" style={{ color: 'var(--fg3)' }}>
                 {r.elite_only
@@ -145,6 +150,7 @@ function FormulaDialog({
   const [nameRu, setNameRu] = useState(item.name_ru)
   const [fatness, setFatness] = useState(item.fatness_match ?? '')
   const [floorPrice, setFloorPrice] = useState(String(item.floor_price))
+  const [recPrice, setRecPrice] = useState(item.recommended_price != null ? String(item.recommended_price) : '')
   const [minWeight, setMinWeight] = useState(item.min_weight_kg != null ? String(item.min_weight_kg) : '')
   const [breeds, setBreeds] = useState((item.elite_breeds ?? []).join(', '))
   const [sortOrder, setSortOrder] = useState(String(item.sort_order))
@@ -177,6 +183,8 @@ function FormulaDialog({
       p_min_weight_kg: item.elite_only ? (minWeight === '' ? null : Number(minWeight)) : null,
       p_elite_breeds:  item.elite_only ? breedList : null,
       p_sort_order:    Number(sortOrder) || item.sort_order,
+      // пусто → 0 = очистить рекоменд. цену (RPC: null=не менять, ≤0=очистить)
+      p_recommended_price: recPrice.trim() === '' ? 0 : Number(recPrice),
     })
   }
 
@@ -213,6 +221,16 @@ function FormulaDialog({
             <Label className="text-sm">Защитная цена (₸/кг)</Label>
             <Input type="number" value={floorPrice} onChange={e => setFloorPrice(e.target.value)}
               placeholder="1650" min={1} step="50" />
+          </div>
+
+          <div>
+            <Label className="text-sm">Рекомендованная цена (₸/кг)</Label>
+            <Input type="number" value={recPrice} onChange={e => setRecPrice(e.target.value)}
+              placeholder="напр. 1800 (пусто = не показывать)" min={1} step="50" />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Индикативный ориентир, который видит клиент как предложение. Справочная информация ассоциации,
+              не является обязательной ценой (ст.171 ПК РК). Пусто — клиенту не показывается.
+            </p>
           </div>
 
           {item.elite_only && (
