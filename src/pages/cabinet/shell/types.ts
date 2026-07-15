@@ -36,7 +36,8 @@ export interface Route {
 }
 
 export type SheetKind =
-  | 'payvznos'
+  | 'payvznos'     // DEPRECATED (ARS-207): one-time dues → replaced by 'subscribe'
+  | 'subscribe'    // SubscribeSheet — recurrent membership subscription (ARS-207)
   | 'paypro'
   | 'progate'
   | 'membgate'

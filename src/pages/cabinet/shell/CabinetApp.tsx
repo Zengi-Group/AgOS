@@ -47,6 +47,7 @@ import { BatchWizard } from './tsp/wizard/BatchWizard'
 import { PubResult } from './tsp/wizard/PubResult'
 import type { PubVariant } from './tsp/types/batch'
 import { PayVznosSheet } from './components/sheets/PayVznosSheet'
+import { SubscribeSheet } from './components/sheets/SubscribeSheet'
 import { PayProSheet } from './components/sheets/PayProSheet'
 import { ProGateSheet } from './components/sheets/ProGateSheet'
 import { MembGateSheet } from './components/sheets/MembGateSheet'
@@ -361,7 +362,9 @@ export function CabinetApp() {
       // полноэкранный процесс подачи заявки.
       navigate(profile?.orgId ? '/membership' : '/register')
     }
-    else setSheet({ kind: 'payvznos' })
+    // ARS-207 (решение CEO 2026-07-15): оплата членства = рекуррентная подписка.
+    // Старый разовый взнос (kind 'payvznos') выведен из UI (deprecated, код сохранён).
+    else setSheet({ kind: 'subscribe' })
   }
   // Оплата взноса — симуляция на пилоте (реальной платёжной системы пока нет): выбор способа →
   // «Оплатить» → членство сразу активно, Рынок (TSP) открывается.
@@ -390,6 +393,15 @@ export function CabinetApp() {
     setIsPro(true); setSheet(null)
     host.haptics('medium')   // S2.1: подключение Pro — ключевое действие
     showToast('Platform Pro подключён · Консультант открыт')
+  }
+  // ARS-207: подписка оформлена (rpc_subscribe_org_membership прошёл в шторке) — членство
+  // активно, Рынок (TSP) открывается. Мгновенный статус мок-фолбэком не подпираем: сервер
+  // уже создал live-подписку (trialing/active), а deriveMembership при следующем pull её учтёт.
+  const subscribeDone = () => {
+    setSheet(null)
+    setMembership('active')
+    host.haptics('medium')
+    showToast('Подписка оформлена · членство активно')
   }
 
   // ---------- Главная: ярусы, баннер, стикер, сервисы ----------
@@ -687,6 +699,16 @@ export function CabinetApp() {
                 показ с чистого состояния. S2.1 (ARS-157): PriceSheet теперь тоже IonModal
                 (agos-sheet-modal) и монтируется постоянно — все 10 шторок однородны. */}
             <Toast toast={toast} />
+            {/* ARS-207: рекуррентная подписка на членство — основная поверхность оплаты. */}
+            <SubscribeSheet
+              open={sheet?.kind === 'subscribe'}
+              orgId={profile?.orgId}
+              onClose={() => closeSheet('subscribe')}
+              onSubscribed={subscribeDone}
+              toast={showToast}
+            />
+            {/* DEPRECATED (ARS-207): разовый взнос заменён подпиской. Смонтирован, но
+                kind 'payvznos' больше не выставляется — код сохранён (HS-2). */}
             <PayVznosSheet
               open={sheet?.kind === 'payvznos'}
               membership={membership}
