@@ -72,6 +72,7 @@ export function FarmerDetails({ formData, onChange, onNext }: FarmerDetailsProps
           error={errors.bin_iin}
           maxLength={12}
           autoAdvanceAt={12}
+          inputMode="numeric"
         />
 
         <button

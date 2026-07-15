@@ -214,6 +214,7 @@ export function PhonePicker({
           ref={inputRef}
           type="tel"
           inputMode="tel"
+          autoComplete="tel"
           autoFocus={autoFocus}
           disabled={disabled}
           value={formatted}

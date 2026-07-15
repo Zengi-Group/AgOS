@@ -167,6 +167,8 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
             if (errors.full_name) setErrors((prev) => ({ ...prev, full_name: '' }))
           }}
           placeholder="Как к вам обращаться"
+          autoComplete="name"
+          autoCapitalize="words"
           autoFocus
         />
         {errors.full_name && <div style={{ fontSize: 12, color: T.red, marginTop: 6 }}>{errors.full_name}</div>}

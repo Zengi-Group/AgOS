@@ -11,6 +11,7 @@ import {
   Wheat,
   Users,
   BookOpen,
+  Megaphone,
   Calculator,
   ClipboardList,
   ShoppingCart,
@@ -136,6 +137,7 @@ const ADMIN_GROUPS: NavGroup[] = [
     label: 'Платформа',
     items: [
       { id: 'knowledge', icon: BookOpen, label: 'База знаний', route: '/admin/knowledge' },
+      { id: 'content-banners', icon: Megaphone, label: 'Контент', route: '/admin/content/banners' },
       { id: 'audit', icon: FileText, label: 'Аудит', route: '/admin/audit' },
       { id: 'marketplace', icon: Store, label: 'Торговая площадка', route: '/admin/marketplace' },
       // '/admin/pools' (pre-M6 write-UI) выведён из основной навигации — ARS-200.

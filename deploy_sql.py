@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 AgOS SQL Migration Deployer
-Applies d01→d02→d03→d04→d05→d07→d08→d09→d11 to Supabase project mwtbozflyldcadypherr
+Applies d01→d02→d03→d04→d05→d07→d08→d09→d11→d12 to Supabase project mwtbozflyldcadypherr
 NOTE: d10_public_site.sql is NOT in the list — see IMPL_DEBT DEPLOY-PIPE-01 before adding.
 Usage: python3 deploy_sql.py <DB_PASSWORD>
 """
@@ -27,6 +27,7 @@ SQL_FILES = [
     "d09_consulting.sql",
     # d10_public_site.sql intentionally absent? — undecided; flagged as DEPLOY-PIPE-01 in IMPL_DEBT.md
     "d11_norms.sql",
+    "d12_messaging.sql",  # ARS-223: messaging domain (comm_channels/participants/messages)
 ]
 
 def deploy(password: str):

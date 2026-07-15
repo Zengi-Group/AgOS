@@ -88,13 +88,13 @@ export const execOk = (m: MembershipStatus) => CAN_EXEC.includes(m)
 export const gated = (m: MembershipStatus) => !CAN_EXEC.includes(m)
 
 // ---------- таб для маршрута (shell/app.jsx tabOf) ----------
+// N-2: таб экрана = URL-префикс его таба (см. nav.ts routeToUrl). Флоу-роуты острова
+// (farmwiz→ферма, batchwiz/pub→рынок) и shop→главная, чтобы подсветка/стек совпадали с URL.
 const TAB_MAP: Record<string, RouteName> = {
-  home: 'home', services: 'home', cabinet: 'home',
-  farm: 'farm',
-  market: 'market', p1list: 'market', batch: 'market', review: 'market',
-  shop: 'shop',
+  home: 'home', services: 'home', cabinet: 'home', shop: 'home', turan: 'home',
+  farm: 'farm', farmwiz: 'farm',
+  market: 'market', p1list: 'market', batch: 'market', review: 'market', batchwiz: 'market', pub: 'market',
   messages: 'messages', thread: 'messages',
-  turan: 'home',
 }
 export const tabOf = (r: Route): RouteName => TAB_MAP[r.name] ?? 'home'
 
