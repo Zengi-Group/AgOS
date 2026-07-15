@@ -13,8 +13,9 @@ import type { UseIonRouterResult } from '@ionic/react'
 import { useIonRouter } from '@ionic/react'
 import { IonReactRouter } from '@ionic/react-router'
 // @ts-expect-error v5-alias пакет без @types — импорты v5-острова (спайк-проверено).
-// RouteV5 — иначе конфликт имён с типом Route из './types'.
-import { Route as RouteV5, useLocation } from 'react-router-dom-v5'
+// RouteV5 — иначе конфликт имён с типом Route из './types'. RedirectV5 — нормализация
+// старых плоских deep-link/push-путей в канонический таб-URL (N-2 backward-compat).
+import { Route as RouteV5, Redirect as RedirectV5, useLocation } from 'react-router-dom-v5'
 import '@ionic/react/css/core.css'
 import './cabinet.css'
 import './ionic.css'
@@ -876,44 +877,68 @@ export function CabinetApp() {
                   страницы через IonShellFrame). Роуты в outlet не изменены. */}
               <IonTabs>
                 <IonRouterOutlet>
-                  <RouteV5 exact path="/cabinet" render={renderHome} />
-                  <RouteV5 exact path="/cabinet/market" render={renderMarket} />
-                  <RouteV5 exact path="/cabinet/market/new" render={renderBatchWiz} />
-                  <RouteV5 exact path="/cabinet/pub/:id" render={renderPub} />
-                  <RouteV5 exact path="/cabinet/list" render={renderList} />
-                  <RouteV5 exact path="/cabinet/batch/:id" render={renderBatch} />
-                  <RouteV5 exact path="/cabinet/review/:id" render={renderReview} />
-                  <RouteV5 exact path="/cabinet/account" render={renderCabinet} />
-                  <RouteV5 exact path="/cabinet/turan" render={renderTuran} />
+                  {/* N-2: роуты сгруппированы по табам (sibling-префиксы /cabinet/{home,farm,
+                      market,messages}/…). Каждый под-экран под URL-префиксом своего таба →
+                      Ionic держит независимый стек+скролл на вкладку и подсвечивает таб по
+                      совпадению href-префикса. */}
+                  {/* --- таб «Главная» --- */}
+                  <RouteV5 exact path="/cabinet/home" render={renderHome} />
+                  <RouteV5 exact path="/cabinet/home/account" render={renderCabinet} />
+                  <RouteV5 exact path="/cabinet/home/turan" render={renderTuran} />
+                  <RouteV5 exact path="/cabinet/home/shop" render={() => <PlaceholderScreen title="Маркет" sub="Дистрибуция и специалисты TURAN" icon="bag" emptySub="Дистрибуция и специалисты TURAN появятся здесь" />} />
+                  <RouteV5 exact path="/cabinet/home/services" render={() => <PlaceholderScreen title="Сервисы" sub="Специалисты и услуги TURAN" icon="grid" emptySub="Специалисты и услуги TURAN появятся здесь" />} />
+                  {/* --- таб «Ферма» --- */}
                   <RouteV5 exact path="/cabinet/farm" render={renderFarm} />
                   <RouteV5 exact path="/cabinet/farm/wizard" render={renderFarmWiz} />
-                  <RouteV5 exact path="/cabinet/shop" render={() => <PlaceholderScreen title="Маркет" sub="Дистрибуция и специалисты TURAN" icon="bag" emptySub="Дистрибуция и специалисты TURAN появятся здесь" />} />
-                  <RouteV5 exact path="/cabinet/services" render={() => <PlaceholderScreen title="Сервисы" sub="Специалисты и услуги TURAN" icon="grid" emptySub="Специалисты и услуги TURAN появятся здесь" />} />
+                  {/* --- таб «Рынок» --- */}
+                  <RouteV5 exact path="/cabinet/market" render={renderMarket} />
+                  <RouteV5 exact path="/cabinet/market/new" render={renderBatchWiz} />
+                  <RouteV5 exact path="/cabinet/market/list" render={renderList} />
+                  <RouteV5 exact path="/cabinet/market/batch/:id" render={renderBatch} />
+                  <RouteV5 exact path="/cabinet/market/review/:id" render={renderReview} />
+                  <RouteV5 exact path="/cabinet/market/pub/:id" render={renderPub} />
+                  {/* --- таб «Сообщения» --- */}
                   <RouteV5 exact path="/cabinet/messages" render={renderMessages} />
-                  <RouteV5 exact path="/cabinet/thread/:tid" render={renderThread} />
-                  {/* неизвестный под-путь → Главная (первое совпадение выигрывает) */}
+                  <RouteV5 exact path="/cabinet/messages/thread/:tid" render={renderThread} />
+                  {/* N-2 backward-compat: старые плоские deep-link/push-пути (до N-2, C10/IMPL_DEBT)
+                      → канонический таб-URL. Декларативные Redirect (НЕ морфят persistent pathless-вью
+                      → без churn вью-стека, в отличие от условного рендера в fallback). market/new и
+                      farm/wizard уже сгруппированы — редирект не нужен. Ретайрится с островом. */}
+                  <RedirectV5 exact from="/cabinet" to="/cabinet/home" />
+                  <RedirectV5 exact from="/cabinet/account" to="/cabinet/home/account" />
+                  <RedirectV5 exact from="/cabinet/turan" to="/cabinet/home/turan" />
+                  <RedirectV5 exact from="/cabinet/shop" to="/cabinet/home/shop" />
+                  <RedirectV5 exact from="/cabinet/services" to="/cabinet/home/services" />
+                  <RedirectV5 exact from="/cabinet/list" to="/cabinet/market/list" />
+                  <RedirectV5 exact from="/cabinet/batch/:id" to="/cabinet/market/batch/:id" />
+                  <RedirectV5 exact from="/cabinet/review/:id" to="/cabinet/market/review/:id" />
+                  <RedirectV5 exact from="/cabinet/pub/:id" to="/cabinet/market/pub/:id" />
+                  <RedirectV5 exact from="/cabinet/thread/:tid" to="/cabinet/messages/thread/:tid" />
+                  {/* неизвестный под-путь → Главная (стабильный контент — без churn) */}
                   <RouteV5 render={renderHome} />
                 </IonRouterOutlet>
-                {/* Постоянный таб-бар. selected/onClick — прежняя схема (ctx.go), href нет:
-                    навигация идёт через go()→ion.push, как и раньше. hideTabBar скрывает бар
-                    на детальных экранах (сохранение UX, решение CEO). */}
+                {/* Постоянный таб-бар. N-2: кнопки навигируют через href (нативный таб-свитч
+                    Ionic) — свой стек на вкладку восстанавливается, повторный тап по активному
+                    табу поппит к корню и скроллит вверх (N-6, из коробки). Подсветка активного
+                    таба — авто по совпадению href-префикса с URL (ручной selected убран).
+                    hideTabBar скрывает бар на детальных/флоу-экранах (сохранение UX, решение CEO). */}
                 <IonTabBar slot="bottom" className={'agos-tabbar' + (hideTabBar ? ' agos-tabbar--hidden' : '')}>
-                  <IonTabButton tab="home" selected={tab === 'home'} onClick={() => go({ name: 'home' })}>
+                  <IonTabButton tab="home" href="/cabinet/home">
                     <span className="bn-ic"><PhIcon name="home" size={22} /></span>
                     <span className="bn-t">Главная</span>
                   </IonTabButton>
-                  <IonTabButton tab="farm" selected={tab === 'farm'} onClick={() => go({ name: 'farm' })}>
+                  <IonTabButton tab="farm" href="/cabinet/farm">
                     <span className="bn-ic"><PhIcon name="sprout" size={22} /></span>
                     <span className="bn-t">Ферма</span>
                   </IonTabButton>
-                  <IonTabButton tab="market" selected={tab === 'market'} onClick={() => go({ name: 'market' })}>
+                  <IonTabButton tab="market" href="/cabinet/market">
                     <span className="bn-ic">
                       <PhIcon name="market" size={22} />
                       {marketDot && <i className="tb-dot" />}
                     </span>
                     <span className="bn-t">Рынок</span>
                   </IonTabButton>
-                  <IonTabButton tab="messages" selected={tab === 'messages'} onClick={() => go({ name: 'messages' })}>
+                  <IonTabButton tab="messages" href="/cabinet/messages">
                     <span className="bn-ic">
                       <PhIcon name="chat" size={22} />
                       {msgBadge > 0 && <i className="tb-badge mono">{msgBadge}</i>}
