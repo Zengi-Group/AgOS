@@ -505,9 +505,9 @@ declare
     v_expired    integer := 0;
 begin
     for rec in
-        select s.id, s.organization_id, s.state, s.currency, s.price_snapshot,
+        select s.id, s.organization_id, s.state, s.price_snapshot,
                s.current_period_end, s.cancel_at_period_end,
-               mp.billing_period, mp.price_amount as plan_price
+               mp.billing_period, mp.price_amount as plan_price, mp.currency
           from public.membership_subscription s
           join public.membership_plan mp on mp.plan_code = s.plan_code
          where s.next_billing_at is not null
