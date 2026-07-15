@@ -10,7 +10,7 @@ const TAB_ROOTS: RouteName[] = ['home', 'farm', 'market', 'shop', 'messages']
 // Глубина роута — для направления анимации (forward/back), когда это не таб-корень.
 const DEPTH: Record<RouteName, number> = {
   home: 0, farm: 0, market: 0, shop: 0, messages: 0,
-  cabinet: 1, p1list: 1, thread: 1, turan: 1, services: 1,
+  cabinet: 1, p1list: 1, thread: 1, turan: 1, services: 1, farmwiz: 1,
   batch: 2,
   review: 3,
 }
@@ -25,6 +25,7 @@ export function routeToUrl(r: Route): string {
     case 'review': return `/cabinet/review/${r.batchId ?? ''}`
     case 'cabinet': return '/cabinet/account'
     case 'farm': return '/cabinet/farm'
+    case 'farmwiz': return '/cabinet/farm/wizard'
     case 'shop': return '/cabinet/shop'
     case 'messages': return '/cabinet/messages'
     // ARS-231: тред TURAN — лента на /cabinet/thread/turan; форма обращения — route 'turan'.
@@ -47,7 +48,7 @@ export function urlToRoute(pathname: string): Route {
     case 'batch': return { name: 'batch', batchId: seg[1] }
     case 'review': return { name: 'review', batchId: seg[1] }
     case 'account': return { name: 'cabinet' }
-    case 'farm': return { name: 'farm' }
+    case 'farm': return seg[1] === 'wizard' ? { name: 'farmwiz' } : { name: 'farm' }
     case 'shop': return { name: 'shop' }
     case 'services': return { name: 'services' }
     case 'messages': return { name: 'messages' }

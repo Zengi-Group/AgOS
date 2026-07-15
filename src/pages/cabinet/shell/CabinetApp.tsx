@@ -172,12 +172,22 @@ export function CabinetApp() {
   // Реальная сводка фермы (стадо + задачи) перекрывает демо-сид. Хойстнута из эффекта
   // (S2): переиспользуется pull-to-refresh на Главной (IonRefresher, spec §7).
   const pullFarm = useCallback(
-    () => loadFarmState().then((fs) => { if (fs) setFarm(fs) }),
+    // D2 (аудит нативности): в auth-гейтед кабинете демо-сид (seedFarm, cycle «Отёл, день 34») —
+    // лишь стартовый плейсхолдер. Успех → реальная ферма; сбой, пока стейт ещё демо → реальный
+    // ПУСТОЙ (член не залипает на фейковой ферме); сбой при уже-реальном стейте → держим последнее
+    // известное (D1, не перетираем). Демо распознаём по cycle — его ставит только seedFarm
+    // (реальная сводка и emptyFarm идут без cycle).
+    () => loadFarmState().then((fs) => setFarm((prev) => fs ?? (prev?.cycle ? emptyFarm() : prev))),
     []
   )
 
   useEffect(() => {
     let alive = true
+    // D4 (аудит нативности): страховка от подвисшего rpc_get_my_context. Сетевой сбой резолвит
+    // (см. C3), но настоящий hang запроса держал бы BootScreen вечно (таймаута у supabase нет).
+    // Через 8с снимаем boot-гейт и работаем на персистентном стейте; подъедет ответ — profile
+    // обновится штатно.
+    const bootTimeout = setTimeout(() => { if (alive) setProfileLoading(false) }, 8000)
     loadAccountProfile('farmer').then(async (p) => {
       if (!alive) return
       if (p) { setProfile(p); setProfileLoading(false); return }
@@ -193,9 +203,13 @@ export function CabinetApp() {
         navigate('/', { replace: true })
         return
       }
-      // Сессия валидна (getUser прошёл), но контекста нет — напр. зарегистрирован, ещё нет
-      // орг/членства. Показываем реальный ПУСТОЙ стейт, а НЕ демо-сид (ARS-210): членства нет,
-      // фермы нет. Иначе фермер без членства видел бы фейковые «Членство активно» + «Отёл, день 34».
+      // C3 (аудит нативности): различаем транзиентный сбой и «валидная сессия без контекста».
+      // getUser вернул ошибку, но НЕ 401/403 (orphaned уже отсеян) → сеть/5xx: НЕ сбрасываем
+      // персистентное членство в 'none', иначе активный член на офлайн-cold-start видит пустой
+      // кабинет. Держим init-стейт (loadState из localStorage), только снимаем boot-гейт.
+      if (error) { setProfileLoading(false); return }
+      // getUser подтвердил валидного пользователя, но контекста нет — напр. зарегистрирован, ещё
+      // нет орг/членства. Реальный ПУСТОЙ стейт, а НЕ демо-сид (ARS-210): членства нет, фермы нет.
       setProfile(null)
       setMembership('none')
       setFarm(emptyFarm())
@@ -205,7 +219,7 @@ export function CabinetApp() {
     // loadFarmState: контекст есть, но фермы нет → emptyFarm(); аноним/сбой сети → null (сид не трогаем).
     pullFarm().finally(() => { if (alive) setFarmLoaded(true) })
     const id = setInterval(pullFarm, 30000)
-    return () => { alive = false; clearInterval(id) }
+    return () => { alive = false; clearInterval(id); clearTimeout(bootTimeout) }
   }, [pullFarm])
 
   // Dok6 offline-контракт: retry — при восстановлении сети сразу перезагружаем данные,
@@ -218,6 +232,20 @@ export function CabinetApp() {
     pullFarm()
     refetchBatches()
   }, [offline, pullFarm, refetchBatches])
+
+  // D12 (аудит нативности): возврат приложения из фона (нативный resume / повторный показ вкладки)
+  // — сразу тихо обновляем данные, не дожидаясь 20-30с поллинга, иначе после разблокировки фермер
+  // видит устаревшую сделку/стадо. silent — без скелета поверх живого контента (pullFarm/refetch
+  // оба silent). Покрывает Capacitor WebView (resume даёт visibilitychange) и web/PWA.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      pullFarm()
+      refetchBatches()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [pullFarm, refetchBatches])
 
   // Изоляция по аккаунту: при входе под другим userId не наследуем кабинет предыдущего.
   useEffect(() => {
@@ -266,8 +294,8 @@ export function CabinetApp() {
   const [wizActive, setWizActive] = useState(false)
   const [pubResult, setPubResult] = useState<{ batch: Batch; variant: PubVariant } | null>(null)
 
-  // ---------- ARS-212: мастер профиля фермы (флоу-страница на табе Ферма) ----------
-  const [farmWizActive, setFarmWizActive] = useState(false)
+  // ---------- ARS-212: мастер профиля фермы (теперь роут 'farmwiz', не state-оверлей) ----------
+  // startAt держится в state (какой ярус открыть); сам показ мастера — навигацией на роут.
   const [farmWizStart, setFarmWizStart] = useState<'herd' | 'plan'>('herd')
 
   // ---------- persistence ----------
@@ -375,9 +403,8 @@ export function CabinetApp() {
   // с постоянным IonTabBar его надо прятать явно — иначе бар просвечивает под визардом.
   // C9 (аудит 2026-07-13): флаги флоу скоупим на владеющий роут — иначе оставшийся true флаг
   // (после system-back/edge-swipe из визарда мимо URL) прятал таб-бар глобально на чужом экране.
-  const hideTabBar = (['p1list', 'batch', 'review', 'turan', 'thread'] as RouteName[]).includes(route.name)
+  const hideTabBar = (['p1list', 'batch', 'review', 'turan', 'thread', 'farmwiz'] as RouteName[]).includes(route.name)
     || (route.name === 'market' && (wizActive || !!pubResult))
-    || (route.name === 'farm' && farmWizActive)
 
   // C9 (аудит 2026-07-13): флоу живут в state мимо URL — system-back/edge-swipe/browser-back
   // меняют URL, но флаг оставался true → «призрачное» переоткрытие визарда при возврате на таб.
@@ -387,7 +414,6 @@ export function CabinetApp() {
       setWizActive((v) => (v ? false : v))
       setPubResult((v) => (v ? null : v))
     }
-    if (route.name !== 'farm') setFarmWizActive((v) => (v ? false : v))
   }, [route.name])
 
   const handleLogout = async () => {
@@ -768,32 +794,31 @@ export function CabinetApp() {
   // членства — существующие правила Рынка; кнопку показываем только продающим статусам).
   const farmCanSell = (['active', 'grace', 'expiring'] as MembershipStatus[]).includes(membership)
   const sellFromFarm = () => {
-    setFarmWizActive(false)
+    // Мастер фермы теперь роут — уход на Рынок (go) сам покидает 'farmwiz', флаг не нужен.
     const activeCount = batches.filter((b) =>
       ['scheduled', 'published', 'offering', 'decision', 'matched', 'confirmed', 'dispatched'].includes(b.state)
     ).length
     if (activeCount >= 5) { go({ name: 'market' }); setSheet({ kind: 'limit' }); return }
     setWizActive(true); go({ name: 'market' })
   }
-  const renderFarm = () => {
-    if (farmWizActive) {
-      return (
-        <IonPage className="agos-flow-page">
-          <FarmWizard
-            startAt={farmWizStart}
-            onExit={() => setFarmWizActive(false)}
-            onSell={farmCanSell ? sellFromFarm : undefined}
-          />
-        </IonPage>
-      )
-    }
-    return (
-      <FarmScreen
-        onStart={() => { setFarmWizStart('herd'); setFarmWizActive(true) }}
-        onResume={() => { setFarmWizStart('plan'); setFarmWizActive(true) }}
+  const renderFarm = () => (
+    <FarmScreen
+      onStart={() => { setFarmWizStart('herd'); go({ name: 'farmwiz' }) }}
+      onResume={() => { setFarmWizStart('plan'); go({ name: 'farmwiz' }) }}
+    />
+  )
+  // N-3/N-5/M4/M5 (аудит нативности): мастер фермы — реальный роут острова, а не state-оверлей.
+  // Свой стек-энтри → нативный push/pop + edge-swipe + exit-анимация; system-back/edge-swipe
+  // возвращает на «Ферму», не выкидывает из флоу. Компонент FarmWizard не тронут; startAt в state.
+  const renderFarmWiz = () => (
+    <IonPage className="agos-flow-page">
+      <FarmWizard
+        startAt={farmWizStart}
+        onExit={() => goBackTo({ name: 'farm' })}
+        onSell={farmCanSell ? sellFromFarm : undefined}
       />
-    )
-  }
+    </IonPage>
+  )
 
   // Пока грузится реальный профиль — брендовый boot (а не голый спиннер/демо-экран).
   // P-2 (ARS-218): единый BootScreen на всём пути в кабинет. См. profileLoading выше.
@@ -821,6 +846,7 @@ export function CabinetApp() {
                   <RouteV5 exact path="/cabinet/account" render={renderCabinet} />
                   <RouteV5 exact path="/cabinet/turan" render={renderTuran} />
                   <RouteV5 exact path="/cabinet/farm" render={renderFarm} />
+                  <RouteV5 exact path="/cabinet/farm/wizard" render={renderFarmWiz} />
                   <RouteV5 exact path="/cabinet/shop" render={() => <PlaceholderScreen title="Маркет" sub="Дистрибуция и специалисты TURAN" icon="bag" emptySub="Дистрибуция и специалисты TURAN появятся здесь" />} />
                   <RouteV5 exact path="/cabinet/services" render={() => <PlaceholderScreen title="Сервисы" sub="Специалисты и услуги TURAN" icon="grid" emptySub="Специалисты и услуги TURAN появятся здесь" />} />
                   <RouteV5 exact path="/cabinet/messages" render={renderMessages} />

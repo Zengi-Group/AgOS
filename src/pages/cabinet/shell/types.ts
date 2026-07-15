@@ -26,6 +26,9 @@ export type RouteName =
   | 'batch'
   | 'review'
   | 'turan'
+  // Флоу-страницы как реальные роуты острова (аудит нативности N-3/N-5/M4/M5): свой стек-энтри
+  // → нативный push/pop, edge-swipe, exit-анимация, system-back шагает внутрь флоу.
+  | 'farmwiz'
 
 export interface Route {
   name: RouteName

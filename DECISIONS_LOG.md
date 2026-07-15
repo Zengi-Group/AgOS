@@ -3,6 +3,33 @@
 > Maintained by: Architect & Coordinator Agent
 > Format: WHAT was decided → WHY (alternatives considered) → CONSEQUENCES (what becomes easy/hard)
 
+### 2026-07-15: Аудит нативности — роутер-остров, флоу как реальные роуты (Increment 1a: FarmWizard → N-3/N-5/M4/M5)
+
+**What**: Первый инкремент «роутер-остров полностью» (решение CEO). Мастер профиля фермы (`FarmWizard`) переведён из state-оверлея (`farmWizActive`) в **реальный роут острова** `/cabinet/farm/wizard` в `IonRouterOutlet`. Теперь у него свой стек-энтри → нативный push/pop, edge-swipe-назад, exit-анимация, и system-back/edge-swipe шагает ВНУТРЬ флоу (возврат на «Ферму»), а не выкидывает наружу. Аддитивно, компонент `FarmWizard` не тронут:
+- `types.ts`: +`RouteName 'farmwiz'`.
+- `nav.ts`: `routeToUrl farmwiz→/cabinet/farm/wizard`; `urlToRoute` `farm/wizard→farmwiz` (deep-link/edge-swipe/reload); `DEPTH.farmwiz=1` (farm 0→farmwiz 1 = forward, назад = back).
+- `CabinetApp.tsx`: `renderFarm` теперь только `FarmScreen` (onStart/onResume → `go({name:'farmwiz'})`); новый `renderFarmWiz` (IonPage+FarmWizard, `onExit→goBackTo({farm})`); `<RouteV5 path="/cabinet/farm/wizard">`; `hideTabBar` включает `farmwiz` (убрана state-ветка `farm&&farmWizActive`); удалён `farmWizActive` state + его сброс-эффект + строка в `sellFromFarm` (HS-4, `startAt` остался в state).
+
+**Why**: N-3/N-5/M4/M5 из аудита — визарды жили в локальном state внутри роута таба → мгновенный свап без анимации, system-back/edge-swipe выкидывал из середины флоу. Реальный роут отдаёт StackManager Ionic весь нативный переход бесплатно. FarmWizard взят первым (самый чистый: нет возвратных данных как у PubResult batch/variant, таб «Ферма» доступен без членства). BatchWizard+PubResult (цепочка публикации, вариант→query/ref) и per-tab стеки N-2 — следующие инкременты, отдельно (revenue-флоу, нужна live-проверка под member-сидом).
+
+**Verify**: `tsc -b` — 0 ошибок. `npm run test:routers` — 5/5 (гейт DEBT-NATIVE-ROUTER-01, v5-остров цел). Прод-превью (dev 5173, mobile 375×812, реальный бэкенд): `/cabinet/farm` → чистый редирект на вход, **0 ошибок в консоли** (только benign React-Router-v7 future-flag warnings) — остров с новым роутом монтируется без белого экрана. Живой проход самого мастера (открытие слайдом / возврат) — под member-сидом на устройстве (сид-логин упирается в прод-бэкенд, граница сида). Чистый фронт, SQL не тронут.
+
+**Files**: `src/pages/cabinet/shell/{types.ts, nav.ts, CabinetApp.tsx}`. Ветка `claude/roadmap-audit-status-19bdc0`. Канон-эхо в мозге: [[projects/agos/specs/native-farmer-app]].
+
+### 2026-07-15: Аудит нативности — read-side офлайн, ядро (C3, D2, D4, D12)
+
+**What**: Первый пакет read-side робастности офлайна (разблокирован S4=A). Аудит-верификация против прода (main `917737a`) показала: из 7 пунктов D1 уже сделан, C3/D2 ОТКРЫТЫ, D4/D-err/D-fw/D12 частичны. Закрыты 4 (все в `CabinetApp.tsx`, аддитивно):
+- **C3** (был ОТКРЫТ): офлайн cold-start сбрасывал активного члена в пустое `none`. Причина — blanket `setMembership('none')` в ветке «профиль пуст». Теперь: после отсева orphaned (401/403) getUser-ошибка (сеть/5xx) → `if (error) { setProfileLoading(false); return }` — держим персистентный init-стейт (localStorage), НЕ сбрасываем членство. Ветка реального пустого стейта (ARS-210) осталась только для подтверждённо-валидной сессии без контекста.
+- **D2** (был ОТКРЫТ): сбой `rpc_get_farm_summary` оставлял вошедшему демо-сид «Отёл, день 34» (в auth-гейтед кабинете `INITIAL_STATE.farm=seedFarm()` — лишь плейсхолдер). `pullFarm` теперь: успех→реальная ферма; сбой при ещё-демо-стейте (распознаём по `cycle`, его ставит только seedFarm)→`emptyFarm()`; сбой при уже-реальном→держим последнее известное (D1, не перетираем).
+- **D4** (был частичен): нет таймаута у подвисшего `rpc_get_my_context` → BootScreen вечно. Добавлен `bootTimeout` 8с, снимающий boot-гейт (работаем на персистентном стейте; ответ подъедет — profile обновится). Чистится в cleanup.
+- **D12** (был частичен): нет рефетча при возврате из фона (только offline→online retry + 20-30с поллинг). Добавлен `visibilitychange`-listener → тихий `pullFarm()`+`refetchBatches()` при показе (Capacitor resume даёт visibilitychange; покрывает web/PWA). Оба вызова silent — без скелета поверх живого контента.
+
+**Why**: C3/D2 — correctness-баги, которые фермеру врут (пустой кабинет активному члену / фейковая ферма). Различение «транзиентный сетевой сбой vs подтверждённое отсутствие контекста» — ключ: сеть-сбой держит персистентный стейт, подтверждённая валидная-сессия-без-контекста показывает реальный пустой (ARS-210). Всё аддитивно (HS-5/6): ветки не удалены, только уточнены условия; демо-сид как anon-плейсхолдер сохранён, но в auth-шелле больше не «залипает». D-err (error+retry vs пустой) и D-fw (гейт финального submit мастера фермы офлайн) — отдельный след. пакет.
+
+**Verify**: `tsc -b` — 0 ошибок в `CabinetApp.tsx` (те же 5 предсуществующих `@chatscope`, пакет не в lockfile — DECISIONS_LOG 2026-07-11). `vite build` упирается в тот же предсуществующий `@chatscope`-импорт (инфра-пробел worktree, не связан с правкой). Живой офлайн/resume-прогон требует устройства + member-сида (граница сида, аудит §8) — как и весь S4-класс. Чистый фронт, SQL не тронут → `cross_check.sh` не нужен.
+
+**Files**: `src/pages/cabinet/shell/CabinetApp.tsx` (C3-ветка, pullFarm D2, bootTimeout D4, visibilitychange D12). Ветка `claude/roadmap-audit-status-19bdc0`. Канон-эхо в мозге: [[projects/agos/specs/native-farmer-app]] (секция «Аудит нативности — статус»).
+
 ### 2026-07-15: Лоадер запуска — только иконка + фикс пересечения лучей (R-29)
 
 **What**: правки CEO по лоадеру при загрузке приложения. **(1)** `BootScreen` очищен до одной иконки-марки: убрана slim-полоса индикатора (`agosBootBar` keyframes + бар-div) и текстовая подпись под маркой; `label` остаётся только как `aria-label` обёртки (доступность). **(2)** Пересечение лучей у `breathe`-анимации `TuranLoader` исправлено: причина — у `.tl-ray` отсутствовал `transform-box: fill-box`, поэтому `transform-origin` луча считался от общего viewBox (или border-box), лучи расходились и пересекались при scale. Приняли готовый веб-сниппет анимации от дизайнера (`turan-loader-web.html`, 2026-07-14): геометрия 1:1 из оригинального `public/turan-icon.svg` (viewBox `42.88 -0.13 130 130`), `.tl-ray { transform-box: fill-box }`, keyframes `tlSpin` (вращение 90°) / `tlBreatheSpin` (синхронное дыхание лучей у spin) / `tlBreathe` (фазовый сдвиг у breathe); цвет — фирменный `#F7931E` (дизайнерский `#C8A24B` заменён на бренд по запросу CEO). Компонентный API (`variant`/`size`/`color`/`label`) не менялся — все вызовы (46 мест) работают без правок.
