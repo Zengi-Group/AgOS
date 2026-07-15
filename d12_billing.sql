@@ -395,3 +395,223 @@ values
     ('rpc_subscribe_org_membership',null, 'subscribe_org_membership','d12_billing.sql', 'ARS-205 enroll + start trial'),
     ('rpc_cancel_org_membership',   null, 'cancel_org_membership',   'd12_billing.sql', 'ARS-205 cancel at period end / immediate')
 on conflict (sql_name) do nothing;
+
+-- ============================================================
+-- Slice ARS-206 (renewal engine + payment abstraction)
+-- A cron/service job rolls due subscriptions forward, charges via a payment
+-- abstraction, and walks the failure ladder. Uses SKIP LOCKED (never advisory
+-- locks — CLAUDE.md L-NEW-2) so parallel cron ticks don't double-charge.
+--
+-- Renewal FSM (state at period end, next_billing_at <= now):
+--   cancel_at_period_end → expired            (no charge)
+--   charge OK             → active, period rolled forward   [access ON]
+--   charge FAIL:
+--     trialing/active → grace     (retry in GRACE window)   [access ON]
+--     grace           → past_due  (retry)                   [access OFF — d13]
+--     past_due        → expired   (terminal)                [access OFF]
+--
+-- Events (Dok 4 D66) — FLAG (Architect): none registered in Dok 4 yet:
+--   membership.subscription.renewed / .expired
+--   membership.payment.succeeded / .failed
+--   entitlements.invalidated  (on access loss/restore)
+--
+-- FLAG (ARS-206b, deferred per HS-4 — no speculative code): the real payment
+-- provider + async webhook handler (rpc_membership_payment_webhook) are NOT
+-- written here. fn_charge_membership is a synchronous stub that always succeeds
+-- until a provider is chosen. When it lands, replace the stub body only (P7).
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- membership_payment — append-only audit of charge attempts (P12 temporal).
+-- ------------------------------------------------------------
+create table if not exists public.membership_payment (
+    id              uuid    primary key default gen_random_uuid(),
+    subscription_id uuid    not null references public.membership_subscription(id) on delete cascade,
+    organization_id uuid    not null references public.organizations(id) on delete cascade,
+    amount          numeric(12,2) not null check (amount >= 0),
+    currency        text    not null default 'KZT',
+    status          text    not null check (status in ('pending','succeeded','failed')),
+    provider        text    not null default 'stub',
+    provider_ref    text,
+    created_at      timestamptz not null default now()
+);
+comment on table public.membership_payment is
+    'ARS-206. Append-only log of membership charge attempts. provider=''stub''
+     until a real provider lands (ARS-206b). One row per charge attempt.';
+
+create index if not exists idx_membership_payment_sub
+    on public.membership_payment (subscription_id, created_at desc);
+
+alter table public.membership_payment enable row level security;
+drop policy if exists "membership_payment_read_own" on public.membership_payment;
+create policy "membership_payment_read_own"
+    on public.membership_payment for select
+    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+-- Writes only via SECURITY DEFINER engine (bypasses RLS) — no client insert policy.
+
+-- ------------------------------------------------------------
+-- fn_charge_membership — payment provider abstraction (STUB).
+-- Logs a payment row and returns success. Replace body only when a real
+-- provider is integrated (ARS-206b); signature stays (P7).
+-- ------------------------------------------------------------
+create or replace function public.fn_charge_membership(
+    p_subscription_id uuid,
+    p_organization_id uuid,
+    p_amount          numeric,
+    p_currency        text default 'KZT'
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_ok boolean := true;   -- STUB: real provider decides this
+begin
+    insert into public.membership_payment
+        (subscription_id, organization_id, amount, currency, status, provider)
+    values
+        (p_subscription_id, p_organization_id, p_amount, p_currency,
+         case when v_ok then 'succeeded' else 'failed' end, 'stub');
+    return v_ok;
+end;
+$$;
+comment on function public.fn_charge_membership(uuid, uuid, numeric, text) is
+    'ARS-206 STUB payment abstraction. Logs membership_payment + returns success.
+     Replace body only when a real provider is integrated (ARS-206b). P7.';
+
+-- ------------------------------------------------------------
+-- rpc_process_membership_renewals — the cron/service engine.
+-- Global job (no organization_id — whitelisted in cross_check CHECK 5).
+-- Grant to service_role only; anon/authenticated revoked.
+-- Returns a run summary: { processed, renewed, deferred, expired }.
+-- ------------------------------------------------------------
+create or replace function public.rpc_process_membership_renewals(p_limit integer default 100)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_grace_days integer := 3;   -- FLAG (ARS-206): grace window; make configurable later
+    rec          record;
+    v_amount     numeric;
+    v_paid       boolean;
+    v_next_state text;
+    v_new_end    timestamptz;
+    v_processed  integer := 0;
+    v_renewed    integer := 0;
+    v_deferred   integer := 0;
+    v_expired    integer := 0;
+begin
+    for rec in
+        select s.id, s.organization_id, s.state, s.currency, s.price_snapshot,
+               s.current_period_end, s.cancel_at_period_end,
+               mp.billing_period, mp.price_amount as plan_price
+          from public.membership_subscription s
+          join public.membership_plan mp on mp.plan_code = s.plan_code
+         where s.next_billing_at is not null
+           and s.next_billing_at <= now()
+           and s.state in ('trialing','active','grace','past_due')
+         order by s.next_billing_at
+         limit p_limit
+         for update of s skip locked
+    loop
+        v_processed := v_processed + 1;
+
+        -- Scheduled cancellation: terminate at period end, no charge.
+        if rec.cancel_at_period_end then
+            update public.membership_subscription
+               set state = 'expired', next_billing_at = null
+             where id = rec.id;
+            perform public.publish_platform_event(
+                'membership.subscription.expired', rec.organization_id, rec.id,
+                jsonb_build_object('reason', 'canceled_at_period_end'));
+            perform public.publish_platform_event(
+                'entitlements.invalidated', rec.organization_id, rec.id,
+                jsonb_build_object('reason', 'subscription_expired'));
+            v_expired := v_expired + 1;
+            continue;
+        end if;
+
+        v_amount := coalesce(rec.price_snapshot, rec.plan_price);
+        v_paid   := public.fn_charge_membership(rec.id, rec.organization_id, v_amount, rec.currency);
+
+        if v_paid then
+            v_new_end := rec.current_period_end + rec.billing_period::interval;
+            update public.membership_subscription
+               set state = 'active',
+                   current_period_start = rec.current_period_end,
+                   current_period_end   = v_new_end,
+                   next_billing_at      = v_new_end,
+                   price_snapshot       = v_amount,
+                   trial_end            = null
+             where id = rec.id;
+            perform public.publish_platform_event(
+                'membership.payment.succeeded', rec.organization_id, rec.id,
+                jsonb_build_object('amount', v_amount, 'currency', rec.currency));
+            perform public.publish_platform_event(
+                'membership.subscription.renewed', rec.organization_id, rec.id,
+                jsonb_build_object('period_end', v_new_end));
+            -- access was OFF in grace-fail states → restore
+            if rec.state in ('past_due') then
+                perform public.publish_platform_event(
+                    'entitlements.invalidated', rec.organization_id, rec.id,
+                    jsonb_build_object('reason', 'access_restored'));
+            end if;
+            v_renewed := v_renewed + 1;
+        else
+            v_next_state := case rec.state
+                when 'grace'    then 'past_due'
+                when 'past_due' then 'expired'
+                else 'grace'    -- trialing / active
+            end;
+            perform public.publish_platform_event(
+                'membership.payment.failed', rec.organization_id, rec.id,
+                jsonb_build_object('amount', v_amount, 'from_state', rec.state));
+
+            if v_next_state = 'expired' then
+                update public.membership_subscription
+                   set state = 'expired', next_billing_at = null
+                 where id = rec.id;
+                perform public.publish_platform_event(
+                    'membership.subscription.expired', rec.organization_id, rec.id,
+                    jsonb_build_object('reason', 'payment_failed'));
+                perform public.publish_platform_event(
+                    'entitlements.invalidated', rec.organization_id, rec.id,
+                    jsonb_build_object('reason', 'subscription_expired'));
+                v_expired := v_expired + 1;
+            else
+                update public.membership_subscription
+                   set state = v_next_state,
+                       next_billing_at = now() + make_interval(days => v_grace_days)
+                 where id = rec.id;
+                -- entering past_due loses access (d13 excludes it)
+                if v_next_state = 'past_due' then
+                    perform public.publish_platform_event(
+                        'entitlements.invalidated', rec.organization_id, rec.id,
+                        jsonb_build_object('reason', 'entered_past_due'));
+                end if;
+                v_deferred := v_deferred + 1;
+            end if;
+        end if;
+    end loop;
+
+    return jsonb_build_object(
+        'processed', v_processed, 'renewed', v_renewed,
+        'deferred', v_deferred, 'expired', v_expired);
+end;
+$$;
+comment on function public.rpc_process_membership_renewals(integer) is
+    'ARS-206. Cron/service renewal engine. SKIP LOCKED batch; charges via
+     fn_charge_membership; rolls period on success, walks grace→past_due→expired
+     ladder on failure. Global job (no org param). service_role only.';
+
+-- Grants: engine is service-only; catalog for admins via dashboard (postgres).
+revoke execute on function public.rpc_process_membership_renewals(integer) from anon, authenticated;
+grant execute on function public.rpc_process_membership_renewals(integer) to service_role;
+
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes)
+values ('rpc_process_membership_renewals', null, null, 'd12_billing.sql',
+        'ARS-206 cron renewal engine (SKIP LOCKED); service_role only; global job')
+on conflict (sql_name) do nothing;
