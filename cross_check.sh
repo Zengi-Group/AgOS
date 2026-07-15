@@ -173,6 +173,7 @@ exceptions="get_active_prompt|rpc_name_registry|\
 rpc_list_animal_categories|rpc_list_feed_items|rpc_list_feed_categories|\
 rpc_list_feed_prices|rpc_list_feed_consumption_norms|\
 rpc_list_membership_plans|rpc_process_membership_renewals|\
+rpc_admin_list_membership_plans|rpc_admin_upsert_membership_plan|rpc_admin_set_membership_plan_active|\
 rpc_upsert_feed_item|rpc_upsert_feed_price|rpc_upsert_feed_consumption_norm|\
 rpc_upsert_consulting_reference|rpc_start_production_plan|\
 rpc_resolve_category|rpc_get_category_mappings|\

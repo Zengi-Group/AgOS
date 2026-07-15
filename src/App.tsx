@@ -123,6 +123,7 @@ const CapexMaterialsTab = lazy(() => import('@/pages/admin/capex/CapexReferenceA
 const CapexNormsTab = lazy(() => import('@/pages/admin/capex/CapexReferenceAdmin').then(m => ({ default: m.CapexNormsTab })))
 const CapexSurchargesTab = lazy(() => import('@/pages/admin/capex/CapexReferenceAdmin').then(m => ({ default: m.CapexSurchargesTab })))
 const LivestockPricesAdmin = lazy(() => import('@/pages/admin/livestock-prices/LivestockPricesAdmin').then(m => ({ default: m.LivestockPricesAdmin })))
+const BillingPlansAdmin = lazy(() => import('@/pages/admin/billing/BillingPlansAdmin').then(m => ({ default: m.BillingPlansAdmin })))
 const LivestockCategoriesLayout = lazy(() => import('@/pages/admin/livestock-categories/LivestockCategoriesLayout').then(m => ({ default: m.LivestockCategoriesLayout })))
 const LivestockCategoriesTab = lazy(() => import('@/pages/admin/livestock-categories/LivestockCategoriesLayout').then(m => ({ default: m.CategoriesTab })))
 const LivestockRulesTab = lazy(() => import('@/pages/admin/livestock-categories/LivestockCategoriesLayout').then(m => ({ default: m.RulesTab })))
@@ -314,6 +315,8 @@ function App() {
                     </Route>
                     {/* A-GRADE — Формула сорта МПК (упитанность → сорт + защитная цена) */}
                     <Route path="grade-formula" element={<GradeFormulaAdmin />} />
+                    {/* ARS-207 — Конструктор планов членства (CRUD над membership_plan) */}
+                    <Route path="billing/plans" element={<BillingPlansAdmin />} />
                     <Route path="directories/regions" element={<RegionDirectory />} />
                     <Route path="directories/norms" element={<NormsReferenceAdmin />}>
                       <Route path="facilities" element={<FacilityNormsTab />} />

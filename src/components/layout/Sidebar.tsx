@@ -34,6 +34,7 @@ import {
   Library,
   Tags,
   SlidersHorizontal,
+  CreditCard,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -145,6 +146,7 @@ const ADMIN_GROUPS: NavGroup[] = [
       { id: 'pricing', icon: DollarSign, label: 'Цены', route: '/admin/pricing' },
       { id: 'livestock-categories', icon: Tags, label: 'Категории скота', route: '/admin/livestock-categories' },
       { id: 'grade-formula', icon: SlidersHorizontal, label: 'Формула сорта', route: '/admin/grade-formula' },
+      { id: 'billing-plans', icon: CreditCard, label: 'Планы членства', route: '/admin/billing/plans' },
       { id: 'settings', icon: Settings, label: 'Настройки', route: '/admin/settings' },
       { id: 'consulting', icon: Briefcase, label: 'Консалтинг', route: '/admin/consulting' },
     ],

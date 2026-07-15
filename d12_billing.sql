@@ -615,3 +615,164 @@ insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, creat
 values ('rpc_process_membership_renewals', null, null, 'd12_billing.sql',
         'ARS-206 cron renewal engine (SKIP LOCKED); service_role only; global job')
 on conflict (sql_name) do nothing;
+
+-- ============================================================
+-- Slice ARS-207 (admin plan constructor — write side of the P8 catalog)
+-- TURAN admins fill the membership_plan catalog from the console without a
+-- deploy (P8: standards as data). billing_period stays fixed to {1,3,12} months
+-- (CEO, ARS-202) — enforced by the table CHECK; the RPC surfaces a clean error.
+-- All admin-gated via fn_is_admin(); no org scope (global catalog).
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- rpc_admin_list_membership_plans — full catalog incl. inactive rows, all
+-- fields, for the admin constructor table. Admin-only.
+-- ------------------------------------------------------------
+create or replace function public.rpc_admin_list_membership_plans()
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public, pg_temp
+as $$
+declare
+    v_rows jsonb;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = '42501';
+    end if;
+
+    select coalesce(jsonb_agg(p order by p.is_active desc, p.price_amount), '[]'::jsonb)
+      into v_rows
+      from (
+        select id, plan_code, title, billing_period, price_amount, currency,
+               trial_days, applies_org_type, grants_tier, version, is_active,
+               created_at, updated_at
+        from public.membership_plan
+      ) p;
+    return v_rows;
+end;
+$$;
+comment on function public.rpc_admin_list_membership_plans() is
+    'ARS-207. Full membership_plan catalog (incl. inactive) for the admin
+     constructor. Admin only.';
+
+-- ------------------------------------------------------------
+-- rpc_admin_upsert_membership_plan — create or update a plan by plan_code.
+-- On update: bumps version + updated_at (existing subscriptions keep their
+-- price_snapshot, so live subs are unaffected — P7 additive). Admin-only.
+-- ------------------------------------------------------------
+create or replace function public.rpc_admin_upsert_membership_plan(
+    p_plan_code        text,
+    p_title            text,
+    p_billing_period   text,
+    p_price_amount     numeric,
+    p_trial_days       integer default 30,
+    p_grants_tier      text    default 'standard',
+    p_applies_org_type text    default null,
+    p_currency         text    default 'KZT'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_row jsonb;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = '42501';
+    end if;
+
+    if coalesce(trim(p_plan_code), '') = '' then
+        raise exception 'PLAN_CODE_REQUIRED' using errcode = '22023';
+    end if;
+    if coalesce(trim(p_title), '') = '' then
+        raise exception 'TITLE_REQUIRED' using errcode = '22023';
+    end if;
+    -- CEO constraint (ARS-202): only 1/3/12-month periods. Clean error before
+    -- the table CHECK fires with a cryptic message.
+    if p_billing_period not in ('1 month', '3 months', '12 months') then
+        raise exception 'BAD_BILLING_PERIOD: % (allowed: 1 month, 3 months, 12 months)',
+            p_billing_period using errcode = '22023';
+    end if;
+
+    insert into public.membership_plan
+        (plan_code, title, billing_period, price_amount, currency,
+         trial_days, applies_org_type, grants_tier)
+    values
+        (p_plan_code, p_title, p_billing_period, p_price_amount, coalesce(p_currency, 'KZT'),
+         coalesce(p_trial_days, 30), p_applies_org_type, coalesce(p_grants_tier, 'standard'))
+    on conflict (plan_code) do update
+        set title            = excluded.title,
+            billing_period   = excluded.billing_period,
+            price_amount     = excluded.price_amount,
+            currency         = excluded.currency,
+            trial_days       = excluded.trial_days,
+            applies_org_type = excluded.applies_org_type,
+            grants_tier      = excluded.grants_tier,
+            version          = public.membership_plan.version + 1,
+            updated_at       = now();
+
+    select to_jsonb(mp) into v_row
+      from public.membership_plan mp where mp.plan_code = p_plan_code;
+    return v_row;
+end;
+$$;
+comment on function public.rpc_admin_upsert_membership_plan(text, text, text, numeric, integer, text, text, text) is
+    'ARS-207. Create/update a membership plan (by plan_code) from the admin
+     constructor. Bumps version on update. Admin only. Live subs keep their
+     price_snapshot (P7 additive).';
+
+-- ------------------------------------------------------------
+-- rpc_admin_set_membership_plan_active — retire/restore a plan (soft, P7).
+-- Inactive plans drop out of the public catalog but keep serving live subs.
+-- Admin-only.
+-- ------------------------------------------------------------
+create or replace function public.rpc_admin_set_membership_plan_active(
+    p_plan_code text,
+    p_is_active  boolean
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_row jsonb;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = '42501';
+    end if;
+
+    update public.membership_plan
+       set is_active  = p_is_active,
+           updated_at = now()
+     where plan_code = p_plan_code;
+    if not found then
+        raise exception 'PLAN_NOT_FOUND: %', p_plan_code using errcode = 'P0002';
+    end if;
+
+    select to_jsonb(mp) into v_row
+      from public.membership_plan mp where mp.plan_code = p_plan_code;
+    return v_row;
+end;
+$$;
+comment on function public.rpc_admin_set_membership_plan_active(text, boolean) is
+    'ARS-207. Soft retire/restore a membership plan. Inactive plans leave the
+     public catalog but keep serving live subs (P7). Admin only.';
+
+-- Grants: admin funcs — authenticated may call, fn_is_admin() gate inside; anon may not.
+grant execute on function public.rpc_admin_list_membership_plans()                                       to authenticated;
+grant execute on function public.rpc_admin_upsert_membership_plan(text, text, text, numeric, integer, text, text, text) to authenticated;
+grant execute on function public.rpc_admin_set_membership_plan_active(text, boolean)                     to authenticated;
+revoke execute on function public.rpc_admin_list_membership_plans()                                      from anon;
+revoke execute on function public.rpc_admin_upsert_membership_plan(text, text, text, numeric, integer, text, text, text) from anon;
+revoke execute on function public.rpc_admin_set_membership_plan_active(text, boolean)                    from anon;
+
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes)
+values
+    ('rpc_admin_list_membership_plans',    null, null, 'd12_billing.sql', 'ARS-207 admin plan constructor — full catalog'),
+    ('rpc_admin_upsert_membership_plan',   null, null, 'd12_billing.sql', 'ARS-207 admin plan constructor — create/update'),
+    ('rpc_admin_set_membership_plan_active',null, null, 'd12_billing.sql', 'ARS-207 admin plan constructor — retire/restore')
+on conflict (sql_name) do nothing;
