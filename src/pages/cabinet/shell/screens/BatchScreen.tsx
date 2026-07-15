@@ -12,6 +12,7 @@ import { SubHead } from '../components/SubHead'
 import { Sheet } from '../components/Sheet'
 import { PhIcon, type PhIconName } from '../components/icons/PhIcon'
 import { BatchMedia } from '../components/BatchMedia'
+import { BatchAnimals } from '../components/BatchAnimals'
 import { WithdrawSheet } from '../components/sheets/WithdrawSheet'
 import { DispatchSheet } from '../components/sheets/DispatchSheet'
 import { BatchPriceSheet } from '../components/sheets/BatchPriceSheet'
@@ -577,6 +578,16 @@ export function BatchScreen({ batch, account, orgId, onBack, backLabel = 'Мои
             batchId={batch.id}
             orgId={orgId}
             editable={st === 'draft' || st === 'published'}
+            toast={toast}
+          />
+
+          {/* ARS-228 · Детализация по животным (ИНЖ) — опционально, редактируемо
+              владельцем в draft|published; heads остаётся источником правды (P3/P4/D20). */}
+          <BatchAnimals
+            batchId={batch.id}
+            orgId={orgId}
+            editable={st === 'draft' || st === 'published'}
+            heads={batch.heads}
             toast={toast}
           />
 

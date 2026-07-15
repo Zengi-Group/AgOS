@@ -1977,3 +1977,65 @@
 .agos-cabinet-stage .mk-media-add:disabled { opacity:.6; }
 .agos-cabinet-stage .mk-media-add-t { font-size:12px; font-weight:600; }
 .agos-cabinet-stage .mk-media-hint { font-size:12px; color:var(--fg3); margin-top:8px; }
+
+/* ═══ ARS-228 · Детализация по животным (BatchAnimals) — плоские строки, отклик R-28 ═══ */
+.agos-cabinet-stage .mk-anml { display:flex; flex-direction:column; gap:8px; }
+.agos-cabinet-stage .mk-anml-row {
+  display:flex; align-items:flex-start; gap:11px;
+  padding:11px 13px;
+  border:1px solid var(--bd);
+  border-radius:var(--r-lg);
+  background:var(--bg-c);
+  transition:background 90ms var(--ease), transform 90ms var(--ease);
+}
+.agos-cabinet-stage .mk-anml-row.ed { cursor:pointer; }
+.agos-cabinet-stage .mk-anml-row.ed:active { background:var(--bg-m); transform:scale(.99); }
+.agos-cabinet-stage .mk-anml-ic {
+  flex:none; width:20px; display:flex; align-items:center; justify-content:center;
+  color:var(--fg2); margin-top:1px;
+}
+.agos-cabinet-stage .mk-anml-bd { flex:1; min-width:0; }
+.agos-cabinet-stage .mk-anml-t { font-size:15px; font-weight:600; }
+.agos-cabinet-stage .mk-anml-m { font-size:12.5px; color:var(--fg2); margin-top:2px; }
+.agos-cabinet-stage .mk-anml-note { font-size:12px; color:var(--fg3); margin-top:2px; }
+.agos-cabinet-stage .mk-anml-del {
+  position:relative;
+  flex:none; width:30px; height:30px;
+  display:flex; align-items:center; justify-content:center;
+  border:0; padding:0; background:transparent;
+  color:var(--fg3); cursor:pointer;
+  transition:transform 90ms var(--ease), color 90ms var(--ease);
+}
+.agos-cabinet-stage .mk-anml-del::before { content:''; position:absolute; inset:-8px; }  /* ≥44pt */
+.agos-cabinet-stage .mk-anml-del:active { transform:scale(.9); color:var(--red); }
+/* добавить — плоская строка-чип (R-18): граница + bg-c */
+.agos-cabinet-stage .mk-anml-add {
+  display:flex; align-items:center; justify-content:center; gap:7px;
+  padding:11px 13px;
+  border:1px solid var(--bd);
+  border-radius:var(--r-lg);
+  background:var(--bg-c);
+  color:var(--fg2); font-size:13px; font-weight:600;
+  cursor:pointer;
+  transition:background 90ms var(--ease), transform 90ms var(--ease);
+}
+.agos-cabinet-stage .mk-anml-add:active { background:var(--bg-m); transform:scale(.99); }
+.agos-cabinet-stage .mk-anml-hint { font-size:12px; color:var(--fg3); margin-top:2px; }
+.agos-cabinet-stage .mk-anml-hint.warn { color:var(--amber); }
+/* пол — два чипа (R-18) */
+.agos-cabinet-stage .mk-anml-sex { display:flex; gap:8px; }
+.agos-cabinet-stage .mk-anml-sexb {
+  flex:1; padding:10px 12px;
+  border:1px solid var(--bd);
+  border-radius:var(--r-lg);
+  background:var(--bg-c);
+  color:var(--fg2); font-size:14px; font-weight:600;
+  cursor:pointer;
+  transition:background 90ms var(--ease), border-color 90ms var(--ease), transform 90ms var(--ease);
+}
+.agos-cabinet-stage .mk-anml-sexb:active { transform:scale(.985); }
+.agos-cabinet-stage .mk-anml-sexb.on {
+  border-color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 12%, transparent);
+  color:var(--fg);
+}

@@ -298,6 +298,51 @@ comment on table public.batch_media is
      on delete cascade: media dies with its batch (orphan storage objects cleaned client-side/cron).';
 
 -- -------------------------------------------------------
+-- batch_animals (ARS-228)
+-- Per-batch animal detail: one row per individual head with ИНЖ (individual animal
+-- number / ear-tag) + optional attributes. STRICTLY per-batch — this is a SALE MANIFEST,
+-- NOT a herd-level Animal registry.
+--   D20 BOUNDARY (d01_kernel.sql:840) UPHELD: AGOS operates at group level; individual
+--   animals live in ERP. batch_animals does NOT reopen D20 — it is supplementary sale
+--   detail scoped to one marketing batch, never the source of truth for the herd.
+--   The group aggregate (batches.heads) stays authoritative (P3/P4, CEO 2026-07-15):
+--   rows are OPTIONAL and MAY be fewer than heads (partial detail, P11). heads is NOT
+--   derived from rows; no DB constraint ties row-count to heads (soft UI hint only).
+-- Fill is OPTIONAL (CEO 2026-07-10): a batch is valid with zero rows.
+-- Visibility (Art.171 aggregate-only): owner + admin only (ARS-228); MPK read after
+--   contact reveal DEFERRED to ARS-229 (correct reveal = closed_filled/closed_partial
+--   per D-M6-5/12, not "after match"; D40 superseded).
+-- Uniqueness (CEO 2026-07-15): soft — partial unique on (batch_id, inzh_number) WHERE set;
+--   many NULL allowed (optional). No ИНЖ format check (farmer enters legacy tags as-is).
+-- -------------------------------------------------------
+create table if not exists public.batch_animals (
+    id                  uuid    primary key default gen_random_uuid(),
+    batch_id            uuid    not null references public.batches(id) on delete cascade,
+    organization_id     uuid    not null references public.organizations(id),  -- denorm for RLS
+    inzh_number         text,                        -- ИНЖ / бирка; nullable (P11 optional)
+    weight_kg           numeric(6,2) check (weight_kg > 0 and weight_kg < 2000),
+    sex                 text    check (sex in ('m','f')),
+    age_months          int     check (age_months >= 0 and age_months < 600),
+    notes               text,
+    sort_order          int     not null default 0,
+    created_by          uuid    references public.users(id),
+    created_at          timestamptz not null default now(),
+    updated_at          timestamptz not null default now()
+);
+-- Soft uniqueness: no duplicate ИНЖ within one batch, but unlimited NULL (optional fill).
+create unique index if not exists batch_animals_inzh_uq
+    on public.batch_animals (batch_id, inzh_number)
+    where inzh_number is not null and btrim(inzh_number) <> '';
+create index if not exists batch_animals_batch_idx on public.batch_animals (batch_id);
+comment on table public.batch_animals is
+    'ARS-228: per-batch animal detail (sale manifest), one row per head with ИНЖ + optional
+     attrs. Separate table (P6, not JSONB). STRICTLY per-batch — NOT a herd Animal registry.
+     D20 UPHELD: AGOS = group level; batches.heads (aggregate) stays authoritative (P3/P4);
+     rows OPTIONAL and MAY be < heads (P11); heads NOT derived from rows.
+     Visibility (Art.171): owner + admin only (ARS-228); MPK read deferred to ARS-229.
+     Soft-unique ИНЖ per batch (many NULL allowed); no format check.';
+
+-- -------------------------------------------------------
 -- pool_requests
 -- D33: PoolRequest 1:1 Pool (one request = one pool, auto-created on activation)
 -- FSM 5.7: draft → active → closed | expired
@@ -749,6 +794,18 @@ create policy "batch_media_read"    on public.batch_media for select
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 drop policy if exists "batch_media_write_own" on public.batch_media;
 create policy "batch_media_write_own" on public.batch_media for all
+    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+
+-- batch_animals (ARS-228): owner + admin only. MPK read after reveal deferred to ARS-229
+-- (correct reveal = closed_filled/closed_partial per D-M6-5/12, not executing). Same
+-- rationale as batch_media above: not baking a guessed cross-surface predicate into an
+-- antitrust-sensitive policy while the two-surface pool drift (ARS-194) is unresolved.
+alter table public.batch_animals enable row level security;
+drop policy if exists "batch_animals_read" on public.batch_animals;
+create policy "batch_animals_read"    on public.batch_animals for select
+    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+drop policy if exists "batch_animals_write_own" on public.batch_animals;
+create policy "batch_animals_write_own" on public.batch_animals for all
     using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
 
 -- Pool requests: MPK sees own; admin sees all
@@ -6317,4 +6374,199 @@ revoke execute on function public.rpc_remove_batch_media(uuid, uuid)            
 
 -- ============================================================
 -- END SECTION 12 (BATCH MEDIA — ARS-227)
+-- ============================================================
+
+-- ============================================================
+-- SECTION 13 · BATCH ANIMALS (ARS-228)
+-- Per-batch animal detail (sale manifest) with ИНЖ. All RPC SECURITY DEFINER with
+-- ownership guard (SEC-RPC-ORGTRUST-01); add/update gated to status draft|published
+-- (farmer-controlled window). heads aggregate stays authoritative — these RPC never
+-- touch batches.heads (P3/P4/D20). Additive only (P7).
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- rpc_add_batch_animal
+-- ------------------------------------------------------------
+create or replace function public.rpc_add_batch_animal(
+    p_organization_id   uuid,
+    p_batch_id          uuid,
+    p_inzh_number       text        default null,
+    p_weight_kg         numeric     default null,
+    p_sex               text        default null,
+    p_age_months        int         default null,
+    p_notes             text        default null,
+    p_sort_order        int         default 0
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_batch record;
+    v_animal_id uuid;
+begin
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    if p_sex is not null and p_sex not in ('m','f') then
+        raise exception 'INVALID_SEX: % (expected m|f)', p_sex using errcode = 'P0001';
+    end if;
+
+    select * into v_batch
+    from public.batches
+    where id = p_batch_id and organization_id = p_organization_id;
+    if v_batch is null then
+        raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    -- Detail editable only while batch is farmer-controlled (draft|published).
+    if v_batch.status not in ('draft','published') then
+        raise exception 'INVALID_STATUS: cannot edit animal detail in status %', v_batch.status
+            using errcode = 'P0001';
+    end if;
+
+    insert into public.batch_animals (
+        batch_id, organization_id, inzh_number, weight_kg, sex, age_months, notes,
+        sort_order, created_by
+    ) values (
+        p_batch_id, p_organization_id,
+        nullif(btrim(p_inzh_number), ''), p_weight_kg, p_sex, p_age_months, p_notes,
+        coalesce(p_sort_order, 0), public.fn_current_user_id()
+    )
+    returning id into v_animal_id;
+
+    return v_animal_id;
+end;
+$$;
+comment on function public.rpc_add_batch_animal(uuid, uuid, text, numeric, text, int, text, int) is
+    'ARS-228 | Add one animal-detail row (ИНЖ + optional attrs) to a batch. Owner/admin/
+     service_role only (SEC-RPC-ORGTRUST-01). Editable only in status draft|published.
+     Fill optional (P11). Never touches batches.heads (P3/P4/D20). Additive (P7).';
+
+-- ------------------------------------------------------------
+-- rpc_update_batch_animal
+-- Full-row update (all optional attrs). Pass current values for fields you keep.
+-- ------------------------------------------------------------
+create or replace function public.rpc_update_batch_animal(
+    p_organization_id   uuid,
+    p_animal_id         uuid,
+    p_inzh_number       text        default null,
+    p_weight_kg         numeric     default null,
+    p_sex               text        default null,
+    p_age_months        int         default null,
+    p_notes             text        default null
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_animal record;
+    v_batch  record;
+begin
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    if p_sex is not null and p_sex not in ('m','f') then
+        raise exception 'INVALID_SEX: % (expected m|f)', p_sex using errcode = 'P0001';
+    end if;
+
+    select * into v_animal
+    from public.batch_animals
+    where id = p_animal_id and organization_id = p_organization_id;
+    if v_animal is null then
+        raise exception 'ANIMAL_NOT_FOUND' using errcode = 'P0001';
+    end if;
+
+    select * into v_batch from public.batches where id = v_animal.batch_id;
+    if v_batch.status not in ('draft','published') then
+        raise exception 'INVALID_STATUS: cannot edit animal detail in status %', v_batch.status
+            using errcode = 'P0001';
+    end if;
+
+    update public.batch_animals set
+        inzh_number = nullif(btrim(p_inzh_number), ''),
+        weight_kg   = p_weight_kg,
+        sex         = p_sex,
+        age_months  = p_age_months,
+        notes       = p_notes,
+        updated_at  = now()
+    where id = p_animal_id;
+
+    return true;
+end;
+$$;
+comment on function public.rpc_update_batch_animal(uuid, uuid, text, numeric, text, int, text) is
+    'ARS-228 | Update one animal-detail row (full replace of optional attrs). Owner/admin/
+     service_role only. Editable only in status draft|published. Additive (P7).';
+
+-- ------------------------------------------------------------
+-- rpc_remove_batch_animal
+-- ------------------------------------------------------------
+create or replace function public.rpc_remove_batch_animal(
+    p_organization_id   uuid,
+    p_animal_id         uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_animal record;
+begin
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    select * into v_animal
+    from public.batch_animals
+    where id = p_animal_id and organization_id = p_organization_id;
+    if v_animal is null then
+        return true;  -- idempotent (already gone / not owned)
+    end if;
+
+    delete from public.batch_animals where id = p_animal_id;
+    return true;
+end;
+$$;
+comment on function public.rpc_remove_batch_animal(uuid, uuid) is
+    'ARS-228 | Delete one animal-detail row. Owner/admin/service_role only. Idempotent. Additive (P7).';
+
+-- Registry
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
+    ('rpc_add_batch_animal',    'rpc_add_batch_animal',    null, 'd02_tsp.sql (Section 13 / ARS-228)', 'Add animal-detail row (ИНЖ + optional attrs) to a batch; owner/admin; status draft|published'),
+    ('rpc_update_batch_animal', 'rpc_update_batch_animal', null, 'd02_tsp.sql (Section 13 / ARS-228)', 'Update animal-detail row; owner/admin; status draft|published'),
+    ('rpc_remove_batch_animal', 'rpc_remove_batch_animal', null, 'd02_tsp.sql (Section 13 / ARS-228)', 'Delete animal-detail row; owner/admin; idempotent')
+on conflict (sql_name) do update
+    set dok3_name = excluded.dok3_name, notes = excluded.notes, created_in = excluded.created_in;
+
+grant execute on function public.rpc_add_batch_animal(uuid, uuid, text, numeric, text, int, text, int) to authenticated;
+grant execute on function public.rpc_update_batch_animal(uuid, uuid, text, numeric, text, int, text)    to authenticated;
+grant execute on function public.rpc_remove_batch_animal(uuid, uuid)                                     to authenticated;
+revoke execute on function public.rpc_add_batch_animal(uuid, uuid, text, numeric, text, int, text, int) from anon;
+revoke execute on function public.rpc_update_batch_animal(uuid, uuid, text, numeric, text, int, text)    from anon;
+revoke execute on function public.rpc_remove_batch_animal(uuid, uuid)                                     from anon;
+
+-- ============================================================
+-- END SECTION 13 (BATCH ANIMALS — ARS-228)
 -- ============================================================

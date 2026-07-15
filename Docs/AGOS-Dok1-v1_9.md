@@ -1393,6 +1393,8 @@ The following text MUST be displayed wherever reference prices are shown (PriceG
 | D41 | Dispatched/Delivered optional | Can skip to executed if simple |
 | D84 | PriceIndex = expert product, not transaction aggregate | Phase 1: expert assessment. Phase 2+: hybrid with real deals |
 | D88 | Беспородные → grade = НС жёстко | CHECK constraint в RPC create_batch. Нет исключений |
+| D-ARS227 | `batch_media` = фото/видео партии, отдельная таблица | P6 (не array-колонка). Приватный бакет `batch-media`, путь `{org}/{batch}/{uuid}`. Видимость (Art.171 aggregate-only): владелец + админ; МПК-чтение отложено на ARS-229 (reveal = closed_filled per D-M6-5/12). Редактирование в статусах draft\|published. |
+| D-ARS228 | `batch_animals` = манифест продажи по ИНЖ, НЕ herd-реестр Animal | **D20 сохранён**: AGOS = групповой уровень; агрегат `batches.heads` остаётся авторитетным (P3/P4). Строки опциональны (P11) и МОГУТ быть < heads; heads НЕ выводится из строк (без DB-констрейнта, только мягкая UI-подсказка). ИНЖ мягко-уникален в рамках партии (много NULL). Владелец + админ (Art.171); МПК-чтение отложено на ARS-229. Редактирование в draft\|published. |
 | D89 | Нетель → TspCategory = КВ | Продаётся как мясное животное, не как маточное поголовье. Отдельная категория не нужна |
 | D90 | TspCategory финальный список: 8 категорий | БМ1(6–12м), БМ2(12–24м), БВ(24–48м), БС(48+м), ТМ(12–24м), ТВ(24–48м), КВ(24–48м), КС(48+м). БС — новая категория: бычок 48+ мес, 480–700 кг, по параметрам = БВ |
 | D91 | WeightClass: 3 класса W1/W2/W3 | W1 Лёгкая / W2 Стандартная / W3 Тяжёлая. Диапазоны кг зависят от TspCategory |
