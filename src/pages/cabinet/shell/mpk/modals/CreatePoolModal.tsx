@@ -171,8 +171,8 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
           <div className="mpk-field-label">Общий объём закупа (голов) *</div>
           <input
             className="mpk-input"
-            type="number"
-            min={1}
+            type="text"
+            inputMode="numeric"
             value={totalHeads}
             placeholder="Сколько голов"
             onChange={(e) => setTotalHeads(e.target.value)}
@@ -229,16 +229,16 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
                     </select>
                     <input
                       className={'mpk-input' + (below ? ' error' : '')}
-                      type="number"
-                      min={1}
+                      type="text"
+                      inputMode="numeric"
                       value={l.price || ''}
                       placeholder="Цена ₸/кг"
                       onChange={(e) => patchLine(i, { price: parseInt(e.target.value, 10) || 0 })}
                     />
                     <input
                       className={'mpk-input' + (overCapacity && (l.maxHeads ?? 0) > 0 ? ' error' : '')}
-                      type="number"
-                      min={1}
+                      type="text"
+                      inputMode="numeric"
                       value={l.maxHeads ?? ''}
                       placeholder="Макс гол"
                       onChange={(e) => {

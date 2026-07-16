@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { loadMyContext, pickShellPath } from '@/lib/account'
 import { toast } from 'sonner'
 import { T } from '@/lib/auth-ui/tokens'
-import { AuthShell, AuthBody, TopBar, H1, Lede, StickyDock, CTA, Field, PinCells } from '@/lib/auth-ui/primitives'
+import { AuthShell, AuthBody, TopBar, H1, Lede, StickyDock, CTA, Field, PinCells, AuthAltAction } from '@/lib/auth-ui/primitives'
 import { PhonePicker } from '@/components/PhonePicker'
 import { maskPhoneE164 } from '@/lib/phone'
 import { isValidPhoneNumber } from 'libphonenumber-js'
@@ -109,28 +109,15 @@ export function Login() {
             {error && (
               <div style={{ marginTop: 4, color: T.red, fontSize: 13 }}>{error}</div>
             )}
-            <div style={{ marginTop: 24, textAlign: 'center' }}>
-              <button
-                onClick={() => navigate('/register')}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  padding: '12px 16px',
-                  minHeight: 44,
-                  color: T.fg2,
-                  fontFamily: T.font,
-                  fontSize: 15,
-                  cursor: 'pointer',
-                  WebkitTapHighlightColor: 'transparent',
-                }}
-              >
-                Нет аккаунта? <span style={{ color: T.accent, fontWeight: 500 }}>Зарегистрироваться ›</span>
-              </button>
-            </div>
             <StickyDock>
               <CTA disabled={!phoneValid} onClick={handlePhoneSubmit}>
                 Продолжить
               </CTA>
+              <AuthAltAction
+                prefix="Нет аккаунта?"
+                action="Зарегистрироваться"
+                onClick={() => navigate('/register')}
+              />
             </StickyDock>
           </>
         ) : (

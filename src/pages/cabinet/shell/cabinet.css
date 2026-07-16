@@ -199,6 +199,30 @@
 }
 
 /* ---------- офлайн / back ---------- */
+/* L3 (аудит 2026-07-13): баннер всегда смонтирован, появление/уход — плавная анимация
+   высоты (grid-rows 0fr↔1fr) + opacity; было mount/unmount → скачок всего экрана на ~30px.
+   L3-a11y (2026-07-15): в скрытом состоянии добавлен visibility:hidden — иначе всегда
+   смонтированный баннер (grid 0fr + opacity:0, но display:grid/visibility:visible) утекает
+   текстом «Нет связи» в document.innerText и в дерево доступности (screen reader читает
+   «Нет связи» при онлайне). visibility переключается 0s с задержкой .22s на скрытие —
+   элемент остаётся видимым всю анимацию сворачивания, прячется после (анимация L3 цела). */
+.agos-cabinet-stage .offline-bar-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition: grid-template-rows .22s ease, opacity .22s ease, visibility 0s linear .22s;
+}
+.agos-cabinet-stage .offline-bar-wrap.is-on {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition: grid-template-rows .22s ease, opacity .22s ease, visibility 0s linear 0s;
+}
+.agos-cabinet-stage .offline-bar-wrap > .offline-bar {
+  overflow: hidden;
+  min-height: 0;
+}
 .agos-cabinet-stage .offline-bar {
   background: #fdeccf; color: #8a5a12; font-size: 12.5px;
   text-align: center; padding: 6px 10px;
@@ -316,10 +340,6 @@
 .agos-cabinet-stage .br-s { font-size: 12px; color: var(--ink-3); display: block; margin-top: 1px; }
 .agos-cabinet-stage .br-body { display: block; }
 
-.agos-cabinet-stage .gate-list { display: flex; flex-direction: column; gap: 7px; }
-.agos-cabinet-stage .gate-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
-.agos-cabinet-stage .gate-ck { color: var(--green); font-weight: 700; }
-
 /* ---------- кнопка Cta ---------- */
 .agos-cabinet-stage .cta {
   width: 100%; margin-top: 10px; padding: 13px;
@@ -370,7 +390,9 @@
 
 /* ---------- тост ---------- */
 .agos-cabinet-stage .toast {
-  position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%);
+  /* + env(safe-area-inset-bottom) (аудит 2026-07-13, L2): на iPhone таб-бар выше на
+     высоту home-indicator — без инсета тост наезжал на бар. На web env()=0 → no-op. */
+  position: absolute; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
   z-index: 60; max-width: 86%;
   background: rgba(30, 18, 6, .94); color: #fff;
   font-size: 13px; line-height: 1.4; padding: 11px 16px; border-radius: 12px;
@@ -854,3 +876,66 @@
 .agos-cabinet-stage .supplier-status { font-size: 11px; font-weight: 600; }
 .agos-cabinet-stage .supplier-status.transit { color: var(--amber); }
 .agos-cabinet-stage .supplier-status.done { color: var(--ok); }
+
+/* ARS-229 · «Фото и детализация» раскрытой партии в карточке поставщика (read-only) */
+.agos-cabinet-stage .rbd { margin-top: 4px; border-top: 1px solid var(--line-soft); padding-top: 6px; }
+.agos-cabinet-stage .rbd-toggle {
+  display: flex; align-items: center; gap: 6px;
+  background: none; border: 0; padding: 4px 0; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: var(--ink-2);
+}
+.agos-cabinet-stage .rbd-toggle:active { opacity: .6; }
+.agos-cabinet-stage .rbd-caret { display: inline-flex; transition: transform 120ms var(--ease); }
+.agos-cabinet-stage .rbd-caret[data-open="1"] { transform: rotate(90deg); }
+.agos-cabinet-stage .rbd-body { display: flex; flex-direction: column; gap: 10px; padding: 6px 0 2px; }
+.agos-cabinet-stage .rbd-note { font-size: 11.5px; color: var(--ink-3); }
+.agos-cabinet-stage .rbd-media { display: flex; flex-wrap: wrap; gap: 6px; }
+.agos-cabinet-stage .rbd-thumb {
+  width: 56px; height: 56px; border-radius: 8px; overflow: hidden;
+  background: var(--paper-2); display: grid; place-items: center;
+  border: 1px solid var(--line-soft);
+}
+.agos-cabinet-stage .rbd-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.agos-cabinet-stage .rbd-thumb-ph { color: var(--ink-3); display: grid; place-items: center; }
+.agos-cabinet-stage .rbd-anml { display: flex; flex-direction: column; gap: 3px; }
+.agos-cabinet-stage .rbd-anml-h { font-size: 11.5px; font-weight: 700; color: var(--ink-2); margin-bottom: 2px; }
+.agos-cabinet-stage .rbd-anml-row {
+  display: flex; justify-content: space-between; gap: 10px;
+  font-size: 11.5px; color: var(--ink-2);
+  padding: 3px 0; border-bottom: 1px solid var(--line-soft);
+}
+.agos-cabinet-stage .rbd-anml-row:last-child { border-bottom: 0; }
+.agos-cabinet-stage .rbd-anml-inzh { font-family: var(--font-mono); font-weight: 600; color: var(--fg); }
+.agos-cabinet-stage .rbd-anml-m { color: var(--ink-3); text-align: right; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Этап 2 · Отклик на касание (pressed-состояния) — аудит нативности 2026-07-13.
+   ТОЛЬКО ДОБАВЛЕНИЕ фидбека нажатия там, где его не было (HS-5, аддитивно).
+   Base transition + :active по образцу wizard-полиша (.mk-cta:active,
+   market-proto.css:1756). Анимируем transform/opacity/background — без рефлоу.
+   ═══════════════════════════════════════════════════════════════════════ */
+/* .cta — единственная кнопка всех 8 шторок + МПК, была совсем без :active (C7) */
+.agos-cabinet-stage .cta,
+.agos-cabinet-stage .mp-cta,
+.agos-cabinet-stage .ph-cta,
+.agos-cabinet-stage .big-radio { transition: transform 120ms var(--ease), background 120ms var(--ease); }
+.agos-cabinet-stage .cta:not(.is-disabled):active,
+.agos-cabinet-stage .mp-cta:active,
+.agos-cabinet-stage .ph-cta:active { transform: scale(.985); }
+.agos-cabinet-stage .cta.ghost:active { background: var(--paper-2); }
+.agos-cabinet-stage .big-radio:active { transform: scale(.995); background: var(--paper-2); }
+/* строки-ссылки и тумблеры профиля + ряды/кнопка шторки цен — подложка при нажатии */
+.agos-cabinet-stage .cab-link:active,
+.agos-cabinet-stage .cab-tgl:not(.locked):active,
+.agos-cabinet-stage .ps-row:active,
+.agos-cabinet-stage .ps-close:active,
+.agos-cabinet-stage .hsl-step:not(:disabled):active { background: var(--paper-2); }
+.agos-cabinet-stage .back-strip:active { opacity: .6; }
+/* долгий тап по интерактивам не выделяет текст / не зовёт callout-меню ОС
+   (контент — пузыри чата, цены, документы сделки — остаётся выделяемым) */
+.agos-cabinet-stage button,
+.agos-cabinet-stage [role="button"],
+.agos-cabinet-stage .cs-conversation,
+.agos-cabinet-stage ion-tab-bar.agos-tabbar {
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}

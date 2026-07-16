@@ -3,10 +3,12 @@
 
 import { useEffect, useState } from 'react'
 import { Cta } from '../../components/Cta'
+import { PhIcon } from '../../components/icons/PhIcon'
 import { fmtMoney } from '../../tsp/data/tsp-utils'
 import { NBSP } from '../../tsp/data/tsp-dicts'
 import { printDealDoc, fmtDealDate, type DealDocData } from '../../data/deal-doc'
 import { useGradeFormula } from '@/hooks/useGradeFormula'
+import { useRevealedBatch } from '../data/revealed-batch'
 import { mpkCatName, type Pool, type SupplierRow } from '../types'
 
 interface Props {
@@ -116,6 +118,63 @@ function StarPicker({ value, onChange }: { value: number; onChange: (n: number) 
           ★
         </button>
       ))}
+    </div>
+  )
+}
+
+// ARS-229 · «Фото и детализация» раскрытой партии (read-only для МПК, post-reveal).
+// Личность фермера уже раскрыта (D-M6-5/12) → детализация не нарушает анонимность.
+// Лениво: RLS-чтение только при разворачивании. Пусто/закрыто RLS → мягкая деградация.
+function RevealedBatchDetail({ batchId }: { batchId: string }) {
+  const [open, setOpen] = useState(false)
+  const { media, animals, loading, loaded } = useRevealedBatch(batchId, open)
+  const isEmpty = loaded && !loading && media.length === 0 && animals.length === 0
+  const sexRu = (s: 'm' | 'f' | null) => (s === 'm' ? 'бычок' : s === 'f' ? 'тёлка' : null)
+  return (
+    <div className="rbd">
+      <button className="rbd-toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <span className="rbd-caret" data-open={open ? '1' : '0'}><PhIcon name="chevronRight" size={13} /></span>
+        Фото и детализация
+      </button>
+      {open && (
+        <div className="rbd-body">
+          {loading && <div className="rbd-note">Загрузка…</div>}
+          {isEmpty && <div className="rbd-note">Поставщик не добавил фото и детализацию.</div>}
+          {media.length > 0 && (
+            <div className="rbd-media">
+              {media.map((m) => (
+                <a
+                  key={m.id}
+                  className="rbd-thumb"
+                  href={m.url ?? undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {m.type === 'video'
+                    ? <span className="rbd-thumb-ph"><PhIcon name="play" size={18} /></span>
+                    : m.url
+                      ? <img src={m.url} alt="" loading="lazy" />
+                      : <span className="rbd-thumb-ph"><PhIcon name="image" size={18} /></span>}
+                </a>
+              ))}
+            </div>
+          )}
+          {animals.length > 0 && (
+            <div className="rbd-anml">
+              <div className="rbd-anml-h">Животные ({animals.length})</div>
+              {animals.map((a) => (
+                <div className="rbd-anml-row" key={a.id}>
+                  <span className="rbd-anml-inzh">{a.inzhNumber || '—'}</span>
+                  <span className="rbd-anml-m">
+                    {[sexRu(a.sex), a.weightKg ? `${a.weightKg}${NBSP}кг` : null, a.ageMonths ? `${a.ageMonths}${NBSP}мес` : null]
+                      .filter(Boolean).join(' · ')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -343,6 +402,7 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                 )}
                 {s.deliveryStatus === 'delivered' && <div className="supplier-status done">✓ Принята</div>}
                 {s.deliveryStatus === 'withdrawn' && <div className="supplier-status">Отозвана</div>}
+                {realPool && s.batchId && <RevealedBatchDetail batchId={s.batchId} />}
               </div>
             ))}
           </div>
@@ -392,6 +452,7 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                       }
                     }}
                   />
+                  {realPool && s.batchId && <RevealedBatchDetail batchId={s.batchId} />}
                 </div>
               ))}
             </div>

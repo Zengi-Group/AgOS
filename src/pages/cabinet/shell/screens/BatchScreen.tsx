@@ -11,6 +11,8 @@ import { IonShellFrame } from '../components/IonShellFrame'
 import { SubHead } from '../components/SubHead'
 import { Sheet } from '../components/Sheet'
 import { PhIcon, type PhIconName } from '../components/icons/PhIcon'
+import { BatchMedia } from '../components/BatchMedia'
+import { BatchAnimals } from '../components/BatchAnimals'
 import { WithdrawSheet } from '../components/sheets/WithdrawSheet'
 import { DispatchSheet } from '../components/sheets/DispatchSheet'
 import { BatchPriceSheet } from '../components/sheets/BatchPriceSheet'
@@ -32,9 +34,13 @@ interface FarmerAccount {
 interface Props {
   batch: Batch
   account?: FarmerAccount | null
+  // ARS-227: org фермера — для загрузки/чтения медиа партии (rpc_*_batch_media + бакет).
+  orgId?: string | null
   onBack: () => void
   backLabel?: string
-  onPatch: (patch: Partial<Batch>) => void
+  // S4=A · C4+D7: successToast — тост показывается в CabinetApp.patchBatch ПОСЛЕ
+  // сетевого round-trip (не оптимистично); офлайн действие гейтится там же.
+  onPatch: (patch: Partial<Batch>, successToast?: string) => void
   onNew: () => void
   onReview: () => void
   onTuran: () => void
@@ -177,7 +183,7 @@ function BatchPath({ batch }: { batch: Batch }) {
         <div className="mk-trk-bd">
           <div className="mk-trk-t">{stg.t}</div>
           <div className="mk-trk-d">{desc}</div>
-          {meta && <div className="mk-trk-meta mk-mono">{meta}</div>}
+          {meta && <div className="mk-trk-meta">{meta}</div>}
         </div>
       </div>
     )
@@ -185,18 +191,18 @@ function BatchPath({ batch }: { batch: Batch }) {
 
   return (
     <div className={'mk-trk ' + (expanded ? 'ex' : 'co')}>
-      <button type="button" className={'mk-trk-more top mk-mono' + (expanded || beforeN === 0 ? ' hidden' : '')}
+      <button type="button" className={'mk-trk-more top' + (expanded || beforeN === 0 ? ' hidden' : '')}
         onClick={() => setExpanded(true)} tabIndex={expanded || beforeN === 0 ? -1 : 0}>
         +{beforeN} пройдено
       </button>
       {PATH_STAGES.map((stg, i) => renderRow(stg, i))}
-      <button type="button" className={'mk-trk-more bot mk-mono' + (expanded || afterN === 0 ? ' hidden' : '')}
+      <button type="button" className={'mk-trk-more bot' + (expanded || afterN === 0 ? ' hidden' : '')}
         onClick={() => setExpanded(true)} tabIndex={expanded || afterN === 0 ? -1 : 0}>
         ещё {afterN}
         <span className="mk-trk-more-arr" aria-hidden><PhIcon name="chevronRight" size={12} /></span>
       </button>
       {N > 3 && (
-        <button type="button" className={'mk-trk-collapse mk-mono' + (expanded ? '' : ' hidden')}
+        <button type="button" className={'mk-trk-collapse' + (expanded ? '' : ' hidden')}
           onClick={() => setExpanded(false)} tabIndex={expanded ? 0 : -1}>
           свернуть
         </button>
@@ -266,7 +272,7 @@ function SplitPanel({ batch }: { batch: Batch }) {
     <div className="mk-headsum">
       <div className="mk-headsum-top">
         <span>Продано {matched} из {total} гол.</span>
-        {remaining > 0 && <span className="mk-mono">{withdrawn ? `остаток снят (${remaining})` : `на рынке ещё ${remaining}`}</span>}
+        {remaining > 0 && <span>{withdrawn ? `остаток снят (${remaining})` : `на рынке ещё ${remaining}`}</span>}
       </div>
       <div className="mk-headbar"><i style={{ width: `${pct}%` }} /></div>
       {allocs.length > 0 && (
@@ -290,7 +296,7 @@ function SplitPanel({ batch }: { batch: Batch }) {
 
 // ── DecisionActions (state=decision) — .mk-rec + .dec-act. Логика/prot сохранены ──
 function DecisionActions({ batch, onPatch, toast }: {
-  batch: Batch; onPatch: (p: Partial<Batch>) => void; toast: (t: string) => void
+  batch: Batch; onPatch: (p: Partial<Batch>, successToast?: string) => void; toast: (t: string) => void
 }) {
   const [customOn, setCustomOn] = useState(false)
   const [custom, setCustom] = useState('')
@@ -299,8 +305,7 @@ function DecisionActions({ batch, onPatch, toast }: {
   const lowered = cur - 100
   const lowerBlocked = prot != null && lowered < prot
   const applyPrice = (newPrice: number) => {
-    onPatch({ state: 'offering', price: newPrice, deadlineLabel: 'завтра, 14:30' })
-    toast('Предложение отправлено покупателям по новой цене')
+    onPatch({ state: 'offering', price: newPrice, deadlineLabel: 'завтра, 14:30' }, 'Предложение отправлено покупателям по новой цене')
   }
   const customNum = parseInt(custom, 10)
   const customValid = !Number.isNaN(customNum) && customNum > 0 && (prot == null || customNum >= prot)
@@ -412,7 +417,7 @@ function ActionMenu({ open, onClose, items }: { open: boolean; onClose: () => vo
 
 type LocalSheet = null | 'withdraw' | 'dispatch' | 'price'
 
-export function BatchScreen({ batch, account, onBack, backLabel = 'Мои партии', onPatch, onNew, onReview, onTuran, toast }: Props) {
+export function BatchScreen({ batch, account, orgId, onBack, backLabel = 'Мои партии', onPatch, onNew, onReview, onTuran, toast }: Props) {
   const [sheet, setSheet] = useState<LocalSheet>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const host = useHost()   // S2.1: тактильный отклик на отгрузке (web no-op)
@@ -431,7 +436,7 @@ export function BatchScreen({ batch, account, onBack, backLabel = 'Мои пар
   if (st === 'draft') {
     caption = 'Продолжите заполнение, чтобы выставить партию на продажу.'
     primary = { t: 'Продолжить заполнение', fn: () => toast('Заполнение черновика откроется в следующем обновлении') }
-    menu.push({ t: 'Удалить черновик', icon: 'trash', danger: true, fn: () => { onPatch({ state: 'cancelled' }); toast('Черновик удалён') } })
+    menu.push({ t: 'Удалить черновик', icon: 'trash', danger: true, fn: () => onPatch({ state: 'cancelled' }, 'Черновик удалён') })
   } else if (st === 'scheduled') {
     caption = 'Изменить данные можно до выхода в продажу.'
     menu.push({ t: 'Изменить партию', icon: 'pencil', fn: () => toast('Редактирование откроется в следующем обновлении') })
@@ -567,6 +572,25 @@ export function BatchScreen({ batch, account, onBack, backLabel = 'Мои пар
             </div>
           )}
 
+          {/* ARS-227 · Фото и видео — редактируемо владельцем в draft|published,
+              иначе только просмотр. Само-скрывается, если показывать нечего. */}
+          <BatchMedia
+            batchId={batch.id}
+            orgId={orgId}
+            editable={st === 'draft' || st === 'published'}
+            toast={toast}
+          />
+
+          {/* ARS-228 · Детализация по животным (ИНЖ) — опционально, редактируемо
+              владельцем в draft|published; heads остаётся источником правды (P3/P4/D20). */}
+          <BatchAnimals
+            batchId={batch.id}
+            orgId={orgId}
+            editable={st === 'draft' || st === 'published'}
+            heads={batch.heads}
+            toast={toast}
+          />
+
           {st !== 'draft' && detailRows.length > 0 && (
             <div className="blk">
               <TierH label="ДАННЫЕ ПАРТИИ" />
@@ -601,8 +625,8 @@ export function BatchScreen({ batch, account, onBack, backLabel = 'Мои пар
         onClose={() => setSheet((s) => (s === 'withdraw' ? null : s))}
         onConfirm={(includeMatched) => {
           const hasSold = (typeof batch.matchedHeads === 'number' ? batch.matchedHeads : 0) > 0
-          onPatch({ _withdraw: includeMatched ? 'matched' : 'remainder' })
-          toast(
+          onPatch(
+            { _withdraw: includeMatched ? 'matched' : 'remainder' },
             includeMatched ? 'Партия снята — отмена проданного отмечена'
             : hasSold        ? 'Остаток снят с продажи'
             :                  'Партия снята с продажи',
@@ -615,9 +639,8 @@ export function BatchScreen({ batch, account, onBack, backLabel = 'Мои пар
         open={sheet === 'dispatch'}
         onClose={() => setSheet((s) => (s === 'dispatch' ? null : s))}
         onConfirm={() => {
-          onPatch({ _dispatchReady: true, dispatchedLabel: 'сегодня' })
+          onPatch({ _dispatchReady: true, dispatchedLabel: 'сегодня' }, 'Покупатель уведомлён об отгрузке')
           host.haptics('medium')   // S2.1: отгрузка — ключевое действие
-          toast('Покупатель уведомлён об отгрузке')
           setSheet(null)
         }}
       />
@@ -625,7 +648,7 @@ export function BatchScreen({ batch, account, onBack, backLabel = 'Мои пар
         batch={batch}
         open={sheet === 'price'}
         onClose={() => setSheet((s) => (s === 'price' ? null : s))}
-        onConfirm={(newPrice) => { onPatch({ price: newPrice }); toast('Цена обновлена'); setSheet(null) }}
+        onConfirm={(newPrice) => { onPatch({ price: newPrice }, 'Цена обновлена'); setSheet(null) }}
       />
     </IonShellFrame>
   )

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 
@@ -81,7 +81,7 @@ export function MembershipApp({ orgId, onComplete, onSkip }: MembershipAppProps)
           disabled={isSubmitting}
           className="reg-btn-primary w-full flex items-center justify-center gap-2"
         >
-          {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+          {isSubmitting && <TuranLoader variant="spin" size={16} />}
           {isSubmitting ? 'Отправка...' : 'Подать заявку'}
         </button>
 

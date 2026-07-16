@@ -3383,7 +3383,12 @@ begin
         start_date  date    not null,
         end_date    date    not null
     ) on commit drop;
-    delete from _phase_code_map;
+    -- FARM-02-bis (ARS-215): DELETE без WHERE блокируется Supabase safeupdate-гардом для
+    -- API-ролей (authenticated/service_role) — функция падала 21000 при ЛЮБОМ реальном
+    -- вызове через rpc.*, работала только с прямого psql-подключения (маскировалось
+    -- graceful-фоллбэком мастера на F7 «Стадо записано» — план молча не создавался никогда).
+    -- TRUNCATE не подпадает под гард и корректен для temp-таблицы в транзакции.
+    truncate _phase_code_map;
 
     -- ── 3. СОЗДАТЬ FarmProductionPlan ────────────────────────
     v_cycle_end_date := p_plan_start_date + (v_cycle_days - 1);
@@ -3868,4 +3873,288 @@ VALUES
 ('fn_preview_cascade',     'RPC-36', null, 'd05_ops_edu.sql',
  'fn_* prefix by convention. Read-only preview of cascade shift. Returns table of affected phases.')
 ON CONFLICT (sql_name) DO NOTHING;
+
+
+-- ============================================================
+-- SECTION: ARS-213 — мост archetype→farm_type (F-D11) +
+--          генерация draft-ЦТК из профиля хозяйства (F-D13/F-D14)
+-- ============================================================
+-- Канон: Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md (F-D11/F-D12/F-D13/F-D14).
+-- Движок ЦТК уже построен выше (fn_generate_production_plan, F-D9) —
+-- здесь ТОЛЬКО мост словарей + порог + wiring. Всё аддитивно (P7):
+-- существующие функции не тронуты.
+--
+-- Цепочка: профиль (herd_groups + farms.calving_system)
+--   → fn_derive_farm_archetype (F-D14: вычисленный архетип, словарь activity_type)
+--   → fn_activity_to_farm_type (F-D11: мост в словарь production_cycle_templates.farm_type)
+--   → преселект активного recurring-шаблона
+--   → rpc_start_production_plan (draft, self-service — F-D12).
+-- ============================================================
+
+-- -------------------------------------------------------
+-- fn_activity_to_farm_type — мост F-D11
+-- activity_type (farm_activity_types) → farm_type (production_cycle_templates)
+-- -------------------------------------------------------
+create or replace function public.fn_activity_to_farm_type(p_activity_type text)
+returns text
+language sql
+immutable
+as $$
+    select case p_activity_type
+        when 'cow_calf'  then 'cow_calf'
+        when 'finishing' then 'finishing'
+        when 'mixed'     then 'combined'   -- «полный цикл» (F-D11)
+        when 'breeding'  then 'breeding'
+        else null                          -- 'dairy' не применяется (F-D1); неизвестное → null
+    end;
+$$;
+
+comment on function public.fn_activity_to_farm_type(text) is
+    'F-D11 (ARS-213): канонический мост словарей archetype→farm_type.
+     cow_calf→cow_calf, finishing→finishing, mixed→combined, breeding→breeding;
+     dairy→null (продукт только для мясного КРС, F-D1). Единственное место маппинга (P4).';
+
+-- -------------------------------------------------------
+-- fn_derive_farm_archetype — вывод архетипа из состава стада (F-D14)
+-- Возвращает словарь activity_type: cow_calf | finishing | mixed | null.
+-- Маточное = COW + HEIFER_PREG (нетели отелятся — цикл отёла применим);
+-- откормочные бычки = BULL_CALF + STEER.
+-- -------------------------------------------------------
+create or replace function public.fn_derive_farm_archetype(p_farm_id uuid)
+returns text
+language sql
+stable
+as $$
+    with herd as (
+        select
+            coalesce(sum(hg.head_count) filter (where ac.code in ('COW', 'HEIFER_PREG')), 0) as breeding_stock,
+            coalesce(sum(hg.head_count) filter (where ac.code in ('BULL_CALF', 'STEER')), 0) as feeder_bulls
+        from public.herd_groups hg
+        join public.animal_categories ac on ac.id = hg.animal_category_id
+        where hg.farm_id  = p_farm_id
+          and hg.is_active = true
+    )
+    select case
+        when breeding_stock > 0 and feeder_bulls > 0 then 'mixed'
+        when breeding_stock > 0                      then 'cow_calf'
+        when feeder_bulls   > 0                      then 'finishing'
+        else null
+    end
+    from herd;
+$$;
+
+comment on function public.fn_derive_farm_archetype(uuid) is
+    'F-D14 (ARS-213): архетип НЕ спрашивается — вычисляется из состава стада:
+     маточное>0 → cow_calf; только откормочные бычки → finishing; оба → mixed
+     (словарь activity_type; в farm_type переводит fn_activity_to_farm_type, F-D11).
+     Маточное = COW+HEIFER_PREG; бычки = BULL_CALF+STEER. null = состав не определяет архетип.';
+
+-- -------------------------------------------------------
+-- rpc_generate_plan_from_profile — генерация draft-ЦТК из профиля
+-- Вызывается опросником (ARS-212) после блока «План» и AI Gateway.
+-- Доменные состояния возвращает graceful jsonb (generated:false + reason),
+-- НЕ ошибкой: ниже порога — профиль и Payoff-1 сохраняются (F-D14).
+-- -------------------------------------------------------
+create or replace function public.rpc_generate_plan_from_profile(
+    p_organization_id       uuid,
+    p_farm_id               uuid default null,   -- null → primary-ферма организации
+    p_first_calving_month   int  default null,   -- 1–12, «месяц первого отёла» из опросника (сезонный отёл)
+    p_actor_id              uuid default null    -- C-NEW-7: AI Gateway / service_role path
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_actor_id        uuid;
+    v_farm            record;
+    v_breeding_stock  int;
+    v_total_heads     int;
+    v_archetype       text;
+    v_farm_type       text;
+    v_template        record;
+    v_month           int;
+    v_start           date;
+    v_existing        uuid;
+    v_result          jsonb;
+begin
+    -- actor: JWT или явный p_actor_id (паттерн rpc_start_production_plan, C-NEW-7)
+    v_actor_id := coalesce(p_actor_id, public.fn_current_user_id());
+    if v_actor_id is null then
+        raise exception 'UNAUTHORIZED: необходима аутентификация (JWT или p_actor_id)'
+            using errcode = 'P0001';
+    end if;
+
+    if not exists (
+        select 1
+        from   public.user_organization_roles uor
+        where  uor.organization_id = p_organization_id
+          and  uor.user_id         = v_actor_id
+    ) then
+        raise exception 'FORBIDDEN: у пользователя % нет доступа к организации %',
+            v_actor_id, p_organization_id
+            using errcode = 'P0001';
+    end if;
+
+    if p_first_calving_month is not null
+       and p_first_calving_month not between 1 and 12 then
+        raise exception 'INVALID_MONTH: p_first_calving_month = % (ожидается 1–12)',
+            p_first_calving_month
+            using errcode = 'P0001';
+    end if;
+
+    -- ферма: явная или primary-ферма организации (org-фильтр = P-AI-2)
+    select f.id, f.calving_system
+    into   v_farm
+    from   public.farms f
+    where  f.organization_id = p_organization_id
+      and  f.is_active = true
+      and  (p_farm_id is null or f.id = p_farm_id)
+    order by f.is_primary desc, f.created_at
+    limit 1;
+
+    if not found then
+        return jsonb_build_object(
+            'generated', false,
+            'reason',    'FARM_NOT_FOUND',
+            'message',   'Активная ферма организации не найдена');
+    end if;
+
+    -- уже есть draft/active план — graceful (D82, не ошибка для опросника)
+    select fpp.id into v_existing
+    from   public.farm_production_plans fpp
+    where  fpp.farm_id = v_farm.id
+      and  fpp.status in ('draft', 'active')
+    limit 1;
+
+    if found then
+        return jsonb_build_object(
+            'generated', false,
+            'reason',    'PLAN_ALREADY_EXISTS',
+            'plan_id',   v_existing,
+            'message',   'У фермы уже есть черновой или активный план');
+    end if;
+
+    -- порог генерации (F-D14): маточное>0 + любой ответ про отёл.
+    -- year_round / «по-разному» — НЕ блокер (план держится на слое-1, F-D6).
+    select
+        coalesce(sum(hg.head_count) filter (where ac.code in ('COW', 'HEIFER_PREG')), 0),
+        coalesce(sum(hg.head_count), 0)
+    into   v_breeding_stock, v_total_heads
+    from   public.herd_groups hg
+    join   public.animal_categories ac on ac.id = hg.animal_category_id
+    where  hg.farm_id  = v_farm.id
+      and  hg.is_active = true;
+
+    if v_breeding_stock = 0 or v_farm.calving_system is null then
+        return jsonb_build_object(
+            'generated',          false,
+            'reason',             'BELOW_THRESHOLD',
+            'has_breeding_stock', v_breeding_stock > 0,
+            'has_calving_answer', v_farm.calving_system is not null,
+            'message',            'Порог генерации не достигнут (нужно маточное поголовье '
+                                  'и ответ про отёл); профиль сохранён');
+    end if;
+
+    -- вычисленный архетип (F-D14) → мост в farm_type (F-D11)
+    v_archetype := public.fn_derive_farm_archetype(v_farm.id);
+    v_farm_type := public.fn_activity_to_farm_type(v_archetype);
+
+    if v_farm_type is null then
+        return jsonb_build_object(
+            'generated', false,
+            'reason',    'ARCHETYPE_NOT_APPLICABLE',
+            'archetype', v_archetype,
+            'message',   'Архетип не определён или не применим для ЦТК (F-D1)');
+    end if;
+
+    -- преселект шаблона: активный годовой (recurring) шаблон нужного farm_type.
+    -- is_recurring=true отсекает разовый onboarding-чеклист (BEEF_FARM_LAUNCH_KZ, D102).
+    select pct.id, pct.code
+    into   v_template
+    from   public.production_cycle_templates pct
+    where  pct.farm_type    = v_farm_type
+      and  pct.is_active    = true
+      and  pct.is_recurring = true
+      and  coalesce(pct.min_herd_size, 1) <= v_total_heads
+    order by pct.sort_order, pct.created_at
+    limit 1;
+
+    if not found then
+        return jsonb_build_object(
+            'generated', false,
+            'reason',    'NO_TEMPLATE',
+            'farm_type', v_farm_type,
+            'message',   'Нет активного шаблона ЦТК для типа хозяйства ' || v_farm_type);
+    end if;
+
+    -- якорь цикла (D78): cycle_start_date = дата первого отёла.
+    -- Сезонный отёл → 1-е число месяца первого отёла (год: ближайшее вхождение,
+    -- допустимое гардом INVALID_START_DATE движка — не старше 90 дней).
+    -- year_round / «по-разному» → 1-е число текущего месяца: якоря отёла нет,
+    -- план держится на слое-1 (сквозной вет-календарь) + сезонных работах (F-D14).
+    if v_farm.calving_system in ('spring', 'autumn', 'two_season') then
+        v_month := coalesce(
+            p_first_calving_month,
+            case when v_farm.calving_system = 'autumn' then 9 else 3 end);
+        v_start := make_date(extract(year from current_date)::int, v_month, 1);
+        if v_start < (current_date - interval '90 days')::date then
+            v_start := make_date(extract(year from current_date)::int + 1, v_month, 1);
+        end if;
+    else
+        v_start := date_trunc('month', current_date)::date;
+    end if;
+
+    -- self-service draft (F-D12): делегируем существующему RPC (zero duplication)
+    v_result := public.rpc_start_production_plan(
+        p_farm_id         => v_farm.id,
+        p_template_id     => v_template.id,
+        p_plan_start_date => v_start,
+        p_actor_id        => v_actor_id
+    );
+
+    if coalesce(v_result ->> 'error', 'false')::boolean then
+        return v_result || jsonb_build_object('generated', false);
+    end if;
+
+    return v_result || jsonb_build_object(
+        'generated',        true,
+        'archetype',        v_archetype,
+        'farm_type',        v_farm_type,
+        'template_code',    v_template.code,
+        'cycle_start_date', v_start
+    );
+
+exception
+    when others then
+        return jsonb_build_object(
+            'error',     true,
+            'generated', false,
+            'code',      sqlstate,
+            'message',   sqlerrm
+        );
+end;
+$$;
+
+comment on function public.rpc_generate_plan_from_profile(uuid, uuid, int, uuid) is
+    'RPC-33a (ARS-213): генерация draft-ЦТК из профиля хозяйства.
+     Порог (F-D14): маточное>0 + calving_system задан (year_round — легальный путь).
+     Архетип вычисляется из состава стада (fn_derive_farm_archetype, F-D14),
+     мост в farm_type — fn_activity_to_farm_type (F-D11), преселект активного
+     recurring-шаблона, якорь cycle_start_date = месяц первого отёла (D78).
+     Делегирует в rpc_start_production_plan (RPC-33) → draft, self-service (F-D12).
+     Доменные исходы — graceful jsonb {generated:false, reason}, не ошибка:
+     ниже порога профиль и Payoff-1 сохраняются. Вызывают: опросник ARS-212, AI Gateway.';
+
+grant execute on function public.rpc_generate_plan_from_profile(uuid, uuid, int, uuid) to authenticated;
+revoke execute on function public.rpc_generate_plan_from_profile(uuid, uuid, int, uuid) from anon;
+revoke execute on function public.fn_derive_farm_archetype(uuid) from anon;
+revoke execute on function public.fn_activity_to_farm_type(text) from anon;
+
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes)
+values ('rpc_generate_plan_from_profile', 'RPC-33a', null, 'd05_ops_edu.sql (ARS-213)',
+        'F-D11/F-D14: мост archetype→farm_type + порог генерации + draft-ЦТК из профиля. '
+        'Делегирует в rpc_start_production_plan (RPC-33).')
+on conflict (sql_name) do update set notes = excluded.notes, created_in = excluded.created_in;
 

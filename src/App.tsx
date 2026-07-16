@@ -8,6 +8,7 @@ import { HostProvider } from '@/platform/host/HostContext'
 import { RequireAuth } from '@/components/guards/RequireAuth'
 import { PushDeepLinkBridge } from '@/components/PushDeepLinkBridge'
 import { BootScreen } from '@/components/BootScreen'
+import { ShellBackGuard } from '@/pages/cabinet/shell/backGuard'
 
 import { RequireExpert } from '@/components/guards/RequireExpert'
 import { PublicLanding } from '@/components/guards/PublicLanding'
@@ -46,6 +47,7 @@ const CreateArticlePage = lazy(() => import('@/pages/admin/news/CreateArticlePag
 const CreateMediaPage = lazy(() => import('@/pages/admin/news/CreateMediaPage'))
 const EditNewsPage = lazy(() => import('@/pages/admin/news/EditNewsPage'))
 const BackfillCoversPage = lazy(() => import('@/pages/admin/news/BackfillCovers'))
+const BannersAdmin = lazy(() => import('@/pages/admin/content/BannersAdmin'))
 const AdminStartupList = lazy(() => import('@/pages/admin/startups/StartupList'))
 const AdminStartupDetail = lazy(() => import('@/pages/admin/startups/StartupDetail'))
 const AdminProgramsPage = lazy(() => import('@/pages/admin/finance/AdminProgramsPage'))
@@ -183,6 +185,9 @@ function App() {
       <AuthProvider>
         <BrowserRouter>
           <PushDeepLinkBridge />
+          {/* Граница истории оболочек: системный back/edge-swipe не выкидывает
+              авторизованного из /cabinet|/mpk на auth-экран (см. backGuard.ts). */}
+          <ShellBackGuard />
           <Routes>
             {/* Native: корень встречает неавторизованных тёмным Welcome, авторизованных — кабинетом. */}
             <Route path="/" element={IS_NATIVE ? <NativeEntry /> : <PublicLanding />} />
@@ -351,6 +356,7 @@ function App() {
                     <Route path="news/create-media" element={<Suspense fallback={null}><CreateMediaPage /></Suspense>} />
                     <Route path="news/:id/edit" element={<Suspense fallback={null}><EditNewsPage /></Suspense>} />
                     <Route path="news/backfill-covers" element={<Suspense fallback={null}><BackfillCoversPage /></Suspense>} />
+                    <Route path="content/banners" element={<Suspense fallback={null}><BannersAdmin /></Suspense>} />
                     <Route path="startups" element={<Suspense fallback={null}><AdminStartupList /></Suspense>} />
                     <Route path="startups/:id" element={<Suspense fallback={null}><AdminStartupDetail /></Suspense>} />
                     <Route path="finance/programs" element={<Suspense fallback={null}><AdminProgramsPage /></Suspense>} />

@@ -50,6 +50,13 @@ TEMPLATES: dict[str, str] = {
     "batch_dispatched_mpk": "Продавец отгрузил партию по вашей сделке. Дата отгрузки: {dispatched_at}. Детали в кабинете.",
     "offer_created_mpk": "Новое предложение по партии. Цена: {offered_price_per_kg} ₸/кг. Действует до {expires_at}. Ответьте в кабинете.",
     "pool_contacts_revealed": "Контакт покупателя раскрыт: {mpk_name}. Дата отгрузки: {dispatch_date}. Контакт менеджера: {contact}.",
+    # ── ARS-224: messaging (comm.message.created) ────────────────────────────
+    # Template-ONLY invariant (d01_kernel.sql:1102 / ARS-224): the message text is
+    # NOT duplicated into notifications — the notice is generic, content is read
+    # from comm_messages when the user opens the thread. params = {channel_id,
+    # message_id} only (no preview). Fan-out done in SQL (fn_fanout_comm_notifications,
+    # in_app+push, participants except author, preference-gated).
+    "new_message": "Новое сообщение в чате поддержки TURAN. Откройте, чтобы прочитать.",
 }
 
 # ARS-143 (C5) + ARS-144/155 (C6): deep-link path per template for the push `data`
@@ -74,6 +81,10 @@ PUSH_DEEP_LINKS: dict[str, str] = {
     "batch_dispatched_mpk": "/mpk/offers",
     "offer_created_mpk": "/mpk/offers",
     "pool_contacts_revealed": "/cabinet/batch/{batch_id}",
+    # ARS-224: tap on a messaging push → the cabinet thread list. Farmer support
+    # channel = the "Сообщения" section (ARS-231/ARS-225); thread routes are keyed by
+    # tid (turan/…), not channel uuid, so land on the always-valid list route.
+    "new_message": "/cabinet/messages",
 }
 
 # Push notification title (Android/iOS show title + body). Body = rendered template.

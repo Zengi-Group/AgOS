@@ -1,5 +1,5 @@
 -- ============================================================
--- d12_billing.sql — Membership Billing (recurrent org subscription)
+-- d13_billing.sql — Membership Billing (recurrent org subscription)
 -- ============================================================
 -- Domain: AssociationMembership made recurrent/paid.
 -- Canon: Feature ARS-202 (G2 closed 2026-07-10), Microstep 2 (Membership FSM).
@@ -390,10 +390,10 @@ revoke execute on function public.rpc_cancel_org_membership(uuid, boolean) from 
 -- ------------------------------------------------------------
 insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes)
 values
-    ('rpc_list_membership_plans',   null, 'list_membership_plans',   'd12_billing.sql', 'ARS-205 pricing catalog'),
-    ('rpc_get_org_subscription',    null, 'get_org_subscription',    'd12_billing.sql', 'ARS-205 org live subscription'),
-    ('rpc_subscribe_org_membership',null, 'subscribe_org_membership','d12_billing.sql', 'ARS-205 enroll + start trial'),
-    ('rpc_cancel_org_membership',   null, 'cancel_org_membership',   'd12_billing.sql', 'ARS-205 cancel at period end / immediate')
+    ('rpc_list_membership_plans',   null, 'list_membership_plans',   'd13_billing.sql', 'ARS-205 pricing catalog'),
+    ('rpc_get_org_subscription',    null, 'get_org_subscription',    'd13_billing.sql', 'ARS-205 org live subscription'),
+    ('rpc_subscribe_org_membership',null, 'subscribe_org_membership','d13_billing.sql', 'ARS-205 enroll + start trial'),
+    ('rpc_cancel_org_membership',   null, 'cancel_org_membership',   'd13_billing.sql', 'ARS-205 cancel at period end / immediate')
 on conflict (sql_name) do nothing;
 
 -- ============================================================
@@ -479,6 +479,13 @@ $$;
 comment on function public.fn_charge_membership(uuid, uuid, numeric, text) is
     'ARS-206 STUB payment abstraction. Logs membership_payment + returns success.
      Replace body only when a real provider is integrated (ARS-206b). P7.';
+
+-- Internal engine helper only: writes the membership_payment ledger with no ownership
+-- guard, so it MUST be service_role-only. Revoke from PUBLIC (default grant) — not just anon.
+revoke execute on function public.fn_charge_membership(uuid, uuid, numeric, text) from public;
+revoke execute on function public.fn_charge_membership(uuid, uuid, numeric, text) from anon;
+revoke execute on function public.fn_charge_membership(uuid, uuid, numeric, text) from authenticated;
+grant  execute on function public.fn_charge_membership(uuid, uuid, numeric, text) to service_role;
 
 -- ------------------------------------------------------------
 -- rpc_process_membership_renewals — the cron/service engine.
@@ -608,11 +615,13 @@ comment on function public.rpc_process_membership_renewals(integer) is
      ladder on failure. Global job (no org param). service_role only.';
 
 -- Grants: engine is service-only; catalog for admins via dashboard (postgres).
+-- Revoke from PUBLIC (default grant) — `from anon, authenticated` alone leaves PUBLIC execute.
+revoke execute on function public.rpc_process_membership_renewals(integer) from public;
 revoke execute on function public.rpc_process_membership_renewals(integer) from anon, authenticated;
 grant execute on function public.rpc_process_membership_renewals(integer) to service_role;
 
 insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes)
-values ('rpc_process_membership_renewals', null, null, 'd12_billing.sql',
+values ('rpc_process_membership_renewals', null, null, 'd13_billing.sql',
         'ARS-206 cron renewal engine (SKIP LOCKED); service_role only; global job')
 on conflict (sql_name) do nothing;
 
@@ -772,7 +781,7 @@ revoke execute on function public.rpc_admin_set_membership_plan_active(text, boo
 
 insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes)
 values
-    ('rpc_admin_list_membership_plans',    null, null, 'd12_billing.sql', 'ARS-207 admin plan constructor — full catalog'),
-    ('rpc_admin_upsert_membership_plan',   null, null, 'd12_billing.sql', 'ARS-207 admin plan constructor — create/update'),
-    ('rpc_admin_set_membership_plan_active',null, null, 'd12_billing.sql', 'ARS-207 admin plan constructor — retire/restore')
+    ('rpc_admin_list_membership_plans',    null, null, 'd13_billing.sql', 'ARS-207 admin plan constructor — full catalog'),
+    ('rpc_admin_upsert_membership_plan',   null, null, 'd13_billing.sql', 'ARS-207 admin plan constructor — create/update'),
+    ('rpc_admin_set_membership_plan_active',null, null, 'd13_billing.sql', 'ARS-207 admin plan constructor — retire/restore')
 on conflict (sql_name) do nothing;

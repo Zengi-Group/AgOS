@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Loader2, ExternalLink, Mail, Phone, Globe, FileText, Video, Users } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Mail, Phone, Globe, FileText, Video, Users } from 'lucide-react';
+import { TuranLoader } from '@/components/TuranLoader';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -336,7 +337,7 @@ export default function AdminStartupDetail() {
               onClick={() => setApproveOpen(true)}
               disabled={approve.isPending || reject.isPending}
             >
-              {approve.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {approve.isPending && <TuranLoader variant="spin" size={16} className="mr-2" />}
               {t('admin.startupDetail.approveBtn')}
             </Button>
             <Button
@@ -346,7 +347,7 @@ export default function AdminStartupDetail() {
               onClick={() => setRejectOpen(true)}
               disabled={approve.isPending || reject.isPending}
             >
-              {reject.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {reject.isPending && <TuranLoader variant="spin" size={16} className="mr-2" />}
               {t('admin.startupDetail.rejectBtn')}
             </Button>
           </div>

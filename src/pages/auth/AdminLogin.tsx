@@ -6,7 +6,8 @@
 
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2, Lock, User } from 'lucide-react'
+import { Lock, User } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 
@@ -93,7 +94,7 @@ export function AdminLogin() {
             disabled={!login.trim() || !password || isLoading}
             className="w-full py-2.5 bg-[hsl(24,73%,54%)] text-white rounded-xl font-medium hover:bg-[hsl(24,73%,44%)] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
           >
-            {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isLoading && <TuranLoader variant="spin" size={16} />}
             {isLoading ? 'Проверка…' : 'Войти'}
           </button>
         </div>

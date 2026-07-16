@@ -132,6 +132,7 @@
 | ID | Функция | Домен | Вызов | Статус | Возвращает |
 |----|---------|-------|-------|--------|------------|
 | RPC-33 | `rpc_start_production_plan` | Operations | web, ai | ✅ Implemented | uuid (plan_id) |
+| RPC-33a | `rpc_generate_plan_from_profile` | Operations | web, ai | ✅ Implemented | jsonb { generated, plan_id?, reason?, farm_type?, cycle_start_date? } |
 | RPC-34 | `rpc_complete_farm_task` | Operations | web, ai | ✅ Implemented | jsonb { task_id, next_tasks[], kpi_updates[] } |
 | RPC-35 | `fn_shift_phase_cascade` | Operations | web, ai | ✅ Implemented | jsonb [{ phase_id, phase_name, old_start, new_start, shift_days, date_type }, ...] |
 | RPC-36 | `fn_preview_cascade` | Operations | web, ai | ✅ Implemented | TABLE (phase_id, phase_name, old_start, new_start, old_end, new_end, shift_days, date_type, depth) |
@@ -922,6 +923,21 @@ Columns: `id, category_id, category_code, category_name_ru, region_id, region_na
 | `p_actor_id` | uuid | ✓ | Инициатор (service_role compat, C-NEW-7); `organization_id` резолвится через actor→farm (S-1) |
 
 *Внутренне вызывает `fn_generate_production_plan()` → создаёт FarmPhase и FarmTask по шаблону.*
+
+### RPC-33a `rpc_generate_plan_from_profile` [WEB] [AI] ✅ Implemented
+
+Генерация draft-ЦТК из профиля хозяйства (ARS-213) → jsonb `{ generated, plan_id?, reason?, archetype?, farm_type?, template_code?, cycle_start_date? }`
+
+Канон: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` F-D11/F-D12/F-D13/F-D14. Цепочка: состав стада → `fn_derive_farm_archetype()` (F-D14) → мост `fn_activity_to_farm_type()` (F-D11: `mixed→combined`, `dairy→null`) → преселект активного recurring-шаблона по `farm_type` → делегирование в RPC-33 (draft, self-service F-D12).
+
+| Параметр | Тип | Обяз. | Описание |
+|----------|-----|-------|----------|
+| `p_organization_id` | uuid | ✓ | P-AI-2 |
+| `p_farm_id` | uuid | — | default null → primary-ферма организации |
+| `p_first_calving_month` | int | — | 1–12, месяц первого отёла из опросника; якорь `cycle_start_date` (D78). При сезонном отёле без месяца: spring/two_season→3, autumn→9 |
+| `p_actor_id` | uuid | — | service_role compat (C-NEW-7), как в RPC-33 |
+
+**Порог (F-D14):** маточное (COW+HEIFER_PREG) > 0 **и** `farms.calving_system` задан; `year_round` — легальный путь (якорь = 1-е число текущего месяца, план держится на слое-1). Доменные исходы — graceful jsonb `{generated:false, reason}` без ошибки: `BELOW_THRESHOLD` · `PLAN_ALREADY_EXISTS` · `FARM_NOT_FOUND` · `NO_TEMPLATE` · `ARCHETYPE_NOT_APPLICABLE`. Вызывающие: опросник-мастер профиля (ARS-212), AI Gateway.
 
 ### RPC-34 `rpc_complete_farm_task` [WEB] [AI] ✅ Implemented
 

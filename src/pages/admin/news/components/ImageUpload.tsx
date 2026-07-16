@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import { TuranLoader } from '@/components/TuranLoader';
 import { Button } from '@/components/ui/button';
 import { useUploadCoverImage } from '@/hooks/useUploadCoverImage';
 import { toast } from 'sonner';
@@ -87,7 +88,7 @@ export default function ImageUpload({ value, onChange }: ImageUploadProps) {
         </div>
         {upload.isPending && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <div className="animate-spin h-6 w-6 border-2 border-white border-t-transparent rounded-full" />
+            <TuranLoader variant="breathe" size={28} />
           </div>
         )}
       </div>
@@ -105,7 +106,7 @@ export default function ImageUpload({ value, onChange }: ImageUploadProps) {
     >
       <input type="file" accept={ACCEPT} className="hidden" onChange={onFileSelect} />
       {upload.isPending ? (
-        <div className="animate-spin h-6 w-6 border-2 border-muted-foreground/50 border-t-foreground rounded-full" />
+        <TuranLoader variant="breathe" size={28} />
       ) : (
         <>
           <div className="p-3 rounded-full bg-primary/10">

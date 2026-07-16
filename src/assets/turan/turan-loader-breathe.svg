@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="42.88 -0.13 130 130" width="96" height="96" role="img" aria-label="Загрузка">
+  <style>
+    .ray { animation: tlRayBreathe 1.45s ease-in-out infinite; }
+    @keyframes tlRayBreathe { 0%,100% { opacity:.28; transform:scale(.82); } 50% { opacity:1; transform:scale(1); } }
+    @media (prefers-reduced-motion: reduce) { .ray { animation:none; opacity:.85; } }
+  </style>
+  <g fill="#F7931E">
+    <path class="ray" style="transform-origin:100% 100%;animation-delay:-1.214s" d="M63.62,33.3l24.23,24.23c1.01,1.01,2.64,1.01,3.64,0l5.92-5.92c13.08-13.08,20.43-30.82,20.43-49.31V0h-18.38v43.15l-22.84-22.84-13,13h0Z"></path>
+    <path class="ray" style="transform-origin:0% 100%;animation-delay:-1.15s" d="M139.46,20.61l-24.23,24.23c-1.01,1.01-1.01,2.64,0,3.64l5.92,5.92c13.08,13.08,30.82,20.43,49.31,20.43h2.29v-18.38h-43.15l22.84-22.84-13-13h.02Z"></path>
+    <path class="ray" style="transform-origin:0% 0%;animation-delay:-1.086s" d="M152.15,96.45l-24.23-24.23c-1.01-1.01-2.64-1.01-3.64,0l-5.92,5.92c-13.08,13.08-20.43,30.82-20.43,49.31v2.29h18.38v-43.15l22.84,22.84,13-13v.02Z"></path>
+    <path class="ray" style="transform-origin:100% 0%;animation-delay:-1.021s" d="M76.31,109.14l24.23-24.23c1.01-1.01,1.01-2.64,0-3.64l-5.92-5.92c-13.08-13.08-30.82-20.43-49.31-20.43h-2.29v18.38h43.15l-22.84,22.84,13,13h-.02Z"></path>
+  </g>
+</svg>

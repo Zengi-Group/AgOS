@@ -8,7 +8,7 @@ export function BigRadio({ sel, onClick, title, sub }: { sel: boolean; onClick: 
       <span className={'mk-br-dot' + (sel ? ' on' : '')}>{sel && <PhIcon name="check" size={12} color="var(--cta-fg)" />}</span>
       <span className="mk-br-body">
         <span className="mk-br-t">{title}</span>
-        {sub && <span className="mk-br-s mk-mono">{sub}</span>}
+        {sub && <span className="mk-br-s">{sub}</span>}
       </span>
     </button>
   )

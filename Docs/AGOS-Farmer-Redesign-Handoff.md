@@ -75,6 +75,20 @@
 
 **Проверка в preview без бэкенда:** нет `.env` в свежем worktree → RequireAuth редиректит на /login. Обход: заинжектить фейковую сессию в localStorage (`sb-placeholder-auth-token`, непросроченный `expires_at`) + сид-партии в `agos.cabinet.batches.v1.<userId>`, reload → seed-fallback рендерит кабинет. Ошибки консоли `Failed to fetch`/`Failed to load user context` = ожидаемо (placeholder-бэкенд).
 
+### ✅ Phase 6 — Сообщения + Консультант (ARS-231, проверено живым прогоном с реальным логином)
+
+- **Модель:** `data/threads.ts` — порт `app/messages.jsx` (Фаза 03 прототипа): `MSG_META` (§16 семантика аватаров), `buildThreadList`/`buildThreadMsgs` (проекция событий модуля), `aiReply` (мок по справочным данным, антитраст). Хендлеры тредов = `decH` ярусов Главной («один объект — две поверхности»: decision решён из треда — погашен на Главной).
+- **Экраны:** `MessagesScreen` (TabHead + `.thr-list`, mini-CTA решения в списке, футер «не в отдельный центр уведомлений»), `ThreadScreen` (Рынок/Ферма/TURAN: `.thr-head` sticky + pinned «ТРЕБУЕТ РЕШЕНИЯ» + `MsgBubble`), `ConsultantScreen` (AI-чат: пузыри, typing, мок голосового ввода-волны, док-инпут через `IonShellFrame footer footBare`). Новый атом `components/ThreadAv.tsx`.
+- **CSS:** `messages-proto.css` (рескоуп `.agos-cabinet-stage`, импорт после market-proto). R-9 применён: времена «сегодня/утром» и день-разделители — sans (в прототипе были mono), mono остался только у цифровых бейджей.
+- **Chatscope (R-19, решение CEO 2026-07-11 «дизайн чатов очень плохой → готовая библиотека»):** ВСЕ три поверхности сообщений на `@chatscope/chat-ui-kit-react` + тема `messages-chatscope.css` (перекраска `cs-*` в daylight). Кнопки kit'а (FontAwesome) отключены — свои PhIcon; `IonShellFrame` +`noScroll` (scrollY=false — у MessageList/полотна свой скролл).
+  - **ConsultantScreen** — ChatContainer/MessageList/Message/MessageInput/TypingIndicator. Гоча: фон инпута сидит на `__content-editor-container` (не только wrapper/editor); selection на пустом contenteditable красил плейсхолдер синим → перекрыт + `getSelection().removeAllRanges()` после отправки.
+  - **MessagesScreen** — `ConversationList`+`Conversation` (Avatar=ThreadAv, `Conversation.Content` с нашим превью/mini-CTA/unread). unread-бейдж kit (`.cs-conversation__unread`) перекрашен в красный кружок канона.
+  - **ThreadScreen** — `MessageList`+`MessageSeparator`+`Message.CustomContent` (доменный пузырь: текст, действия, дисклеймер; pin «ТРЕБУЕТ РЕШЕНИЯ» = amber через `.cs-message.thr-pin`). **Гоча:** MessageList валидирует ТИП прямых детей (allowed: Message/MessageGroup/MessageSeparator) — обёртка-компонент (`<Bubble/>`) даёт варнинг «not a valid child»; рендерить Message функцией (`renderBubble()`), не компонентом, чтобы `element.type===Message`.
+  - Гоча установки: ставить пакет при остановленном dev-сервере или чистить `node_modules/.vite` — иначе дубль React («Invalid hook call»). Гоча консоли preview: буфер копит стейл-ошибки прошлых HMR (старый `?t=`); чистая проверка — свежая вкладка. Peer-чек D-DEP-BUMP-01 пройден (react 18.3.1 deduped; единственный invalid — известный v5-остров). Транспорт реального Консультанта — `@ai-sdk/react` useChat к AI Gateway (отдельная задача).
+- **Навигация:** тред TURAN — лента `/cabinet/thread/turan`; форма обращения — отдельный route `turan` (`/cabinet/turan`, TuranScreen сохранён HS-2, доступен из ленты «Написать в TURAN»; три onTuran-входа переведены на форму). `hideTabBar` + `'thread'`. Бейдж таба: + decision-партии (pinned не гаснет до решения).
+- **Сохранено:** Pro-гейт Консультанта (`openAI` → progate), эффект гашения непрочитанных по входу в тред, TuranScreen целиком.
+- **Реальный AI Gateway и чтение таблицы `notifications`** — отдельные задачи (мок aiReply / локальные notifs, см. IMPL_DEBT-кандидатов в спеке мозга farmer-messages).
+
 ## Осталось (следующие фазы)
 
 Подход тот же: **портировать структуру прототипа + CSS, переиспользовать `PhIcon`/`.mk-*`/`.sh-*`, сохранить RPC/данные.**
@@ -82,7 +96,7 @@
 - **Phase 3-остаток:** реcкин membership-шторок (`src/pages/cabinet/shell/components/sheets/*`) под светлую тему + дизайн Join/Pay прототипа (`public/agos/app/membership.jsx`).
 - **Phase 4 — Рынок:** ✅ полностью закрыт (4a–4e). Следующее — Phase 5 (Ферма).
 - **Phase 5 — Ферма:** `/cabinet/farm` (сейчас Placeholder) → построить по `farm.jsx` (Сегодня/Стадо/План/Цифры). Wire `rpc_get_farm_summary` + seed-fallback. Большой экран — можно подфазами.
-- **Phase 6 — Сообщения + Консультант:** `/cabinet/messages`, `/thread/:tid` (Placeholder) → 4 треда + AI-чат по `messages.jsx`. Дисклеймер цен в треде TURAN. P-AI для реального AI.
+- **Phase 6 — Сообщения + Консультант:** ✅ закрыт (ARS-231, см. выше). Остаток: реальный AI Gateway вместо мока aiReply + чтение таблицы `notifications` (RPC list/mark-read нет в Dok 3) — отдельные задачи.
 - **Phase 7 — Сервисы/Магазин/Кабинет:** реcкин `CabinetScreen`, построить Shop (`/cabinet/shop`), сетку Сервисов по `services.jsx`. Переключатель тем — ОТЛОЖЕН (только светлая).
 - **Phase 8 — MPK-шелл:** проверить/подправить `mpk/*` (наследует cabinet.css). Обновить apex-brain.
 

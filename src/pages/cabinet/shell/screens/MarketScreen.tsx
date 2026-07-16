@@ -12,6 +12,7 @@ import { TabHead } from '../components/TabHead'
 import { PhIcon } from '../components/icons/PhIcon'
 import { BatchCard } from '../components/BatchListCard'
 import { ScreenSkeleton } from '../components/ScreenSkeleton'
+import { DemandBoard } from '../components/DemandBoard'
 
 // тизер-гейт «Продаю» (shell/market.jsx SellGate) — для не-членов; вне прототипа, стиль сохранён
 function SellGate({ membership, onApply }: { membership: MembershipStatus; onApply: () => void }) {
@@ -19,11 +20,12 @@ function SellGate({ membership, onApply }: { membership: MembershipStatus; onApp
     ? 'Заявка на рассмотрении. Ответим в течение 3 рабочих дней.'
     : membership === 'rejected' ? 'Заявка отклонена: нужна выписка о регистрации хозяйства.' : null
   return (
-    <div className="sell-gate">
-      <div className="sg-t">Продажа партий — для членов ассоциации TURAN</div>
-      <div className="gate-list">
+    <div className="mk-offer">
+      <div className="mk-empty-art"><PhIcon name="market" size={46} /></div>
+      <div className="mk-offer-h">Продажа партий — для членов ассоциации TURAN</div>
+      <div className="mk-offer-list">
         {['Покупатели-комбинаты без посредников', 'Справочные цены по категориям', 'Защита сделки ассоциацией'].map((t) => (
-          <div className="gate-row" key={t}><span className="gate-ck"><PhIcon name="check" size={14} color="var(--green)" /></span>{t}</div>
+          <div className="mk-offer-row" key={t}><span className="mk-offer-ck"><PhIcon name="check" size={15} color="var(--green)" /></span>{t}</div>
         ))}
       </div>
       {note
@@ -55,9 +57,13 @@ interface Props {
   onPay: () => void
   go: (r: Route) => void
   onRefresh?: () => Promise<unknown>   // S2: pull-to-refresh (spec §7)
+  orgId?: string | null                // ARS-229: доска спроса МПК (обезличенный агрегат)
+  /** D2 (офлайн-чтение): сбой загрузки при пустом кеше — ошибка+retry, не «нет партий». */
+  error?: string | null
+  onRetry?: () => void
 }
 
-export function MarketScreen({ membership, batches, loading, onNew, onApply, onPay, go, onRefresh }: Props) {
+export function MarketScreen({ membership, batches, loading, onNew, onApply, onPay, go, onRefresh, orgId, error, onRetry }: Props) {
   const isGate = gated(membership)
   const approved = membership === 'approved'
   const expired = membership === 'expired'
@@ -111,6 +117,8 @@ export function MarketScreen({ membership, batches, loading, onNew, onApply, onP
               </div>
             )}
 
+            <DemandBoard orgId={orgId} />
+
             {nAll > 0 && (
               <div className="mk-tabs">
                 {([['all', 'Все', nAll], ['active', 'В работе', nActive], ['done', 'Завершённые', nDone]] as const).map(([k, t, n]) => (
@@ -121,7 +129,16 @@ export function MarketScreen({ membership, batches, loading, onNew, onApply, onP
               </div>
             )}
 
-            {nAll === 0 ? (
+            {nAll === 0 && error ? (
+              // D2 (офлайн-чтение): пустой кеш из-за сбоя — честная ошибка + «Повторить»,
+              // а не ложное «Пока нет ни одной партии».
+              <div className="mk-empty">
+                <div className="mk-empty-art"><PhIcon name="alert" size={46} /></div>
+                <div className="mk-empty-h">Не удалось загрузить партии</div>
+                <div className="mk-empty-t">Проверьте связь и попробуйте ещё раз.</div>
+                {onRetry && <button className="mk-cta primary" onClick={onRetry}>Повторить</button>}
+              </div>
+            ) : nAll === 0 ? (
               <div className="mk-empty">
                 <div className="mk-empty-art"><PhIcon name="market" size={46} /></div>
                 <div className="mk-empty-h">Пока нет ни одной партии</div>

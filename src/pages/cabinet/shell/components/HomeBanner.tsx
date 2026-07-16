@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useShell } from '../context'
+import { useRpc } from '@/hooks/useRpc'
 import type { MembershipStatus } from '../types'
 import bannerMembership from '@/assets/turan/banner-membership.jpg'
 import bannerCourse from '@/assets/turan/banner-course.jpg'
@@ -13,6 +14,24 @@ interface Tile {
   img: string
   label: string
   onClick?: () => void
+}
+
+// Строка из rpc_list_home_banners (см. Docs/AGOS-Slice-AppBanners.md).
+interface BannerRow {
+  id: string
+  title: string
+  subtitle?: string | null
+  image_path?: string | null
+  action_type: 'internal' | 'external' | 'none'
+  action_target?: string | null
+}
+
+// asset-ключ → импорт (баннеры фермера — фоновые картинки из бандла).
+const ASSET_MAP: Record<string, string> = {
+  'banner-membership': bannerMembership,
+  'banner-course': bannerCourse,
+  'banner-prices': bannerPrices,
+  'banner-market': bannerMarket,
 }
 
 export function HomeBanner() {
@@ -27,12 +46,52 @@ export function HomeBanner() {
     return undefined // active / pending — информационная
   }
 
-  const tiles: Tile[] = [
+  // Вариант набора по членству (перенесено из CabinetApp bannerVariant, P4 — источник тот же ctx).
+  const variant = (ctx.membership === 'none' || ctx.membership === 'terminated') ? 'join' : 'season'
+
+  // Диспетч «рабочих ссылок»: internal-enum → хендлеры ctx; external → внешний переход; none → тост.
+  const dispatch = (row: BannerRow): (() => void) | undefined => {
+    if (row.action_type === 'external' && row.action_target) {
+      const url = row.action_target
+      return () => window.open(url, '_blank', 'noopener,noreferrer')
+    }
+    if (row.action_type === 'internal') {
+      switch (row.action_target) {
+        case 'join_membership': return memberOnClick(ctx.membership) // реактивно к статусу членства
+        case 'pay_membership':  return () => ctx.memberAct('pay')
+        case 'open_prices':     return () => ctx.openPrices('bychki')
+        case 'open_market':     return () => ctx.go({ name: 'market' })
+        case 'open_tsp':        return () => ctx.go({ name: 'market' })
+        case 'open_offers':     return () => ctx.go({ name: 'market' })
+        case 'open_course':     return () => ctx.toast('Курс TURAN откроется в обучении')
+        default:                return undefined // неизвестный ключ — no-op (defensive)
+      }
+    }
+    // none — информационная плитка с мягким тостом
+    return () => ctx.toast(row.subtitle || row.title)
+  }
+
+  // Данные из БД (rpc_list_home_banners). Фолбэк — прежние хардкод-плитки:
+  // нулевой визуальный регресс, работает офлайн и до деплоя SQL (HS-2).
+  const { data } = useRpc<BannerRow[]>('rpc_list_home_banners', {
+    p_app: 'farmer',
+    p_membership_variant: variant,
+  })
+
+  const fallbackTiles: Tile[] = [
     { img: bannerMembership, label: 'Членство TURAN', onClick: memberOnClick(ctx.membership) },
     { img: bannerCourse, label: 'Курс TURAN: сезон отёла', onClick: () => ctx.toast('Курс TURAN откроется в обучении') },
     { img: bannerPrices, label: 'Справочные цены', onClick: () => ctx.openPrices('bychki') },
     { img: bannerMarket, label: 'Маркет · скоро', onClick: () => ctx.toast('Маркет откроется с партнёрами TURAN') },
   ]
+
+  const tiles: Tile[] = (data && data.length > 0)
+    ? data.map((row) => ({
+        img: (row.image_path && ASSET_MAP[row.image_path]) || row.image_path || bannerMarket,
+        label: row.title,
+        onClick: dispatch(row),
+      }))
+    : fallbackTiles
 
   const goTo = (i: number) => {
     const el = stripRef.current

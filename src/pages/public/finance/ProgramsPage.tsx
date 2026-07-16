@@ -5,7 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import PageToolbar, { ToolbarTab, ToolbarChip } from '@/components/layout/PageToolbar';
 import Footer from '@/components/public/Footer';
 import Reveal from '@/components/public/Reveal';
-import { Loader2, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+import { TuranLoader } from '@/components/TuranLoader';
 import { useFinancePrograms } from '@/hooks/finance/useFinancePrograms';
 import { buildDetailFromRow } from '@/lib/finance/program-details';
 import type { FinanceProgram } from '@/types/finance';
@@ -98,7 +99,7 @@ const ProgramsPage = () => {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen" style={{ background: "#fdf6ee" }}>
-        <Loader2 className="h-8 w-8 animate-spin" style={{ color: "#E8730C" }} />
+        <TuranLoader variant="breathe" size={40} />
       </div>
     );
   }

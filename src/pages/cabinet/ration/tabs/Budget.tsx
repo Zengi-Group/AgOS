@@ -4,7 +4,8 @@
  * Edge Function: get-feed-budget (POST /functions/v1/get-feed-budget)
  */
 import { useState, useEffect } from 'react'
-import { AlertTriangle, CheckCircle2, Package, TrendingDown, Loader2, AlertCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Package, TrendingDown, AlertCircle } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 
@@ -199,7 +200,7 @@ export function Budget() {
       {/* Loading */}
       {loading && (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0', color: 'var(--fg3)' }}>
-          <Loader2 size={24} className="animate-spin" />
+          <TuranLoader variant="breathe" size={40} />
         </div>
       )}
 

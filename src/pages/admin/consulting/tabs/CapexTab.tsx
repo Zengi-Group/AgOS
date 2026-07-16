@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { AlertCircle, ChevronDown, ChevronRight, Loader2, Package } from 'lucide-react'
+import { AlertCircle, ChevronDown, ChevronRight, Package } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { useRpc } from '@/hooks/useRpc'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
@@ -470,7 +471,7 @@ export function CapexTab() {
                 Сбросить
               </Button>
               <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1.5">
-                {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {saving && <TuranLoader variant="spin" size={14} />}
                 {saving ? 'Сохраняю…' : 'Сохранить и пересчитать'}
               </Button>
             </div>

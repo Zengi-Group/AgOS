@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import type { WizState } from '../types/batch'
 import { NBSP, CATS } from '../data/tsp-dicts'
-import { fmtMoney, deriveMpkGrade, mpkSortFloor, mpkSortLabel } from '../data/tsp-utils'
+import { fmtMoney, deriveMpkGrade, mpkSortFloor, mpkSortRec, mpkSortLabel } from '../data/tsp-utils'
 import { useGradeFormula } from '@/hooks/useGradeFormula'
 import { WizShell, DraftNote } from './WizShell'
 import { MkField } from '../components/MkField'
@@ -28,6 +28,11 @@ export function WizStep4Price({ w, sw, onNext, onBack, onExit }: Props) {
   // Если сорт не определяется (нестандартная упитанность) — падаем на пол категории.
   const mpkSort = deriveMpkGrade(w)
   const floor = mpkSort ? mpkSortFloor(mpkSort) : cat.prot
+  // Рекомендованная (индикативная) цена — по сорту МПК; фолбэк на цену категории,
+  // если сорт не определён или сорту рекоменд. цена не задана (ст.171: справочно).
+  const recBySort = mpkSort ? mpkSortRec(mpkSort) : null
+  const rec = recBySort ?? cat.rec
+  const recByGrade = recBySort != null
   const price = parseInt(w.price || '0', 10)
   const low = price > 0 && price < floor
   const valid = price > 0 && (!low || w.lowOk)
@@ -39,7 +44,9 @@ export function WizStep4Price({ w, sw, onNext, onBack, onExit }: Props) {
     <WizShell step={4} onBack={onBack} onExit={onExit} title="Цена"
       footer={<><MkCta onClick={tryNext}>Далее</MkCta><DraftNote /></>}>
       <div className="mk-ref">
-        <div className="mk-ref-t">Рекомендуемая цена по категории «{cat.name}»: <b className="mk-mono">{fmtMoney(cat.rec)}{NBSP}₸/кг</b></div>
+        <div className="mk-ref-t">
+          Рекомендуемая цена {recByGrade ? `сорта «${mpkSortLabel(mpkSort!)}»` : `по категории «${cat.name}»`}: <b className="mk-mono">{fmtMoney(rec)}{NBSP}₸/кг</b>
+        </div>
         <div className="mk-ref-d">Справочная информация ассоциации. Не является обязательной — цену вы назначаете сами.</div>
       </div>
       <MkField label="Ваша цена, ₸/кг" miss={miss && !(price > 0)}>
@@ -48,7 +55,7 @@ export function WizStep4Price({ w, sw, onNext, onBack, onExit }: Props) {
       </MkField>
       {miss && !(price > 0) && <MkErr amber>Укажите цену</MkErr>}
       {price > 0 && (
-        <div className="mk-calc mk-mono">≈ {w.heads} × {w.avgWeight} кг × {fmtMoney(price)} = <b>{fmtMoney(sum)}{NBSP}₸</b> за партию <span className="mk-calc-n">(ориентировочно)</span></div>
+        <div className="mk-calc"><span className="mk-mono">≈ {w.heads} × {w.avgWeight} кг × {fmtMoney(price)} = <b>{fmtMoney(sum)}{NBSP}₸</b></span> за партию <span className="mk-calc-n">(ориентировочно)</span></div>
       )}
       {low && (
         <div className="mk-warn">

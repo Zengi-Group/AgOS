@@ -8,6 +8,7 @@ import type { Batch, PubVariant } from '../types/batch'
 import { NBSP } from '../data/tsp-dicts'
 import { fmtMoney } from '../data/tsp-utils'
 import { MkCta } from '../components/MkCta'
+import { TuranLoader } from '@/components/TuranLoader'
 import { PhIcon, type PhIconName } from '../../components/icons/PhIcon'
 
 interface PubResultProps {
@@ -49,7 +50,7 @@ export function PubResult({ variant, batch, onToBatch, onToList }: PubResultProp
         <div className="phone-scroll">
           <div className="mk" data-screen-label={'SCR-03 · публикация · поиск · вариант ' + variant}>
             <div className="mk-loader">
-              <div className="mk-spin" />
+              <TuranLoader variant="breathe" size={44} />
               <div>{SEARCH_PHRASES[phraseIdx]}</div>
             </div>
           </div>
@@ -65,7 +66,7 @@ export function PubResult({ variant, batch, onToBatch, onToList }: PubResultProp
       ic: 'checkCircle', tone: 'green', h: 'Покупатель найден',
       body: (
         <>
-          <div className="mk-pr-price mk-mono">Цена сделки: <b>{fmtMoney(dealPrice)}{NBSP}₸/кг</b></div>
+          <div className="mk-pr-price">Цена сделки: <b className="mk-mono">{fmtMoney(dealPrice)}{NBSP}₸/кг</b></div>
           {dealPrice > price && <div className="mk-pr-badge">на {fmtMoney(dealPrice - price)}{NBSP}₸/кг выше вашей цены</div>}
           <p>Покупатель сейчас добирает полный заказ. Когда доберёт — сделка подтвердится, и мы покажем, кто покупатель. Обычно это занимает от нескольких часов до нескольких дней.</p>
         </>

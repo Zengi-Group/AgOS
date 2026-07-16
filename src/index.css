@@ -29,6 +29,26 @@
   to   { transform: none; opacity: 1; }
 }
 
+/* ═══ TURAN brand loader (TuranLoader.tsx) — ЕДИНСТВЕННЫЙ лоадер проекта ═══
+   Namespaced tl-* — не пересекается с border-спиннерами кабинета (.spin/.mk-spin). */
+/* Готовый веб-сниппет анимации от дизайнера (turan-loader-web.html, 2026-07-14):
+   spin = вращение всей марки на 90° + лёгкое синхронное «дыхание» лучей;
+   breathe = «дыхание» лучей с фазовым сдвигом, без вращения.
+   КРИТИЧНО: `.tl-ray { transform-box: fill-box }` — origin каждого луча считается
+   от ЕГО собственного bbox (а не от общего viewBox), поэтому при scale лучи НЕ
+   расходятся и НЕ пересекаются (это и была причина «пересечения лучей»). */
+@keyframes tlSpin        { from { transform: rotate(0); } to { transform: rotate(90deg); } }
+@keyframes tlBreatheSpin { 0%, 100% { transform: scale(1); } 50% { transform: scale(.9); } }
+@keyframes tlBreathe     { 0%, 100% { transform: scale(1); } 50% { transform: scale(.82); } }
+.tl-spin            { animation: tlSpin 1.09s cubic-bezier(.5,.12,.5,.88) infinite; transform-origin: 50% 50%; }
+.tl-spin .tl-ray    { transform-box: fill-box; animation: tlBreatheSpin 1.09s ease-in-out infinite; }
+.tl-breathe .tl-ray { transform-box: fill-box; animation: tlBreathe 1.214s cubic-bezier(.45,0,.55,1) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .tl-spin            { animation: none; }
+  .tl-spin .tl-ray,
+  .tl-breathe .tl-ray { animation: none; opacity: .9; }
+}
+
 /* AppShell scrollbar styling */
 .shell-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
 .shell-scrollbar::-webkit-scrollbar-track { background: transparent; }

@@ -1,0 +1,92 @@
+/* AgOS · ARS-231 · Сообщения (треды + AI-чат) — CSS прототипа app/messages.jsx,
+   рескоуп в .agos-cabinet-stage (как market-proto.css). Импорт в CabinetApp ПОСЛЕ
+   market-proto.css. R-9: время/день-разделители — слова («сегодня», «утром») → sans;
+   mono остаётся только у цифрового бейджа (.thr-badge.mono из cabinet.css). */
+
+/* аватары тредов — БЕЗ круглых подложек (правка CEO R-21): крупный полноцветный глиф,
+   тон статуса фиксирован (§16 прототипа) */
+.agos-cabinet-stage .thr-av { width: 44px; height: 44px; flex-shrink: 0; display: grid; place-items: center; line-height: 0; }
+.agos-cabinet-stage .thr-av-l { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+.agos-cabinet-stage .thr-av.tone-accent { color: var(--accent); }
+.agos-cabinet-stage .thr-av.tone-amber { color: var(--amber); }
+.agos-cabinet-stage .thr-av.tone-green { color: var(--green); }
+.agos-cabinet-stage .thr-av.tone-neutral { color: var(--fg); }
+
+/* доменный контент строки треда (внутри Chatscope Conversation.Content, R-19) */
+.agos-cabinet-stage .thr-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+/* строка 1: имя слева + время в правом столбце (верх) — компоновка примеров (R-21) */
+.agos-cabinet-stage .thr-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+/* строка 2: превью слева (многоточие) + счётчик в правом столбце (под временем) */
+.agos-cabinet-stage .thr-line2 { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.agos-cabinet-stage .thr-n { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--fg); }
+.agos-cabinet-stage .thr-time { font-size: 13px; color: var(--fg3); white-space: nowrap; flex-shrink: 0; }
+/* превью — одна строка с многоточием, читаемый размер/контраст (R-20/R-21) */
+.agos-cabinet-stage .thr-prev { flex: 1; min-width: 0; font-size: 14.5px; color: var(--fg2); line-height: 1.45;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agos-cabinet-stage .thr-prev.unread { color: var(--fg); font-weight: 500; }
+/* счётчик непрочитанного — красный кружок канона в правом столбце, число mono (R-9) */
+.agos-cabinet-stage .thr-badge { flex-shrink: 0; min-width: 22px; height: 22px; padding: 0 7px; border-radius: var(--r-full);
+  background: var(--red); color: #fff; font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center; }
+/* строка-действие: один primary-CTA на реальном хендлере (функциональный список, R-21) */
+.agos-cabinet-stage .thr-cta-row { display: flex; gap: 8px; margin-top: 9px; }
+.agos-cabinet-stage .thr-cta { font-size: 13.5px; font-weight: 600; padding: 9px 16px; border-radius: var(--r-lg); white-space: nowrap;
+  background: var(--cta); color: var(--cta-fg); border: 1px solid var(--cta); line-height: 1; cursor: pointer; transition: background 60ms var(--ease); }
+.agos-cabinet-stage .thr-cta:hover { background: var(--cta-h); }
+.agos-cabinet-stage .thr-foot { font-size: 12.5px; color: var(--fg3); line-height: 1.5; padding: 18px 2px 4px; border-top: 1px solid var(--bd-s); margin-top: 10px; }
+
+/* шапка треда / консультанта */
+.agos-cabinet-stage .thr-head { display: flex; align-items: center; gap: 10px; padding: 8px 0 11px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--bd-s); position: sticky; top: 0; background: var(--bg); z-index: 4; }
+.agos-cabinet-stage .thr-back { width: 28px; height: 34px; margin-left: -7px; flex-shrink: 0; border: none; background: none; color: var(--fg2);
+  display: grid; place-items: center; cursor: pointer; transition: color 60ms var(--ease); }
+.agos-cabinet-stage .thr-back:hover { color: var(--fg); }
+.agos-cabinet-stage .thr-head .thr-av { width: 46px; height: 46px; }
+.agos-cabinet-stage .thr-head-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.agos-cabinet-stage .thr-head-t b { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--fg); }
+.agos-cabinet-stage .thr-head-t span { font-size: 13px; color: var(--fg2); }
+/* presence-точка у подстроки Консультанта «всегда на связи» (R-20) */
+.agos-cabinet-stage .thr-presence { display: inline-flex; align-items: center; gap: 5px; }
+.agos-cabinet-stage .thr-presence .pres-dot { width: 6px; height: 6px; border-radius: var(--r-full); background: var(--green); flex-shrink: 0; }
+
+/* содержимое пузыря ленты (внутри Chatscope Message.CustomContent, R-19):
+   каркас/фон/бордюр даёт .cs-message__content (messages-chatscope.css). */
+.agos-cabinet-stage .msg-t { font-size: 15.5px; color: var(--fg); line-height: 1.55; }
+.agos-cabinet-stage .msg-s { font-size: 13.5px; color: var(--fg2); line-height: 1.5; margin-top: 5px; }
+
+/* действия — заметные кнопки с релевантной иконкой (R-23): primary solid + secondary
+   outline; ghost-«текст-ссылка» отвергнут — CTA был «практически не заметен». */
+.agos-cabinet-stage .msg-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 12px; }
+.agos-cabinet-stage .msg-act { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px;
+  border-radius: var(--r-lg); font-size: 14px; font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer;
+  font-family: inherit; border: 1px solid transparent; transition: all 60ms var(--ease); }
+.agos-cabinet-stage .msg-act.primary { background: var(--cta); color: var(--cta-fg); border-color: var(--cta); }
+.agos-cabinet-stage .msg-act.primary:hover { background: var(--cta-h); border-color: var(--cta-h); }
+.agos-cabinet-stage .msg-act.ghost { background: var(--bg-c); color: var(--fg); border-color: var(--bd-h); }
+.agos-cabinet-stage .msg-act.ghost:hover { background: var(--bg-m); border-color: var(--fg3); }
+.agos-cabinet-stage .msg-time { font-size: 12px; color: var(--fg3); margin-top: 9px; }
+
+/* AI диалог: полотно/пузыри/инпут — Chatscope (см. messages-chatscope.css);
+   здесь остаются только наши атомы дока: кнопки mic/send, волна.
+   Аватар в баблах убран (R-23, референс Telegram — в 1:1 чате аватар в пузыре не нужен). */
+.agos-cabinet-stage .ai-inrow { display: flex; align-items: center; gap: 9px; }
+.agos-cabinet-stage .ai-mic { width: 44px; height: 44px; flex-shrink: 0; border-radius: var(--r-full); border: 1px solid var(--bd);
+  background: var(--bg-c); color: var(--fg2); display: grid; place-items: center; cursor: pointer; transition: all 60ms var(--ease); }
+.agos-cabinet-stage .ai-mic:hover { background: var(--bg-m); color: var(--fg); }
+.agos-cabinet-stage .ai-mic.send { background: var(--cta); color: var(--cta-fg); border-color: var(--cta); }
+.agos-cabinet-stage .ai-mic.on { background: var(--red); color: #fff; border-color: var(--red); }
+.agos-cabinet-stage .ai-wave { flex: 1; display: flex; align-items: center; justify-content: center; gap: 3px; height: 44px;
+  background: var(--bg-s); border: 1px solid var(--bd); border-radius: var(--r-full); }
+.agos-cabinet-stage .ai-wave i { width: 3px; height: 8px; border-radius: var(--r-full); background: var(--accent); animation: ai-wave 900ms var(--ease) infinite; }
+@keyframes ai-wave { 0%, 100% { height: 8px; opacity: 0.5; } 50% { height: 22px; opacity: 1; } }
+.agos-cabinet-stage .ai-foot { font-size: 11.5px; color: var(--fg3); text-align: center; padding-top: 8px; }
+
+/* ═══ Этап 2 · Отклик на касание — чат/треды (аудит 2026-07-13, аддитивно).
+   Контролы жили только на :hover → на таче фидбек «залипал» после отпускания (T1). ═══ */
+.agos-cabinet-stage .thr-cta:active { background: var(--cta-h); transform: scale(.97); }
+.agos-cabinet-stage .msg-act { transition: all 60ms var(--ease), transform 90ms var(--ease); }
+.agos-cabinet-stage .msg-act:active { transform: scale(.97); }
+.agos-cabinet-stage .ai-mic:active { transform: scale(.92); }
+/* «‹ назад» треда — тап-таргет 28×34 < 44pt (R-25): расширяем зону без сдвига раскладки */
+.agos-cabinet-stage .thr-back { width: 44px; height: 44px; margin-left: -14px; }
+.agos-cabinet-stage .thr-back:active { opacity: .6; }

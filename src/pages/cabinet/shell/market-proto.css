@@ -679,6 +679,27 @@
 }
 .agos-cabinet-stage .mk-empty-h + .mk-empty-t { margin-top:8px; }
 .agos-cabinet-stage .mk-empty .mk-cta { margin-top:24px; max-width:240px; }
+/* Оффер вступления (гейт не-члена) — тот же блоб-язык, что empty-state (R-6/R-24) */
+.agos-cabinet-stage .mk-offer {
+  padding:56px 14px 40px; display:flex; flex-direction:column;
+  align-items:center; text-align:center;
+}
+.agos-cabinet-stage .mk-offer .mk-empty-art { margin:0 0 22px; }
+.agos-cabinet-stage .mk-offer-h {
+  font-size:18px; font-weight:700; color:var(--ink);
+  letter-spacing:-.02em; line-height:1.3; max-width:280px;
+}
+.agos-cabinet-stage .mk-offer-list {
+  display:flex; flex-direction:column; gap:11px;
+  margin:22px 0 0; width:100%; max-width:280px;
+}
+.agos-cabinet-stage .mk-offer-row {
+  display:flex; align-items:center; gap:10px; text-align:left;
+  font-size:14.5px; color:var(--fg); line-height:1.35;
+}
+.agos-cabinet-stage .mk-offer-ck { display:inline-grid; place-items:center; flex-shrink:0; }
+.agos-cabinet-stage .mk-offer .mk-cta { margin-top:26px; max-width:260px; }
+.agos-cabinet-stage .mk-offer .sg-note { margin-top:22px; max-width:280px; text-align:left; }
 /* ─── 10. Льготный режим ───────────────────────────────────────────────── */
 .agos-cabinet-stage .mk-grace {
   display:flex; align-items:center; gap:14px;
@@ -758,10 +779,11 @@
   content:none;
 }
 
-@keyframes mk-pulse {
-  0% { transform:scale(.9); opacity:.6; }
-  100% { transform:scale(1.5); opacity:0; }
-}
+/* УДАЛЁН дубликат @keyframes mk-pulse (аудит 2026-07-13, M1 / урок L-1): здесь стоял
+   второй `mk-pulse` (scale .9→1.5, opacity .6→0) — остаток убранного кольца .mk-trkh-bul::before
+   (content:none выше). Будучи позже в каскаде, он молча перебивал НАМЕРЕННЫЙ opacity-пульс
+   (market-proto.css:133) — статус-дот «торги идут» раздувался и исчезал вместо мягкого дыхания.
+   Единственное валидное определение mk-pulse теперь одно (opacity 1↔.5). */
 .agos-cabinet-stage .mk-trkh-line {
   flex:1; height:1.5px;
   background:var(--bd-s);
@@ -1735,12 +1757,12 @@
 .agos-cabinet-stage .mk-cta:active { transform:scale(.985); }
 /* footer wizard: увеличенный safe-area (шторка home на iOS) */
 .agos-cabinet-stage .sh-foot { padding-bottom:calc(14px + env(safe-area-inset-bottom, 0px)); }
-/* — draft-note: приглушить, центр — */
+/* — draft-note: приглушить, центр; микрокопия = sans, спокойный трекинг — */
 .agos-cabinet-stage .mk-note {
   text-align:center;
   color:var(--fg3);
-  font-size:10.5px;
-  letter-spacing:.08em;
+  font-size:11.5px;
+  letter-spacing:.01em;
   margin-top:10px;
 }
 /* — ошибка ниже поля: чуть плотнее к инпуту — */
@@ -1779,3 +1801,275 @@
 /* ══════ app-local: топ-бар пушевых экранов (back + kebab), не из прототипа ══════ */
 .agos-cabinet-stage .mk-topbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:2px -6px 2px; min-height:40px; }
 .agos-cabinet-stage .mk-topbar .mk-wiz-back { margin-left:-4px; }
+
+
+/* ══════ fw · ARS-212 · Мастер профиля фермы (Dok6 Slice7 §6) — только из токенов палитры ══════ */
+
+/* — F0a хук: hero по центру (каркас es), собственные типоразмеры mk-h1/mk-sub — */
+.agos-cabinet-stage .fw-hook { padding-top:40px; }
+.agos-cabinet-stage .fw-hook-t { font-size:20px; font-weight:700; letter-spacing:-.02em; line-height:1.25; color:var(--fg); max-width:280px; }
+.agos-cabinet-stage .fw-hook-s { font-size:13px; color:var(--fg3); line-height:1.5; max-width:288px; margin-top:8px; }
+
+/* — F0b resume: eyebrow + сводка стада — */
+.agos-cabinet-stage .fw-herd-eyebrow { font-size:10px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--fg3); margin:2px 0 10px; }
+.agos-cabinet-stage .fw-herd-box { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); overflow:hidden; margin-bottom:16px; }
+.agos-cabinet-stage .fw-herd-row { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; }
+.agos-cabinet-stage .fw-herd-row + .fw-herd-row { border-top:1px solid var(--bd-s); }
+.agos-cabinet-stage .fw-herd-n { font-size:14px; font-weight:600; color:var(--fg); }
+.agos-cabinet-stage .fw-herd-h { font-size:15px; font-weight:600; color:var(--fg); }
+.agos-cabinet-stage .fw-herd-note { font-size:13px; color:var(--fg2); line-height:1.5; padding:2px 0 4px; }
+
+/* — F1 ряды категорий со степпером — */
+.agos-cabinet-stage .fw-cats { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); overflow:hidden; margin-bottom:10px; }
+.agos-cabinet-stage .fw-cats.mk-miss { border-color:var(--amber); background:color-mix(in srgb, var(--amber) 6%, var(--bg-c)); }
+.agos-cabinet-stage .fw-cat { display:grid; grid-template-columns:1fr auto; align-items:center; gap:12px; padding:12px 14px; }
+.agos-cabinet-stage .fw-cat + .fw-cat { border-top:1px solid var(--bd-s); }
+.agos-cabinet-stage .fw-cat-t { font-size:14px; font-weight:600; color:var(--fg); }
+.agos-cabinet-stage .fw-cat-s { font-size:11px; color:var(--fg3); margin-top:1px; }
+.agos-cabinet-stage .fw-cat-stp { width:184px; }
+/* компактнее кнопки, шире окно цифры (~74px, до 4 цифр); ручной ввод — первичный сценарий */
+.agos-cabinet-stage .fw-cat-stp .mk-stp { grid-template-columns:44px minmax(0,1fr) 44px; }
+.agos-cabinet-stage .fw-cat-stp .mk-stp-b { height:44px; }
+.agos-cabinet-stage .fw-cat-stp .mk-stp-i { height:44px; font-size:18px; }
+.agos-cabinet-stage .fw-cat-stp.fw-zero .mk-stp-i { color:var(--fg3); }
+
+/* — F2 Payoff-1 · цены — */
+.agos-cabinet-stage .fw-exit-row { display:flex; justify-content:flex-end; margin:2px -4px 4px; }
+.agos-cabinet-stage .fw-pay-eyebrow { font-size:10px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--fg3); margin:2px 0 12px; }
+.agos-cabinet-stage .fw-pay-list { display:flex; flex-direction:column; gap:10px; }
+.agos-cabinet-stage .fw-pay-card { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); padding:14px; }
+/* внутренняя сетка карточки: шапка (имя+поголовье | дельта-чип) → цена|бары → защитная */
+.agos-cabinet-stage .fw-pay-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.agos-cabinet-stage .fw-pay-hl { min-width:0; }
+.agos-cabinet-stage .fw-pay-name { font-size:14.5px; font-weight:700; color:var(--fg); letter-spacing:-.01em; }
+.agos-cabinet-stage .fw-pay-herd { font-size:12px; color:var(--fg3); margin-top:2px; }
+/* дельта — единственный цветовой акцент карточки: чип с тонированной подложкой */
+.agos-cabinet-stage .fw-pay-card .pdelta { flex:none; padding:4px 9px; border-radius:var(--r-full); font-size:12px; }
+.agos-cabinet-stage .fw-pay-card .pdelta.up { background:color-mix(in srgb, var(--ok) 12%, transparent); }
+.agos-cabinet-stage .fw-pay-card .pdelta.down { background:color-mix(in srgb, var(--warn) 14%, transparent); }
+.agos-cabinet-stage .fw-pay-card .pdelta.flat { background:var(--bg-m); }
+.agos-cabinet-stage .fw-pay-row { display:flex; align-items:flex-end; gap:10px; margin-top:10px; }
+.agos-cabinet-stage .fw-pay-card .psm-price { font-size:27px; letter-spacing:-.02em; }
+.agos-cabinet-stage .fw-pay-row .pbars { margin-left:auto; }
+.agos-cabinet-stage .fw-pay-prot { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--fg2); margin-top:9px; }
+.agos-cabinet-stage .fw-pay-sell { display:inline-flex; align-items:center; gap:4px; margin-top:10px; padding:9px 12px; width:100%; justify-content:center; border:1.5px solid var(--green); background:color-mix(in srgb, var(--green) 10%, transparent); color:var(--green-d); border-radius:var(--r-md); font-weight:600; font-size:13px; cursor:pointer; }
+.agos-cabinet-stage .fw-pay-sell:hover { background:color-mix(in srgb, var(--green) 16%, transparent); }
+
+/* — F3 чипы месяца (сами чипы — mk-fat-c) — */
+/* окно сезона: одна строка чипов (3–4 шт); .full — полный грид 4×3 («другой месяц») */
+.agos-cabinet-stage .fw-months { display:grid; grid-template-columns:repeat(auto-fit, minmax(64px, 1fr)); gap:8px; margin-top:4px; }
+.agos-cabinet-stage .fw-months.full { grid-template-columns:repeat(4, 1fr); }
+.agos-cabinet-stage .fw-mon {
+  height:46px;
+  border:1px solid var(--bd); border-radius:12px;
+  background:var(--bg-c);
+  font-size:14px; font-weight:500; color:var(--fg2);
+  cursor:pointer;
+  transition:background 120ms var(--ease), box-shadow 120ms var(--ease), transform 120ms var(--ease);
+}
+.agos-cabinet-stage .fw-mon:active { transform:scale(.95); }
+.agos-cabinet-stage .fw-mon.sel {
+  background:color-mix(in srgb, var(--amber) 12%, var(--bg-c));
+  box-shadow:inset 0 0 0 1.5px var(--amber);
+  color:var(--fg); font-weight:600;
+}
+.agos-cabinet-stage .fw-months.mk-miss .fw-mon { border-color:var(--amber); }
+.agos-cabinet-stage .fw-mon-more { margin-top:8px; font-size:13px; text-align:left; padding:6px 0; }
+
+/* — F3–F5 · опции-карточки (BigRadio): не сливаться (R-18: чип выбора = видимая граница + зазор),
+   компактнее. mk-stack8 в ленте партий = gap:0 — поэтому зазор возвращаем только в fw-opts. — */
+.agos-cabinet-stage .fw-opts { gap:8px; }
+.agos-cabinet-stage .fw-opts .mk-big-radio { padding:12px 14px; }
+.agos-cabinet-stage .fw-opts .mk-big-radio:not(.sel) { border-color:var(--bd); }
+
+/* — «зачем спрашиваем» (дизайн-ход #2) — */
+.agos-cabinet-stage .fw-why { display:flex; align-items:flex-start; gap:7px; margin-top:14px; padding:10px 12px; border-radius:var(--r-md); background:var(--bg-m); color:var(--fg2); font-size:12px; line-height:1.45; }
+.agos-cabinet-stage .fw-why > svg { color:var(--fg3); margin-top:1px; flex-shrink:0; }
+
+/* — ARS-215 · state C: годовой план на табе «Ферма» (плоские карты r-12, один акцент на блок) — */
+.agos-cabinet-stage .fw-plan-card { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); padding:14px; margin-bottom:10px; }
+.agos-cabinet-stage .fw-plan-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.agos-cabinet-stage .fw-plan-name { font-size:15px; font-weight:700; color:var(--fg); letter-spacing:-.01em; }
+.agos-cabinet-stage .fw-plan-period { font-size:12px; color:var(--fg3); margin-top:3px; }
+.agos-cabinet-stage .fw-plan-chip { flex:none; padding:4px 9px; border-radius:var(--r-full); font-size:12px; font-weight:600; background:var(--bg-m); color:var(--fg2); }
+.agos-cabinet-stage .fw-plan-box { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); overflow:hidden; margin-bottom:16px; }
+.agos-cabinet-stage .fw-ph { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; }
+.agos-cabinet-stage .fw-ph + .fw-ph { border-top:1px solid var(--bd-s); }
+.agos-cabinet-stage .fw-ph-n { display:flex; align-items:center; gap:5px; font-size:14px; font-weight:600; color:var(--fg); }
+.agos-cabinet-stage .fw-ph-n > svg { color:var(--fg3); flex-shrink:0; }
+.agos-cabinet-stage .fw-ph-d { font-size:12px; color:var(--fg3); margin-top:2px; }
+.agos-cabinet-stage .fw-ph-chip { flex:none; padding:3px 8px; border-radius:var(--r-full); font-size:11.5px; font-weight:600; background:var(--bg-m); color:var(--fg2); }
+.agos-cabinet-stage .fw-ph-chip.on { background:color-mix(in srgb, var(--amber) 12%, transparent); color:var(--fg); }
+.agos-cabinet-stage .fw-ph-chip.ok { background:color-mix(in srgb, var(--ok) 12%, transparent); color:var(--fg2); }
+
+/* ═══ Этап 2 · Отклик на касание — Рынок/Партия/payoff (аудит 2026-07-13, аддитивно).
+   Wizard-контролы (.mk-cta/.mk-stp-b/.mk-kebab/.mk-card…) уже имеют :active; тут —
+   дозаполнение поверхностей рынка/сделки, что жили только на :hover (T2). ═══ */
+/* площадные (меню действий, шапки аккордеонов, альтернативы решения) — подложка */
+.agos-cabinet-stage .mk-menu-item:active,
+.agos-cabinet-stage .mk-acc-head:active,
+.agos-cabinet-stage .mk-dec-alt:active { background:var(--bg-m); }
+/* текстовые (табы-фильтры, ссылки, «изменить», «отмена») — приглушение */
+.agos-cabinet-stage .mk-tab:active,
+.agos-cabinet-stage .mk-link:active,
+.agos-cabinet-stage .mk-dec-cancel:active,
+.agos-cabinet-stage .mk-prose-edit:active { opacity:.6; }
+/* «Продать через TURAN» в payoff-карте фермы */
+.agos-cabinet-stage .fw-pay-sell { transition:background 90ms var(--ease), transform 90ms var(--ease); }
+.agos-cabinet-stage .fw-pay-sell:active { background:color-mix(in srgb, var(--green) 20%, transparent); transform:scale(.99); }
+
+/* ═══ ARS-227 · Фото и видео партии (BatchMedia) — плоские тайлы R-18, отклик R-28 ═══ */
+.agos-cabinet-stage .mk-media-grid {
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:8px;
+}
+.agos-cabinet-stage .mk-media-tile {
+  position:relative;
+  aspect-ratio:1 / 1;
+  border-radius:var(--r-lg);
+  overflow:hidden;
+  background:var(--bg-c);
+  border:1px solid var(--bd);
+}
+.agos-cabinet-stage .mk-media-media { width:100%; height:100%; object-fit:cover; display:block; }
+.agos-cabinet-stage .mk-media-ph {
+  width:100%; height:100%;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--fg3);
+}
+/* пилюля-«видео» в углу тайла */
+.agos-cabinet-stage .mk-media-badge {
+  position:absolute; left:6px; bottom:6px;
+  width:22px; height:22px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:var(--r-full);
+  background:color-mix(in srgb, var(--fg) 62%, transparent);
+}
+/* удалить — компактный тап-таргет (хит-зона добирается ::before, R-28) */
+.agos-cabinet-stage .mk-media-del {
+  position:absolute; top:5px; right:5px;
+  width:24px; height:24px;
+  display:flex; align-items:center; justify-content:center;
+  border:0; padding:0;
+  border-radius:var(--r-full);
+  background:color-mix(in srgb, var(--fg) 62%, transparent);
+  cursor:pointer;
+  transition:transform 90ms var(--ease);
+}
+.agos-cabinet-stage .mk-media-del::before {
+  content:''; position:absolute; inset:-10px;   /* ≥44pt хит-зона */
+}
+.agos-cabinet-stage .mk-media-del:active { transform:scale(.9); }
+/* добавить — плоский тайл-чип: граница + bg-c (R-18) */
+.agos-cabinet-stage .mk-media-add {
+  aspect-ratio:1 / 1;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:5px;
+  border:1px solid var(--bd);
+  border-radius:var(--r-lg);
+  background:var(--bg-c);
+  color:var(--fg2);
+  cursor:pointer;
+  transition:background 90ms var(--ease), transform 90ms var(--ease);
+}
+.agos-cabinet-stage .mk-media-add:active { background:var(--bg-m); transform:scale(.985); }
+.agos-cabinet-stage .mk-media-add:disabled { opacity:.6; }
+.agos-cabinet-stage .mk-media-add-t { font-size:12px; font-weight:600; }
+.agos-cabinet-stage .mk-media-hint { font-size:12px; color:var(--fg3); margin-top:8px; }
+
+/* ═══ ARS-228 · Детализация по животным (BatchAnimals) — плоские строки, отклик R-28 ═══ */
+.agos-cabinet-stage .mk-anml { display:flex; flex-direction:column; gap:8px; }
+.agos-cabinet-stage .mk-anml-row {
+  display:flex; align-items:flex-start; gap:11px;
+  padding:11px 13px;
+  border:1px solid var(--bd);
+  border-radius:var(--r-lg);
+  background:var(--bg-c);
+  transition:background 90ms var(--ease), transform 90ms var(--ease);
+}
+.agos-cabinet-stage .mk-anml-row.ed { cursor:pointer; }
+.agos-cabinet-stage .mk-anml-row.ed:active { background:var(--bg-m); transform:scale(.99); }
+.agos-cabinet-stage .mk-anml-ic {
+  flex:none; width:20px; display:flex; align-items:center; justify-content:center;
+  color:var(--fg2); margin-top:1px;
+}
+.agos-cabinet-stage .mk-anml-bd { flex:1; min-width:0; }
+.agos-cabinet-stage .mk-anml-t { font-size:15px; font-weight:600; }
+.agos-cabinet-stage .mk-anml-m { font-size:12.5px; color:var(--fg2); margin-top:2px; }
+.agos-cabinet-stage .mk-anml-note { font-size:12px; color:var(--fg3); margin-top:2px; }
+.agos-cabinet-stage .mk-anml-del {
+  position:relative;
+  flex:none; width:30px; height:30px;
+  display:flex; align-items:center; justify-content:center;
+  border:0; padding:0; background:transparent;
+  color:var(--fg3); cursor:pointer;
+  transition:transform 90ms var(--ease), color 90ms var(--ease);
+}
+.agos-cabinet-stage .mk-anml-del::before { content:''; position:absolute; inset:-8px; }  /* ≥44pt */
+.agos-cabinet-stage .mk-anml-del:active { transform:scale(.9); color:var(--red); }
+/* добавить — плоская строка-чип (R-18): граница + bg-c */
+.agos-cabinet-stage .mk-anml-add {
+  display:flex; align-items:center; justify-content:center; gap:7px;
+  padding:11px 13px;
+  border:1px solid var(--bd);
+  border-radius:var(--r-lg);
+  background:var(--bg-c);
+  color:var(--fg2); font-size:13px; font-weight:600;
+  cursor:pointer;
+  transition:background 90ms var(--ease), transform 90ms var(--ease);
+}
+.agos-cabinet-stage .mk-anml-add:active { background:var(--bg-m); transform:scale(.99); }
+.agos-cabinet-stage .mk-anml-hint { font-size:12px; color:var(--fg3); margin-top:2px; }
+.agos-cabinet-stage .mk-anml-hint.warn { color:var(--amber); }
+/* пол — два чипа (R-18) */
+.agos-cabinet-stage .mk-anml-sex { display:flex; gap:8px; }
+.agos-cabinet-stage .mk-anml-sexb {
+  flex:1; padding:10px 12px;
+  border:1px solid var(--bd);
+  border-radius:var(--r-lg);
+  background:var(--bg-c);
+  color:var(--fg2); font-size:14px; font-weight:600;
+  cursor:pointer;
+  transition:background 90ms var(--ease), border-color 90ms var(--ease), transform 90ms var(--ease);
+}
+.agos-cabinet-stage .mk-anml-sexb:active { transform:scale(.985); }
+.agos-cabinet-stage .mk-anml-sexb.on {
+  border-color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 12%, transparent);
+  color:var(--fg);
+}
+/* ─── 14. Доска спроса МПК (ARS-229) — обезличенный агрегат, ledger-rows ── */
+.agos-cabinet-stage .mk-demand { display:flex; flex-direction:column; }
+.agos-cabinet-stage .mk-demand-row {
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  column-gap:12px;
+  padding:14px 0;
+  border-bottom:1px solid var(--bd-s);
+}
+.agos-cabinet-stage .mk-demand-row:last-of-type { border-bottom:0; }
+.agos-cabinet-stage .mk-demand-ic {
+  display:grid; place-items:center;
+  width:34px; height:34px;
+  border-radius:var(--r-md);
+  background:var(--bg-m);
+  color:var(--fg2);
+  flex-shrink:0;
+}
+.agos-cabinet-stage .mk-demand-bd { min-width:0; }
+.agos-cabinet-stage .mk-demand-t {
+  font-size:14.5px; font-weight:600; color:var(--fg);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.agos-cabinet-stage .mk-demand-m { font-size:12px; color:var(--fg3); margin-top:2px; }
+.agos-cabinet-stage .mk-demand-price {
+  font-size:14px; font-weight:600; color:var(--fg);
+  white-space:nowrap; text-align:right;
+}
+.agos-cabinet-stage .mk-demand-note {
+  font-size:11px; color:var(--fg3); line-height:1.45;
+  padding-top:12px; margin-top:2px;
+  border-top:1px solid var(--bd-s);
+}

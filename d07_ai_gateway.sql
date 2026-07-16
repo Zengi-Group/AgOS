@@ -277,11 +277,14 @@ begin
     return (
         select jsonb_build_object(
             'plan_id',     fpp.id,
-            'plan_name',   fpp.plan_name,
+            'plan_name',   fpp.name,
             'status',      fpp.status,
-            'start_date',  fpp.plan_start_date,
-            'end_date',    fpp.plan_end_date,
+            'start_date',  fpp.cycle_start_date,
+            'end_date',    fpp.cycle_end_date,
             'phases', (
+                -- FARM-01-bis (ARS-215): счётчики задач в lateral-подзапросе —
+                -- count() внутри jsonb_agg() = вложенные агрегаты (42803), функция
+                -- падала на ЛЮБОМ существующем плане. Payload не изменён.
                 select coalesce(jsonb_agg(jsonb_build_object(
                     'phase_id',      fph.id,
                     'name',          fph.name_ru,
@@ -289,16 +292,19 @@ begin
                     'start_date',    fph.start_date,
                     'end_date',      fph.end_date,
                     'is_sale_phase', fph.is_sale_phase,
-                    'task_counts', jsonb_build_object(
+                    'task_counts',   tc.counts
+                ) order by fph.start_date), '[]'::jsonb)
+                from   public.farm_phases fph
+                cross  join lateral (
+                    select jsonb_build_object(
                         'total',     count(ft.id),
                         'completed', count(ft.id) filter (where ft.status = 'completed'),
                         'overdue',   count(ft.id) filter (where ft.status = 'overdue')
-                    )
-                ) order by fph.start_date), '[]'::jsonb)
-                from   public.farm_phases fph
-                left   join public.farm_tasks ft on ft.farm_phase_id = fph.id
+                    ) as counts
+                    from   public.farm_tasks ft
+                    where  ft.farm_phase_id = fph.id
+                ) tc
                 where  fph.plan_id = fpp.id
-                group  by fph.id
             )
         )
         from   public.farm_production_plans fpp
@@ -956,7 +962,9 @@ begin
             select coalesce(jsonb_agg(jsonb_build_object(
                 'price_grid_id',    pg2.id,
                 'sku_code',         ts.sku_code,
-                'sku_name',         ts.description_ru,
+                -- ARS-232: tsp_skus has no name/description column (schema & canon);
+                -- sku_name carries sku_code until a data-driven label exists (P8, IMPL_DEBT BUG-GETORGBATCHES-01)
+                'sku_name',         ts.sku_code,
                 'base_price_per_kg', pg2.base_price_per_kg,
                 'premium_per_kg',   pg2.premium_per_kg,
                 'total_per_kg',     pg2.base_price_per_kg + pg2.premium_per_kg,
@@ -1010,25 +1018,35 @@ begin
         -- LEGAL 5.9: Individual farm data never visible to competitors
         'legal_note', 'Агрегированные анонимные данные. Детали конкретных ферм не раскрываются.',
         'supply', (
+            -- ARS-232: aggregates pre-computed in inner grouped subquery, then jsonb_agg
+            -- over derived rows — count()/sum()/avg() inside jsonb_agg() = nested aggregates
+            -- (42803, same class as FARM-01-bis/PR#77). sku_name → sku_code (no name column).
             select coalesce(jsonb_agg(jsonb_build_object(
-                'sku_code',         ts.sku_code,
-                'sku_name',         ts.description_ru,
-                'region',           r.name_ru,
-                'target_month',     date_trunc('month', b.target_month),
-                'batch_count',      count(b.id),
-                'total_heads',      sum(b.heads),
-                'avg_weight_kg',    round(avg(b.avg_weight_kg)::numeric, 1)
-            ) order by ts.sku_code, date_trunc('month', b.target_month)), '[]'::jsonb)
-            from   public.batches b
-            join   public.tsp_skus ts on ts.id = b.tsp_sku_id
-            left   join public.regions r on r.id = b.region_id
-            where  b.status = 'published'
-              and  (p_target_month is null
-                    or date_trunc('month', b.target_month) = date_trunc('month', p_target_month))
-              and  (p_region_id is null or b.region_id = p_region_id)
-            group  by ts.sku_code, ts.description_ru, r.name_ru,
-                      date_trunc('month', b.target_month)
-            having count(b.id) >= p_min_count   -- ANTITRUST: min 5 batches for anonymity
+                'sku_code',         agg.sku_code,
+                'sku_name',         agg.sku_code,
+                'region',           agg.region,
+                'target_month',     agg.target_month,
+                'batch_count',      agg.batch_count,
+                'total_heads',      agg.total_heads,
+                'avg_weight_kg',    agg.avg_weight_kg
+            ) order by agg.sku_code, agg.target_month), '[]'::jsonb)
+            from (
+                select ts.sku_code                             as sku_code,
+                       r.name_ru                               as region,
+                       date_trunc('month', b.target_month)     as target_month,
+                       count(b.id)                             as batch_count,
+                       sum(b.heads)                            as total_heads,
+                       round(avg(b.avg_weight_kg)::numeric, 1) as avg_weight_kg
+                from   public.batches b
+                join   public.tsp_skus ts on ts.id = b.tsp_sku_id
+                left   join public.regions r on r.id = b.region_id
+                where  b.status = 'published'
+                  and  (p_target_month is null
+                        or date_trunc('month', b.target_month) = date_trunc('month', p_target_month))
+                  and  (p_region_id is null or b.region_id = p_region_id)
+                group  by ts.sku_code, r.name_ru, date_trunc('month', b.target_month)
+                having count(b.id) >= p_min_count   -- ANTITRUST: min 5 batches for anonymity
+            ) agg
         ),
         'privacy_threshold', p_min_count,
         'note', 'Данные скрыты если источников меньше ' || p_min_count::text
@@ -1064,26 +1082,37 @@ begin
         'legal_note', 'Агрегированные анонимные данные. Детали конкретных МПК не раскрываются.',
         'demand', (
             -- Note: pool_requests.accepted_categories is JSONB — aggregated without SKU breakdown
+            -- ARS-232: aggregates pre-computed in inner grouped subquery, then jsonb_agg over
+            -- derived rows — count()/sum() inside jsonb_agg() = nested aggregates (42803,
+            -- same class as FARM-01-bis/PR#77). Payload keys unchanged (P7).
             select coalesce(jsonb_agg(jsonb_build_object(
-                'region',           r.name_ru,
-                'target_month',     date_trunc('month', pr.target_month),
-                'pool_count',       count(distinct p2.id),
-                'total_heads_needed', sum(p2.target_heads),
-                'status_breakdown', jsonb_build_object(
-                    'filling', count(p2.id) filter (where p2.status = 'filling'),
-                    'filled',  count(p2.id) filter (where p2.status = 'filled')
+                'region',             agg.region,
+                'target_month',       agg.target_month,
+                'pool_count',         agg.pool_count,
+                'total_heads_needed', agg.total_heads_needed,
+                'status_breakdown',   jsonb_build_object(
+                    'filling', agg.filling_count,
+                    'filled',  agg.filled_count
                 )
-            ) order by date_trunc('month', pr.target_month)), '[]'::jsonb)
-            from   public.pools p2
-            join   public.pool_requests pr on pr.id = p2.pool_request_id
-            left   join public.regions r on r.id = pr.region_id
-            where  p2.status in ('filling', 'filled')
-              and  pr.status = 'active'
-              and  (p_target_month is null
-                    or date_trunc('month', pr.target_month) = date_trunc('month', p_target_month))
-              and  (p_region_id is null or pr.region_id = p_region_id)
-            group  by r.name_ru, date_trunc('month', pr.target_month)
-            having count(distinct p2.id) >= p_min_count
+            ) order by agg.target_month), '[]'::jsonb)
+            from (
+                select r.name_ru                                        as region,
+                       date_trunc('month', pr.target_month)             as target_month,
+                       count(distinct p2.id)                            as pool_count,
+                       sum(p2.target_heads)                             as total_heads_needed,
+                       count(p2.id) filter (where p2.status = 'filling') as filling_count,
+                       count(p2.id) filter (where p2.status = 'filled')  as filled_count
+                from   public.pools p2
+                join   public.pool_requests pr on pr.id = p2.pool_request_id
+                left   join public.regions r on r.id = pr.region_id
+                where  p2.status in ('filling', 'filled')
+                  and  pr.status = 'active'
+                  and  (p_target_month is null
+                        or date_trunc('month', pr.target_month) = date_trunc('month', p_target_month))
+                  and  (p_region_id is null or pr.region_id = p_region_id)
+                group  by r.name_ru, date_trunc('month', pr.target_month)
+                having count(distinct p2.id) >= p_min_count
+            ) agg
         ),
         'privacy_threshold', p_min_count
     );
@@ -1129,7 +1158,9 @@ begin
             select coalesce(jsonb_agg(jsonb_build_object(
                 'batch_id',      b.id,
                 'sku_code',      ts.sku_code,
-                'sku_name',      ts.description_ru,
+                -- ARS-232: tsp_skus has no name/description column (schema & canon);
+                -- sku_name carries sku_code until a data-driven label exists (P8, IMPL_DEBT BUG-GETORGBATCHES-01)
+                'sku_name',      ts.sku_code,
                 'heads',         b.heads,
                 'avg_weight_kg', b.avg_weight_kg,
                 'target_month',  b.target_month,
@@ -1405,7 +1436,8 @@ comment on function public.rpc_publish_batch(uuid, uuid, uuid, jsonb) is
 -- Explicit grants for anon-blocking:
 -- ============================================================
 revoke execute on function public.rpc_get_ai_farm_context(uuid,uuid) from anon;
-revoke execute on function public.rpc_upsert_herd_group(uuid,uuid,text,int,numeric,uuid,uuid,uuid,jsonb) from anon;
+-- rpc_upsert_herd_group: revoke перенесён после переопределения функции ниже
+-- (сигнатура расширена ARS-212 — здесь старая сигнатура ещё/уже не существует).
 revoke execute on function public.rpc_get_feeding_plan(uuid,uuid,uuid) from anon;
 revoke execute on function public.rpc_get_farm_tasks(uuid,uuid,int,text) from anon;
 revoke execute on function public.rpc_complete_farm_task(uuid,uuid,text,jsonb,uuid,jsonb) from anon;
@@ -1847,9 +1879,11 @@ comment on function public.rpc_get_ai_farm_context(uuid, uuid) is
 -- INSERT path в 011 уже правильный: confidence = greatest(herd_groups.confidence, 50).
 -- Синхронизируем UPDATE path с той же логикой.
 --
--- Это CREATE OR REPLACE всей функции из 011 с единственным изменением:
---   confidence = 50  →  confidence = greatest(v_old_confidence, 50)
---   где v_old_confidence читается в SELECT перед UPDATE.
+-- Это CREATE OR REPLACE всей функции из 011 с изменениями:
+--   1) L-AUDIT-5: confidence = 50 → greatest(v_old_confidence, 50),
+--      где v_old_confidence читается в SELECT перед UPDATE.
+--   2) ARS-212 (аддитивно): p_data_source default 'ai_extracted';
+--      confidence выводится из data_source (D21), мастер профиля шлёт 'platform'.
 -- ============================================================
 
 drop function if exists public.rpc_upsert_herd_group(p_organization_id uuid, p_farm_id uuid, p_animal_category_code text, p_head_count integer, p_avg_weight_kg numeric, p_breed_id uuid, p_herd_group_id uuid, p_actor_id uuid, p_ai_context jsonb);
@@ -1862,7 +1896,10 @@ create or replace function public.rpc_upsert_herd_group(
     p_breed_id              uuid            default null,
     p_herd_group_id         uuid            default null,
     p_actor_id              uuid            default null,
-    p_ai_context            jsonb           default null
+    p_ai_context            jsonb           default null,
+    -- ARS-212 (аддитивно, P7): источник записи. Default сохраняет поведение
+    -- существующих вызовов (AI Gateway); мастер профиля передаёт 'platform' (L3).
+    p_data_source           text            default 'ai_extracted'
 )
 returns jsonb
 language plpgsql
@@ -1875,10 +1912,24 @@ declare
     v_old_count         int;
     v_old_weight        numeric;
     v_old_confidence    int;    -- L-AUDIT-5: читаем для GREATEST
+    v_new_confidence    int;    -- ARS-212: выводится из p_data_source (D21)
 begin
     if not public._ai_check_farm_org(p_farm_id, p_organization_id) then
         raise exception 'FORBIDDEN: farm % does not belong to organization %',
             p_farm_id, p_organization_id using errcode = 'P0001';
+    end if;
+
+    -- D21 Layered Truth: confidence выводится из data_source
+    -- (registration=25, ai_extracted=50, platform=75, erp=95)
+    v_new_confidence := case p_data_source
+        when 'registration' then 25
+        when 'ai_extracted' then 50
+        when 'platform'     then 75
+        when 'erp'          then 95
+    end;
+    if v_new_confidence is null then
+        raise exception 'INVALID: unknown data_source %', p_data_source
+            using errcode = 'P0002';
     end if;
 
     -- Resolve category
@@ -1908,11 +1959,11 @@ begin
         set    head_count        = p_head_count,
                avg_weight_kg     = coalesce(p_avg_weight_kg, avg_weight_kg),
                breed_id          = coalesce(p_breed_id, breed_id),
-               data_source       = 'ai_extracted',
+               data_source       = p_data_source,
                -- L-AUDIT-5 FIX: GREATEST сохраняет накопленную уверенность.
                -- Фермер подтвердил данные → уверенность растёт или остаётся.
                -- До фикса: ERP=90 → AI update → 50. Теперь: ERP=90 → AI update → 90.
-               confidence        = greatest(v_old_confidence, 50),
+               confidence        = greatest(v_old_confidence, v_new_confidence),
                count_updated_at  = case when p_head_count is distinct from v_old_count
                                         then now() else count_updated_at end,
                weight_updated_at = case when p_avg_weight_kg is not null
@@ -1930,7 +1981,7 @@ begin
             count_updated_at, weight_updated_at
         ) values (
             p_farm_id, p_organization_id, v_category_id, p_breed_id,
-            p_head_count, p_avg_weight_kg, 'ai_extracted', 50,
+            p_head_count, p_avg_weight_kg, p_data_source, v_new_confidence,
             now(), case when p_avg_weight_kg is not null then now() end
         )
         on conflict (farm_id, animal_category_id)
@@ -1938,8 +1989,8 @@ begin
             head_count        = excluded.head_count,
             avg_weight_kg     = coalesce(excluded.avg_weight_kg, herd_groups.avg_weight_kg),
             breed_id          = coalesce(excluded.breed_id, herd_groups.breed_id),
-            data_source       = 'ai_extracted',
-            confidence        = greatest(herd_groups.confidence, 50),
+            data_source       = excluded.data_source,
+            confidence        = greatest(herd_groups.confidence, excluded.confidence),
             count_updated_at  = now(),
             weight_updated_at = case when excluded.avg_weight_kg is not null then now()
                                      else herd_groups.weight_updated_at end,
@@ -1966,7 +2017,7 @@ begin
             'animal_category_code', p_animal_category_code,
             'new_head_count',       p_head_count,
             'new_avg_weight_kg',    p_avg_weight_kg,
-            'data_source',          'ai_extracted',
+            'data_source',          p_data_source,
             'ai_context',           p_ai_context
         )
     );
@@ -1976,18 +2027,25 @@ begin
         'animal_category_code', p_animal_category_code,
         'head_count',           p_head_count,
         'avg_weight_kg',        p_avg_weight_kg,
-        'data_source',          'ai_extracted',
-        'confidence',           greatest(coalesce(v_old_confidence, 0), 50)
+        'data_source',          p_data_source,
+        'confidence',           greatest(coalesce(v_old_confidence, 0), v_new_confidence)
     );
 end;
 $$;
 
-comment on function public.rpc_upsert_herd_group(uuid,uuid,text,int,numeric,uuid,uuid,uuid,jsonb) is
-    'L-AUDIT-5 FIX: UPDATE path теперь использует GREATEST(existing_confidence, 50).
+-- Anon-блок: перевешивается здесь же при каждом переопределении сигнатуры
+-- (старый revoke в блоке GRANTS выше удалён — сигнатура расширена ARS-212).
+revoke execute on function public.rpc_upsert_herd_group(uuid,uuid,text,int,numeric,uuid,uuid,uuid,jsonb,text) from anon;
+
+comment on function public.rpc_upsert_herd_group(uuid,uuid,text,int,numeric,uuid,uuid,uuid,jsonb,text) is
+    'L-AUDIT-5 FIX: UPDATE path теперь использует GREATEST(existing_confidence, new).
      Синхронизировано с INSERT/upsert path (был greatest уже в 011_ai_rpc_catalog.sql).
-     Смысл: AI-подтверждение данных никогда не снижает накопленную уверенность.
+     Смысл: подтверждение данных никогда не снижает накопленную уверенность.
      ERP-синхронизированные данные (confidence=90) сохраняют свой уровень
      даже при последующем AI-update.
+     ARS-212 (аддитивно): p_data_source (default ai_extracted — поведение AI Gateway
+     не меняется); confidence выводится из data_source по D21: registration=25,
+     ai_extracted=50, platform=75 (мастер профиля, Узел 1 v2.1 §4), erp=95.
 
      Всё остальное без изменений относительно 011_ai_rpc_catalog.sql:
      - Ownership check через _ai_check_farm_org

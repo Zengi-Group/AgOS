@@ -12,7 +12,7 @@ const WIZ_LABELS = ['Животные', 'Готовность', 'Категор�
 
 // Подпись «черновик сохраняется после каждого шага» — под CTA в футере (useBatchDraft).
 export function DraftNote() {
-  return <div className="mk-note mk-mono">черновик сохраняется после каждого шага</div>
+  return <div className="mk-note">черновик сохраняется после каждого шага</div>
 }
 
 function WizTop({ step, onBack, onExit }: { step: number; onBack: () => void; onExit: () => void }) {
@@ -23,7 +23,7 @@ function WizTop({ step, onBack, onExit }: { step: number; onBack: () => void; on
         <WizProgress step={step} />
         <button className="mk-wiz-exit" onClick={onExit} aria-label="Выйти"><PhIcon name="x" size={16} /></button>
       </div>
-      <div className="mk-wiz-step mk-mono">шаг {step} из 5 · {WIZ_LABELS[step - 1]}</div>
+      <div className="mk-wiz-step">шаг {step} из 5 · {WIZ_LABELS[step - 1]}</div>
     </>
   )
 }

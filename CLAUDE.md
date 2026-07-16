@@ -243,6 +243,8 @@ TSP is coordination infrastructure of the association, NOT a marketplace. It doe
 
 - UX/UI work BEFORE coding: User Story → User Flow → Wireframe → Dok 6 contract → code
 - Design system: warm palette (`:root`) for farmer cabinet; neutral (`.light`) for expert console
+- **Farmer zone design canon = `Docs/AGOS-DesignRules-FarmerCabinet.md`** (D-UI-FARMER-RULES-01): `/cabinet` + auth funnel — Phosphor-only icons via `PhIcon`, Geist, daylight tokens, flat cards. Admin/expert (`[data-shell]`) = `Docs/AGOS-DesignSystem-v12.md` (lucide). Never mix icon libraries across zones. Read the farmer canon BEFORE any UI work in the farmer zone.
+- **CEO design feedback → rule (D-UI-FARMER-RULES-01):** every design correction from Arshidin (screenshot, text, verbal) must be analyzed for the general rule behind it and recorded in the canon's «Реестр правил из правок CEO» table in the SAME PR as the fix. A fix without a recorded rule WILL repeat.
 - Farmer cabinet = full web cabinet (`turanstandard.kz/cabinet`); WhatsApp = additional channel, not replacement
 - UI code in git (`src/`), same repo as SQL and backend — Vite + React + TypeScript
 

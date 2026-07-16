@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Loader2, AlertTriangle, Clock, Shield, Stethoscope } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, Clock, Shield, Stethoscope } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSetTopbar } from '@/components/layout/TopbarContext'
@@ -335,7 +336,7 @@ export function VetCaseDetail() {
           </div>
         ) : (
           <div className="flex items-center gap-2 py-4 justify-center">
-            <Loader2 className="h-4 w-4 animate-spin text-[var(--fg2)]" />
+            <TuranLoader variant="spin" size={16} />
             <span className="text-sm text-[var(--fg2)]">
               AI анализирует симптомы...
             </span>
@@ -398,7 +399,7 @@ export function VetCaseDetail() {
           </div>
         ) : (
           <div className="flex items-center gap-2 py-4 justify-center">
-            <Loader2 className="h-4 w-4 animate-spin text-[var(--fg2)]" />
+            <TuranLoader variant="spin" size={16} />
             <span className="text-sm text-[var(--fg2)]">
               Рекомендации будут добавлены после анализа
             </span>

@@ -6,7 +6,8 @@
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2, Calculator as CalcIcon, ChevronDown, AlertTriangle, CheckCircle2, Save } from 'lucide-react'
+import { Calculator as CalcIcon, ChevronDown, AlertTriangle, CheckCircle2, Save } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useRpc } from '@/hooks/useRpc'
@@ -317,7 +318,7 @@ export function Calculator() {
           opacity: isCalculating ? 0.6 : 1, marginBottom: 24, transition: 'opacity 150ms',
         }}
       >
-        {isCalculating ? <Loader2 size={16} className="animate-spin" /> : <CalcIcon size={16} />}
+        {isCalculating ? <TuranLoader variant="spin" size={16} /> : <CalcIcon size={16} />}
         {isCalculating ? 'Рассчитываем…' : 'Рассчитать рацион'}
       </button>
 
@@ -345,7 +346,7 @@ export function Calculator() {
                 color: 'var(--fg2)', cursor: 'pointer', opacity: isSaving ? 0.5 : 1,
               }}
             >
-              {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+              {isSaving ? <TuranLoader variant="spin" size={13} /> : <Save size={13} />}
               Сохранить как рацион фермы
             </button>
           </div>

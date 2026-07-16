@@ -28,8 +28,8 @@ export function BatchPriceSheet({ batch, open, onClose, onConfirm }: Props) {
       <div className="sh-b">Текущая цена: {fmtMoney(batch.price ?? 0)}{NBSP}₸/кг</div>
       <input
         className="dec-price-input"
-        type="number"
-        min={1}
+        type="text"
+        inputMode="numeric"
         value={val}
         placeholder="Новая цена ₸/кг"
         onChange={(e) => setVal(e.target.value)}

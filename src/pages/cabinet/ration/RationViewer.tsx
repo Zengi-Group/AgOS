@@ -6,7 +6,8 @@
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Calculator, Loader2, AlertTriangle } from 'lucide-react'
+import { Calculator, AlertTriangle } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/hooks/useAuth'
 import type { HerdGroup } from '@/contexts/AuthContext'
@@ -552,7 +553,7 @@ function NoRationGroupRow({
           opacity: isCalculating ? 0.5 : 1, flexShrink: 0,
         }}
       >
-        {isCalculating ? <Loader2 size={13} className="animate-spin" /> : <Calculator size={13} />}
+        {isCalculating ? <TuranLoader variant="spin" size={13} /> : <Calculator size={13} />}
         Рассчитать
       </button>
     </div>

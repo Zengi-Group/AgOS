@@ -1,5 +1,5 @@
 -- ============================================================
--- d13_governance.sql — Feature Governance (Microstep 3)
+-- d14_governance.sql — Feature Governance (Microstep 3)
 -- ============================================================
 -- Canon: Docs/AGOS-TSP-Flow-Microsteps/AGOS-Microstep3-FeatureGovernance-v1_0.md
 -- Feature: ARS-204 (Foundation B). Implements the DESIGNED-but-UNBUILT M3
@@ -9,7 +9,7 @@
 -- Depends on: d01_kernel.sql (users, organizations, organization_type_assignments,
 --             user_organization_roles, fn_current_user_id, fn_my_org_ids,
 --             fn_is_admin, fn_set_updated_at),
---             d12_billing.sql (membership_subscription, membership_plan) — the
+--             d13_billing.sql (membership_subscription, membership_plan) — the
 --             org-membership axis reads live subscription state + granted tier.
 -- Apply order: d01 → … → d11 → d12 → d13.
 --
@@ -144,6 +144,19 @@ declare
     v_used          integer;
     v_limit_json    jsonb := null;
 begin
+    -- SEC-RPC-ORGTRUST-01: SECURITY DEFINER bypasses RLS and p_user_id/p_organization_id are
+    -- client-supplied. A normal authenticated caller may only query their OWN user + OWN orgs;
+    -- service_role (AI gateway, P-AI-6) and admin may query on behalf of anyone.
+    if not (auth.role() = 'service_role' or public.fn_is_admin()) then
+        if p_user_id is distinct from public.fn_current_user_id() then
+            raise exception 'FORBIDDEN: cannot query feature access for another user' using errcode = '42501';
+        end if;
+        if p_organization_id is not null
+           and not (p_organization_id = any(public.fn_my_org_ids())) then
+            raise exception 'FORBIDDEN: not a member of organization %', p_organization_id using errcode = '42501';
+        end if;
+    end if;
+
     -- Fail-closed on unknown feature (D-FG-2)
     select * into v_gate from public.feature_gate where feature_code = p_feature_code;
     if not found then
@@ -272,7 +285,19 @@ $$;
 comment on function public.rpc_check_feature_access(uuid, text, uuid) is
     'M3 §4 effective_access. OR of user-tier and org-membership axes; NULL axis
      does not grant; both NULL ⇒ public. Fail-closed. Returns allow + applicable
-     quota. Read-only (no events). Org axis reads d12 membership_subscription.';
+     quota. Read-only (no events). Org axis reads d13 membership_subscription.';
+
+-- Grants: lock down from PUBLIC/anon (SEC-RPC-ORGTRUST-01). authenticated = own data
+-- (guarded above); service_role = AI gateway (P-AI-6). Note: `revoke from anon` alone does
+-- NOT remove the default PUBLIC execute grant — must revoke from PUBLIC.
+revoke execute on function public.rpc_check_feature_access(uuid, text, uuid) from public;
+revoke execute on function public.rpc_check_feature_access(uuid, text, uuid) from anon;
+grant  execute on function public.rpc_check_feature_access(uuid, text, uuid) to authenticated;
+grant  execute on function public.rpc_check_feature_access(uuid, text, uuid) to service_role;
+revoke execute on function public.fn_user_platform_tier(uuid) from public;
+revoke execute on function public.fn_user_platform_tier(uuid) from anon;
+grant  execute on function public.fn_user_platform_tier(uuid) to authenticated;
+grant  execute on function public.fn_user_platform_tier(uuid) to service_role;
 
 -- ------------------------------------------------------------
 -- Row Level Security
@@ -315,7 +340,7 @@ create trigger trg_feature_gate_updated_at
 -- RPC name registry (D-NEW-A)
 -- ------------------------------------------------------------
 insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes)
-values ('rpc_check_feature_access', null, 'check_feature_access', 'd13_governance.sql',
+values ('rpc_check_feature_access', null, 'check_feature_access', 'd14_governance.sql',
         'M3 §4 effective_access: gate decision + applicable quota, fail-closed')
 on conflict (sql_name) do nothing;
 

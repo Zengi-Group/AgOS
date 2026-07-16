@@ -5,11 +5,11 @@
 import type { ReactNode } from 'react'
 import { AccountBtn } from './AccountBtn'
 
-export function TabHead({ title, right }: { title: string; right?: ReactNode }) {
+export function TabHead({ title, right, noAccount }: { title: string; right?: ReactNode; noAccount?: boolean }) {
   return (
     <div className="tab-head" data-screen-label={'шапка ' + title}>
       <h1 className="tab-head-t">{title}</h1>
-      {right ?? <AccountBtn />}
+      {right ?? (noAccount ? null : <AccountBtn />)}
     </div>
   )
 }

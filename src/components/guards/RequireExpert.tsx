@@ -10,7 +10,7 @@ import { Navigate, Outlet } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { Loader2 } from 'lucide-react'
+import { TuranLoader } from '@/components/TuranLoader'
 
 export function RequireExpert() {
   const { session, loading, isContextLoading, isAdmin, isExpert } = useAuth()
@@ -39,7 +39,7 @@ export function RequireExpert() {
   if (loading || isContextLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <TuranLoader variant="breathe" size={40} />
       </div>
     )
   }
@@ -53,7 +53,7 @@ export function RequireExpert() {
   if (liveAllowed === null) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <TuranLoader variant="breathe" size={40} />
       </div>
     )
   }

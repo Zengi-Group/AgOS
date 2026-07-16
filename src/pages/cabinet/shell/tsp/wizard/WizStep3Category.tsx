@@ -8,6 +8,7 @@ import type { WizState } from '../types/batch'
 import { CATS } from '../data/tsp-dicts'
 import { deriveCategory, deriveMpkGrade, mpkSortLabel } from '../data/tsp-utils'
 import { useGradeFormula } from '@/hooks/useGradeFormula'
+import { TuranLoader } from '@/components/TuranLoader'
 import { WizShell, DraftNote } from './WizShell'
 import { MkCta } from '../components/MkCta'
 
@@ -43,7 +44,7 @@ export function WizStep3Category({ w, sw, onNext, onBack, onExit, onTuran }: Pro
     return (
       <WizShell step={3} onBack={onBack} onExit={onExit} title="Категория">
         <div className="mk-loader">
-          <div className="mk-spin" />
+          <TuranLoader variant="breathe" size={44} />
           <div>Определяем категорию по вашим данным…</div>
         </div>
       </WizShell>
@@ -62,7 +63,7 @@ export function WizStep3Category({ w, sw, onNext, onBack, onExit, onTuran }: Pro
         <MkCta variant="ghost" onClick={() => { sw({ catKey: null, catUnknown: false }); onBack() }}>Вернуться к данным</MkCta>
         <p className="mk-cc-note" style={{ marginTop: 14 }}>Если данные верны — напишите в TURAN, мы добавим категорию.</p>
         <MkCta variant="ghost" onClick={onTuran}>Написать в TURAN</MkCta>
-        <div className="mk-note mk-mono" style={{ marginTop: 10 }}>черновик сохранён · публикация недоступна</div>
+        <div className="mk-note" style={{ marginTop: 10 }}>черновик сохранён · публикация недоступна</div>
       </WizShell>
     )
   }

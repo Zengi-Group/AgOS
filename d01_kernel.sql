@@ -755,7 +755,8 @@ create table if not exists public.farms (
                                 'spring',       -- весенний отёл (March–May)
                                 'autumn',       -- осенний отёл (Sep–Nov)
                                 'year_round',   -- круглогодичный
-                                'two_season'    -- весна + осень
+                                'two_season',   -- весна + осень
+                                'varies'        -- «по-разному» (F-D14, ARS-212: легальный ответ; план = слой-1)
                             )),
     total_area_ha   numeric(10,2),  -- total farm area (informational, P11)
     pasture_area_ha numeric(10,2),  -- grazing area (informational, P11)
@@ -777,6 +778,36 @@ comment on table public.farms is
      D54: shelter_type and calving_system are location properties — same for all groups on this farm.
      D26: Infrastructure (barns, paddocks, fields) deferred — no clear consumer until Ops module (P11).
      is_primary=true marks default farm for single-farm orgs.';
+
+-- 2026-07-10 (ARS-212, Узел 1 v2.1 §4): профиль хозяйства из опросника.
+-- Оба поля — персистентные факты профиля (P11: могут прийти позже; P4: живут здесь,
+-- а не в транзитных параметрах моста): при BELOW_THRESHOLD / отложенной генерации
+-- ЦТК ответы опросника не теряются, мост ARS-213 читает их при следующем вызове.
+alter table public.farms
+    add column if not exists cycle_start_date date,
+    add column if not exists calf_strategy text
+        check (calf_strategy in (
+            'weaners',      -- продаю отъёмышей (~6 мес, сразу после отъёма)
+            'yearling',     -- держу до года и продаю (доращивание — модификатор F-D2)
+            'keep'          -- оставляю себе (рост стада)
+        ));
+
+-- 2026-07-10 (ARS-212, F-D14): «по-разному» — легальный ответ про отёл (порог моста ARS-213
+-- требует calving_system is not null; null «съедал» бы ответ ЛПХ и блокировал план — дефект
+-- стыка). Значение 'varies': несезонный, план = слой-1 (как year_round). Идемпотентная
+-- эволюция CHECK (P7, паттерн notifications_channel_check).
+alter table public.farms drop constraint if exists farms_calving_system_check;
+alter table public.farms add constraint farms_calving_system_check
+    check (calving_system in ('spring', 'autumn', 'year_round', 'two_season', 'varies'));
+
+comment on column public.farms.cycle_start_date is
+    'D78 (Узел 1 v2.1 §4): якорная дата цикла = дата первого отёла (1-е число месяца
+     из ответа «месяц первого отёла»). Релевантна при сезонном calving_system;
+     year_round/varies(«по-разному») → null (план держится на слое-1, F-D6/F-D14).';
+comment on column public.farms.calf_strategy is
+    'F-D2 (Узел 1 v2.1 §4): модификатор доращивания — «что делаете с телятами».
+     Значения = токены мастера ARS-212 (L-7: UI-коды совпадают с CHECK).
+     Влияет на хвост ЦТК после отъёма, окно продажи, зимний запас кормов, сигнал TSP.';
 
 -- -------------------------------------------------------
 -- farm_activity_types
@@ -3302,7 +3333,7 @@ insert into public.rpc_name_registry (
 ) values
     -- Migration 011: new RPCs
     ('rpc_get_ai_farm_context',        null,                'get_farm_context',           '011_ai_rpc_catalog.sql',            'Farm context snapshot for AI'),
-    ('rpc_upsert_herd_group',          null,                'update_herd_group',          '011_ai_rpc_catalog.sql',            'Create or update herd group (data_source=ai_extracted)'),
+    ('rpc_upsert_herd_group',          null,                'update_herd_group',          '011_ai_rpc_catalog.sql',            'Create or update herd group (p_data_source: ai_extracted default / platform / registration / erp — ARS-212)'),
     ('rpc_get_feeding_plan',           null,                'get_feeding_plan',           '011_ai_rpc_catalog.sql',            'Active feeding plan with periods'),
     ('rpc_get_farm_tasks',             null,                'get_farm_tasks',             '011_ai_rpc_catalog.sql',            'Upcoming farm tasks'),
     ('rpc_complete_farm_task',         null,                'complete_farm_task',         '011_ai_rpc_catalog.sql',            'Mark task completed'),
@@ -3878,7 +3909,10 @@ create or replace function public.rpc_upsert_farm(
     p_region_id         uuid        default null,
     p_shelter_type      text        default null,
     p_calving_system    text        default null,
-    p_total_area_ha     numeric     default null
+    p_total_area_ha     numeric     default null,
+    -- ARS-212 (аддитивно, P7): якорь цикла D78 + модификатор доращивания F-D2
+    p_cycle_start_date  date        default null,
+    p_calf_strategy     text        default null
 )
 returns uuid
 language plpgsql
@@ -3903,6 +3937,8 @@ begin
             shelter_type,
             calving_system,
             total_area_ha,
+            cycle_start_date,
+            calf_strategy,
             data_source,
             is_primary
         ) values (
@@ -3912,6 +3948,8 @@ begin
             p_shelter_type,
             p_calving_system,
             p_total_area_ha,
+            p_cycle_start_date,
+            p_calf_strategy,
             'platform',
             -- is_primary = true only if this is the first farm for the org
             not exists (select 1 from public.farms where organization_id = p_organization_id and is_active = true)
@@ -3930,11 +3968,19 @@ begin
         end if;
 
         update public.farms
-        set    name           = coalesce(p_name, name),
-               region_id      = coalesce(p_region_id, region_id),
-               shelter_type   = coalesce(p_shelter_type, shelter_type),
-               calving_system = coalesce(p_calving_system, calving_system),
-               total_area_ha  = coalesce(p_total_area_ha, total_area_ha)
+        set    name             = coalesce(p_name, name),
+               region_id        = coalesce(p_region_id, region_id),
+               shelter_type     = coalesce(p_shelter_type, shelter_type),
+               calving_system   = coalesce(p_calving_system, calving_system),
+               total_area_ha    = coalesce(p_total_area_ha, total_area_ha),
+               -- D78-гигиена (ARS-212): переход на несезонный отёл гасит якорь — иначе
+               -- coalesce вечно держал бы старую дату при смене spring→year_round/varies.
+               cycle_start_date = case
+                   when p_calving_system in ('year_round', 'varies') then null
+                   else coalesce(p_cycle_start_date, cycle_start_date)
+               end,
+               calf_strategy    = coalesce(p_calf_strategy, calf_strategy),
+               updated_at       = now()
         where  id = p_farm_id
           and  organization_id = p_organization_id;
 
@@ -3964,7 +4010,9 @@ begin
             'region_id', p_region_id,
             'shelter_type', p_shelter_type,
             'calving_system', p_calving_system,
-            'total_area_ha', p_total_area_ha
+            'total_area_ha', p_total_area_ha,
+            'cycle_start_date', p_cycle_start_date,
+            'calf_strategy', p_calf_strategy
         ),
         false
     );
@@ -3973,13 +4021,14 @@ begin
 end;
 $$;
 
-comment on function public.rpc_upsert_farm(uuid, uuid, text, uuid, text, text, numeric) is
+comment on function public.rpc_upsert_farm(uuid, uuid, text, uuid, text, text, numeric, date, text) is
     'RPC-05 | Dok 3 §3.1 | Slice 1
      Create or update farm. p_farm_id=null → INSERT, p_farm_id=uuid → UPDATE.
      Ownership check: farm must belong to p_organization_id.
      Idempotent UPDATE: only non-null params overwrite (COALESCE pattern).
      First farm for an org gets is_primary=true automatically.
-     Events: farm.farm.created | farm.farm.updated.';
+     Events: farm.farm.created | farm.farm.updated.
+     ARS-212 (аддитивно): p_cycle_start_date (якорь D78), p_calf_strategy (F-D2).';
 
 
 -- ============================================================

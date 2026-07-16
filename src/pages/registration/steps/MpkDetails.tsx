@@ -74,6 +74,7 @@ export function MpkDetails({ formData, onChange, onNext }: MpkDetailsProps) {
           error={errors.bin}
           maxLength={12}
           autoAdvanceAt={12}
+          inputMode="numeric"
         />
 
         <button

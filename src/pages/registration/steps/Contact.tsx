@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { T } from '@/lib/auth-ui/tokens'
-import { H1, Lede, Field, inputStyle, StickyDock, CTA } from '@/lib/auth-ui/primitives'
+import { H1, Lede, Field, inputStyle, StickyDock, CTA, AuthAltAction } from '@/lib/auth-ui/primitives'
 import { OtpInput } from '../components/OtpInput'
 import { PhonePicker } from '@/components/PhonePicker'
 import { maskPhoneE164 } from '@/lib/phone'
@@ -167,6 +167,8 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
             if (errors.full_name) setErrors((prev) => ({ ...prev, full_name: '' }))
           }}
           placeholder="Как к вам обращаться"
+          autoComplete="name"
+          autoCapitalize="words"
           autoFocus
         />
         {errors.full_name && <div style={{ fontSize: 12, color: T.red, marginTop: 6 }}>{errors.full_name}</div>}
@@ -184,19 +186,11 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
         {errors.phone && <div style={{ fontSize: 12, color: T.red, marginTop: 6 }}>{errors.phone}</div>}
       </Field>
 
-      <div style={{ marginTop: 24, textAlign: 'center' }}>
-        <button
-          onClick={() => navigate('/login')}
-          style={{ background: 'transparent', border: 'none', padding: '12px 16px', minHeight: 44, color: T.fg2, fontFamily: T.font, fontSize: 15, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
-        >
-          Есть аккаунт? <span style={{ color: T.accent, fontWeight: 500 }}>Войти ›</span>
-        </button>
-      </div>
-
       <StickyDock>
         <CTA disabled={isSending} onClick={handleSendOtp}>
           {isSending ? 'Отправка…' : 'Получить код'}
         </CTA>
+        <AuthAltAction prefix="Есть аккаунт?" action="Войти" onClick={() => navigate('/login')} />
       </StickyDock>
     </>
   )
