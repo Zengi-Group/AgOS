@@ -13,7 +13,7 @@ set -uo pipefail
 CRITICAL=0
 SIGNIFICANT=0
 MINOR=0
-SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d12_messaging.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql)
+SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d12_messaging.sql d13_billing.sql d14_governance.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql)
 # TSP canonical trade layer = self-serve adapter migration (D-TSP-CANON-01, 2026-06-23).
 # Brought into cross_check scope per convergence Slice A. The adapter intentionally
 # redefines rpc_create_batch / rpc_get_org_batches (text-sig) over the d07 uuid-sig —
@@ -173,6 +173,8 @@ exceptions="get_active_prompt|rpc_name_registry|\
 rpc_list_home_banners|\
 rpc_list_animal_categories|rpc_list_feed_items|rpc_list_feed_categories|\
 rpc_list_feed_prices|rpc_list_feed_consumption_norms|\
+rpc_list_membership_plans|rpc_process_membership_renewals|\
+rpc_admin_list_membership_plans|rpc_admin_upsert_membership_plan|rpc_admin_set_membership_plan_active|\
 rpc_upsert_feed_item|rpc_upsert_feed_price|rpc_upsert_feed_consumption_norm|\
 rpc_upsert_consulting_reference|rpc_start_production_plan|\
 rpc_resolve_category|rpc_get_category_mappings|\

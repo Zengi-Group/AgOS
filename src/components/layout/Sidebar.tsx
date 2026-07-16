@@ -34,6 +34,7 @@ import {
   User,
   Library,
   SlidersHorizontal,
+  CreditCard,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -147,6 +148,7 @@ const ADMIN_GROUPS: NavGroup[] = [
       // A-CAT «Категории скота» выведены из навигации (ARS-235): цены перенесены на
       // уровень сорта (/admin/grade-formula). Роут и компоненты сохранены (HS-2), откат = вернуть пункт.
       { id: 'grade-formula', icon: SlidersHorizontal, label: 'Формула сорта', route: '/admin/grade-formula' },
+      { id: 'billing-plans', icon: CreditCard, label: 'Планы членства', route: '/admin/billing/plans' },
       { id: 'settings', icon: Settings, label: 'Настройки', route: '/admin/settings' },
       { id: 'consulting', icon: Briefcase, label: 'Консалтинг', route: '/admin/consulting' },
     ],
