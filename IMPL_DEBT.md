@@ -244,3 +244,22 @@
 **Context:** `d12_messaging.sql` `fn_fanout_comm_notifications` перед вставкой делает `exists(select 1 from notifications where template_id='new_message' and (params->>'message_id')::uuid = p_message_id)`. Индекса на `params->>'message_id'` нет → по мере роста `notifications` это O(N) фильтр-скан, выполняемый синхронно внутри каждого `rpc_send_message`.
 **Retire-when:** добавить partial expression index `on notifications (((params->>'message_id'))) where template_id='new_message'`, либо перевести идемпотентность на `platform_event_id`. Аддитивно.
 **Severity:** low (на Phase-1 объёмах незаметно; всплывёт при масштабе). **Owner surface:** `d12_messaging.sql` (fn_fanout_comm_notifications), `d01_kernel.sql` (notifications).
+
+## 💳 Billing / Governance (d13/d14, ARS-202..207 — merge 2026-07-16)
+
+> Найдено код-ревью при мердже ветки `feature/billing-membership-subscription`. C1/C2/S1 (живые дыры) исправлены в том же мердже + хотфиксом на прод (`billing_security_hotfix_c1_c2_s1`); ниже — отложенные/системные пункты.
+
+### SEC-GRANT-PUBLIC-01 — `revoke ... from anon` во всём репо оставляет PUBLIC execute
+**Context:** канонический паттерн `grant execute to authenticated; revoke execute from anon` НЕ снимает дефолтный `GRANT EXECUTE ... TO PUBLIC`, который Postgres/Supabase вешает на каждую функцию при создании. Подтверждено на проде: у `rpc_get_grade_formula`, `rpc_get_demand_board` и др. ACL содержит `=X/postgres` (PUBLIC) → `has_function_privilege('anon', …)` = true, несмотря на `revoke from anon`. Не эксплойт там, где у SECURITY DEFINER функции есть внутренний org-guard (`fn_my_org_ids()`/`fn_is_admin()`) — guard отклоняет анонима. Эксплойт — только у SECURITY DEFINER без guard (были C1/C2/S1 в биллинге, уже закрыты).
+**Retire-when:** аудит всех SECURITY DEFINER RPC без внутреннего guard → добавить `revoke execute ... from public` (не только anon) там, где функция раскрывает per-tenant данные или пишет. Опционально: `ALTER DEFAULT PRIVILEGES ... REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` + явные гранты. Проверять новые RPC на этот паттерн в ревью (cross_check-правило не добавлял — зафлагает сотни существующих функций шумом).
+**Severity:** medium (системно; фактический риск локализован незащищёнными функциями — их надо найти). **Owner surface:** все d-файлы (grant/revoke-блоки).
+
+### GOV-QUOTA-PERUSER-01 — org-tier квоты в rpc_check_feature_access считаются per-user
+**Context:** `d14_governance.sql` `rpc_check_feature_access` — когда доступ выдан по оси `org_membership_tier`, окно потребления всё равно суммируется `where user_id = p_user_id` (без `org_id`). Org-wide квота («100 X / billing_cycle») по факту умножается на число членов орг (5 членов → 500). Латентно: сейчас нет засеянных `feature_limit` с `applies_to='org_membership_tier'`.
+**Retire-when:** при появлении org-tier лимитов — суммировать по `org_id` для оси `org_membership_tier` (требует `feature_usage.org_id` в предикате). Аддитивно.
+**Severity:** low (латентно до первого org-tier лимита). **Owner surface:** `d14_governance.sql` (rpc_check_feature_access, usage-window).
+
+### BILLING-STUB-PAYMENT-01 — fn_charge_membership всегда success → доступ без оплаты
+**Context:** `d13_billing.sql` `fn_charge_membership` — STUB, всегда `success=true`, реального провайдера нет (отложено в ARS-206b). Движок продлений `rpc_process_membership_renewals` при этом переводит подписки в `active` без фактической оплаты.
+**Retire-when:** реальный платёжный провайдер + async webhook (ARS-206b). До тех пор перед публичным go-live биллинга — feature-flag/guard, чтобы stub не «оплачивал» молча в проде.
+**Severity:** medium (нет реальной монетизации; риск = раздача доступа бесплатно, если запустить биллинг до провайдера). **Owner surface:** `d13_billing.sql` (fn_charge_membership), ARS-206b.
