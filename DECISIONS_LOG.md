@@ -4171,3 +4171,18 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: прод — ACL после хотфикса: `fn_charge_membership`/`rpc_process_membership_renewals` anon=auth=false, service=true; `rpc_check_feature_access` anon=false, auth=true(свои данные, guard), service=true, guard присутствует. Канон — tsc -b + cross_check ниже.
 
 **Files**: prod migration `billing_security_hotfix_c1_c2_s1`; `d13_billing.sql` (renamed +C2/S1 grants), `d14_governance.sql` (renamed +C1 guard/grants), `deploy_sql.py`, `cross_check.sh`. Мердж-конфликты (deploy_sql.py, cross_check.sh) разрешены до финальной нумерации.
+
+### 2026-07-16: Биллинг Итерация 2 — аудит + G2-решения CEO (PM/CTO, `/feature`)
+
+**What**: Аудит задеплоенной итерации 1 биллинга (ARS-203..207, PR #104) тремя срезами (канон MS2/MS3↔d13/d14, фронт, живая прод-БД). Вывод: тела корректны (прод=канон, 0 подписок), но **петля не собрана** — подписка построена как истина оплаты, но ни один потребитель не переключён (TSP-гейты и derive смотрят `memberships.level`; `rpc_check_feature_access` 0 вызывающих; renewals никем не запущен — `pg_cron` не установлен). + живая межорг-утечка `rpc_get_membership_status` (SECURITY DEFINER без guard, anon). Управления подписками в админке нет. Спроектировано (eng-spec `Docs/AGOS-Billing-AdminOps-EngSpec-v0_1.md`) + разбито в Linear (umbrella ARS-258 + ARS-259..271).
+
+**G2-решения CEO (2026-07-16):**
+- **D-BILL-TRUTH-01 — источник истины членства = `membership_subscription.state`** (подписка = оплаченное членство). `memberships.level` заморожен как legacy (не удалять, HS-2); `AssociationMembership.state` (MS2-канон) НЕ строится отдельной колонкой. Разрешает конфликт трёх моделей (P4): потребители сводятся мост-предикатом `level<>'registered' OR live-subscription` (ARS-263). MS2 обновить примечанием+маппингом (ARS-268). subscription-FSM = реализация lifecycle членства.
+- **D-BILL-NOAPP-01 — подписка НЕ требует одобренной заявки.** Оформление подписки самодостаточно даёт членство, независимо от `membership_applications`. Заявка-флоу остаётся, но не является пре-реквизитом подписки.
+- **D-BILL-CRON-01 — renewals запускаются `pg_cron` на проде** (не edge-cron). `grace_days` дефолт 3 — ок, выносится в план (P8). Прод-включение на живых орг — после платёжного провайдера (stub-риск, ARS-264/270).
+- **D-BILL-MANUAL-01 — ручной приём оплаты админом включаем** (пилот, до провайдера) — billing-path с обязательным референсом+основанием+аудит-строкой (ARS-267).
+- **D-BILL-REVOKE-01 — дисциплинарный revoke (MS2 T10) в пилот-скоуп** — значение `'revoked'` добавляется в CHECK `membership_subscription.state` (text+CHECK, аддитивно), нерекуррентный терминал (ARS-267).
+
+**Why**: биллинг задеплоен вручную до ревью, слайсы делались изолированно — замыкание петли не было отдельным слайсом. G2 закрыт CEO → задачи итерации 2 переведены в Ready for Dev (кроме blocked ARS-271 и post-MVP backlog ARS-269/270).
+
+**Files**: `Docs/AGOS-Billing-AdminOps-EngSpec-v0_1.md` (new eng-spec), `apex-brain/projects/agos/specs/membership-billing.md` (brain synthesis). Кода не трогали (аудит+дизайн). Реализация — по задачам ARS-259..271.
