@@ -4186,3 +4186,13 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Why**: биллинг задеплоен вручную до ревью, слайсы делались изолированно — замыкание петли не было отдельным слайсом. G2 закрыт CEO → задачи итерации 2 переведены в Ready for Dev (кроме blocked ARS-271 и post-MVP backlog ARS-269/270).
 
 **Files**: `Docs/AGOS-Billing-AdminOps-EngSpec-v0_1.md` (new eng-spec), `apex-brain/projects/agos/specs/membership-billing.md` (brain synthesis). Кода не трогали (аудит+дизайн). Реализация — по задачам ARS-259..271.
+
+### 2026-07-16: ARS-259 — SEC-фикс межорг-утечки `rpc_get_membership_status` (Urgent)
+
+**What**: Закрыта живая уязвимость класса SEC-RPC-ORGTRUST-01 в `rpc_get_membership_status` (AI-15, d07). Функция — SECURITY DEFINER с client-supplied `p_organization_id` без ownership-guard → любой (в т.ч. anon через PUBLIC-грант) по org-UUID читал `level`, pending-заявку, `is_restricted` чужой организации (нарушение Data Isolation, D-LEGAL-1). Добавлен guard `p_organization_id = any(fn_my_org_ids()) or fn_is_admin() or auth.role()='service_role'` + `revoke execute from public` + `revoke from authenticated` + `grant service_role`.
+
+**Why**: тул AI Gateway (P-AI-6 → service_role), живых self-serve вызывающих нет (0 ссылок в `src/` и `ai_gateway/` — консультант-тулсет вообще не подключён, IMPL_DEBT AI-GATEWAY-03). Урок SEC-GRANT-PUBLIC-01: `revoke from anon` не снимает дефолтный PUBLIC-грант — использован `revoke from public`. Guard = основной слой, revoke = второй.
+
+**Verify**: прод `mwtbozflyldcadypherr` (2 миграции `ars_259_*`) — ДО: `anon_exec=true, auth_exec=true, has_guard=false`; ПОСЛЕ: `anon_exec=false, auth_exec=false, service_exec=true, has_guard=true`, ACL `{postgres, service_role}`. `cross_check.sh` 0 critical. Канон d07 синхронизирован с прод.
+
+**Files**: `d07_ai_gateway.sql` (guard + revoke/grant), `IMPL_DEBT.md` (SEC-RPC-ORGTRUST-01 += эта функция + остаточный долг по 3 batch-сигнатурам d07). Прод: миграции `ars_259_rpc_get_membership_status_orgtrust_guard`, `ars_259_revoke_authenticated_membership_status`.
