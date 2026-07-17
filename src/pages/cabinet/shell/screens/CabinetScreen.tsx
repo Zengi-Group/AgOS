@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { IonShellFrame } from '../components/IonShellFrame'
 import { ShellHead } from '../components/ShellHead'
 import { ShIc } from '../components/icons/ShIc'
-import { MEMBERSHIP_DICT, FARM } from '../store'
+import { membershipEntry, FARM } from '../store'
 import type { MembershipStatus } from '../types'
 import type { AccountProfile } from '@/lib/account'
 
@@ -51,7 +51,10 @@ interface Props {
 }
 
 export function CabinetScreen({ membership, profileIncomplete, newsOn, onNewsToggle, memberAct, onBack, onTuran, onLogout, profile }: Props) {
-  const m = MEMBERSHIP_DICT[membership]
+  // ARS-263: реальные даты подписки (profile.currentPeriodEnd/nextBillingAt) вместо хардкода.
+  const m = membershipEntry(membership, profile
+    ? { currentPeriodEnd: profile.currentPeriodEnd, nextBillingAt: profile.nextBillingAt }
+    : null)
   const plate = m.plate
 
   // Реальный аккаунт перекрывает демо-данные; при отсутствии профиля — демо-фолбэк.

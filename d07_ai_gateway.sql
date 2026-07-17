@@ -1245,13 +1245,11 @@ begin
             p_farm_id, p_organization_id using errcode = 'P0001';
     end if;
 
-    -- SEC-GATE-MEMBERSHIP-01: pilot stand-in for MEMBERSHIP-01 (canon `state`
-    -- column not deployed yet) — mirrors the self-serve rpc_create_batch gate
-    -- so the AI Gateway path enforces the same association-membership rule.
-    if not exists (
-        select 1 from public.memberships
-        where organization_id = p_organization_id and level <> 'registered'
-    ) then
+    -- SEC-GATE-MEMBERSHIP-01: canonical membership check (ARS-263, D-BILL-TRUTH-01)
+    -- via fn_org_membership_active — live paid subscription (trialing|active|grace)
+    -- OR legacy level-stack. One predicate shared with the self-serve TSP gate, so
+    -- the AI Gateway path and the wizard path agree on who is a member.
+    if not public.fn_org_membership_active(p_organization_id) then
         raise exception 'MEMBERSHIP_REQUIRED: организация не является членом ассоциации'
             using errcode = 'P0001';
     end if;
@@ -1378,13 +1376,11 @@ begin
             p_batch_id, v_batch.status using errcode = 'P0003';
     end if;
 
-    -- SEC-GATE-MEMBERSHIP-01: pilot stand-in for MEMBERSHIP-01 (canon `state`
-    -- column not deployed yet) — mirrors the self-serve rpc_create_batch gate
-    -- so the AI Gateway path enforces the same association-membership rule.
-    if not exists (
-        select 1 from public.memberships
-        where organization_id = p_organization_id and level <> 'registered'
-    ) then
+    -- SEC-GATE-MEMBERSHIP-01: canonical membership check (ARS-263, D-BILL-TRUTH-01)
+    -- via fn_org_membership_active — live paid subscription (trialing|active|grace)
+    -- OR legacy level-stack. One predicate shared with the self-serve TSP gate, so
+    -- the AI Gateway path and the wizard path agree on who is a member.
+    if not public.fn_org_membership_active(p_organization_id) then
         raise exception 'MEMBERSHIP_REQUIRED: организация не является членом ассоциации'
             using errcode = 'P0001';
     end if;

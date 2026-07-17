@@ -120,13 +120,11 @@ begin
         raise exception 'ORG_NOT_FOUND' using errcode = 'P0001';
     end if;
 
-    -- SEC-GATE-MEMBERSHIP-01: pilot stand-in for MEMBERSHIP-01 (canon `state`
-    -- column not deployed yet) — deployed memberships.level stack still has
-    -- 'registered' as the pre-membership default; anything above it gates TSP.
-    if not exists (
-        select 1 from public.memberships
-        where organization_id = v_org_id and level <> 'registered'
-    ) then
+    -- SEC-GATE-MEMBERSHIP-01: canonical membership check (ARS-263, D-BILL-TRUTH-01)
+    -- via fn_org_membership_active — live paid subscription (trialing|active|grace)
+    -- OR legacy level-stack. Shared predicate: the self-serve wizard and the AI
+    -- Gateway (d07) now gate on the same truth (subscription, not just level).
+    if not public.fn_org_membership_active(v_org_id) then
         raise exception 'MEMBERSHIP_REQUIRED: организация не является членом ассоциации'
             using errcode = 'P0001';
     end if;

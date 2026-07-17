@@ -316,12 +316,14 @@ export function CabinetApp() {
   // Аноним (profile === null) остаётся на демо/localStorage.
   useEffect(() => {
     if (!profile?.userId) return
-    let derived = deriveMembership(profile.membershipLevel, profile.applicationStatus)
+    // ARS-263: подписка (subscriptionState) — канонический источник статуса (D-BILL-TRUTH-01).
+    // Переживает reload: статус выводится из БД-подписки, а не только level+заявка (B1).
+    let derived = deriveMembership(profile.membershipLevel, profile.applicationStatus, profile.subscriptionState)
     // Фолбэк: если взнос уже оплачен локально (демо), но БД ещё отдаёт 'approved'
     // (RPC недоступен/не применён), не сбрасываем в запрос оплаты — держим 'active'.
     if (derived === 'approved' && isPaidLocally(profile.userId)) derived = 'active'
     setMembership(derived)
-  }, [profile?.userId, profile?.membershipLevel, profile?.applicationStatus])
+  }, [profile?.userId, profile?.membershipLevel, profile?.applicationStatus, profile?.subscriptionState])
   const [sheet, setSheet] = useState<SheetState | null>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
   // S2-ревью (PR #27): IonModal-шторки держим смонтированными — программное закрытие

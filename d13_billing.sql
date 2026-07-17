@@ -217,6 +217,48 @@ comment on function public.rpc_get_org_subscription(uuid) is
      info, or JSON null. Member-or-admin only.';
 
 -- ------------------------------------------------------------
+-- fn_org_membership_active — canonical "is this org an active member?" predicate.
+-- Source of truth for membership (ARS-263, D-BILL-TRUTH-01): a live PAID
+-- subscription (trialing|active|grace — the access-ON window, past_due excluded
+-- per d13 access rule) OR a legacy level-stack membership (old flow, NOT removed —
+-- HS-2). One point of truth: every consumer that used to read `memberships.level`
+-- directly (TSP gates SEC-GATE-MEMBERSHIP-01, admin membership_paid) calls this.
+-- Pure org-scoped predicate — does NOT authenticate the caller; callers keep their
+-- own ownership guard. Internal helper: revoke from public/anon/authenticated,
+-- invoked by SECURITY DEFINER gate functions (owner executes) + service_role.
+-- ------------------------------------------------------------
+create or replace function public.fn_org_membership_active(p_organization_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public, pg_temp
+as $$
+    select exists (
+        -- canonical: live paid subscription (D-BILL-TRUTH-01)
+        select 1 from public.membership_subscription
+        where organization_id = p_organization_id
+          and state in ('trialing', 'active', 'grace')
+    ) or exists (
+        -- legacy level-stack member (old flow, frozen not removed — HS-2)
+        select 1 from public.memberships
+        where organization_id = p_organization_id
+          and level <> 'registered'
+    );
+$$;
+comment on function public.fn_org_membership_active(uuid) is
+    'ARS-263 / D-BILL-TRUTH-01. Canonical membership-active predicate: live paid
+     subscription (trialing|active|grace) OR legacy level<>registered. Single point
+     of truth for TSP gates + admin membership_paid. Pure predicate, no caller auth.';
+
+-- Internal predicate: no ownership guard (org_id is an argument), so it must NOT be
+-- callable directly by clients — revoke from PUBLIC (default grant), not just anon.
+revoke execute on function public.fn_org_membership_active(uuid) from public;
+revoke execute on function public.fn_org_membership_active(uuid) from anon;
+revoke execute on function public.fn_org_membership_active(uuid) from authenticated;
+grant  execute on function public.fn_org_membership_active(uuid) to service_role;
+
+-- ------------------------------------------------------------
 -- rpc_subscribe_org_membership — enroll an org into a plan, starting the trial.
 -- Guards: authz (member/admin), plan active, no existing live subscription.
 -- trial_days > 0 → state 'trialing' (period = trial window; billing after trial);
@@ -393,7 +435,8 @@ values
     ('rpc_list_membership_plans',   null, 'list_membership_plans',   'd13_billing.sql', 'ARS-205 pricing catalog'),
     ('rpc_get_org_subscription',    null, 'get_org_subscription',    'd13_billing.sql', 'ARS-205 org live subscription'),
     ('rpc_subscribe_org_membership',null, 'subscribe_org_membership','d13_billing.sql', 'ARS-205 enroll + start trial'),
-    ('rpc_cancel_org_membership',   null, 'cancel_org_membership',   'd13_billing.sql', 'ARS-205 cancel at period end / immediate')
+    ('rpc_cancel_org_membership',   null, 'cancel_org_membership',   'd13_billing.sql', 'ARS-205 cancel at period end / immediate'),
+    ('fn_org_membership_active',    null, null,                      'd13_billing.sql', 'ARS-263 canonical membership-active predicate (subscription OR legacy level) — TSP gates + admin membership_paid')
 on conflict (sql_name) do nothing;
 
 -- ============================================================
