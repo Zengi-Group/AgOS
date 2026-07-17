@@ -29,7 +29,7 @@ export function HomeStartLadder({ herdFilled }: { herdFilled: boolean }) {
   } else if (m === 'pending') {
     join = { key: 'join', icon: 'clock', title: 'Заявка на рассмотрении', sub: 'Ответим в течение 3 рабочих дней', state: 'wait' }
   } else if (m === 'approved') {
-    join = { key: 'join', icon: 'userCheck', title: 'Оплатить членский взнос', sub: 'Заявка одобрена — оформите членство', state: 'todo', onClick: () => ctx.memberAct('pay') }
+    join = { key: 'join', icon: 'userCheck', title: 'Оформить подписку', sub: 'Заявка одобрена — оформите членство', state: 'todo', onClick: () => ctx.memberAct('pay') }
   } else {
     join = { key: 'join', icon: 'users', title: m === 'rejected' ? 'Подать заявку заново' : 'Вступить в ассоциацию', sub: 'Откроются цены и продажа скота через TURAN', state: 'todo', onClick: () => ctx.memberAct('apply') }
   }
