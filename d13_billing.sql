@@ -67,7 +67,7 @@ create table if not exists public.membership_subscription (
     membership_id   uuid    references public.memberships(id) on delete set null,  -- additive link
     plan_code       text    not null references public.membership_plan(plan_code),
     state           text    not null default 'trialing'
-                        check (state in ('trialing', 'active', 'grace', 'past_due', 'expired', 'canceled')),
+                        check (state in ('trialing', 'active', 'grace', 'past_due', 'expired', 'canceled', 'revoked')),
     trial_end               timestamptz,
     current_period_start    timestamptz,
     current_period_end      timestamptz,
@@ -82,6 +82,19 @@ comment on table public.membership_subscription is
      One LIVE subscription per org (partial unique index below). Terminal rows
      (expired/canceled) may accumulate as history. state supplies the value the
      Feature Governance formula (d13, Microstep 3 §4) reads for the org axis.';
+
+-- ARS-267: disciplinary revoke (MS2 D-MEM-5, CEO D-BILL-REVOKE-01) adds a terminal
+-- `revoked` state (≠ voluntary cancel; non-recurrent — a new subscription/application
+-- is needed to return). text+CHECK evolves in place; `create table if not exists` is a
+-- no-op on prod, so an explicit idempotent drop+add is required for existing installs.
+alter table public.membership_subscription drop constraint if exists membership_subscription_state_check;
+alter table public.membership_subscription add  constraint membership_subscription_state_check
+    check (state in ('trialing', 'active', 'grace', 'past_due', 'expired', 'canceled', 'revoked'));
+-- ARS-267: reason captured when an admin disciplinarily revokes membership.
+alter table public.membership_subscription
+    add column if not exists revoke_reason text;
+comment on column public.membership_subscription.revoke_reason is
+    'ARS-267. Admin-supplied reason for a disciplinary revoke (state=''revoked''). null otherwise.';
 
 -- One live subscription per organization; terminal states may repeat.
 create unique index if not exists uq_membership_subscription_live
@@ -496,6 +509,19 @@ create table if not exists public.membership_payment (
 comment on table public.membership_payment is
     'ARS-206. Append-only log of membership charge attempts. provider=''stub''
      until a real provider lands (ARS-206b). One row per charge attempt.';
+
+-- ARS-267: audit columns for admin-recorded manual payments (provider='manual').
+-- `create table if not exists` is a no-op on prod → explicit idempotent ALTER (P7).
+alter table public.membership_payment
+    add column if not exists created_by uuid references public.users(id);
+alter table public.membership_payment
+    add column if not exists note text;
+comment on column public.membership_payment.created_by is
+    'ARS-267. User who recorded a manual payment (rpc_admin_record_manual_payment).
+     null for engine/stub charges.';
+comment on column public.membership_payment.note is
+    'ARS-267. Mandatory justification for a manual payment (Kaspi transfer note etc.);
+     null for engine charges.';
 
 create index if not exists idx_membership_payment_sub
     on public.membership_payment (subscription_id, created_at desc);
@@ -1107,4 +1133,403 @@ values
     ('rpc_admin_list_subscriptions',        null, null, 'd13_billing.sql', 'ARS-266 admin subscriptions list + filters + counts_by_state'),
     ('rpc_admin_get_subscription',          null, null, 'd13_billing.sql', 'ARS-266 admin subscription card + payments + events'),
     ('rpc_admin_list_membership_payments',  null, null, 'd13_billing.sql', 'ARS-266 admin membership payments ledger + sum_succeeded')
+on conflict (sql_name) do nothing;
+
+-- ============================================================
+-- Slice ARS-267 (admin subscription write-ops + cabinet resume)
+-- Management operations for the TURAN admin (eng-spec §2.2) + cabinet resume.
+-- Every op leaves a trail (ledger row and/or platform_event). All SECURITY
+-- DEFINER, guard inside, ACL `revoke from public, anon` + grant authenticated
+-- (guard inside) + service_role (SEC-GRANT-PUBLIC-01). Existing signatures
+-- untouched (P7); additive columns only (created_by/note/revoke_reason above).
+--
+-- CEO decisions (2026-07-16): D-BILL-MANUAL-01 (manual payment in pilot),
+-- D-BILL-REVOKE-01 (disciplinary `revoked` state in pilot).
+--
+-- Events (Dok 4): membership.subscription.{extended,plan_changed,resumed,revoked}
+-- + reuse membership.payment.succeeded / .renewed / entitlements.invalidated.
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- rpc_admin_record_manual_payment — MS2 authority "Billing / manual admin
+-- confirm", NOT a silent admin-override: p_reference + p_note are mandatory and
+-- land in the append-only ledger. Mirrors the renewal-engine success branch —
+-- rolls the period forward (base = max(current_period_end, now)) and sets state
+-- 'active'. price_snapshot is NOT overwritten with the manual amount (future
+-- auto-renewals stay on the plan-locked price). Terminal subs (canceled/revoked)
+-- are rejected — resubscribe instead.
+-- ------------------------------------------------------------
+create or replace function public.rpc_admin_record_manual_payment(
+    p_subscription_id uuid,
+    p_amount          numeric,
+    p_reference       text,
+    p_note            text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_sub        public.membership_subscription%rowtype;
+    v_plan       public.membership_plan%rowtype;
+    v_prev_state text;
+    v_base       timestamptz;
+    v_new_end    timestamptz;
+    v_currency   text;
+    v_row        jsonb;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = '42501';
+    end if;
+    if nullif(btrim(coalesce(p_reference, '')), '') is null then
+        raise exception 'REFERENCE_REQUIRED: manual payment needs a receipt/reference'
+            using errcode = '22023';
+    end if;
+    if nullif(btrim(coalesce(p_note, '')), '') is null then
+        raise exception 'NOTE_REQUIRED: manual payment needs a justification note'
+            using errcode = '22023';
+    end if;
+    if p_amount is null or p_amount < 0 then
+        raise exception 'INVALID_AMOUNT: %', p_amount using errcode = '22023';
+    end if;
+
+    select * into v_sub
+      from public.membership_subscription
+     where id = p_subscription_id
+     for update;
+    if not found then
+        raise exception 'SUBSCRIPTION_NOT_FOUND: %', p_subscription_id using errcode = 'P0002';
+    end if;
+    if v_sub.state in ('canceled', 'revoked') then
+        raise exception 'SUBSCRIPTION_TERMINAL: cannot record payment on % subscription (resubscribe instead)',
+            v_sub.state using errcode = '22023';
+    end if;
+
+    select * into v_plan from public.membership_plan where plan_code = v_sub.plan_code;
+    v_currency   := coalesce(v_plan.currency, 'KZT');
+    v_prev_state := v_sub.state;
+
+    -- roll the period forward (mirror renewal success branch)
+    v_base    := greatest(coalesce(v_sub.current_period_end, now()), now());
+    v_new_end := v_base + v_plan.billing_period::interval;
+
+    -- ledger row FIRST — append-only audit with mandatory reference + note (P8-audit)
+    insert into public.membership_payment
+        (subscription_id, organization_id, amount, currency, status,
+         provider, provider_ref, created_by, note)
+    values
+        (v_sub.id, v_sub.organization_id, p_amount, v_currency,
+         'succeeded', 'manual', p_reference, public.fn_current_user_id(), p_note);
+
+    update public.membership_subscription
+       set state                = 'active',
+           current_period_start = v_base,
+           current_period_end   = v_new_end,
+           next_billing_at      = v_new_end,
+           trial_end            = null
+     where id = v_sub.id;
+
+    perform public.publish_platform_event(
+        'membership.payment.succeeded', v_sub.organization_id, v_sub.id,
+        jsonb_build_object('amount', p_amount, 'currency', v_currency,
+                           'provider', 'manual', 'reference', p_reference));
+    perform public.publish_platform_event(
+        'membership.subscription.renewed', v_sub.organization_id, v_sub.id,
+        jsonb_build_object('period_end', v_new_end, 'source', 'manual_admin'));
+    -- access was OFF in past_due/expired → restored
+    if v_prev_state in ('past_due', 'expired') then
+        perform public.publish_platform_event(
+            'entitlements.invalidated', v_sub.organization_id, v_sub.id,
+            jsonb_build_object('reason', 'access_restored'));
+    end if;
+
+    select to_jsonb(s) into v_row from public.membership_subscription s where s.id = v_sub.id;
+    return v_row;
+end;
+$$;
+comment on function public.rpc_admin_record_manual_payment(uuid, numeric, text, text) is
+    'ARS-267. Admin records a manual (e.g. Kaspi transfer) membership payment.
+     Mandatory reference+note; writes membership_payment(provider=''manual'',succeeded,
+     created_by,note); rolls the period forward (state→active). Restores access from
+     past_due/expired. Emits payment.succeeded(manual)+renewed(+entitlements.invalidated).
+     Rejects canceled/revoked subs. fn_is_admin() guard.';
+
+-- ------------------------------------------------------------
+-- rpc_admin_extend_subscription — comp/goodwill gesture: add p_days (1..90) to the
+-- period. Reactivates from grace/past_due/expired (deliberate admin power — no
+-- charge). Mandatory note. Rejects canceled/revoked.
+-- ------------------------------------------------------------
+create or replace function public.rpc_admin_extend_subscription(
+    p_subscription_id uuid,
+    p_days            integer,
+    p_note            text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_sub        public.membership_subscription%rowtype;
+    v_prev_state text;
+    v_new_end    timestamptz;
+    v_new_next   timestamptz;
+    v_new_state  text;
+    v_row        jsonb;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = '42501';
+    end if;
+    if p_days is null or p_days < 1 or p_days > 90 then
+        raise exception 'INVALID_DAYS: must be 1..90, got %', p_days using errcode = '22023';
+    end if;
+    if nullif(btrim(coalesce(p_note, '')), '') is null then
+        raise exception 'NOTE_REQUIRED: extension needs a justification note'
+            using errcode = '22023';
+    end if;
+
+    select * into v_sub
+      from public.membership_subscription
+     where id = p_subscription_id
+     for update;
+    if not found then
+        raise exception 'SUBSCRIPTION_NOT_FOUND: %', p_subscription_id using errcode = 'P0002';
+    end if;
+    if v_sub.state in ('canceled', 'revoked') then
+        raise exception 'SUBSCRIPTION_TERMINAL: cannot extend % subscription', v_sub.state
+            using errcode = '22023';
+    end if;
+
+    v_prev_state := v_sub.state;
+    v_new_end    := coalesce(v_sub.current_period_end, now()) + make_interval(days => p_days);
+    -- keep the billing cadence shifted; for reactivated (expired) subs next_billing was
+    -- null → arm it to the new period end so the engine picks it up again.
+    v_new_next   := coalesce(v_sub.next_billing_at + make_interval(days => p_days), v_new_end);
+    v_new_state  := case when v_sub.state in ('grace', 'past_due', 'expired')
+                         then 'active' else v_sub.state end;
+
+    update public.membership_subscription
+       set state              = v_new_state,
+           current_period_end = v_new_end,
+           next_billing_at    = v_new_next
+     where id = v_sub.id;
+
+    perform public.publish_platform_event(
+        'membership.subscription.extended', v_sub.organization_id, v_sub.id,
+        jsonb_build_object('days', p_days, 'note', p_note, 'period_end', v_new_end));
+    if v_prev_state in ('past_due', 'expired') then
+        perform public.publish_platform_event(
+            'entitlements.invalidated', v_sub.organization_id, v_sub.id,
+            jsonb_build_object('reason', 'access_restored'));
+    end if;
+
+    select to_jsonb(s) into v_row from public.membership_subscription s where s.id = v_sub.id;
+    return v_row;
+end;
+$$;
+comment on function public.rpc_admin_extend_subscription(uuid, integer, text) is
+    'ARS-267. Admin comp/goodwill: extend the period by 1..90 days (mandatory note).
+     Reactivates grace/past_due/expired → active without charge. Emits
+     subscription.extended (+entitlements.invalidated if access restored).';
+
+-- ------------------------------------------------------------
+-- rpc_admin_change_subscription_plan — switch the plan effective NEXT period.
+-- price_snapshot is NOT touched now: re-tariffing happens in the renewal engine
+-- at the next roll (snapshot := new plan price). No immediate charge/refund —
+-- simple and legally clean. Live subs only.
+-- ------------------------------------------------------------
+create or replace function public.rpc_admin_change_subscription_plan(
+    p_subscription_id uuid,
+    p_new_plan_code   text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_sub  public.membership_subscription%rowtype;
+    v_plan public.membership_plan%rowtype;
+    v_old  text;
+    v_row  jsonb;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = '42501';
+    end if;
+
+    select * into v_plan
+      from public.membership_plan
+     where plan_code = p_new_plan_code and is_active = true;
+    if not found then
+        raise exception 'PLAN_NOT_FOUND: % (or inactive)', p_new_plan_code using errcode = 'P0002';
+    end if;
+
+    select * into v_sub
+      from public.membership_subscription
+     where id = p_subscription_id
+     for update;
+    if not found then
+        raise exception 'SUBSCRIPTION_NOT_FOUND: %', p_subscription_id using errcode = 'P0002';
+    end if;
+    if v_sub.state not in ('trialing', 'active', 'grace', 'past_due') then
+        raise exception 'SUBSCRIPTION_NOT_LIVE: cannot change plan on % subscription', v_sub.state
+            using errcode = '22023';
+    end if;
+    if v_sub.plan_code = p_new_plan_code then
+        raise exception 'PLAN_UNCHANGED: already on plan %', p_new_plan_code using errcode = '22023';
+    end if;
+
+    v_old := v_sub.plan_code;
+    update public.membership_subscription
+       set plan_code = p_new_plan_code
+     where id = v_sub.id;
+
+    perform public.publish_platform_event(
+        'membership.subscription.plan_changed', v_sub.organization_id, v_sub.id,
+        jsonb_build_object('from_plan', v_old, 'to_plan', p_new_plan_code,
+                           'effective', 'next_period'));
+
+    select to_jsonb(s) into v_row from public.membership_subscription s where s.id = v_sub.id;
+    return v_row;
+end;
+$$;
+comment on function public.rpc_admin_change_subscription_plan(uuid, text) is
+    'ARS-267. Change the subscription plan effective next period (price_snapshot
+     untouched — re-tariffed by the renewal engine at next roll; no immediate
+     charge/refund). Live subs only. Emits subscription.plan_changed.';
+
+-- ------------------------------------------------------------
+-- rpc_resume_org_membership — undo a scheduled cancellation (cancel_at_period_end
+-- → false) on the org's live subscription. Guard: member-or-admin (symmetric to
+-- rpc_cancel_org_membership, S3). Called from both admin and the cabinet (ARS-261).
+-- Idempotent: no error if the flag is already false.
+-- ------------------------------------------------------------
+create or replace function public.rpc_resume_org_membership(p_organization_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_sub_id uuid;
+    v_was    boolean;
+    v_row    jsonb;
+begin
+    if not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin()) then
+        raise exception 'FORBIDDEN: not a member of organization %', p_organization_id
+            using errcode = '42501';
+    end if;
+
+    select id, cancel_at_period_end into v_sub_id, v_was
+      from public.membership_subscription
+     where organization_id = p_organization_id
+       and state in ('trialing', 'active', 'grace', 'past_due')
+     limit 1;
+    if v_sub_id is null then
+        raise exception 'NO_LIVE_SUBSCRIPTION: organization %', p_organization_id
+            using errcode = 'P0002';
+    end if;
+
+    update public.membership_subscription
+       set cancel_at_period_end = false
+     where id = v_sub_id;
+
+    perform public.publish_platform_event(
+        'membership.subscription.resumed', p_organization_id, v_sub_id,
+        jsonb_build_object('was_scheduled_for_cancellation', v_was));
+
+    select to_jsonb(s) into v_row from public.membership_subscription s where s.id = v_sub_id;
+    return v_row;
+end;
+$$;
+comment on function public.rpc_resume_org_membership(uuid) is
+    'ARS-267. Undo a scheduled cancellation (cancel_at_period_end→false) on the org''s
+     live subscription. Member-or-admin (symmetric to cancel). Idempotent. Called from
+     admin + cabinet (ARS-261). Emits subscription.resumed.';
+
+-- ------------------------------------------------------------
+-- rpc_admin_revoke_membership — disciplinary terminal revoke (MS2 D-MEM-5,
+-- CEO D-BILL-REVOKE-01). Distinct from voluntary cancel: state→'revoked' (terminal),
+-- non-recurrent — the org needs a new subscription/application to return (revoked is
+-- outside uq_membership_subscription_live, so re-subscribe is allowed). Mandatory
+-- reason. Admin-only. Access is lost immediately.
+-- ------------------------------------------------------------
+create or replace function public.rpc_admin_revoke_membership(
+    p_organization_id uuid,
+    p_reason          text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_sub_id uuid;
+    v_row    jsonb;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = '42501';
+    end if;
+    if nullif(btrim(coalesce(p_reason, '')), '') is null then
+        raise exception 'REASON_REQUIRED: disciplinary revoke needs a reason'
+            using errcode = '22023';
+    end if;
+
+    select id into v_sub_id
+      from public.membership_subscription
+     where organization_id = p_organization_id
+       and state in ('trialing', 'active', 'grace', 'past_due')
+     limit 1;
+    if v_sub_id is null then
+        raise exception 'NO_LIVE_SUBSCRIPTION: organization %', p_organization_id
+            using errcode = 'P0002';
+    end if;
+
+    update public.membership_subscription
+       set state                = 'revoked',
+           cancel_at_period_end = false,
+           next_billing_at      = null,
+           revoke_reason        = p_reason
+     where id = v_sub_id;
+
+    perform public.publish_platform_event(
+        'membership.subscription.revoked', p_organization_id, v_sub_id,
+        jsonb_build_object('reason', p_reason));
+    perform public.publish_platform_event(
+        'entitlements.invalidated', p_organization_id, v_sub_id,
+        jsonb_build_object('reason', 'membership_revoked'));
+
+    select to_jsonb(s) into v_row from public.membership_subscription s where s.id = v_sub_id;
+    return v_row;
+end;
+$$;
+comment on function public.rpc_admin_revoke_membership(uuid, text) is
+    'ARS-267. Disciplinary terminal revoke (MS2 D-MEM-5): state→''revoked'', clears
+     next_billing, records revoke_reason. Non-recurrent (re-subscribe allowed since
+     revoked is outside the live-unique index). Mandatory reason. Admin-only.
+     Emits subscription.revoked + entitlements.invalidated.';
+
+-- ------------------------------------------------------------
+-- Grants (eng-spec §2): revoke from public AND anon (SEC-GRANT-PUBLIC-01);
+-- grant authenticated (guard inside) + service_role.
+-- ------------------------------------------------------------
+revoke execute on function public.rpc_admin_record_manual_payment(uuid, numeric, text, text) from public, anon;
+revoke execute on function public.rpc_admin_extend_subscription(uuid, integer, text)          from public, anon;
+revoke execute on function public.rpc_admin_change_subscription_plan(uuid, text)              from public, anon;
+revoke execute on function public.rpc_resume_org_membership(uuid)                             from public, anon;
+revoke execute on function public.rpc_admin_revoke_membership(uuid, text)                     from public, anon;
+grant  execute on function public.rpc_admin_record_manual_payment(uuid, numeric, text, text) to authenticated, service_role;
+grant  execute on function public.rpc_admin_extend_subscription(uuid, integer, text)          to authenticated, service_role;
+grant  execute on function public.rpc_admin_change_subscription_plan(uuid, text)              to authenticated, service_role;
+grant  execute on function public.rpc_resume_org_membership(uuid)                             to authenticated, service_role;
+grant  execute on function public.rpc_admin_revoke_membership(uuid, text)                     to authenticated, service_role;
+
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes)
+values
+    ('rpc_admin_record_manual_payment',    null, null, 'd13_billing.sql', 'ARS-267 admin manual payment (provider=manual) + roll period'),
+    ('rpc_admin_extend_subscription',      null, null, 'd13_billing.sql', 'ARS-267 admin comp extend 1..90 days + reactivate'),
+    ('rpc_admin_change_subscription_plan', null, null, 'd13_billing.sql', 'ARS-267 admin change plan effective next period'),
+    ('rpc_resume_org_membership',          null, null, 'd13_billing.sql', 'ARS-267 undo scheduled cancellation (member-or-admin; cabinet ARS-261)'),
+    ('rpc_admin_revoke_membership',        null, null, 'd13_billing.sql', 'ARS-267 disciplinary terminal revoke (MS2 D-MEM-5)')
 on conflict (sql_name) do nothing;

@@ -110,14 +110,18 @@ v1.1 исправляет все критические и серьёзные д
 | B-04 | **membership.subscription.expired** | Billing | — (новое, ARS-206) | rpc_process_membership_renewals [CRON] | ✅ | — | ✅ | ✅ |
 | B-05 | **membership.payment.succeeded** | Billing | — (новое, ARS-206) | fn_charge_membership / renewals | ✅ | — | — | — |
 | B-06 | **membership.payment.failed** | Billing | — (новое, ARS-206) | rpc_process_membership_renewals [CRON] | ✅ | — | ✅ | ✅ |
-| B-07 | **entitlements.invalidated** | Billing | — (новое, ARS-205/207) | subscribe / cancel / renewals | — | ✅ | — | — |
+| B-07 | **entitlements.invalidated** | Billing | — (новое, ARS-205/207) | subscribe / cancel / renewals / admin-ops (ARS-267) | — | ✅ | — | — |
+| B-08 | **membership.subscription.extended** | Billing | — (новое, ARS-267) | rpc_admin_extend_subscription [ADMIN] | ✅ | — | — | — |
+| B-09 | **membership.subscription.plan_changed** | Billing | — (новое, ARS-267) | rpc_admin_change_subscription_plan [ADMIN] | ✅ | — | — | — |
+| B-10 | **membership.subscription.resumed** | Billing | — (новое, ARS-267) | rpc_resume_org_membership [WEB,ADMIN] | ✅ | — | — | — |
+| B-11 | **membership.subscription.revoked** | Billing | — (новое, ARS-267) | rpc_admin_revoke_membership [ADMIN] | ✅ | — | ✅ | — |
 
-> **Billing (B-01..B-07) — статус (ARS-268).** Все 7 событий уже эмитятся кодом d13_billing.sql
-> (флаг «не зарегистрированы в Dok 4» снят). Каноническая нотация домена — `membership.*` /
-> `entitlements.*` (подписочный lifecycle членства; отличается от `identity.membership.*` —
-> те про заявку/level старого стека). **Ещё 3 события зарезервированы, но НЕ эмитятся** (ждут
-> admin-ops RPC итерации 2, ARS-266/267): `membership.subscription.extended`, `.plan_changed`,
-> `.resumed` — вносятся в реестр при постройке тех RPC, не раньше (иначе Dok4 обгонит реальность).
+> **Billing (B-01..B-11) — статус (ARS-267).** Все 11 событий эмитятся кодом d13_billing.sql.
+> Каноническая нотация домена — `membership.*` / `entitlements.*` (подписочный lifecycle членства;
+> отличается от `identity.membership.*` — те про заявку/level старого стека). B-08..B-11 добавлены
+> при постройке admin-ops RPC (ARS-267): `extended` / `plan_changed` / `resumed` (были зарезервированы)
+> + `revoked` (дисциплинарный терминал, MS2 D-MEM-5 / CEO D-BILL-REVOKE-01). `membership.payment.succeeded`
+> (B-05) и `.renewed` (B-03) теперь эмитятся и из `rpc_admin_record_manual_payment` (payload.provider='manual').
 
 ---
 
@@ -539,22 +543,25 @@ CapexTab (после toggle/qty_override/material_override изменений). 
 
 > Подписочный lifecycle членства (d13_billing.sql). Отличать от `identity.membership.*` (§3.1) —
 > те про заявку/level старого стека; эти — про рекуррентную оплаченную подписку (D-BILL-TRUTH-01).
-> Все 7 эмитятся сегодня. Зарезервированы, но НЕ эмитятся (до admin-ops ARS-266/267):
-> `membership.subscription.extended/.plan_changed/.resumed`.
+> Все 11 эмитятся сегодня (B-08..B-11 добавлены admin-ops ARS-267).
 
 | canonical_event_type | Producer | Consumers | Описание / after-payload key fields |
 |----------------------|----------|-----------|-------------------------------------|
 | **membership.subscription.started** | rpc_subscribe_org_membership [WEB,AI] | Audit, Notification | org_id, plan_code, state (trialing\|active), trial_end, current_period_end |
 | **membership.subscription.canceled** | rpc_cancel_org_membership [WEB,AI] | Audit, Notification | org_id, subscription_id, reason (subscription_canceled), immediate |
-| **membership.subscription.renewed** | rpc_process_membership_renewals [CRON] | Audit | org_id, subscription_id, new current_period_end, next_billing_at |
+| **membership.subscription.renewed** | rpc_process_membership_renewals [CRON] / rpc_admin_record_manual_payment [ADMIN] | Audit | org_id, subscription_id, period_end, next_billing_at, source (manual_admin для ручной оплаты) |
 | **membership.subscription.expired** | rpc_process_membership_renewals [CRON] | Audit, Notification (owner), AI GW | org_id, subscription_id, reason (canceled_at_period_end \| subscription_expired) |
-| **membership.payment.succeeded** | fn_charge_membership (renewals / subscribe) | Audit | org_id, subscription_id, amount, currency, provider (stub\|manual) |
+| **membership.subscription.extended** | rpc_admin_extend_subscription [ADMIN] | Audit | org_id, subscription_id, days (1..90), note, period_end |
+| **membership.subscription.plan_changed** | rpc_admin_change_subscription_plan [ADMIN] | Audit | org_id, subscription_id, from_plan, to_plan, effective (next_period) |
+| **membership.subscription.resumed** | rpc_resume_org_membership [WEB,ADMIN] | Audit | org_id, subscription_id, was_scheduled_for_cancellation |
+| **membership.subscription.revoked** | rpc_admin_revoke_membership [ADMIN] | Audit, Notification (owner), AI GW | org_id, subscription_id, reason (дисциплинарный, обязателен) |
+| **membership.payment.succeeded** | fn_charge_membership (renewals / subscribe) / rpc_admin_record_manual_payment [ADMIN] | Audit | org_id, subscription_id, amount, currency, provider (stub\|manual), reference (для manual) |
 | **membership.payment.failed** | rpc_process_membership_renewals [CRON] | Audit, Notification (owner), AI GW | org_id, subscription_id, amount, next retry (grace) |
-| **entitlements.invalidated** | subscribe / cancel / renewals | AI Gateway (cache flush), UI (re-fetch feature flags) | org_id — сигнал клиентам перечитать `rpc_check_feature_access` |
+| **entitlements.invalidated** | subscribe / cancel / renewals / admin-ops (manual payment, extend, revoke) | AI Gateway (cache flush), UI (re-fetch feature flags) | org_id — сигнал клиентам перечитать `rpc_check_feature_access` |
 
-**Notification-шаблоны (ARS-268 решение, минимум):** `subscription_expired` + `payment_failed` →
-владельцу орг (§7). Остальные 5 событий — без шаблона (аудит/RT достаточно; started/renewed —
-не требуют push, canceled инициирован пользователем).
+**Notification-шаблоны (ARS-268/267 решение, минимум):** `subscription_expired` + `payment_failed` +
+`subscription_revoked` → владельцу орг (§7). Остальные события — без шаблона (аудит/RT достаточно;
+started/renewed/extended/plan_changed/resumed — не требуют push, canceled инициирован пользователем).
 
 ---
 
