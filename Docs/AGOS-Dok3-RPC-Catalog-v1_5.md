@@ -240,6 +240,9 @@
 | RPC-BILL-6 | `rpc_admin_list_membership_plans()` | admin | ✅ | jsonb[] все планы (вкл. неактивные) |
 | RPC-BILL-7 | `rpc_admin_upsert_membership_plan(...)` | admin | ✅ | jsonb план |
 | RPC-BILL-8 | `rpc_admin_set_membership_plan_active(plan_code, is_active)` | admin | ✅ | jsonb план |
+| RPC-BILL-9 | `rpc_admin_list_subscriptions(state?, plan_code?, search?, limit?, offset?)` | admin | ✅ (ARS-266) | jsonb { total, counts_by_state, rows[…sub, org_name, org_bin, plan_title, last_payment_at] }; сорт next_billing_at asc nulls last |
+| RPC-BILL-10 | `rpc_admin_get_subscription(subscription_id)` | admin | ✅ (ARS-266) | jsonb { subscription, plan, organization{id,name,bin}, membership_level, payments[20], events[20] } |
+| RPC-BILL-11 | `rpc_admin_list_membership_payments(org_id?, status?, from?, to?, limit?, offset?)` | admin | ✅ (ARS-266) | jsonb { total, sum_succeeded, rows[…payment, org_name, plan_code] } |
 | RPC-GOV-1 | `rpc_check_feature_access(feature_code, org_id?)` | web, ai | ✅ (0 вызывающих — wiring ARS-269) | jsonb { allowed, reason, upgrade_hint } fail-closed |
 
 **Внутренние функции (§12, не публичный RPC-контракт):**
@@ -248,10 +251,9 @@
 (stub платёжного провайдера, service_role); `fn_user_platform_tier(user_id)→text` (ось персональной
 подписки governance, placeholder 'free' до PlatformSubscription).
 
-**НЕ построены (admin-ops итерации 2, ARS-266/267):** `rpc_admin_list_subscriptions`,
-`rpc_admin_get_subscription`, `rpc_admin_list_membership_payments`, `rpc_admin_record_manual_payment`,
+**НЕ построены (admin-ops write, итерация 2, ARS-267):** `rpc_admin_record_manual_payment`,
 `rpc_admin_extend_subscription`, `rpc_admin_change_subscription_plan`, `rpc_resume_org_membership` —
-внести при постройке (eng-spec §2.1/2.2), не раньше.
+внести при постройке (eng-spec §2.2), не раньше. Read-часть (§2.1, RPC-BILL-9..11) построена ARS-266.
 
 ---
 

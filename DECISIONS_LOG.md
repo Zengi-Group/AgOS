@@ -4240,3 +4240,18 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: `cross_check.sh` 0 critical; `tsc -b` 0 (тронуты 2 TS-комментария). Docs-only — БД/RPC не менялись.
 
 **Files**: `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md`, `Docs/AGOS-Dok4-EventBus-v1_1.md`, `Docs/AGOS-TSP-Flow-Microsteps/AGOS-Microstep2-AssociationMembership-FSM-v1_0.md`, `IMPL_DEBT.md`, `d13_billing.sql` (коммент), `d14_governance.sql` (комменты), `src/pages/cabinet/shell/components/sheets/SubscribeSheet.tsx` (коммент), `src/pages/admin/billing/BillingPlansAdmin.tsx` (коммент), brain `membership-billing.md` + index/log.
+
+### 2026-07-17: ARS-266 (BILL-A1) — админ read-RPC биллинга (список подписок + карточка + журнал платежей)
+
+**What**: 3 read-only SECURITY DEFINER RPC — фундамент админ-экрана «управление подписками» (eng-spec §2.1). До них в админке был только каталог планов, ни списка подписок, ни истории платежей.
+- `rpc_admin_list_subscriptions(state?, plan_code?, search?, limit?, offset?)` → `{total, counts_by_state{6 состояний}, rows[…sub, org_name, org_bin, plan_title, last_payment_at]}`. Поиск по `organizations.legal_name`+`bin_iin`; сорт `next_billing_at asc nulls last`, tiebreak `created_at desc`. `counts_by_state` игнорирует фильтр state (чипы остаются осмысленными); `total` — по полному фильтру (пагинация).
+- `rpc_admin_get_subscription(subscription_id)` → `{subscription, plan, organization{id,name,bin}, membership_level, payments[20], events[20 platform_events по entity_id]}`. `membership_level` = связанная `membership_id`, иначе самая значимая membership орг (non-registered → свежее).
+- `rpc_admin_list_membership_payments(org_id?, status?, from?, to?, limit?, offset?)` → `{total, sum_succeeded, rows[…payment, org_name, plan_code]}`. `sum_succeeded` суммирует succeeded по фильтру org+даты, ИГНОРИРУЯ status-чип (стабильный футер «денег пришло»).
+
+**Why**: блокирует admin-UI (ARS-271). Tier mechanical — read-RPC поверх готовых таблиц ARS-203/206. Все три: `fn_is_admin()`-guard внутри, глобальный админ-скоуп (админ видит все орг by design), ACL `revoke from public, anon; grant authenticated + service_role` (SEC-GRANT-PUBLIC-01: `revoke from anon` один оставляет PUBLIC execute), регистрация в `rpc_name_registry`.
+
+**Verify**: `cross_check.sh` 0 critical; CHECK 5 (org_id) — 2 org-less RPC внесены в whitelist осознанно (глобальный админ-скоуп, eng-spec §7), `list_membership_payments` проходит нативно (есть p_organization_id); CHECK 7 (registry) — OK. 4 significant — преэкзистные (TSP-адаптер PGRST203 ×3 + дубль R-29 в design-canon), не мои. Тела всех 3 RPC прогнаны read-only на проде (`mwtbozflyldcadypherr`): каждый идентификатор/join/jsonb резолвится против задеплоенной схемы (закрывает `plpgsql-runtime-resolution-blindspot`; `membership_subscription`/`membership_payment` на проде = 0 строк). Колонки сверены с прод: `organizations.legal_name`/`bin_iin`, `platform_events.entity_id`.
+
+**НЕ задеплоено**: прод-деплой ручной (`agos-merge-not-equal-deploy`) — функции в d13, но на прод НЕ наложены (жду решения CEO). Additive + read-only + admin-gated — безопасно к деплою `apply_migration`-ом при подтверждении.
+
+**Files**: `d13_billing.sql` (+3 RPC, grants, registry), `cross_check.sh` (CHECK 5 whitelist +2), `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md` (§1.10 RPC-BILL-9..11, обновлён «НЕ построены» → остались только write ARS-267).

@@ -829,3 +829,264 @@ values
     ('rpc_admin_upsert_membership_plan',   null, null, 'd13_billing.sql', 'ARS-207 admin plan constructor — create/update'),
     ('rpc_admin_set_membership_plan_active',null, null, 'd13_billing.sql', 'ARS-207 admin plan constructor — retire/restore')
 on conflict (sql_name) do nothing;
+
+-- ============================================================
+-- Slice ARS-266 / BILL-A1 (admin read-RPCs — subscriptions ops foundation)
+-- Read-only backbone of the admin «управление подписками» screen (eng-spec §2.1).
+-- Before this, the admin had NO way to see subscriptions or payments — only the
+-- plan catalog. All three: SECURITY DEFINER, fn_is_admin() guard inside, global
+-- admin scope (no per-caller org filter — admin sees all orgs by design).
+-- ACL (eng-spec §2, SEC-GRANT-PUBLIC-01): revoke from public AND anon, then grant
+-- authenticated (guard inside) + service_role. `revoke from anon` alone leaves
+-- PUBLIC execute — both revokes are required.
+-- Global admin scope → whitelisted in cross_check CHECK 5 (organization_id) — the
+-- two org-less RPCs added there consciously (eng-spec §7).
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- rpc_admin_list_subscriptions — paginated, filterable subscription list with
+-- per-state counters. Filters: state / plan_code / free-text search over org
+-- legal_name + БИН. Sort next_billing_at asc nulls last (soonest-to-bill first),
+-- then created_at desc as a stable tiebreak. counts_by_state ignores p_state (so
+-- the state chips stay meaningful while one state is selected); total reflects the
+-- full filter (state+plan+search) for pagination.
+-- ------------------------------------------------------------
+create or replace function public.rpc_admin_list_subscriptions(
+    p_state     text default null,
+    p_plan_code text default null,
+    p_search    text default null,
+    p_limit     integer default 50,
+    p_offset    integer default 0
+)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public, pg_temp
+as $$
+declare
+    v_search text    := nullif(btrim(coalesce(p_search, '')), '');
+    v_limit  integer := least(greatest(coalesce(p_limit, 50), 1), 200);
+    v_offset integer := greatest(coalesce(p_offset, 0), 0);
+    v_counts jsonb;
+    v_total  integer;
+    v_rows   jsonb;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = '42501';
+    end if;
+
+    with base as (
+        select s.*,
+               o.legal_name as org_name,
+               o.bin_iin    as org_bin,
+               mp.title     as plan_title
+          from public.membership_subscription s
+          join public.organizations o  on o.id = s.organization_id
+          join public.membership_plan mp on mp.plan_code = s.plan_code
+         where (p_plan_code is null or s.plan_code = p_plan_code)
+           and (v_search is null
+                or o.legal_name ilike '%' || v_search || '%'
+                or o.bin_iin    ilike '%' || v_search || '%')
+    )
+    select
+        (select jsonb_build_object(
+                    'trialing', count(*) filter (where state = 'trialing'),
+                    'active',   count(*) filter (where state = 'active'),
+                    'grace',    count(*) filter (where state = 'grace'),
+                    'past_due', count(*) filter (where state = 'past_due'),
+                    'expired',  count(*) filter (where state = 'expired'),
+                    'canceled', count(*) filter (where state = 'canceled'))
+           from base),
+        (select count(*) from base where (p_state is null or state = p_state)),
+        (select coalesce(jsonb_agg(row_json order by ord_nbf asc nulls last, ord_created desc), '[]'::jsonb)
+           from (
+                select to_jsonb(b) || jsonb_build_object(
+                           'last_payment_at',
+                           (select max(pay.created_at)
+                              from public.membership_payment pay
+                             where pay.subscription_id = b.id)) as row_json,
+                       b.next_billing_at as ord_nbf,
+                       b.created_at      as ord_created
+                  from base b
+                 where (p_state is null or b.state = p_state)
+                 order by b.next_billing_at asc nulls last, b.created_at desc
+                 limit v_limit offset v_offset
+           ) page)
+      into v_counts, v_total, v_rows;
+
+    return jsonb_build_object('total', v_total, 'counts_by_state', v_counts, 'rows', v_rows);
+end;
+$$;
+comment on function public.rpc_admin_list_subscriptions(text, text, text, integer, integer) is
+    'ARS-266. Admin subscription list: filters (state/plan/search over org name+БИН),
+     counts_by_state (ignores state filter), total (full filter), rows enriched with
+     org_name/org_bin/plan_title/last_payment_at. Sort next_billing_at asc nulls last.
+     Global admin scope; fn_is_admin() guard.';
+
+-- ------------------------------------------------------------
+-- rpc_admin_get_subscription — one subscription card: the sub row, its plan, the
+-- org identity, the legacy membership level, last 20 payment attempts and last 20
+-- platform_events for this subscription (entity_id = subscription id).
+-- membership_level resolves to the linked memberships row (subscription.membership_id);
+-- if unlinked, falls back to the org's most-significant membership (non-registered
+-- preferred, then most recently changed) — mirrors the bridge-predicate intent.
+-- ------------------------------------------------------------
+create or replace function public.rpc_admin_get_subscription(p_subscription_id uuid)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public, pg_temp
+as $$
+declare
+    v_sub   public.membership_subscription%rowtype;
+    v_plan  jsonb;
+    v_org   jsonb;
+    v_level text;
+    v_pay   jsonb;
+    v_ev    jsonb;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = '42501';
+    end if;
+
+    select * into v_sub
+      from public.membership_subscription
+     where id = p_subscription_id;
+    if not found then
+        raise exception 'SUBSCRIPTION_NOT_FOUND: %', p_subscription_id using errcode = 'P0002';
+    end if;
+
+    select to_jsonb(mp) into v_plan
+      from public.membership_plan mp where mp.plan_code = v_sub.plan_code;
+
+    select jsonb_build_object('id', o.id, 'name', o.legal_name, 'bin', o.bin_iin)
+      into v_org
+      from public.organizations o where o.id = v_sub.organization_id;
+
+    -- linked membership row first; else org's most-significant membership
+    select level into v_level
+      from public.memberships where id = v_sub.membership_id;
+    if v_level is null then
+        select level into v_level
+          from public.memberships
+         where organization_id = v_sub.organization_id
+         order by (level <> 'registered') desc, level_changed_at desc
+         limit 1;
+    end if;
+
+    select coalesce(jsonb_agg(to_jsonb(p) order by p.created_at desc), '[]'::jsonb)
+      into v_pay
+      from (
+        select * from public.membership_payment
+         where subscription_id = p_subscription_id
+         order by created_at desc
+         limit 20
+      ) p;
+
+    select coalesce(jsonb_agg(to_jsonb(e) order by e.created_at desc), '[]'::jsonb)
+      into v_ev
+      from (
+        select * from public.platform_events
+         where entity_id = p_subscription_id
+         order by created_at desc
+         limit 20
+      ) e;
+
+    return jsonb_build_object(
+        'subscription',     to_jsonb(v_sub),
+        'plan',             coalesce(v_plan, 'null'::jsonb),
+        'organization',     coalesce(v_org, 'null'::jsonb),
+        'membership_level', to_jsonb(v_level),
+        'payments',         v_pay,
+        'events',           v_ev);
+end;
+$$;
+comment on function public.rpc_admin_get_subscription(uuid) is
+    'ARS-266. Admin subscription card: subscription + plan + organization{id,name,bin}
+     + membership_level (legacy) + last 20 payments + last 20 platform_events
+     (entity_id = subscription). Global admin scope; fn_is_admin() guard.';
+
+-- ------------------------------------------------------------
+-- rpc_admin_list_membership_payments — the payments ledger with a succeeded-sum
+-- footer. Filters: org / status / date range [from,to]. sum_succeeded sums
+-- status='succeeded' over the org+date filter, IGNORING the status filter (stable
+-- "money in" footer regardless of the status chip). total reflects the full filter
+-- (incl. status) for pagination. Rows enriched with org_name + plan_code.
+-- ------------------------------------------------------------
+create or replace function public.rpc_admin_list_membership_payments(
+    p_organization_id uuid        default null,
+    p_status          text        default null,
+    p_from            timestamptz default null,
+    p_to              timestamptz default null,
+    p_limit           integer     default 50,
+    p_offset          integer     default 0
+)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public, pg_temp
+as $$
+declare
+    v_limit  integer := least(greatest(coalesce(p_limit, 50), 1), 200);
+    v_offset integer := greatest(coalesce(p_offset, 0), 0);
+    v_total  integer;
+    v_sum    numeric;
+    v_rows   jsonb;
+begin
+    if not public.fn_is_admin() then
+        raise exception 'FORBIDDEN: admin only' using errcode = '42501';
+    end if;
+
+    with base as (
+        select pay.*,
+               o.legal_name as org_name,
+               s.plan_code  as plan_code
+          from public.membership_payment pay
+          join public.organizations o on o.id = pay.organization_id
+          left join public.membership_subscription s on s.id = pay.subscription_id
+         where (p_organization_id is null or pay.organization_id = p_organization_id)
+           and (p_from is null or pay.created_at >= p_from)
+           and (p_to   is null or pay.created_at <= p_to)
+    )
+    select
+        (select count(*) from base where (p_status is null or status = p_status)),
+        (select coalesce(sum(amount), 0) from base where status = 'succeeded'),
+        (select coalesce(jsonb_agg(row_json order by ord_created desc), '[]'::jsonb)
+           from (
+                select to_jsonb(b) as row_json, b.created_at as ord_created
+                  from base b
+                 where (p_status is null or b.status = p_status)
+                 order by b.created_at desc
+                 limit v_limit offset v_offset
+           ) page)
+      into v_total, v_sum, v_rows;
+
+    return jsonb_build_object('total', v_total, 'sum_succeeded', v_sum, 'rows', v_rows);
+end;
+$$;
+comment on function public.rpc_admin_list_membership_payments(uuid, text, timestamptz, timestamptz, integer, integer) is
+    'ARS-266. Admin payments ledger: filters (org/status/date range), sum_succeeded
+     (succeeded over org+date filter, ignores status chip), total (full filter),
+     rows enriched with org_name + plan_code. Global admin scope; fn_is_admin() guard.';
+
+-- ------------------------------------------------------------
+-- Grants (eng-spec §2): revoke from public AND anon (SEC-GRANT-PUBLIC-01 —
+-- `revoke from anon` alone leaves PUBLIC execute); grant authenticated (guard
+-- inside) + service_role.
+-- ------------------------------------------------------------
+revoke execute on function public.rpc_admin_list_subscriptions(text, text, text, integer, integer)                       from public, anon;
+revoke execute on function public.rpc_admin_get_subscription(uuid)                                                       from public, anon;
+revoke execute on function public.rpc_admin_list_membership_payments(uuid, text, timestamptz, timestamptz, integer, integer) from public, anon;
+grant  execute on function public.rpc_admin_list_subscriptions(text, text, text, integer, integer)                       to authenticated, service_role;
+grant  execute on function public.rpc_admin_get_subscription(uuid)                                                       to authenticated, service_role;
+grant  execute on function public.rpc_admin_list_membership_payments(uuid, text, timestamptz, timestamptz, integer, integer) to authenticated, service_role;
+
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes)
+values
+    ('rpc_admin_list_subscriptions',        null, null, 'd13_billing.sql', 'ARS-266 admin subscriptions list + filters + counts_by_state'),
+    ('rpc_admin_get_subscription',          null, null, 'd13_billing.sql', 'ARS-266 admin subscription card + payments + events'),
+    ('rpc_admin_list_membership_payments',  null, null, 'd13_billing.sql', 'ARS-266 admin membership payments ledger + sum_succeeded')
+on conflict (sql_name) do nothing;
