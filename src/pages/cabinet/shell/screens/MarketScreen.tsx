@@ -35,15 +35,15 @@ function SellGate({ membership, onApply }: { membership: MembershipStatus; onApp
   )
 }
 
-// Плашка оформления членства: заявка одобрена, но взнос не оплачен (TSP-вход в оплату).
+// Плашка оформления членства: заявка одобрена, подписка ещё не оформлена (TSP-вход в оплату).
 function ApprovedPlate({ onPay }: { onPay: () => void }) {
   return (
     <div className="sell-gate">
       <div className="sg-t">Заявка одобрена — оформите членство</div>
       <div className="sg-note" style={{ marginBottom: 10 }}>
-        Ассоциация одобрила вашу заявку. Оплатите членский взнос, чтобы оформить членство и открыть продажу партий.
+        Ассоциация одобрила вашу заявку. Оформите подписку, чтобы открыть продажу партий — первый период бесплатно.
       </div>
-      <button className="mk-cta primary" onClick={onPay}>Оплатить взнос</button>
+      <button className="mk-cta primary" onClick={onPay}>Оформить подписку</button>
     </div>
   )
 }
@@ -110,7 +110,7 @@ export function MarketScreen({ membership, batches, loading, onNew, onApply, onP
                 <span className="badge"><i />{expired ? 'Членство истекло' : 'Льготный период'}</span>
                 <div className="mk-grace-t">
                   {expired
-                    ? 'Текущие сделки можно довести до конца. Для новых партий — продлите членский взнос.'
+                    ? 'Текущие сделки можно довести до конца. Для новых партий — оформите подписку.'
                     : 'Продажа доступна — продлите членство, чтобы не прерывать работу.'}
                 </div>
                 <button className="mk-grace-b" onClick={onPay}>Продлить членство</button>

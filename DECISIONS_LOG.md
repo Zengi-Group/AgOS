@@ -4301,3 +4301,17 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: `cross_check.sh` 0 critical (4 significant — преэкзистные: rpc_create_batch overloads, R-29 design canon; не тронуты этой работой). Staging-приёмка (тик движка + `cron.job` + grace_days из плана) — **hand-off**: в этой сессии нет доступа к staging БД (нет psql, Supabase MCP не авторизован), применять миграцию через SQL Editor на staging. Прод — НЕ применять (см. D-BILL-CRON-STAGING-01).
 
 **Files**: `d13_billing.sql` (grace_days колонка + движок), `supabase/migrations/20260717120000_membership_renewals_pg_cron.sql` (new, staging-only), `IMPL_DEBT.md` (BILLING-STUB-PAYMENT-01 guard-нота).
+### 2026-07-18: ARS-261 — кабинет SubscribeSheet: error/empty/retry + confirm/resume + язык подписки + R-9 mono + дисклеймер ст.171
+
+**What**: закрыты фронт-дефекты B3/B5/B10/B11 + приёмка ст.171 (умбрелла ARS-258, eng-spec §4/§5 BILL-F4). Точечные Edit (HS-1/HS-6), ничего работающего не удалено (HS-2).
+- **B5** (`SubscribeSheet.tsx`): `plansRes.error`/`subRes.error` больше не глотаются → экран «Не удалось загрузить» + «Повторить»; пустой каталог (все планы retired) → «Тарифы недоступны» + «Обновить» вместо пустого списка. Роутинг рендера: loading→noOrg→err→sub→empty→plans.
+- **B3**: отмена — через шаг подтверждения (`confirmCancel`), а не один тап; при `cancel_at_period_end=true` — кнопка «Возобновить подписку» → `rpc_resume_org_membership` (self-serve, грант authenticated, member-or-admin guard; d13 ARS-267). Превью даты конца доступа = `current_period_end` (в trial = trial_end, d13 subscribe RPC).
+- **B10**: язык «взнос»→«подписка» по всей фермерской зоне (скан L-2 нашёл ещё 4 живых сайта сверх списка тикета: HomeStartLadder approved-шаг, MembGateSheet expired/pending, MarketScreen expired-note). Мёртвые ветки `STATE_LABEL` (`expired`/`canceled`) убраны — `rpc_get_org_subscription` отдаёт только trialing/active/grace/past_due. Осиротевшая `MEMB_DATES.payApproved` удалена (HS-4).
+- **B11 (R-9)**: `ws-hint mono`/`blk-h mono` на русских фразах («АКТИВНА»/«ТАРИФ») → sans (mono только на цифрах).
+- **Ст.171**: у цены тарифа добавлен `.mk-ref-d` — рамка ДОБРОВОЛЬНОСТИ участия, НЕ текст индикативных референс-цен (флаг: «цену вы назначаете сами» бессмыслен для фиксированного взноса; CEO одобрил формулировку + добор). → канон R-30.
+
+**Why**: замыкание петли подписки (ARS-258 итерация 2): шит — единственная точка оплаты, но глотал ошибки, отменял без подтверждения, не давал возобновить и говорил языком разового «взноса». keep-docs-in-sync: правила «взнос→подписка» и «дисклеймер тарифа = добровольность» вынесены в канон (D-UI-FARMER-RULES-01, R-30).
+
+**Verify**: `tsc -b` exit 0. Превью `/cabinet` в worktree не поднимается (@chatscope отсутствует — `qa-innertext-false-positive`); верификация = typecheck + чтение + сверка RPC-контракта с d13 (resume грант/guard; subscribe `current_period_end := trial_end`; `get_org_subscription` state-фильтр). RPC-деплой не требуется — `rpc_resume_org_membership` уже в d13 от ARS-267 (прод-наложение — по `agos-merge-not-equal-deploy`, отдельно).
+
+**Files**: `src/pages/cabinet/shell/components/sheets/SubscribeSheet.tsx`, `.../store.ts`, `.../data/membership.ts`, `src/pages/membership/Membership.tsx`, `.../screens/MarketScreen.tsx`, `.../components/HomeStartLadder.tsx`, `.../components/sheets/MembGateSheet.tsx`, `Docs/AGOS-DesignRules-FarmerCabinet.md` (R-30 + §5).
