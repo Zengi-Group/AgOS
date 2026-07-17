@@ -65,7 +65,9 @@ export function SubscribeSheet({ open = true, orgId, onClose, onSubscribed, toas
     if (!orgId) { setLoading(false); return }
     setLoading(true)
     const [plansRes, subRes] = await Promise.all([
-      supabase.rpc('rpc_list_membership_plans'),
+      // ARS-265: pass org id so the server filters the catalog by org type
+      // (applies_org_type). orgId is non-null here (early return above).
+      supabase.rpc('rpc_list_membership_plans', { p_organization_id: orgId }),
       supabase.rpc('rpc_get_org_subscription', { p_organization_id: orgId }),
     ])
     const loadedPlans = (plansRes.data as Plan[] | null) ?? []

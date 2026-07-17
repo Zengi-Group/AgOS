@@ -185,10 +185,21 @@ on conflict (plan_code) do nothing;
 -- ============================================================
 
 -- ------------------------------------------------------------
--- rpc_list_membership_plans — public catalog for the pricing screen.
+-- rpc_list_membership_plans — membership catalog for the pricing screen.
 -- Read-only. Returns active plans ordered by price.
+-- ARS-265/BILL-F5 (targeting): optional p_organization_id filters the catalog by
+-- the caller org's type(s) — a plan with applies_org_type set is offered only to
+-- orgs that carry that type (organization_type_assignments; existence = active,
+-- no status column — same rule as d14 gate (d)). A plan with applies_org_type=null
+-- is offered to everyone. p_organization_id null (default, P7) → unfiltered: the
+-- old zero-arg call and the anon pricing preview keep their exact prior behavior.
+-- The param is additive; the zero-arg signature is dropped and re-created with a
+-- default so ONE overload answers both `()` and `(uuid)` — two overloads would make
+-- `rpc_list_membership_plans()` ambiguous ("function is not unique") and break the
+-- pricing screen (see [[agos-merge-not-equal-deploy]] on live overloads).
 -- ------------------------------------------------------------
-create or replace function public.rpc_list_membership_plans()
+drop function if exists public.rpc_list_membership_plans();
+create or replace function public.rpc_list_membership_plans(p_organization_id uuid default null)
 returns jsonb
 language sql
 security definer
@@ -201,10 +212,22 @@ as $$
                trial_days, grants_tier, applies_org_type
         from public.membership_plan
         where is_active = true
+          and (
+              membership_plan.applies_org_type is null   -- unrestricted → everyone
+              or p_organization_id is null               -- no org context → unfiltered (P7)
+              or exists (                                 -- caller's org carries this type
+                  select 1 from public.organization_type_assignments ota
+                   where ota.organization_id = p_organization_id
+                     and ota.org_type = membership_plan.applies_org_type
+              )
+          )
     ) p;
 $$;
-comment on function public.rpc_list_membership_plans() is
-    'ARS-205. Active membership plans for the pricing screen. Read-only.';
+comment on function public.rpc_list_membership_plans(uuid) is
+    'ARS-205/ARS-265. Active membership plans for the pricing screen, read-only.
+     p_organization_id (optional, P7) filters by org type via organization_type_assignments:
+     a plan with applies_org_type set is shown only to orgs carrying that type;
+     applies_org_type=null → shown to all; p_organization_id=null → unfiltered catalog.';
 
 -- ------------------------------------------------------------
 -- rpc_get_org_subscription — the org''s single LIVE subscription (or null),
@@ -451,11 +474,11 @@ comment on function public.rpc_cancel_org_membership(uuid, boolean) is
 -- P-AI-6 — needed once PUBLIC is revoked). rpc_list_membership_plans is only called from
 -- the authenticated cabinet (SubscribeSheet) — no pre-auth caller, so authenticated-only.
 -- ------------------------------------------------------------
-revoke execute on function public.rpc_list_membership_plans()              from public, anon;
+revoke execute on function public.rpc_list_membership_plans(uuid)          from public, anon;
 revoke execute on function public.rpc_get_org_subscription(uuid)           from public, anon;
 revoke execute on function public.rpc_subscribe_org_membership(uuid, text) from public, anon;
 revoke execute on function public.rpc_cancel_org_membership(uuid, boolean) from public, anon;
-grant  execute on function public.rpc_list_membership_plans()                to authenticated, service_role;
+grant  execute on function public.rpc_list_membership_plans(uuid)            to authenticated, service_role;
 grant  execute on function public.rpc_get_org_subscription(uuid)             to authenticated, service_role;
 grant  execute on function public.rpc_subscribe_org_membership(uuid, text)   to authenticated, service_role;
 grant  execute on function public.rpc_cancel_org_membership(uuid, boolean)   to authenticated, service_role;
