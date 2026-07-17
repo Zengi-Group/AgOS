@@ -6,10 +6,11 @@ import { catName, STATUS_CHIP } from './batches'
 import type { Batch, MembershipStatus } from '../types'
 
 // даты вычисляются от TODAY (как в прототипе)
+// ARS-263: activeTill убран — реальная дата членства приходит из подписки
+// (current_period_end через membershipEntry в store.ts), не хардкодится.
 export const MEMB_DATES = {
   payApproved: fmtDGen(addDays(TODAY, 18)),
   payGrace: fmtDGen(addDays(TODAY, 13)),
-  activeTill: '15 марта 2027',
   expiringTill: fmtDGen(addDays(TODAY, 11)),
 }
 

@@ -10,6 +10,14 @@ export function fmtMoney(n: number): string {
 }
 export function fmtD(d: Date): string { return d.getDate() + ' ' + MON_SHORT[d.getMonth()] }
 export function fmtDGen(d: Date): string { return d.getDate() + ' ' + MON_GEN[d.getMonth()] }
+// ARS-263: ISO/дата-строка → «15 марта 2027» (день + месяц-родит. + год). null-safe.
+// Для реальных дат подписки (current_period_end / next_billing_at) вместо хардкода.
+export function fmtDGenYear(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  return d.getDate() + ' ' + MON_GEN[d.getMonth()] + ' ' + d.getFullYear()
+}
 export function addDays(d: Date, n: number): Date { const x = new Date(d); x.setDate(x.getDate() + n); return x }
 export function monthEnd(d: Date): Date { return new Date(d.getFullYear(), d.getMonth() + 1, 0) }
 
