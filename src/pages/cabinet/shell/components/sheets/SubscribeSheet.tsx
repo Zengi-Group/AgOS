@@ -1,6 +1,6 @@
 // AgOS · ARS-207 · Шторка подписки на членство ассоциации (заменяет разовый взнос
 // PayVznosSheet, решение CEO 2026-07-15). Тарифы + текущий статус подписки + оформление/
-// отмена. Данные и действия — через RPC биллинга (d12): rpc_list_membership_plans,
+// отмена. Данные и действия — через RPC биллинга (d13): rpc_list_membership_plans,
 // rpc_get_org_subscription, rpc_subscribe_org_membership, rpc_cancel_org_membership.
 
 import { useCallback, useEffect, useState } from 'react'

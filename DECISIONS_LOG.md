@@ -4223,3 +4223,20 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: прод-исполнение всех потребителей + `fn_org_membership_active` (true/false), ACL-проверка, active_orgs=15. Каждая миграция = идемпотентный `CREATE OR REPLACE`.
 
 **Files**: прод-миграции `ars_263_fn_org_membership_active`, `ars_263_d07_tsp_membership_gates`, `ars_263_admin_membership_paid_bridge`, `ars_263_self_serve_create_batch_membership_gate`, `ars_263_self_serve_create_batch_canon_converge`. Репо-файлы уже совпадают с прод (правок канона не потребовалось).
+
+### 2026-07-17: ARS-268 — канон-синк биллинга (Dok3/Dok4/MS2 + IMPL_DEBT + comments + migration-history)
+
+**What**: Документационный долг после PR #104/#108 (замысел↔код разъехались). Docs-only, кода не трогали.
+- **Dok 3** (§1.10 new): 8 billing-RPC (RPC-BILL-1..8) + `rpc_check_feature_access` (RPC-GOV-1) + внутренние `fn_org_membership_active`/`fn_charge_membership`/`fn_user_platform_tier`; помечены непостроенные admin-ops (ARS-266/267).
+- **Dok 4**: +7 Billing-событий (B-01..B-07, §1 + §3.12), уже эмитятся; `entitlements.invalidated` переведён из §3.11 DEFERRED в LIVE; +2 notification-шаблона (`subscription_expired`, `payment_failed`); 3 admin-ops события зарезервированы, не внесены. Итого 59→66 событий.
+- **Microstep 2** (§0.1 new): реконсиляция FSM (P4/D-DOC-RECON-01) — `membership_subscription.state` = реализация lifecycle; маппинг 6 MS2-состояний ↔ subscription-состояний; `memberships.level` = legacy; указывает на d13/eng-spec/brain, НЕ дублирует.
+- **IMPL_DEBT**: SEC-GATE-MEMBERSHIP-01 закрыт (ARS-263 заменил legacy стенд-ин каноническим предикатом); GOVERNANCE-01 → framework built/остаток wiring (ARS-269); GOVERNANCE-02 → resolved (RPC существует); MEMBERSHIP-03 → partially built (подписочная FSM). GOV-QUOTA-PERUSER-01 и SEC-RPC-ORGTRUST-01+rpc_get_membership_status уже присутствовали (не дублировал).
+- **Comments/headers**: d13:8, d14:14/19/181 (apply-order/«from d12»→d13/d14 после ренамбера), SubscribeSheet.tsx:3, BillingPlansAdmin.tsx:6. `rpc_name_registry.created_in` уже был корректен (закрыт при ренамбере).
+
+**D-BILL-MIGHIST-01 — migration-history не бэкфилим**: d13/d14 (и более ранние d-файлы) задеплоены вручную через SQL-редактор, `supabase_migrations.schema_migrations` для них пуст. Бэкфилл-миграции, создающие уже существующие объекты, рискованны и бессмысленны при manual-deploy-модели проекта. **Решение:** реальность фиксируется в DECISIONS_LOG (этот и предыдущие записи), фреш-ребилд идёт из d-файлов (все идемпотентны). Прод-фиксы итерации ведём именованными `apply_migration` (как `ars_259_*`, `ars_263_*`) — они пишут в реестр. Связано: [[agos-merge-not-equal-deploy]].
+
+**Why**: keep-docs-in-sync — канон должен совпадать с задеплоенной реальностью, иначе следующая сессия ему не поверит (L-5). Вносили только то, что реально существует на проде (не обгоняя код: admin-ops RPC и 3 их события — не внесены).
+
+**Verify**: `cross_check.sh` 0 critical; `tsc -b` 0 (тронуты 2 TS-комментария). Docs-only — БД/RPC не менялись.
+
+**Files**: `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md`, `Docs/AGOS-Dok4-EventBus-v1_1.md`, `Docs/AGOS-TSP-Flow-Microsteps/AGOS-Microstep2-AssociationMembership-FSM-v1_0.md`, `IMPL_DEBT.md`, `d13_billing.sql` (коммент), `d14_governance.sql` (комменты), `src/pages/cabinet/shell/components/sheets/SubscribeSheet.tsx` (коммент), `src/pages/admin/billing/BillingPlansAdmin.tsx` (коммент), brain `membership-billing.md` + index/log.

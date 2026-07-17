@@ -3,7 +3,7 @@
  * /admin/billing/plans — CRUD над справочником membership_plan (P8: стандарт как
  * данные). Админ задаёт название, срок (только 1/3/12 мес — CEO ARS-202), цену,
  * trial и уровень доступа; правки применяются без деплоя.
- * Backend: d12_billing.sql — rpc_admin_list_membership_plans (read),
+ * Backend: d13_billing.sql — rpc_admin_list_membership_plans (read),
  * rpc_admin_upsert_membership_plan (create/update),
  * rpc_admin_set_membership_plan_active (retire/restore).
  */
