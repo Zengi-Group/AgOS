@@ -5,7 +5,8 @@
 -- Canon: Feature ARS-202 (G2 closed 2026-07-10), Microstep 2 (Membership FSM).
 -- Depends on: d01_kernel.sql (organizations, memberships, users, helpers,
 --             fn_my_org_ids, fn_is_admin, fn_set_updated_at).
--- Apply order: d01 → … → d11 → d12.
+-- Apply order: d01 → … → d12 → d13. (ARS-268: was mislabeled d12 pre-renumber —
+--   d12 is d12_messaging.sql; this file was renumbered d12→d13.)
 --
 -- Slice ARS-203 (Foundation A): membership_plan + membership_subscription.
 -- Additive only (P7) — existing memberships table is NOT modified.

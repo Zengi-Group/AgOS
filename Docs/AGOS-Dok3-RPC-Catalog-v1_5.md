@@ -224,6 +224,37 @@
 
 ---
 
+### 1.10. Billing & Governance (d13_billing.sql, d14_governance.sql, ARS-202..207/263) — ✅ Реализованы
+
+Рекуррентная подписка членства (Microstep 2 lifecycle) + Feature Governance (Microstep 3).
+Источник истины членства = `membership_subscription.state` (D-BILL-TRUTH-01, ARS-263).
+Регистрация имён — §11 (`rpc_name_registry`, D-NEW-A).
+
+| ID | SQL-функция | Caller | Status | Returns |
+|----|-------------|--------|--------|---------|
+| RPC-BILL-1 | `rpc_list_membership_plans()` | web, ai | ✅ | jsonb[] активные планы (P8-каталог) |
+| RPC-BILL-2 | `rpc_get_org_subscription(org_id)` | web, admin | ✅ | jsonb живая подписка + план, или null |
+| RPC-BILL-3 | `rpc_subscribe_org_membership(org_id, plan_code)` | web, ai | ✅ | jsonb подписка (trialing/active) |
+| RPC-BILL-4 | `rpc_cancel_org_membership(org_id, immediate?)` | web, admin | ✅ | jsonb (cancel_at_period_end / canceled) |
+| RPC-BILL-5 | `rpc_process_membership_renewals(limit?)` | service_role [CRON] | ✅ | jsonb { processed, renewed, deferred, expired } |
+| RPC-BILL-6 | `rpc_admin_list_membership_plans()` | admin | ✅ | jsonb[] все планы (вкл. неактивные) |
+| RPC-BILL-7 | `rpc_admin_upsert_membership_plan(...)` | admin | ✅ | jsonb план |
+| RPC-BILL-8 | `rpc_admin_set_membership_plan_active(plan_code, is_active)` | admin | ✅ | jsonb план |
+| RPC-GOV-1 | `rpc_check_feature_access(feature_code, org_id?)` | web, ai | ✅ (0 вызывающих — wiring ARS-269) | jsonb { allowed, reason, upgrade_hint } fail-closed |
+
+**Внутренние функции (§12, не публичный RPC-контракт):**
+`fn_org_membership_active(org_id)→boolean` (ARS-263, канонический мост-предикат членства: живая
+подписка OR legacy level — зовётся TSP-гейтами + admin membership_paid); `fn_charge_membership(...)`
+(stub платёжного провайдера, service_role); `fn_user_platform_tier(user_id)→text` (ось персональной
+подписки governance, placeholder 'free' до PlatformSubscription).
+
+**НЕ построены (admin-ops итерации 2, ARS-266/267):** `rpc_admin_list_subscriptions`,
+`rpc_admin_get_subscription`, `rpc_admin_list_membership_payments`, `rpc_admin_record_manual_payment`,
+`rpc_admin_extend_subscription`, `rpc_admin_change_subscription_plan`, `rpc_resume_org_membership` —
+внести при постройке (eng-spec §2.1/2.2), не раньше.
+
+---
+
 ## 2. Identity — Идентификация и членство
 
 ### RPC-01 `rpc_register_organization` [WEB] [AI] 📋 Planned

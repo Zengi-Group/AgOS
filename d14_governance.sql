@@ -11,12 +11,12 @@
 --             fn_is_admin, fn_set_updated_at),
 --             d13_billing.sql (membership_subscription, membership_plan) — the
 --             org-membership axis reads live subscription state + granted tier.
--- Apply order: d01 → … → d11 → d12 → d13.
+-- Apply order: d01 → … → d12 → d13 → d14. (ARS-268: was mislabeled pre-renumber.)
 --
 -- Two access axes joined by OR (D-FG-3):
 --   1) personal PlatformSubscription (user_tier)  — NOT yet deployed → 'free'
 --      placeholder via fn_user_platform_tier(); pro-gated features fail-closed.
---   2) organization AssociationMembership (org_membership_tier) — from d12.
+--   2) organization AssociationMembership (org_membership_tier) — from d13.
 -- Fail-closed (D-FG-2): unknown feature / missing row / error → DENY.
 -- ============================================================
 
@@ -178,7 +178,7 @@ begin
         end if;
     end if;
 
-    -- Axis 2: org membership (live subscription state + granted tier from d12)
+    -- Axis 2: org membership (live subscription state + granted tier from d13)
     if v_gate.org_membership_tier_required is not null and p_organization_id is not null then
         select ms.state, mp.grants_tier
           into v_sub_state, v_org_tier

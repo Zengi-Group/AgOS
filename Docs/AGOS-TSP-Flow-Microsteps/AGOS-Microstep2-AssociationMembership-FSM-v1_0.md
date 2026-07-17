@@ -24,6 +24,36 @@
 
 ---
 
+## 0.1. Реализация lifecycle = подписка (ARS-268, D-BILL-TRUTH-01)
+
+> **Реконсиляция замысел↔код (P4 / D-DOC-RECON-01 — указываем, НЕ дублируем).** Этот документ
+> остаётся каноном FSM членства (состояния, переходы, авторитеты). Но **реализация lifecycle** —
+> это рекуррентная подписка `membership_subscription` (реальность: `d13_billing.sql`; детальный
+> замысел: `Docs/AGOS-Billing-AdminOps-EngSpec-v0_1.md`; синтез: brain `membership-billing.md`).
+> Источник истины «член/не член» = `membership_subscription.state` (CEO G2 2026-07-16). Отдельная
+> колонка `AssociationMembership.state` НЕ строится; `memberships.level` — legacy старого стека
+> (заморожен, не удалён — HS-2). Потребители сводятся мост-предикатом `fn_org_membership_active`
+> (ARS-263) = `live subscription OR level<>'registered'`.
+
+**Маппинг состояний MS2 FSM ↔ `membership_subscription.state`:**
+
+| MS2 FSM (canon) | subscription.state (реальность d13) | capabilities |
+|-----------------|-------------------------------------|--------------|
+| `not_member` | нет живой подписки (или `canceled`/`expired` без legacy level) | OFF |
+| `submitted` | — (заявка НЕ пре-реквизит подписки, D-BILL-NOAPP-01) | OFF |
+| `grace_period` (pending_first_payment) | `trialing` | ON |
+| `active` | `active` | ON |
+| `grace_period` (renewal_overdue) | `grace` | ON |
+| `expired` | `past_due` → `expired` (past_due=доступ OFF в d13; expired=терминал) | OFF |
+| `revoked` | `canceled` + дисциплинарный `revoked` (пилот, ARS-267) | OFF |
+
+Расхождение `grace_period` (одно MS2-состояние) ↔ `trialing`+`grace`+`past_due` (три subscription-
+состояния) осознанно: подписка разводит биллинг-семантику тоньше, чем бизнес-FSM. Оба уровня
+согласованы через мост-предикат. Полная сверка/миграция legacy level-стека (36 memberships) — вне
+скоупа, отдельный слайс.
+
+---
+
 ## 1. Что мы убрали и почему
 
 В Dok 6 v1.0 закладывался уровневый стек:
