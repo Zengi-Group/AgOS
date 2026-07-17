@@ -261,5 +261,6 @@
 
 ### BILLING-STUB-PAYMENT-01 — fn_charge_membership всегда success → доступ без оплаты
 **Context:** `d13_billing.sql` `fn_charge_membership` — STUB, всегда `success=true`, реального провайдера нет (отложено в ARS-206b). Движок продлений `rpc_process_membership_renewals` при этом переводит подписки в `active` без фактической оплаты.
-**Retire-when:** реальный платёжный провайдер + async webhook (ARS-206b). До тех пор перед публичным go-live биллинга — feature-flag/guard, чтобы stub не «оплачивал» молча в проде.
-**Severity:** medium (нет реальной монетизации; риск = раздача доступа бесплатно, если запустить биллинг до провайдера). **Owner surface:** `d13_billing.sql` (fn_charge_membership), ARS-206b.
+**Retire-when:** реальный платёжный провайдер + async webhook (ARS-206b / ARS-270). До тех пор перед публичным go-live биллинга — feature-flag/guard, чтобы stub не «оплачивал» молча в проде.
+**Guard (ARS-264):** движок теперь армируется pg_cron, но арм-DDL (`cron.schedule('membership-renewals', …)`) вынесен в ОТДЕЛЬНУЮ миграцию `supabase/migrations/20260717120000_membership_renewals_pg_cron.sql` с пометкой **STAGING ONLY** — прод-деплой канонического `d13_billing.sql` НЕ армирует движок. Прод-включение = отдельное G3+CEO решение после замены stub (ARS-270). Это и есть требуемый guard.
+**Severity:** medium (нет реальной монетизации; риск = раздача доступа бесплатно, если запустить биллинг до провайдера). **Owner surface:** `d13_billing.sql` (fn_charge_membership), ARS-206b/ARS-270, `supabase/migrations/20260717120000_membership_renewals_pg_cron.sql`.
