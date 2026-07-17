@@ -4255,3 +4255,18 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **НЕ задеплоено**: прод-деплой ручной (`agos-merge-not-equal-deploy`) — функции в d13, но на прод НЕ наложены (жду решения CEO). Additive + read-only + admin-gated — безопасно к деплою `apply_migration`-ом при подтверждении.
 
 **Files**: `d13_billing.sql` (+3 RPC, grants, registry), `cross_check.sh` (CHECK 5 whitelist +2), `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md` (§1.10 RPC-BILL-9..11, обновлён «НЕ построены» → остались только write ARS-267).
+### 2026-07-17: ARS-264 — активация движка продлений (pg_cron) + grace_days в план (P8)
+
+**What**: Закрыт 🔴 «движок продлений никто не вызывает» (умбрелла ARS-258).
+- **grace_days (P8)** — `d13_billing.sql`: `membership_plan.grace_days integer not null default 3 check (>=0)` (inline в CREATE + идемпотентный ALTER для существующих инсталляций). Движок `rpc_process_membership_renewals` читает `mp.grace_days` per-plan (`v_grace_days := coalesce(rec.grace_days, 3)`) вместо захардкоженного `:= 3` (снят FLAG ARS-206). Аддитивно, сигнатура не тронута (P7).
+- **Шедулер = pg_cron (вариант A, G2 CEO)** — `create extension if not exists pg_cron;` + `cron.schedule('membership-renewals', '0 3 * * *', $$select public.rpc_process_membership_renewals(100)$$)`, идемпотентно (unschedule-if-exists → schedule).
+
+**D-BILL-CRON-STAGING-01 — арм-DDL вынесен из канона, STAGING ONLY**: `cron.schedule` живёт в ОТДЕЛЬНОЙ миграции `supabase/migrations/20260717120000_membership_renewals_pg_cron.sql`, а НЕ в каноническом `d13_billing.sql`. Причина: `fn_charge_membership` — STUB (продлевает без реальной оплаты), поэтому прод-деплой схемы d13 НЕ должен молча армировать движок на живых организациях (бесплатные бесконечные продления). Прод-включение = отдельное G3+CEO решение после замены stub на реальный провайдер (ARS-270 / ARS-206b). Это и есть guard из IMPL_DEBT BILLING-STUB-PAYMENT-01.
+
+**D-BILL-CRON-FIRSTINSTALL-01 — это ПЕРВАЯ установка pg_cron**: претензия задачи «паттерн pg_cron уже в проде (tsp_price_decision_timer, d03_feed)» неточна — `tsp_price_decision_timer` осознанно сделан self-serve именно потому, что pg_cron НЕ было; `d03_feed` — только комментарий-заглушка. pg_cron на проде отсутствует; прецедента нет.
+
+**Why**: движок (ARS-206) был задеплоен, но мёртв — первая же подписка зависала в trialing навсегда, grace-лестница не двигалась. keep-docs-in-sync: grace_days вынесен в конфиг-данные (P8), а не код.
+
+**Verify**: `cross_check.sh` 0 critical (4 significant — преэкзистные: rpc_create_batch overloads, R-29 design canon; не тронуты этой работой). Staging-приёмка (тик движка + `cron.job` + grace_days из плана) — **hand-off**: в этой сессии нет доступа к staging БД (нет psql, Supabase MCP не авторизован), применять миграцию через SQL Editor на staging. Прод — НЕ применять (см. D-BILL-CRON-STAGING-01).
+
+**Files**: `d13_billing.sql` (grace_days колонка + движок), `supabase/migrations/20260717120000_membership_renewals_pg_cron.sql` (new, staging-only), `IMPL_DEBT.md` (BILLING-STUB-PAYMENT-01 guard-нота).

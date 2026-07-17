@@ -32,6 +32,7 @@ create table if not exists public.membership_plan (
                         or applies_org_type in ('farmer', 'mpk', 'supplier', 'consultant', 'other')),
     grants_tier     text    not null default 'standard'
                         check (grants_tier in ('standard', 'premium')),  -- org_membership tier for d13
+    grace_days      integer not null default 3 check (grace_days >= 0),  -- ARS-264: grace window per plan (P8)
     version         integer not null default 1,
     is_active       boolean not null default true,
     created_at      timestamptz not null default now(),
@@ -41,6 +42,19 @@ comment on table public.membership_plan is
     'ARS-203. P8 reference catalog of org membership plans. billing_period fixed to
      1/3/12 months (CEO, ARS-202). Admin fills price + trial + grants_tier via constructor,
      no deploy. grants_tier feeds the org-membership axis of Feature Governance (d13).';
+
+-- ARS-264: grace_days added post-deploy → additive ALTER for existing installs (P8).
+-- `create table if not exists` above won't add a column to a table that already
+-- exists on prod, so an explicit idempotent ALTER is required.
+alter table public.membership_plan
+    add column if not exists grace_days integer not null default 3;
+alter table public.membership_plan drop constraint if exists chk_membership_plan_grace_days;
+alter table public.membership_plan add  constraint chk_membership_plan_grace_days
+    check (grace_days >= 0);
+comment on column public.membership_plan.grace_days is
+    'ARS-264. Days the subscription stays in grace/past_due before the renewal engine
+     walks it one step down the ladder. Read per-plan by rpc_process_membership_renewals
+     (was hardcoded 3 in ARS-206). P8: config as data.';
 
 -- ------------------------------------------------------------
 -- membership_subscription (org-scoped, one live row per org)
@@ -544,7 +558,7 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-    v_grace_days integer := 3;   -- FLAG (ARS-206): grace window; make configurable later
+    v_grace_days integer;        -- ARS-264: read per-plan from membership_plan.grace_days (P8)
     rec          record;
     v_amount     numeric;
     v_paid       boolean;
@@ -558,7 +572,8 @@ begin
     for rec in
         select s.id, s.organization_id, s.state, s.price_snapshot,
                s.current_period_end, s.cancel_at_period_end,
-               mp.billing_period, mp.price_amount as plan_price, mp.currency
+               mp.billing_period, mp.price_amount as plan_price, mp.currency,
+               mp.grace_days
           from public.membership_subscription s
           join public.membership_plan mp on mp.plan_code = s.plan_code
          where s.next_billing_at is not null
@@ -569,6 +584,7 @@ begin
          for update of s skip locked
     loop
         v_processed := v_processed + 1;
+        v_grace_days := coalesce(rec.grace_days, 3);   -- ARS-264: per-plan grace window (P8)
 
         -- Scheduled cancellation: terminate at period end, no charge.
         if rec.cancel_at_period_end then
@@ -654,9 +670,11 @@ begin
 end;
 $$;
 comment on function public.rpc_process_membership_renewals(integer) is
-    'ARS-206. Cron/service renewal engine. SKIP LOCKED batch; charges via
+    'ARS-206/264. Cron/service renewal engine. SKIP LOCKED batch; charges via
      fn_charge_membership; rolls period on success, walks grace→past_due→expired
-     ladder on failure. Global job (no org param). service_role only.';
+     ladder on failure (grace window = membership_plan.grace_days, per-plan, P8).
+     Global job (no org param). service_role only. Armed by pg_cron job
+     ''membership-renewals'' (staging-only migration; prod-enable = separate G3).';
 
 -- Grants: engine is service-only; catalog for admins via dashboard (postgres).
 -- Revoke from PUBLIC (default grant) — `from anon, authenticated` alone leaves PUBLIC execute.
