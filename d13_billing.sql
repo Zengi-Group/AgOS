@@ -444,16 +444,21 @@ comment on function public.rpc_cancel_org_membership(uuid, boolean) is
      immediately. Emits subscription.canceled (+entitlements.invalidated if immediate).';
 
 -- ------------------------------------------------------------
--- Grants: web + AI Gateway (authenticated) may call; anon may not.
+-- Grants: web + AI Gateway (authenticated/service) may call; public+anon may not.
+-- ARS-267/BILL-F8 (SEC-GRANT-PUBLIC-01): `revoke from anon` alone leaves the default
+-- PUBLIC execute grant → these were anon-executable via PUBLIC (advisor WARN). Revoke
+-- from public AND anon; grant authenticated (guard inside) + service_role (AI-GW path,
+-- P-AI-6 — needed once PUBLIC is revoked). rpc_list_membership_plans is only called from
+-- the authenticated cabinet (SubscribeSheet) — no pre-auth caller, so authenticated-only.
 -- ------------------------------------------------------------
-grant execute on function public.rpc_list_membership_plans()                to authenticated;
-grant execute on function public.rpc_get_org_subscription(uuid)             to authenticated;
-grant execute on function public.rpc_subscribe_org_membership(uuid, text)   to authenticated;
-grant execute on function public.rpc_cancel_org_membership(uuid, boolean)   to authenticated;
-revoke execute on function public.rpc_list_membership_plans()              from anon;
-revoke execute on function public.rpc_get_org_subscription(uuid)           from anon;
-revoke execute on function public.rpc_subscribe_org_membership(uuid, text) from anon;
-revoke execute on function public.rpc_cancel_org_membership(uuid, boolean) from anon;
+revoke execute on function public.rpc_list_membership_plans()              from public, anon;
+revoke execute on function public.rpc_get_org_subscription(uuid)           from public, anon;
+revoke execute on function public.rpc_subscribe_org_membership(uuid, text) from public, anon;
+revoke execute on function public.rpc_cancel_org_membership(uuid, boolean) from public, anon;
+grant  execute on function public.rpc_list_membership_plans()                to authenticated, service_role;
+grant  execute on function public.rpc_get_org_subscription(uuid)             to authenticated, service_role;
+grant  execute on function public.rpc_subscribe_org_membership(uuid, text)   to authenticated, service_role;
+grant  execute on function public.rpc_cancel_org_membership(uuid, boolean)   to authenticated, service_role;
 
 -- ------------------------------------------------------------
 -- RPC name registry (D-NEW-A)
@@ -859,13 +864,15 @@ comment on function public.rpc_admin_set_membership_plan_active(text, boolean) i
     'ARS-207. Soft retire/restore a membership plan. Inactive plans leave the
      public catalog but keep serving live subs (P7). Admin only.';
 
--- Grants: admin funcs — authenticated may call, fn_is_admin() gate inside; anon may not.
-grant execute on function public.rpc_admin_list_membership_plans()                                       to authenticated;
-grant execute on function public.rpc_admin_upsert_membership_plan(text, text, text, numeric, integer, text, text, text) to authenticated;
-grant execute on function public.rpc_admin_set_membership_plan_active(text, boolean)                     to authenticated;
-revoke execute on function public.rpc_admin_list_membership_plans()                                      from anon;
-revoke execute on function public.rpc_admin_upsert_membership_plan(text, text, text, numeric, integer, text, text, text) from anon;
-revoke execute on function public.rpc_admin_set_membership_plan_active(text, boolean)                    from anon;
+-- Grants: admin funcs — authenticated may call, fn_is_admin() gate inside; public+anon may not.
+-- BILL-F8 (SEC-GRANT-PUBLIC-01): revoke from public AND anon (revoke-from-anon alone left
+-- PUBLIC execute → advisor WARN); grant authenticated (guard inside) + service_role.
+revoke execute on function public.rpc_admin_list_membership_plans()                                      from public, anon;
+revoke execute on function public.rpc_admin_upsert_membership_plan(text, text, text, numeric, integer, text, text, text) from public, anon;
+revoke execute on function public.rpc_admin_set_membership_plan_active(text, boolean)                    from public, anon;
+grant  execute on function public.rpc_admin_list_membership_plans()                                       to authenticated, service_role;
+grant  execute on function public.rpc_admin_upsert_membership_plan(text, text, text, numeric, integer, text, text, text) to authenticated, service_role;
+grant  execute on function public.rpc_admin_set_membership_plan_active(text, boolean)                     to authenticated, service_role;
 
 insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes)
 values
