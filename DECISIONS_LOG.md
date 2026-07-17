@@ -4301,3 +4301,18 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: `cross_check.sh` 0 critical (4 significant — преэкзистные: rpc_create_batch overloads, R-29 design canon; не тронуты этой работой). Staging-приёмка (тик движка + `cron.job` + grace_days из плана) — **hand-off**: в этой сессии нет доступа к staging БД (нет psql, Supabase MCP не авторизован), применять миграцию через SQL Editor на staging. Прод — НЕ применять (см. D-BILL-CRON-STAGING-01).
 
 **Files**: `d13_billing.sql` (grace_days колонка + движок), `supabase/migrations/20260717120000_membership_renewals_pg_cron.sql` (new, staging-only), `IMPL_DEBT.md` (BILLING-STUB-PAYMENT-01 guard-нота).
+
+### 2026-07-18: ARS-260 — trial один раз на организацию (guard в rpc_subscribe_org_membership)
+
+**What**: Закрыт 🔴 фронт-дефект B9 (бесконечный бесплатный trial); умбрелла ARS-258, eng-spec §2.3 BILL-F3. Правка тела `rpc_subscribe_org_membership` (`d13_billing.sql`) — аддитивно, сигнатуру не трогаем (P7):
+- Правило «один trial на орг» считается из истории (P12, БЕЗ новой колонки): `v_had_history := exists(select 1 from membership_subscription where organization_id = p_organization_id)` — терминальные строки (expired/canceled/revoked) хранятся.
+- Первая подписка орг → `trialing` (30 дн), как раньше. Любая повторная → сразу `state='active'`, `trial_end=null`, `current_period_end = now()+billing_period`, `next_billing_at = now()` (немедленный биллинг на первом renewal-тике).
+- Insert: `next_billing_at` теперь из нового `v_next_billing` (было `v_period_end`); ветки trialing / first-paid (trial_days=0) поведения не меняют — байт-в-байт.
+
+**Why**: без проверки истории каждая новая подписка после лапса снова давала 30 дней бесплатно — модель дырявая. Латентно (оплата = stub, pg_cron не установлен), но закрываем до включения реального провайдера (ARS-270/206b).
+
+**Verify**: `cross_check.sh` 0 critical (4 significant — преэкзистные: TSP overloads ×3 + R-29 design-canon; не мои). Прод (`mwtbozflyldcadypherr`): задеплоенное тело сверено = прежняя версия (merge≠deploy — чисто); схема сверена, все идентификаторы резолвятся (закрывает `plpgsql-runtime-resolution-blindspot`). Поведенческий прогон в rolled-back tx через probe-функцию (реальный RPC НЕ тронут): call1 (нет истории) → `trialing`, trial_end set, next_billing = trial_end (+30д); call2 (после expire) → `active`, trial_end null, next_billing = now (0с), период 31д, `uq_membership_subscription_live` не нарушен. Прод пуст (0 подписок), pg_cron не установлен → деплой никого не затрагивает.
+
+**НЕ задеплоено**: прод-деплой ручной (`agos-merge-not-equal-deploy`) — отдельным шагом по решению CEO.
+
+**Files**: `d13_billing.sql` (тело `rpc_subscribe_org_membership` + doc-комментарии).
