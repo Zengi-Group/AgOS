@@ -314,6 +314,9 @@ grant  execute on function public.fn_org_membership_active(uuid) to service_role
 -- Guards: authz (member/admin), plan active, no existing live subscription.
 -- trial_days > 0 → state 'trialing' (period = trial window; billing after trial);
 -- trial_days = 0 → state 'active' (first paid period starts now).
+-- BILL-F3 (ARS-260): trial only for the org's FIRST subscription; any org with
+-- subscription history (incl. terminal rows) re-subscribes straight to 'active'
+-- with next_billing_at = now() (billed on the next renewal tick) — no second trial.
 -- ------------------------------------------------------------
 create or replace function public.rpc_subscribe_org_membership(
     p_organization_id uuid,
@@ -331,6 +334,8 @@ declare
     v_now           timestamptz := now();
     v_trial_end     timestamptz;
     v_period_end    timestamptz;
+    v_next_billing  timestamptz;
+    v_had_history   boolean;
     v_sub_id        uuid;
     v_row           jsonb;
 begin
@@ -365,14 +370,30 @@ begin
      where organization_id = p_organization_id
      limit 1;
 
-    if v_plan.trial_days > 0 then
-        v_state      := 'trialing';
-        v_trial_end  := v_now + make_interval(days => v_plan.trial_days);
-        v_period_end := v_trial_end;   -- billing starts when the trial ends
+    -- BILL-F3 (ARS-260): one trial per organization. Terminal rows (expired/
+    -- canceled/revoked) are retained (P12), so any prior history means the org
+    -- already had its trial → a re-subscription starts 'active' and is billed now.
+    v_had_history := exists (
+        select 1 from public.membership_subscription
+         where organization_id = p_organization_id
+    );
+
+    if v_had_history then
+        -- repeat subscription: no second trial; immediate billing.
+        v_state        := 'active';
+        v_trial_end    := null;
+        v_period_end   := v_now + v_plan.billing_period::interval;
+        v_next_billing := v_now;                       -- due on the next renewal tick
+    elsif v_plan.trial_days > 0 then
+        v_state        := 'trialing';
+        v_trial_end    := v_now + make_interval(days => v_plan.trial_days);
+        v_period_end   := v_trial_end;                 -- billing starts when the trial ends
+        v_next_billing := v_period_end;
     else
-        v_state      := 'active';
-        v_trial_end  := null;
-        v_period_end := v_now + v_plan.billing_period::interval;
+        v_state        := 'active';
+        v_trial_end    := null;
+        v_period_end   := v_now + v_plan.billing_period::interval;
+        v_next_billing := v_period_end;
     end if;
 
     insert into public.membership_subscription
@@ -382,7 +403,7 @@ begin
     values
         (p_organization_id, v_membership_id, p_plan_code, v_state,
          v_trial_end, v_now, v_period_end,
-         v_period_end, v_plan.price_amount)
+         v_next_billing, v_plan.price_amount)
     returning id into v_sub_id;
 
     perform public.publish_platform_event(
@@ -403,7 +424,9 @@ end;
 $$;
 comment on function public.rpc_subscribe_org_membership(uuid, text) is
     'ARS-205. Enroll an org into a plan and start the trial (or first paid period).
-     One live subscription per org. Emits subscription.started + entitlements.invalidated.';
+     One live subscription per org. Emits subscription.started + entitlements.invalidated.
+     BILL-F3 (ARS-260): trial only for the first subscription in org history; a
+     re-subscription starts ''active'' with immediate billing (no second trial).';
 
 -- ------------------------------------------------------------
 -- rpc_cancel_org_membership — cancel the org''s live subscription.

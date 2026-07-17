@@ -4317,3 +4317,32 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **НЕ задеплоено**: прод-деплой ручной ([[agos-merge-not-equal-deploy]], D-BILL-MIGHIST-01) — изменение в d13 (канон), на прод НЕ наложено. Additive + backward-compatible + graceful degradation (до деплоя фронта каталог просто не фильтруется). Готово к `apply_migration` при подтверждении CEO.
 
 **Files**: `d13_billing.sql` (RPC drop+recreate + comment + grants→(uuid)), `src/pages/cabinet/shell/components/sheets/SubscribeSheet.tsx:68`, `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md` (§1.10 RPC-BILL-1 сигнатура + таргетинг).
+### 2026-07-18: ARS-261 — кабинет SubscribeSheet: error/empty/retry + confirm/resume + язык подписки + R-9 mono + дисклеймер ст.171
+
+**What**: закрыты фронт-дефекты B3/B5/B10/B11 + приёмка ст.171 (умбрелла ARS-258, eng-spec §4/§5 BILL-F4). Точечные Edit (HS-1/HS-6), ничего работающего не удалено (HS-2).
+- **B5** (`SubscribeSheet.tsx`): `plansRes.error`/`subRes.error` больше не глотаются → экран «Не удалось загрузить» + «Повторить»; пустой каталог (все планы retired) → «Тарифы недоступны» + «Обновить» вместо пустого списка. Роутинг рендера: loading→noOrg→err→sub→empty→plans.
+- **B3**: отмена — через шаг подтверждения (`confirmCancel`), а не один тап; при `cancel_at_period_end=true` — кнопка «Возобновить подписку» → `rpc_resume_org_membership` (self-serve, грант authenticated, member-or-admin guard; d13 ARS-267). Превью даты конца доступа = `current_period_end` (в trial = trial_end, d13 subscribe RPC).
+- **B10**: язык «взнос»→«подписка» по всей фермерской зоне (скан L-2 нашёл ещё 4 живых сайта сверх списка тикета: HomeStartLadder approved-шаг, MembGateSheet expired/pending, MarketScreen expired-note). Мёртвые ветки `STATE_LABEL` (`expired`/`canceled`) убраны — `rpc_get_org_subscription` отдаёт только trialing/active/grace/past_due. Осиротевшая `MEMB_DATES.payApproved` удалена (HS-4).
+- **B11 (R-9)**: `ws-hint mono`/`blk-h mono` на русских фразах («АКТИВНА»/«ТАРИФ») → sans (mono только на цифрах).
+- **Ст.171**: у цены тарифа добавлен `.mk-ref-d` — рамка ДОБРОВОЛЬНОСТИ участия, НЕ текст индикативных референс-цен (флаг: «цену вы назначаете сами» бессмыслен для фиксированного взноса; CEO одобрил формулировку + добор). → канон R-30.
+
+**Why**: замыкание петли подписки (ARS-258 итерация 2): шит — единственная точка оплаты, но глотал ошибки, отменял без подтверждения, не давал возобновить и говорил языком разового «взноса». keep-docs-in-sync: правила «взнос→подписка» и «дисклеймер тарифа = добровольность» вынесены в канон (D-UI-FARMER-RULES-01, R-30).
+
+**Verify**: `tsc -b` exit 0. Превью `/cabinet` в worktree не поднимается (@chatscope отсутствует — `qa-innertext-false-positive`); верификация = typecheck + чтение + сверка RPC-контракта с d13 (resume грант/guard; subscribe `current_period_end := trial_end`; `get_org_subscription` state-фильтр). RPC-деплой не требуется — `rpc_resume_org_membership` уже в d13 от ARS-267 (прод-наложение — по `agos-merge-not-equal-deploy`, отдельно).
+
+**Files**: `src/pages/cabinet/shell/components/sheets/SubscribeSheet.tsx`, `.../store.ts`, `.../data/membership.ts`, `src/pages/membership/Membership.tsx`, `.../screens/MarketScreen.tsx`, `.../components/HomeStartLadder.tsx`, `.../components/sheets/MembGateSheet.tsx`, `Docs/AGOS-DesignRules-FarmerCabinet.md` (R-30 + §5).
+
+### 2026-07-18: ARS-260 — trial один раз на организацию (guard в rpc_subscribe_org_membership)
+
+**What**: Закрыт 🔴 фронт-дефект B9 (бесконечный бесплатный trial); умбрелла ARS-258, eng-spec §2.3 BILL-F3. Правка тела `rpc_subscribe_org_membership` (`d13_billing.sql`) — аддитивно, сигнатуру не трогаем (P7):
+- Правило «один trial на орг» считается из истории (P12, БЕЗ новой колонки): `v_had_history := exists(select 1 from membership_subscription where organization_id = p_organization_id)` — терминальные строки (expired/canceled/revoked) хранятся.
+- Первая подписка орг → `trialing` (30 дн), как раньше. Любая повторная → сразу `state='active'`, `trial_end=null`, `current_period_end = now()+billing_period`, `next_billing_at = now()` (немедленный биллинг на первом renewal-тике).
+- Insert: `next_billing_at` теперь из нового `v_next_billing` (было `v_period_end`); ветки trialing / first-paid (trial_days=0) поведения не меняют — байт-в-байт.
+
+**Why**: без проверки истории каждая новая подписка после лапса снова давала 30 дней бесплатно — модель дырявая. Латентно (оплата = stub, pg_cron не установлен), но закрываем до включения реального провайдера (ARS-270/206b).
+
+**Verify**: `cross_check.sh` 0 critical (4 significant — преэкзистные: TSP overloads ×3 + R-29 design-canon; не мои). Прод (`mwtbozflyldcadypherr`): задеплоенное тело сверено = прежняя версия (merge≠deploy — чисто); схема сверена, все идентификаторы резолвятся (закрывает `plpgsql-runtime-resolution-blindspot`). Поведенческий прогон в rolled-back tx через probe-функцию (реальный RPC НЕ тронут): call1 (нет истории) → `trialing`, trial_end set, next_billing = trial_end (+30д); call2 (после expire) → `active`, trial_end null, next_billing = now (0с), период 31д, `uq_membership_subscription_live` не нарушен. Прод пуст (0 подписок), pg_cron не установлен → деплой никого не затрагивает.
+
+**НЕ задеплоено**: прод-деплой ручной (`agos-merge-not-equal-deploy`) — отдельным шагом по решению CEO.
+
+**Files**: `d13_billing.sql` (тело `rpc_subscribe_org_membership` + doc-комментарии).
