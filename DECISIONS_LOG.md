@@ -4301,6 +4301,22 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: `cross_check.sh` 0 critical (4 significant — преэкзистные: rpc_create_batch overloads, R-29 design canon; не тронуты этой работой). Staging-приёмка (тик движка + `cron.job` + grace_days из плана) — **hand-off**: в этой сессии нет доступа к staging БД (нет psql, Supabase MCP не авторизован), применять миграцию через SQL Editor на staging. Прод — НЕ применять (см. D-BILL-CRON-STAGING-01).
 
 **Files**: `d13_billing.sql` (grace_days колонка + движок), `supabase/migrations/20260717120000_membership_renewals_pg_cron.sql` (new, staging-only), `IMPL_DEBT.md` (BILLING-STUB-PAYMENT-01 guard-нота).
+
+### 2026-07-18: ARS-265 (BILL-F5) — таргетинг планов: applies_org_type реально фильтрует каталог
+
+**What**: Закрыт фронт-дефект B4 («мёртвый таргетинг»): админ выставлял `membership_plan.applies_org_type` (BillingPlansAdmin.tsx:307 обещает «план только для типа X»), но `rpc_list_membership_plans()` не фильтровал по типу орг вызывающего → МПК-план был виден фермеру.
+- **Серверно (P4, одна точка правды)** — `rpc_list_membership_plans` получил опц. `p_organization_id uuid default null` (P7). Фильтр: `applies_org_type is null OR p_organization_id is null OR exists(organization_type_assignments где орг несёт этот тип)`. `existence = active` (у таблицы нет status-колонки — то же правило, что d14 gate (d)).
+- **Клиент** — `SubscribeSheet.tsx:68` теперь передаёт `{ p_organization_id: orgId }` (orgId non-null в этой ветке по early-return).
+
+**D-BILL-PLAN-TARGET-01 — signature evolution через drop+recreate, не «просто добавить defaulted-param»**: в Postgres `create or replace` с новой сигнатурой создаёт ВТОРОЙ overload `(uuid)` рядом с `()`, после чего вызов `rpc_list_membership_plans()` падает «function is not unique» и ломает прайс-экран. Поэтому `drop function if exists ...()` + пересоздание с default'ом → ОДИН overload отвечает и на `()`, и на `(uuid)`. Идиома drop+recreate уже принята в проекте (d01/d03/d04). Связано: [[agos-merge-not-equal-deploy]] (2 живых overload = дефект).
+
+**Why**: приёмка ARS-265 + P4 (фильтрация каталога = одна точка правды на сервере, а не дубль в каждом клиенте). Обратно-совместимо: `p_organization_id=null` (старый zero-arg вызов, anon-preview, AI-GW без орг-контекста) → каталог без фильтра, как раньше.
+
+**Verify**: `cross_check.sh` 0 critical (4 significant — преэкзистные: TSP overloads + R-29 design-canon; не мои. CHECK 5 org_id теперь проходит нативно — RPC получил p_organization_id). `tsc -b` exit 0. Предикат фильтра прогнан read-only на проде (`mwtbozflyldcadypherr`) на РЕАЛЬНЫХ данных organization_type_assignments (farmer×24 / mpk×11 / consultant×1): фермер видит null+farmer, НЕ видит mpk/consultant; mpk видит null+mpk; unrestricted виден всем; null-org — без фильтра. Тело новой функции выполнено read-only (farmer-org в параметре) → компилируется и резолвится против задеплоенной схемы, 3 текущих null-плана возвращаются без изменений (0 регрессии). Закрывает [[plpgsql-runtime-resolution-blindspot]].
+
+**НЕ задеплоено**: прод-деплой ручной ([[agos-merge-not-equal-deploy]], D-BILL-MIGHIST-01) — изменение в d13 (канон), на прод НЕ наложено. Additive + backward-compatible + graceful degradation (до деплоя фронта каталог просто не фильтруется). Готово к `apply_migration` при подтверждении CEO.
+
+**Files**: `d13_billing.sql` (RPC drop+recreate + comment + grants→(uuid)), `src/pages/cabinet/shell/components/sheets/SubscribeSheet.tsx:68`, `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md` (§1.10 RPC-BILL-1 сигнатура + таргетинг).
 ### 2026-07-18: ARS-261 — кабинет SubscribeSheet: error/empty/retry + confirm/resume + язык подписки + R-9 mono + дисклеймер ст.171
 
 **What**: закрыты фронт-дефекты B3/B5/B10/B11 + приёмка ст.171 (умбрелла ARS-258, eng-spec §4/§5 BILL-F4). Точечные Edit (HS-1/HS-6), ничего работающего не удалено (HS-2).

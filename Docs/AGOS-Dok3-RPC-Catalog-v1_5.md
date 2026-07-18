@@ -232,7 +232,7 @@
 
 | ID | SQL-функция | Caller | Status | Returns |
 |----|-------------|--------|--------|---------|
-| RPC-BILL-1 | `rpc_list_membership_plans()` | web, ai | ✅ | jsonb[] активные планы (P8-каталог) |
+| RPC-BILL-1 | `rpc_list_membership_plans(org_id?)` | web, ai | ✅ | jsonb[] активные планы (P8-каталог). ARS-265/BILL-F5: опц. `org_id` фильтрует каталог по типу орг (`applies_org_type` via `organization_type_assignments`, existence=active); `applies_org_type=null` → всем; `org_id=null` → без фильтра (P7, старый zero-arg + anon-preview) |
 | RPC-BILL-2 | `rpc_get_org_subscription(org_id)` | web, admin | ✅ | jsonb живая подписка + план, или null |
 | RPC-BILL-3 | `rpc_subscribe_org_membership(org_id, plan_code)` | web, ai | ✅ | jsonb подписка (trialing/active) |
 | RPC-BILL-4 | `rpc_cancel_org_membership(org_id, immediate?)` | web, admin | ✅ | jsonb (cancel_at_period_end / canceled) |
