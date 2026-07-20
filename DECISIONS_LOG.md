@@ -4363,3 +4363,21 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **НЕ задеплоено**: фронт-деплой = Vercel по мержу (G3 + CEO). SQL-изменений в слайсе НЕТ — RPC уже на проде. Сайдбар оставлен как есть («Планы членства» → табы); опция посадки на «Подписки» — за CEO. Связано: [[agos-merge-not-equal-deploy]].
 
 **Files**: `src/pages/admin/billing/billingShared.ts` (new), `.../BillingStates.tsx` (new), `.../BillingSubscriptionsAdmin.tsx` (new), `.../SubscriptionDrawer.tsx` (new), `.../BillingPaymentsAdmin.tsx` (new), `.../BillingPlansAdmin.tsx` (harden: tabs + B7 + B8), `src/App.tsx` (2 lazy + 2 route).
+
+---
+
+### 2026-07-21: ARS-195..199 — деплой d02-дельты admin-TSP на прод (закрыт deploy-gap PR #59)
+
+**What**: Полная сверка Linear↔git↔прод (2026-07-20) нашла критичный deploy-gap: PR #59 (`846c78f`, admin-управление TSP) был влит в main, Vercel раздавал `/admin/marketplace` с write-кнопками, но **7 `rpc_admin_*` отсутствовали на проде** → любое admin-действие TSP падало рантаймом. По «го» CEO задеплоена дельта: миграция `ars195_198_admin_tsp_write_rpcs` = Section 11 канона `d02_tsp.sql` (строки 5364–6315) байт-в-байт — `rpc_admin_cancel_batch`, `rpc_admin_set_batch_terms` (ARS-195), `rpc_admin_cancel_pool`, `rpc_admin_edit_pool` (ARS-196), `rpc_admin_match_batch_to_pool`, `rpc_admin_unmatch` (ARS-197), `rpc_admin_advance_pool_status` (ARS-198) + registry (7 строк, on conflict do update) + гранты (authenticated; revoke anon).
+
+**Why**: прод-фронт уже зовёт эти RPC (ARS-199 в бою); дельта аддитивна (P7), функции новые (перезаписи нет), полный d02 не накатывался (во избежание неявного деплоя другого дрифта — паттерн ARS-267).
+
+**Verify** (техника по [[agos-merge-not-equal-deploy]] / [[plpgsql-runtime-resolution-blindspot]]):
+- Пред-чеки: 7 функций отсутствовали; все 12 таблиц + 30 runtime-колонок (incl. `pools.mpk_contact_revealed_at`, `batches.rollback_at`, `pool_regions.region_type`) + `rpc_retry_match_pool(uuid,uuid)` + `platform_events` actor-check c 'admin' — существуют.
+- Runtime-резолюция БЕЗ мутаций: EXPLAIN-батарея — все 20 statement-форм из тел 7 функций парсятся+планируются против живой схемы (ARS-229-класс исключён). Изначальная rollback-проба со стабом `fn_is_admin` отклонена (security-функции на проде не подменяем даже в rollback-tx).
+- Пост-чеки: 7 функций SECURITY DEFINER + pinned `search_path`; registry 7/7; негативный гейт живым вызовом — не-админ → `FORBIDDEN: admin only`; живые данные не тронуты (7 published-батчей / 6 filling-пулов / 0 отмен).
+- Известный нюанс: PUBLIC-грант остаётся (`revoke from anon` only — как в каноне) — принятый паттерн internally-guarded функций, покрыт IMPL_DEBT SEC-GRANT-PUBLIC-01.
+
+**Linear**: ARS-195/196/197/198/199 → Done; ARS-201 (QA) остаётся In Review — остался preview golden-path под админ-логином + негативные FSM-кейсы под админ-JWT (`tests/tsp_admin_rpc_test.sql` против прода не гонялся). ARS-194 (родитель) — In Review до ARS-201.
+
+**Files**: изменений кода нет (деплой канона); prod migration `ars195_198_admin_tsp_write_rpcs`; эта запись.
