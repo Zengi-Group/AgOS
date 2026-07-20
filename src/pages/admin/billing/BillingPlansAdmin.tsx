@@ -19,6 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { BILLING_TABS } from './billingShared'
+import { BillingError } from './BillingStates'
 
 interface Plan {
   id: string
@@ -68,9 +70,9 @@ export function BillingPlansAdmin() {
   const [editItem, setEditItem] = useState<Plan | null>(null)
   const [showCreate, setShowCreate] = useState(false)
 
-  const { data: rows, isLoading, refetch } = useRpc<Plan[]>('rpc_admin_list_membership_plans', {})
+  const { data: rows, isLoading, isError, refetch } = useRpc<Plan[]>('rpc_admin_list_membership_plans', {})
 
-  useSetTopbar({ title: 'Планы членства', titleIcon: <CreditCard size={15} /> })
+  useSetTopbar({ title: 'Планы членства', titleIcon: <CreditCard size={15} />, tabs: BILLING_TABS })
 
   const setActive = useRpcMutation('rpc_admin_set_membership_plan_active', {
     onSuccess: () => refetch(),
@@ -108,7 +110,9 @@ export function BillingPlansAdmin() {
         </Button>
       </div>
 
-      {isLoading ? <Skeleton className="h-48 w-full" /> : (
+      {isLoading ? <Skeleton className="h-48 w-full" /> : isError ? (
+        <BillingError onRetry={() => refetch()} message="Не удалось загрузить планы" />
+      ) : (
         <div className="flex flex-col border border-border/60 rounded-[8px] overflow-hidden bg-background">
           {/* Header */}
           <div className="grid border-b border-border/60 bg-muted/40" style={{ gridTemplateColumns: COL }}>
@@ -176,6 +180,7 @@ export function BillingPlansAdmin() {
       {(showCreate || editItem) && (
         <PlanDialog
           item={editItem}
+          existingCodes={(rows || []).map(p => p.plan_code)}
           onClose={() => { setShowCreate(false); setEditItem(null) }}
           onSaved={() => { refetch(); setShowCreate(false); setEditItem(null) }}
           onToggleActive={toggleActive}
@@ -189,11 +194,13 @@ export function BillingPlansAdmin() {
 
 function PlanDialog({
   item,
+  existingCodes,
   onClose,
   onSaved,
   onToggleActive,
 }: {
   item: Plan | null
+  existingCodes: string[]
   onClose: () => void
   onSaved: () => void
   onToggleActive: (p: Plan) => void
@@ -216,6 +223,11 @@ function PlanDialog({
     const code = planCode.trim()
     if (!isEdit && !/^[a-z0-9_]+$/.test(code)) {
       toast.error('Код плана: только латиница в нижнем регистре, цифры и «_» (напр. org_monthly)')
+      return
+    }
+    // B8: не создавать план поверх существующего кода (upsert иначе тихо перезапишет)
+    if (!isEdit && existingCodes.includes(code)) {
+      toast.error(`План с кодом «${code}» уже существует — выберите другой код`)
       return
     }
     if (!title.trim()) { toast.error('Укажите название'); return }

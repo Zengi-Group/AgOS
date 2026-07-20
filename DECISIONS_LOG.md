@@ -4346,3 +4346,20 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **НЕ задеплоено**: прод-деплой ручной (`agos-merge-not-equal-deploy`) — отдельным шагом по решению CEO.
 
 **Files**: `d13_billing.sql` (тело `rpc_subscribe_org_membership` + doc-комментарии).
+
+### 2026-07-20: ARS-271 — админ-UI управления подписками (табы + Подписки + карточка + Платежи)
+
+**What**: Построен недостающий admin-UI управления членскими подписками (умбрелла ARS-258, eng-spec §4). Замыкает петлю итерации 2: read/write-RPC (ARS-266/267) уже на проде — не хватало интерфейса. Чистое добавление (5 новых файлов + 2 роута) + точечный harden экрана планов (HS-1/HS-6, ничего не удалено).
+- **Табы биллинга** — общий `BILLING_TABS` (Планы · Подписки · Платежи) через `useSetTopbar({tabs})` (паттерн RationPage, D-UI-TOPBAR-01, titleIcon=CreditCard=Sidebar). Три независимых leaf-экрана; активный таб — по `useMatch` в `Header.tsx` (layout-обёртка не нужна).
+- **Экран «Подписки»** (`/admin/billing/subscriptions`) — KPI (активные/триал/риск из `counts_by_state`; истекают≤7д из загруженной страницы; оплаты/30д из payments-RPC `sum_succeeded`); фильтры state-чипы + поиск(название/БИН) + план; таблица (орг/план/state-badge/период/след.списание/автопродление/цена); skeleton / error+retry / empty (B7).
+- **Карточка** (`SubscriptionDrawer.tsx`, Sheet справа) — сводка + 6 операций (ручная оплата, продление 1–90д, смена плана, отмена period-end/немедленно, возобновление, дисциплинарный revoke) с confirm + disabled-on-submit + тост + рефетч; история платежей (20). Гейтинг по FSM: не-терминал → оплата/продление; live → смена плана/отмена/revoke; resume только при `cancel_at_period_end`.
+- **Экран «Платежи»** — фильтры статус+период (серверные) + провайдер (клиентский — RPC не имеет provider-фильтра); итог `sum_succeeded`; «показано N из total» (нет тихого обрезания).
+- **Harden планов** (`BillingPlansAdmin.tsx`, точечные Edit) — B7 (error+retry вместо пустого списка при ошибке), B8 (запрет create поверх существующего `plan_code` — upsert иначе тихо перезапишет), + таб.
+
+**Why**: без UI подписка/оплата/FSM-операции жили только в БД; TURAN-админ не мог видеть подписки, принять Kaspi-перевод, продлить/сменить/отозвать. Приёмка ARS-271 = последний UI-кусок петли ARS-258.
+
+**Verify**: `tsc -b` exit 0; `vite build` exit 0 (4 биллинг-чанка эмитятся, 0 ошибок резолва/экспорта); dev-server стартует чисто, роуты разрешаются (redirect на auth — нет admin-creds в сессии). Все 8 RPC (ARS-266/267) сверены на проде `mwtbozflyldcadypherr`: существуют, сигнатуры совпадают с биндингами UI, ACL `{authenticated,service_role}` (без public/anon). Живой authenticated-прогон 3 экранов + действий — **hand-off Arshidin** (нужен admin-login; на проде 0 подписок → действия без сид-данных не прогнать). `graphify update` выполнен.
+
+**НЕ задеплоено**: фронт-деплой = Vercel по мержу (G3 + CEO). SQL-изменений в слайсе НЕТ — RPC уже на проде. Сайдбар оставлен как есть («Планы членства» → табы); опция посадки на «Подписки» — за CEO. Связано: [[agos-merge-not-equal-deploy]].
+
+**Files**: `src/pages/admin/billing/billingShared.ts` (new), `.../BillingStates.tsx` (new), `.../BillingSubscriptionsAdmin.tsx` (new), `.../SubscriptionDrawer.tsx` (new), `.../BillingPaymentsAdmin.tsx` (new), `.../BillingPlansAdmin.tsx` (harden: tabs + B7 + B8), `src/App.tsx` (2 lazy + 2 route).

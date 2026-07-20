@@ -126,6 +126,8 @@ const CapexNormsTab = lazy(() => import('@/pages/admin/capex/CapexReferenceAdmin
 const CapexSurchargesTab = lazy(() => import('@/pages/admin/capex/CapexReferenceAdmin').then(m => ({ default: m.CapexSurchargesTab })))
 const LivestockPricesAdmin = lazy(() => import('@/pages/admin/livestock-prices/LivestockPricesAdmin').then(m => ({ default: m.LivestockPricesAdmin })))
 const BillingPlansAdmin = lazy(() => import('@/pages/admin/billing/BillingPlansAdmin').then(m => ({ default: m.BillingPlansAdmin })))
+const BillingSubscriptionsAdmin = lazy(() => import('@/pages/admin/billing/BillingSubscriptionsAdmin').then(m => ({ default: m.BillingSubscriptionsAdmin })))
+const BillingPaymentsAdmin = lazy(() => import('@/pages/admin/billing/BillingPaymentsAdmin').then(m => ({ default: m.BillingPaymentsAdmin })))
 const LivestockCategoriesLayout = lazy(() => import('@/pages/admin/livestock-categories/LivestockCategoriesLayout').then(m => ({ default: m.LivestockCategoriesLayout })))
 const LivestockCategoriesTab = lazy(() => import('@/pages/admin/livestock-categories/LivestockCategoriesLayout').then(m => ({ default: m.CategoriesTab })))
 const LivestockRulesTab = lazy(() => import('@/pages/admin/livestock-categories/LivestockCategoriesLayout').then(m => ({ default: m.RulesTab })))
@@ -322,6 +324,9 @@ function App() {
                     <Route path="grade-formula" element={<GradeFormulaAdmin />} />
                     {/* ARS-207 — Конструктор планов членства (CRUD над membership_plan) */}
                     <Route path="billing/plans" element={<BillingPlansAdmin />} />
+                    {/* ARS-271 — управление подписками (список + карточка) и журнал платежей */}
+                    <Route path="billing/subscriptions" element={<BillingSubscriptionsAdmin />} />
+                    <Route path="billing/payments" element={<BillingPaymentsAdmin />} />
                     <Route path="directories/regions" element={<RegionDirectory />} />
                     <Route path="directories/norms" element={<NormsReferenceAdmin />}>
                       <Route path="facilities" element={<FacilityNormsTab />} />
