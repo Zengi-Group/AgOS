@@ -68,6 +68,7 @@ import { buildDecisions, buildObserve, type DecH } from './data/membership'
 import { FARMER_LEAD_CAT, stickerData } from './data/prices'
 import type { BannerCard, ServiceDef } from './data/banners'
 import { loadAccountProfile, type AccountProfile } from '@/lib/account'
+import { useEntitlementsRealtimeSync } from '@/hooks/useEntitlementsRealtimeSync'
 import { loadFarmState } from './data/farm-load'
 import { emptyFarm } from './data/farm-seed'
 // S3 (ARS-149, EngSpec §4): платформенные адаптеры — KV-хранилище и реальный сетевой статус.
@@ -140,7 +141,7 @@ function IonBridge({ onIon, onPath }: { onIon: (ion: UseIonRouterResult) => void
 
 export function CabinetApp() {
   const navigate = useNavigate()
-  const { signOut } = useAuth()
+  const { signOut, refreshContext } = useAuth()
   const host = useHost()   // S2.1: тактильный отклик (web no-op)
   const init = loadState()
   const [membership, setMembership] = useState<MembershipStatus>(init.membership)
@@ -275,6 +276,20 @@ export function CabinetApp() {
     pullFarm()
     refetchBatches()
   }, [offline, pullFarm, refetchBatches])
+
+  // ARS-269 (slice B): живой слушатель entitlements.invalidated. Админ-действия по
+  // подписке (revoke / ручная оплата / продление — ARS-267) и lifecycle d13 эмитят это
+  // событие в platform_events; RLS platform_events_read_own скоупит доставку до орг
+  // вошедшего фермера. Пере-грузим профиль → deriveMembership пересчитает статус за
+  // секунды, а не «до полного reload» (soft-invalidation M3 D-FG-4: сервер и так
+  // enforce'ит TSP-гейты, это свежесть UI). Профиль иначе грузится только на маунте —
+  // visibilitychange/30с-поллинг обновляют ферму/партии, но не подписку.
+  const reloadEntitlements = useCallback(async () => {
+    const p = await loadAccountProfile('farmer')
+    if (p) setProfile(p)   // только на успехе — транзиентный сбой держит last-good профиль
+    refreshContext()       // синхронизируем и глобальный auth-контекст (useAuth)
+  }, [refreshContext])
+  useEntitlementsRealtimeSync(reloadEntitlements)
 
   // D12 (офлайн-чтение): возврат из фона (разблокировка/переключение вкладки) — сразу
   // тихо освежаем стадо и партии, чтобы не показывать до 30с/20с устаревшие данные.

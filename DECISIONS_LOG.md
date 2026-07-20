@@ -4363,3 +4363,22 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **НЕ задеплоено**: фронт-деплой = Vercel по мержу (G3 + CEO). SQL-изменений в слайсе НЕТ — RPC уже на проде. Сайдбар оставлен как есть («Планы членства» → табы); опция посадки на «Подписки» — за CEO. Связано: [[agos-merge-not-equal-deploy]].
 
 **Files**: `src/pages/admin/billing/billingShared.ts` (new), `.../BillingStates.tsx` (new), `.../BillingSubscriptionsAdmin.tsx` (new), `.../SubscriptionDrawer.tsx` (new), `.../BillingPaymentsAdmin.tsx` (new), `.../BillingPlansAdmin.tsx` (harden: tabs + B7 + B8), `src/App.tsx` (2 lazy + 2 route).
+
+### 2026-07-20: ARS-269 (slice B) — кабинет слушает entitlements.invalidated (live-инвалидация членства)
+
+**What**: Governance-wiring ARS-269 (умбрелла ARS-258, Backlog/post-MVP) разбит по реальной готовности; сделан ТОЛЬКО воркстрим 3 (кабинет-потребитель уже эмитящегося события). Новый хук `useEntitlementsRealtimeSync` (зеркало `useTaxonomyRealtimeSync`) подписывается на INSERT `platform_events` c `event_type='entitlements.invalidated'`; RLS `platform_events_read_own` скоупит доставку до орг фермера. Смонтирован в `CabinetApp` → на событии тихо пере-грузит профиль (`loadAccountProfile('farmer')`) + `refreshContext()` → `deriveMembership` пересчитывает статус за секунды вместо «до полного reload». Debounce 400мс коалесцирует burst (succeeded+renewed+invalidated). Существующий `loadProfile`-эффект не тронут (HS-1), аддитивно.
+
+**Scope decision (G1, привлечён architect, CEO 2026-07-20)**: 3 из 4 воркстримов ARS-269 жёстко заблокированы несуществующими продуктовыми фичами → строить сейчас = спекулятивный код (HS-4). Отложены в Backlog с retire-триггерами:
+- ВС1 (гейты → `rpc_check_feature_access` вместо `fn_org_membership_active`) — триггер: введение Pro/квот/tier; регресс-риск на money-гейте.
+- ВС2 (`feature_usage` writes / `rpc_record_feature_usage`) — триггер: первый живой org-tier `feature_limit` + фикс GOV-QUOTA-PERUSER-01 (иначе метр ×N членов).
+- ВС4 (`fn_user_platform_tier` реальный резолвер) — триггер: деплой PlatformSubscription (IMPL_DEBT IDENTITY-02).
+
+**Why**: `entitlements.invalidated` эмитится живьём (d13 lifecycle + admin revoke/manual-pay/extend ARS-267), но слушателя не было (DECISIONS_LOG флаг «г» ARS-204 это предсказал) → после admin-revoke кабинет фермера показывал «активно» до ручного reload. ВС3 — не scaffolding, а проводка живого сигнала; безопасно (RLS org-scoped), аддитивно. Канон (MS3 §5.2) уже проектировал этого потребителя — доп. правок ADR не требуется (реализация записана здесь + IMPL_DEBT).
+
+**Verify**: `tsc -b` + `vite build` exit 0. Прод (`mwtbozflyldcadypherr`, read-only): RLS `platform_events` включена (relrowsecurity=true) + политика org-scoped → публикация в Realtime не течёт межтенантно; `fn_org_membership_active` на месте. **НАХОДКА**: публикация `supabase_realtime` пуста (puballtables=false, 0 таблиц) → postgres_changes инертен на проде для ВСЕХ таблиц; и новый слушатель, и уже задеплоенный `useTaxonomyRealtimeSync` не получают событий, пока таблицы не в публикации. Realtime не был армирован ни разу. → создана prod-safe идемпотентная миграция `20260720120000_realtime_publish_platform_events.sql` (арм только `platform_events`). Живой E2E (login фермера → admin-revoke → кабинет обновился) — hand-off (нет creds; прод 0 подписок).
+
+**НЕ задеплоено**: фронт = Vercel по мержу (G3+CEO). Миграция арма Realtime — прод-apply отдельным шагом при G3 (без неё фича инертна). Связано: [[agos-merge-not-equal-deploy]].
+
+**Флаг (вне ARS-269)**: `useTaxonomyRealtimeSync` латентно не работает на проде (его таблицы тоже не в публикации, замаскировано staleTime=60s) — отдельный фикс (IMPL_DEBT REALTIME-01).
+
+**Files**: `src/hooks/useEntitlementsRealtimeSync.ts` (new), `src/pages/cabinet/shell/CabinetApp.tsx` (+import, +`refreshContext` из useAuth, +`reloadEntitlements`+mount), `supabase/migrations/20260720120000_realtime_publish_platform_events.sql` (new).
