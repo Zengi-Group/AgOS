@@ -17,7 +17,7 @@ function renderBubble(m: ThreadMsg) {
   const acts = m.actions ?? []
   const hasFooter = acts.length > 0 || m.open
   return (
-    <Message key={m.id} model={{ direction: 'incoming', position: 'single' }} className={m.pin ? 'thr-pin' : undefined}>
+    <Message key={m.id} model={{ direction: m.dir ?? 'incoming', position: 'single' }} className={m.pin ? 'thr-pin' : undefined}>
       <Message.CustomContent>
         <div className="msg-t">{m.t}</div>
         {m.s && <div className="msg-s">{m.s}</div>}
