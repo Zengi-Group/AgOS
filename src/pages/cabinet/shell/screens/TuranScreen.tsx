@@ -23,18 +23,30 @@ interface Props {
   onBack: () => void
   toast: (text: string) => void
   prefillTopic?: string
+  // ARS-225: реальная отправка в канал поддержки (rpc_send_message). true → сообщение ушло;
+  // false / отсутствует → мок-подтверждение (демо/анон-путь, канал не задеплоен) сохраняется.
+  onSend?: (topic: string, message: string) => Promise<boolean>
 }
 
-export function TuranScreen({ onBack, toast, prefillTopic }: Props) {
+export function TuranScreen({ onBack, toast, prefillTopic, onSend }: Props) {
   const initTopic = prefillTopic && TOPICS.includes(prefillTopic) ? prefillTopic : TOPICS[0]!
   const [topic, setTopic] = useState(initTopic)
   const [message, setMessage] = useState('')
   const [sent, setSent] = useState(false)
+  const [sending, setSending] = useState(false)
 
-  const canSend = message.trim().length >= 5
+  const canSend = message.trim().length >= 5 && !sending
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!canSend) return
+    // Реальный канал: отправляем через rpc_send_message. Успех → экран «принято» (ответ
+    // придёт в тред TURAN). Если канал недоступен (onSend вернул false) — мок-фолбэк.
+    if (onSend) {
+      setSending(true)
+      const ok = await onSend(topic, message.trim())
+      setSending(false)
+      if (ok) { setSent(true); return }
+    }
     setSent(true)
     toast('Обращение принято · ответим в течение 1 рабочего дня')
   }
@@ -56,7 +68,7 @@ export function TuranScreen({ onBack, toast, prefillTopic }: Props) {
 
   return (
     <IonShellFrame noTabs label="TURAN" footer={<>
-      <MkCta disabled={!canSend} onClick={handleSend}>Отправить обращение</MkCta>
+      <MkCta disabled={!canSend} onClick={handleSend}>{sending ? 'Отправляем…' : 'Отправить обращение'}</MkCta>
       <MkCta variant="ghost" onClick={onBack}>Отмена</MkCta>
     </>}>
       <SubHead onBack={onBack} star tone="accent" title="TURAN" sub="Поддержка ассоциации" />

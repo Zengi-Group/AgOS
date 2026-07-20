@@ -71,6 +71,8 @@ import { loadAccountProfile, type AccountProfile } from '@/lib/account'
 import { useEntitlementsRealtimeSync } from '@/hooks/useEntitlementsRealtimeSync'
 import { loadFarmState } from './data/farm-load'
 import { emptyFarm } from './data/farm-seed'
+// ARS-225: реальный канал поддержки TURAN (comm_messages) — d12_messaging.sql RPC.
+import { loadSupportThread, sendSupportMessage, markSupportRead, type CommMessage } from './data/messages-load'
 // S3 (ARS-149, EngSpec §4): платформенные адаптеры — KV-хранилище и реальный сетевой статус.
 import { appStorage } from '@/platform/storage'
 import { useOnline } from '@/platform/network'
@@ -99,6 +101,10 @@ function deriveInitials(name: string | null | undefined): string {
 const PAID_KEY = (userId: string) => 'agos.memb.paid.' + userId
 const isPaidLocally = (userId: string | undefined | null) =>
   !!userId && appStorage.getItem(PAID_KEY(userId)) === '1'
+
+// ARS-225: локальная отметка прочтения канала поддержки (last_read_at). Сервер — источник
+// истины (rpc_mark_channel_read), локально держим для мгновенного пересчёта бейджа.
+const TURAN_READ_KEY = (channelId: string) => 'agos.comm.read.' + channelId
 
 // D4 (офлайн-чтение): страж от вечного BootScreen. rpc_get_my_context / getUser могут
 // подвиснуть без ответа (медленная/пропавшая сеть) — гонка с таймаутом даёт кабинету
@@ -163,6 +169,12 @@ export function CabinetApp() {
   const [profileIncomplete] = useState(init.profileIncomplete)
   const [farmUnread, setFarmUnread] = useState(init.farmUnread)
   const [turanUnread, setTuranUnread] = useState(init.turanUnread)
+  // ARS-225: реальный канал поддержки TURAN. supportChannelId=null → канал не загружен
+  // (аноним / RPC не задеплоен) → тред TURAN живёт на ассоциативных дайджестах (мок).
+  const [supportChannelId, setSupportChannelId] = useState<string | null>(null)
+  const [turanMsgs, setTuranMsgs] = useState<CommMessage[]>([])
+  // Отметка «прочитано» канала (last_read_at, зеркалим локально для бейджа без ре-запроса).
+  const [turanReadAt, setTuranReadAt] = useState<string | null>(null)
   const [aiLog, setAiLog] = useState(init.aiLog)
   // ARS-231: индикатор «Консультант печатает…» (мок aiReply до подключения AI Gateway)
   const [aiTyping, setAiTyping] = useState(false)
@@ -197,6 +209,21 @@ export function CabinetApp() {
     }),
     []
   )
+
+  // ARS-225: подтягиваем реальный канал поддержки TURAN для орг фермера. Не загрузилось
+  // (null) → тред остаётся на дайджестах (мок), бейдж — на локальном turanUnread. orgId
+  // читаем из state в момент вызова, чтобы колбэк не пересоздавался (стабильный для poll).
+  const orgIdRef = useRef<string | null>(null)
+  orgIdRef.current = profile?.orgId ?? null
+  const pullTuran = useCallback(async () => {
+    const orgId = orgIdRef.current
+    if (!orgId) return
+    const t = await loadSupportThread(orgId)
+    if (!t) return
+    setSupportChannelId(t.channelId)
+    setTuranMsgs(t.messages)
+    setTuranReadAt(appStorage.getItem(TURAN_READ_KEY(t.channelId)))
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -266,6 +293,15 @@ export function CabinetApp() {
     return () => { alive = false; clearInterval(id) }
   }, [pullFarm])
 
+  // ARS-225: реальный канал поддержки — первичная загрузка при появлении orgId + поллинг 30с
+  // (ответы админа приходят без перезагрузки). Аноним/нет орг → эффект не грузит (guard в pullTuran).
+  useEffect(() => {
+    if (!profile?.orgId) return
+    pullTuran()
+    const id = setInterval(pullTuran, 30000)
+    return () => clearInterval(id)
+  }, [profile?.orgId, pullTuran])
+
   // Dok6 offline-контракт: retry — при восстановлении сети сразу перезагружаем данные,
   // не дожидаясь 30с-поллинга. Первый рендер пропускаем (данные и так грузятся на маунте).
   const wasOffline = useRef(false)
@@ -322,6 +358,10 @@ export function CabinetApp() {
       setNewsOn(INITIAL_STATE.newsOn)
       setFarmUnread(INITIAL_STATE.farmUnread)
       setTuranUnread(INITIAL_STATE.turanUnread)
+      // ARS-225: изоляция канала поддержки — не наследуем канал/сообщения прошлого аккаунта.
+      setSupportChannelId(null)
+      setTuranMsgs([])
+      setTuranReadAt(null)
       setAiLog(INITIAL_STATE.aiLog)
     }
     appStorage.setItem(ACC_KEY, profile.userId)
@@ -477,8 +517,23 @@ export function CabinetApp() {
   // ARS-231: решения (decision) считаются в бейдже сообщений — pinned «ТРЕБУЕТ РЕШЕНИЯ»
   // треда Рынка остаётся непрочитанным, пока фермер не решит (прототип app/messages.jsx).
   const decCount = batches.filter((b) => b.state === 'decision').length
-  const msgBadge = unread + decCount + (farmUnread ? 1 : 0) + (turanUnread ? 1 : 0)
+  // ARS-225: реальный непрочит канала — есть ответ TURAN (не свой) новее отметки прочтения.
+  // Канал загружен (supportChannelId) → он источник истины бейджа TURAN; иначе — мок turanUnread.
+  const realTuranUnread = turanMsgs.some(
+    (m) => m.author_actor_type !== 'farmer' && (!turanReadAt || m.created_at > turanReadAt)
+  )
+  const turanUnreadEff = supportChannelId ? realTuranUnread : turanUnread
+  const msgBadge = unread + decCount + (farmUnread ? 1 : 0) + (turanUnreadEff ? 1 : 0)
   const avatarDot = (['approved', 'grace', 'expired'] as MembershipStatus[]).includes(membership)
+
+  // ARS-225: пометить канал поддержки прочитанным (сервер + локальное зеркало для бейджа).
+  const markTuranRead = useCallback(() => {
+    if (!supportChannelId) return
+    const now = new Date().toISOString()
+    appStorage.setItem(TURAN_READ_KEY(supportChannelId), now)
+    setTuranReadAt(now)
+    markSupportRead(supportChannelId)
+  }, [supportChannelId])
 
   // ---------- AI: Консультант только с Platform Pro ----------
   const openAI = (_ctx2?: string, _opts?: { voice?: boolean; batchId?: string }) => {
@@ -618,8 +673,12 @@ export function CabinetApp() {
     if (route.name !== 'thread') return
     if (route.tid === 'market') setNotifs((ns) => (ns.some((n) => n.unread) ? ns.map((n) => (n.unread ? { ...n, unread: false } : n)) : ns))
     if (route.tid === 'farm') setFarmUnread(false)
-    if (route.tid === 'turan') setTuranUnread(false)
-  }, [route])
+    if (route.tid === 'turan') {
+      setTuranUnread(false)          // мок-путь (аноним / канал не загружен)
+      markTuranRead()                // реальный канал: last_read_at на сервере + локально
+      pullTuran()                    // подтянуть свежие ответы при открытии треда
+    }
+  }, [route, markTuranRead, pullTuran])
 
   // ---------- контекст ----------
   // Инициалы хозяйства для аватара из реального аккаунта (имя орг → иначе имя владельца).
@@ -794,6 +853,7 @@ export function CabinetApp() {
     <TuranScreen
       onBack={() => goBackTo(route.back ?? { name: 'home' })}
       toast={showToast}
+      onSend={sendTuran}
     />
   )
 
@@ -810,7 +870,25 @@ export function CabinetApp() {
     member: memberAct,
     writeTuran: () => go({ name: 'turan', back: routeRef.current }),
   }
-  const threadEnv: ThreadEnv = { batches, notifs, membership, farm, aiLog, farmUnread, turanUnread, newsOn, h: threadH }
+  const threadEnv: ThreadEnv = {
+    batches, notifs, membership, farm, aiLog, farmUnread,
+    turanUnread: turanUnreadEff, newsOn, h: threadH,
+    // ARS-225: реальная переписка канала (undefined → только дайджесты, мок). myUserId
+    // отличает свои отправки (outgoing) от ответов TURAN (incoming).
+    turanReal: supportChannelId ? turanMsgs : undefined,
+    myUserId: profile?.userId ?? null,
+  }
+
+  // ARS-225: отправка обращения в реальный канал поддержки. Возвращает true при успехе —
+  // TuranScreen тогда показывает экран «Обращение принято»; false (канал не задеплоен/сбой)
+  // → TuranScreen откатывается на мок-подтверждение (демо/анон-путь сохраняется).
+  const sendTuran = async (topic: string, message: string): Promise<boolean> => {
+    if (!supportChannelId) return false
+    const body = topic ? `[${topic}] ${message}` : message
+    const ok = await sendSupportMessage(supportChannelId, body)
+    if (ok) { await pullTuran(); markTuranRead() }
+    return ok
+  }
 
   // Мок Консультанта (aiReply по справочным данным TURAN) — до подключения AI Gateway (Dok 5).
   const sendAi = (text: string) => {

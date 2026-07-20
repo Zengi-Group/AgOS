@@ -3,6 +3,27 @@
 > Maintained by: Architect & Coordinator Agent
 > Format: WHAT was decided → WHY (alternatives considered) → CONSEQUENCES (what becomes easy/hard)
 
+### 2026-07-14: Fix — отправка в support-канал падала в мок-фолбэк (ARS-225, живой тест)
+
+**What**: боевой тест на Vercel-preview показал: канал создаётся (`comm_channels` 1 строка), но сообщение не сохраняется (`last_message_at` NULL, `comm_messages` пусто) — форма молча уходила в мок-подтверждение. Две независимые причины в `messages-load.ts`, любая роняла живую отправку в мок: **(1)** `sendSupportMessage` слал `p_attachments: JSON.stringify(attachments)` — supabase-js сам сериализует params, поэтому `rpc_send_message` получал jsonb-**скаляр** `"[]"` вместо массива `[]`; `jsonb_array_length` на скаляре кидает исключение → RPC-ошибка → мок. Передаём массив как есть. **(2)** `loadSupportThread` при ошибке `rpc_list_messages` возвращал `null`, **теряя `channelId`**, который get-or-create уже создал → `supportChannelId` оставался `null` → `sendTuran` возвращал `false`, не дойдя до RPC. Теперь при ошибке ленты канал отдаётся с пустым списком (сообщения подтянутся следующим поллом). Плюс `console.warn` на всех RPC-ошибках для живой диагностики.
+
+**Why**: класс дефектов, вылезающих только вживую после деплоя (jsonb-кодировка PostgREST, порядок вычисления `AND` в plpgsql) — статический `tsc`/`cross_check` их не ловит. Оба симптома идентичны (канал есть, сообщения нет), поэтому исправлены оба.
+
+**Verify**: `tsc -b` = 0. Боевая перепроверка на preview после ре-деплоя ветки; SQL не менялся.
+
+**Files**: `src/pages/cabinet/shell/data/messages-load.ts`. Ветка `kernuree/messaging-support-channel` (коммит `245a33a`).
+
+---
+
+### 2026-07-13: Кабинет фермера — тред TURAN на реальном канале поддержки (ARS-225)
+
+**What**: раздел «Сообщения» → тред `turan` стал реальным двусторонним каналом (фермер ↔ админ) поверх d12_messaging.sql. **(1)** Новый data-loader `messages-load.ts` по образцу `farm-load.ts` (graceful `null` → мок): `loadSupportThread(orgId)` = `rpc_get_or_create_support_channel` + `rpc_list_messages`; `sendSupportMessage`, `markSupportRead`. **(2)** `threads.ts` аддитивно: `ThreadMsg.dir` (свои отправки = `outgoing`); `ThreadEnv.turanReal?`/`myUserId?`; реальные `comm_messages` вставляются в тред TURAN **после** дайджестов (членство/цены/новости НЕ удалены — HS-2), перед CTA «Написать в TURAN»; превью/время строки списка берутся из последнего реального сообщения (fallback на плашку членства). **(3)** `ThreadScreen` чтит `m.dir`. **(4)** `CabinetApp`: state канала + поллинг 30с, эффективный `turanUnread` (реальный: ответ TURAN новее `last_read_at`; иначе мок), авто-mark-read + reload при входе в тред, изоляция канала при смене аккаунта. **(5)** `TuranScreen`: форма обращения (тема+текст) шлёт через `rpc_send_message` (проп `onSend`); успех → экран «принято», иначе мок-фолбэк.
+
+**Why**: MVP-ось фермер↔админ (eng-spec §4.1). Синхронная модель «реальное поверх мока с null-фолбэком» = проверенный паттерн `farm-load.ts`: до боевого деплоя d12 (G3, человек) тред живёт на дайджестах, после — оживает без правок UI. Аддитивно (P7): ни один дайджест/экран не удалён.
+
+**Verify**: `tsc -b` = 0. Боевая проверка (реальные сообщения, unread, mark-read, e2e-нотификации) — deploy-gated: требует применения d12_messaging.sql + воркера (ARS-142). SQL не менялся в этом коммите → `cross_check.sh` уже прогонялся на d12 (ARS-223).
+
+**Files**: `src/pages/cabinet/shell/data/messages-load.ts` (new), `data/threads.ts`, `screens/ThreadScreen.tsx`, `screens/TuranScreen.tsx`, `CabinetApp.tsx`. Ветка `kernuree/ars-222-eng-spec-slice-messaging`.
 ### 2026-07-17: BILL-F8 — SEC-GRANT-PUBLIC-01 (revoke public на 7 биллинг-RPC + RLS на rpc_name_registry)
 
 **What**: ACL-проход биллинга (eng-spec §5 BILL-F8), выявлен сверкой канон↔прод после ARS-267. (1) 7 subscription-RPC (ARS-205/207) имели дефолтный PUBLIC execute (advisor WARN `anon_security_definer_function_executable` — `revoke from anon` его не снимает): `rpc_list_membership_plans`, `rpc_get_org_subscription`, `rpc_subscribe_org_membership`, `rpc_cancel_org_membership`, `rpc_admin_list_membership_plans`, `rpc_admin_upsert_membership_plan`, `rpc_admin_set_membership_plan_active`. Фикс в каноне d13: `revoke from public, anon` + `grant authenticated, service_role` (service_role добавлен явно — до этого AI-GW-путь держался на PUBLIC). (2) `rpc_name_registry` имела RLS disabled (advisor ERROR `rls_disabled_in_public`) — фикс в каноне d01: `enable row level security` + policy `rpc_name_registry_admin_read` (fn_is_admin; cross_check/service_role байпасят RLS; runtime-читателей через API нет — проверено grep src/ai_gateway/functions).
@@ -4114,6 +4135,12 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 
 **Why**: G2 утвердил новый домен `messaging` (префикс comm_), notifications = транспорт (P4). P1 (data-model первым, до UI). Статус active/archived без `closed` (реш. CEO 2026-07-13) — support-канал это постоянный Kaspi-диалог, не тикет. Инвариант «один support-канал на орг» реализован partial unique index → опора get-or-create.
 
+**Consequences**: Легко — UI-задачи (ARS-225 кабинет / ARS-226 admin) и события (ARS-224) садятся на готовые RPC; broadcast (ARS-233, слайс 2) добавляется аддитивно (тип канала уже в CHECK). Аккуратно — RLS проверена только статически (cross_check), боевой RLS-тест орг A ≠ орг B возможен лишь на задеплоенной БД (G3, человеческий деплой; не пушим/не деплоим сами). `cross_check.sh` — 0 critical (3 significant = преждний TSP-adapter PGRST203, не связан с d12).
+
+**Verify**: `bash cross_check.sh` → RESULT 0 critical errors; d12 сканируется (513 строк), CHECK 3/5/7 зелёные для новых RPC. RLS-тесты + событийный тест — на деплое.
+
+**Files**: `d12_messaging.sql` (new), `cross_check.sh` (SQL_FILES + CHECK 5 exceptions), `deploy_sql.py` (apply-order + docstring), `Docs/AGOS-Messaging-EngSpec-v0_1.md` (d14→d12).
+
 **Consequences**: Легко — UI-задачи (ARS-225 кабинет / ARS-226 admin) и события (ARS-224) садятся на готовые RPC; broadcast (ARS-233, слайс 2) добавляется аддитивно (тип канала уже в CHECK). Аккуратно — RLS проверена только статически (cross_check), боевой RLS-тест орг A ≠ орг B возможен лишь на задеплоенной БД (G3, человеческий деплой; не пушим/не деплоим сами).
 
 **Verify**: `bash cross_check.sh` → RESULT 0 critical errors; d12 сканируется, CHECK 3/5/7 зелёные для новых RPC. RLS-тесты + событийный тест — на деплое.
@@ -4126,6 +4153,13 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 
 **What**: Подключил fan-out уведомлений к отправке сообщения. Новый SQL-хелпер `fn_fanout_comm_notifications(p_message_id)` (SECURITY DEFINER, внутренний fn_, не API): вставляет строки `notifications` по каналам in_app+push для всех активных участников канала КРОМЕ автора, с учётом `user_notification_preferences` (default-on, `coalesce(is_enabled,true)`), идемпотентно по message_id. Вызывается синхронно из `rpc_send_message` (после публикации события) — паттерн membership-RPC. В `ai_gateway/notification_worker.py` добавлен шаблон `new_message` («Новое сообщение в чате поддержки TURAN…») + deep-link `/cabinet/messages`.
 
+**Why**: ARS-224 (Dok4 dispatcher). Fan-out в SQL, а не в Python-поллере: (1) бизнес-логика в RPC (CLAUDE.md), (2) атомарно с сообщением и не зависит от того, подключён ли поллер к cron (Slice-4 поллер ещё «future»), (3) переиспользование в broadcast-слайсе 2. Доставку делает существующий channel-agnostic воркер (ARS-142) — его не трогаем, только учим шаблон. Строгий инвариант ARS-224: notif template-only, текст НЕ дублируется — `params={channel_id, message_id}` без preview; preview остаётся только в payload события. Каналы in_app+push (не whatsapp) — по eng-spec §3.
+
+**Consequences**: Легко — участник (кроме автора) получает in_app/push при новом сообщении; выключенный канал в prefs не шлётся (LEFT JOIN). Аккуратно — идемпотентность fan-out через скан notifications по params->>message_id (без индекса; ок на Phase-1 масштабе, при росте — частичный индекс). broadcast 'all' (org=null) пропускается (notifications.org NOT NULL) — делается в слайсе 2. Боевой тест (send → участники получают, автор нет, disabled-канал молчит) — на задеплоенной БД + запущенном воркере (G3).
+
+**Verify**: `bash cross_check.sh` → 0 critical (3 significant = преждний TSP-adapter PGRST203). `python -c ast.parse` worker → OK. fn_fanout определён ДО rpc_send_message (check_function_bodies).
+
+**Files**: `d12_messaging.sql` (fn_fanout_comm_notifications + perform в rpc_send_message), `ai_gateway/notification_worker.py` (TEMPLATES + PUSH_DEEP_LINKS new_message), `Docs/AGOS-Messaging-EngSpec-v0_1.md` (§3).
 **Why**: ARS-224 (Dok4 dispatcher). Fan-out в SQL, а не в Python-поллере: (1) бизнес-логика в RPC (CLAUDE.md), (2) атомарно с сообщением, (3) переиспользование в broadcast-слайсе 2. Строгий инвариант ARS-224: notif template-only, текст НЕ дублируется — `params={channel_id, message_id}` без preview; preview остаётся только в payload события. Каналы in_app+push (не whatsapp) — по eng-spec §3.
 
 **Consequences**: Легко — участник (кроме автора) получает in_app/push при новом сообщении; выключенный канал в prefs не шлётся. Аккуратно — админ техподдержки получает уведомление только если он участник канала (в MVP админ работает через inbox `rpc_list_channels`, а не push — by-design, eng-spec ARS-226). broadcast 'all' (org=null) пропускается (notifications.org NOT NULL) — слайс 2.
