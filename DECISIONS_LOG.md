@@ -4398,6 +4398,40 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 
 **Files**: `src/pages/admin/billing/billingShared.ts` (new), `.../BillingStates.tsx` (new), `.../BillingSubscriptionsAdmin.tsx` (new), `.../SubscriptionDrawer.tsx` (new), `.../BillingPaymentsAdmin.tsx` (new), `.../BillingPlansAdmin.tsx` (harden: tabs + B7 + B8), `src/App.tsx` (2 lazy + 2 route).
 
+---
+
+### 2026-07-21: ARS-195..199 — деплой d02-дельты admin-TSP на прод (закрыт deploy-gap PR #59)
+
+**What**: Полная сверка Linear↔git↔прод (2026-07-20) нашла критичный deploy-gap: PR #59 (`846c78f`, admin-управление TSP) был влит в main, Vercel раздавал `/admin/marketplace` с write-кнопками, но **7 `rpc_admin_*` отсутствовали на проде** → любое admin-действие TSP падало рантаймом. По «го» CEO задеплоена дельта: миграция `ars195_198_admin_tsp_write_rpcs` = Section 11 канона `d02_tsp.sql` (строки 5364–6315) байт-в-байт — `rpc_admin_cancel_batch`, `rpc_admin_set_batch_terms` (ARS-195), `rpc_admin_cancel_pool`, `rpc_admin_edit_pool` (ARS-196), `rpc_admin_match_batch_to_pool`, `rpc_admin_unmatch` (ARS-197), `rpc_admin_advance_pool_status` (ARS-198) + registry (7 строк, on conflict do update) + гранты (authenticated; revoke anon).
+
+**Why**: прод-фронт уже зовёт эти RPC (ARS-199 в бою); дельта аддитивна (P7), функции новые (перезаписи нет), полный d02 не накатывался (во избежание неявного деплоя другого дрифта — паттерн ARS-267).
+
+**Verify** (техника по [[agos-merge-not-equal-deploy]] / [[plpgsql-runtime-resolution-blindspot]]):
+- Пред-чеки: 7 функций отсутствовали; все 12 таблиц + 30 runtime-колонок (incl. `pools.mpk_contact_revealed_at`, `batches.rollback_at`, `pool_regions.region_type`) + `rpc_retry_match_pool(uuid,uuid)` + `platform_events` actor-check c 'admin' — существуют.
+- Runtime-резолюция БЕЗ мутаций: EXPLAIN-батарея — все 20 statement-форм из тел 7 функций парсятся+планируются против живой схемы (ARS-229-класс исключён). Изначальная rollback-проба со стабом `fn_is_admin` отклонена (security-функции на проде не подменяем даже в rollback-tx).
+- Пост-чеки: 7 функций SECURITY DEFINER + pinned `search_path`; registry 7/7; негативный гейт живым вызовом — не-админ → `FORBIDDEN: admin only`; живые данные не тронуты (7 published-батчей / 6 filling-пулов / 0 отмен).
+- Известный нюанс: PUBLIC-грант остаётся (`revoke from anon` only — как в каноне) — принятый паттерн internally-guarded функций, покрыт IMPL_DEBT SEC-GRANT-PUBLIC-01.
+
+**Linear**: ARS-195/196/197/198/199 → Done; ARS-201 (QA) остаётся In Review — остался preview golden-path под админ-логином + негативные FSM-кейсы под админ-JWT (`tests/tsp_admin_rpc_test.sql` против прода не гонялся). ARS-194 (родитель) — In Review до ARS-201.
+
+**Files**: изменений кода нет (деплой канона); prod migration `ars195_198_admin_tsp_write_rpcs`; эта запись.
+
+---
+
+### 2026-07-21: d12-дельта messaging + push-стек — деплой на прод (закрыты deploy-gaps №2 и №3)
+
+**What**: По «го» CEO закрыты два оставшихся deploy-gap'а сверки 2026-07-20 (все дельты = канон дословно):
+- **Миграция `messaging_rls_helper_and_race_fix`** (ARS-223, review-фиксы мержа #98): `fn_my_channel_ids()` (SECURITY DEFINER) + 7 политик comm_channels/participants/messages переписаны на хелпер (разрыв взаимной RLS-рекурсии 42P17 для прямых PostgREST-select/Realtime — пре-реквизит фронт-мержа ARS-225) + race-фикс `rpc_get_or_create_support_channel` (unique_violation → перечитать канал).
+- **Миграция `ars139_140_push_token_stack`** (ARS-139/140): таблица `push_token` + 2 индекса + RLS + 3 политики (read/insert/update own) + `rpc_register_push_token` / `rpc_revoke_push_token` + registry. Индексы с `if not exists` (в d01 без него — нит канона, идемпотентность миграции).
+- **Edge-функция `push-send` v1** (ARS-141) задеплоена, ACTIVE, `verify_jwt=true` (воркер зовёт с service-key Bearer — совместимо). Env-guarded: FCM/APNS-ключи НЕ сконфигурированы → тихий skip по дизайну; секреты — при store-релизе.
+
+**Why**: (1) без `fn_my_channel_ids` мерж фронта ARS-225 дал бы 42P17 на Realtime/select; (2) клиент регистрации токенов (ARS-151) влит и на проде бился об отсутствующую таблицу/RPC; ARS-139/141 числились Done при отсутствующих прод-артефактах.
+
+**Verify**: хелпер prosecdef=1; политики на хелпере = 3, всего comm-политик 7; race-marker (`unique_violation` в prosrc) = true; `push_token` RLS=on, политик 3, RPC 2 (SECURITY DEFINER), registry 2/2; данные целы (каналов 1, сообщений 0, токенов 0); edge в списке функций ACTIVE v1. Прим.: два первых прогона миграций заблокировал auto-mode классификатор Claude Code (policy-DDL на проде) — применено после явного одобрения CEO (вариант 2).
+
+**Хвосты**: RLS-тест орг A≠B по comm_* под authenticated-JWT (приёмка ARS-223) и боевой пуш через воркер (ARS-224, Railway) — не гонялись; FCM/APNS-секреты не заданы. Linear: ARS-223 → In Review, ARS-151 → In Review, комменты в 224/225.
+
+**Files**: изменений кода нет (деплой канона d12/d01 + supabase/functions/push-send); prod migrations `messaging_rls_helper_and_race_fix`, `ars139_140_push_token_stack`; edge `push-send` v1; эта запись.
 ### 2026-07-20: ARS-269 (slice B) — кабинет слушает entitlements.invalidated (live-инвалидация членства)
 
 **What**: Governance-wiring ARS-269 (умбрелла ARS-258, Backlog/post-MVP) разбит по реальной готовности; сделан ТОЛЬКО воркстрим 3 (кабинет-потребитель уже эмитящегося события). Новый хук `useEntitlementsRealtimeSync` (зеркало `useTaxonomyRealtimeSync`) подписывается на INSERT `platform_events` c `event_type='entitlements.invalidated'`; RLS `platform_events_read_own` скоупит доставку до орг фермера. Смонтирован в `CabinetApp` → на событии тихо пере-грузит профиль (`loadAccountProfile('farmer')`) + `refreshContext()` → `deriveMembership` пересчитывает статус за секунды вместо «до полного reload». Debounce 400мс коалесцирует burst (succeeded+renewed+invalidated). Существующий `loadProfile`-эффект не тронут (HS-1), аддитивно.
