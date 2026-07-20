@@ -899,6 +899,20 @@ stable
 set search_path = public, pg_temp
 as $$
 begin
+    -- OWNERSHIP GUARD (SEC-RPC-ORGTRUST-01, data-isolation/Art.171; ARS-259): SECURITY
+    -- DEFINER bypasses RLS — p_organization_id is client-supplied and must be verified
+    -- against the caller, not trusted as given. service_role bypasses (AI Gateway scopes
+    -- org per P-AI-2 before calling; P-AI-6). This is the AI-gateway membership tool
+    -- (AI-15) with no live self-serve caller (verified: 0 refs in src/ and ai_gateway/).
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or auth.role() = 'service_role'
+    ) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
+
     return jsonb_build_object(
         'organization_id', p_organization_id,
         'memberships', (
@@ -1231,13 +1245,11 @@ begin
             p_farm_id, p_organization_id using errcode = 'P0001';
     end if;
 
-    -- SEC-GATE-MEMBERSHIP-01: pilot stand-in for MEMBERSHIP-01 (canon `state`
-    -- column not deployed yet) — mirrors the self-serve rpc_create_batch gate
-    -- so the AI Gateway path enforces the same association-membership rule.
-    if not exists (
-        select 1 from public.memberships
-        where organization_id = p_organization_id and level <> 'registered'
-    ) then
+    -- SEC-GATE-MEMBERSHIP-01: canonical membership check (ARS-263, D-BILL-TRUTH-01)
+    -- via fn_org_membership_active — live paid subscription (trialing|active|grace)
+    -- OR legacy level-stack. One predicate shared with the self-serve TSP gate, so
+    -- the AI Gateway path and the wizard path agree on who is a member.
+    if not public.fn_org_membership_active(p_organization_id) then
         raise exception 'MEMBERSHIP_REQUIRED: организация не является членом ассоциации'
             using errcode = 'P0001';
     end if;
@@ -1364,13 +1376,11 @@ begin
             p_batch_id, v_batch.status using errcode = 'P0003';
     end if;
 
-    -- SEC-GATE-MEMBERSHIP-01: pilot stand-in for MEMBERSHIP-01 (canon `state`
-    -- column not deployed yet) — mirrors the self-serve rpc_create_batch gate
-    -- so the AI Gateway path enforces the same association-membership rule.
-    if not exists (
-        select 1 from public.memberships
-        where organization_id = p_organization_id and level <> 'registered'
-    ) then
+    -- SEC-GATE-MEMBERSHIP-01: canonical membership check (ARS-263, D-BILL-TRUTH-01)
+    -- via fn_org_membership_active — live paid subscription (trialing|active|grace)
+    -- OR legacy level-stack. One predicate shared with the self-serve TSP gate, so
+    -- the AI Gateway path and the wizard path agree on who is a member.
+    if not public.fn_org_membership_active(p_organization_id) then
         raise exception 'MEMBERSHIP_REQUIRED: организация не является членом ассоциации'
             using errcode = 'P0001';
     end if;
@@ -1450,7 +1460,13 @@ revoke execute on function public.rpc_get_vaccination_schedule(uuid,uuid,int) fr
 revoke execute on function public.rpc_complete_vaccination_item(uuid,uuid,uuid,int,text,text,uuid,jsonb) from anon;
 revoke execute on function public.rpc_create_consultation_request(uuid,text,text,text,uuid,text,uuid,jsonb) from anon;
 revoke execute on function public.rpc_search_knowledge_chunks(uuid,text,vector,text,text,int) from anon;
-revoke execute on function public.rpc_get_membership_status(uuid) from anon;
+-- SEC-RPC-ORGTRUST-01 + SEC-GRANT-PUBLIC-01 (ARS-259): AI-gateway-only tool (AI-15,
+-- P-AI-6 → service_role). `revoke ... from anon` alone left the default PUBLIC execute
+-- grant intact (anon/authenticated still executable on prod). Revoke from PUBLIC and
+-- grant only service_role; the body-guard above is the second layer of defense.
+revoke execute on function public.rpc_get_membership_status(uuid) from public;
+revoke execute on function public.rpc_get_membership_status(uuid) from authenticated;
+grant  execute on function public.rpc_get_membership_status(uuid) to service_role;
 revoke execute on function public.rpc_get_price_grid(uuid,uuid,date) from anon;
 revoke execute on function public.rpc_get_aggregated_supply(uuid,date,uuid,int) from anon;
 revoke execute on function public.rpc_get_aggregated_demand(uuid,date,uuid,int) from anon;

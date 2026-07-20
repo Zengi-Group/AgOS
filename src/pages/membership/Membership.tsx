@@ -224,7 +224,7 @@ function IntroStep({ onNext }: { onNext: () => void }) {
   return (
     <>
       <H1>Членство в TURAN</H1>
-      <Lede>Заявка в ассоциацию. После одобрения оплатите годовой взнос — откроется Рынок и всё, что доступно членам.</Lede>
+      <Lede>Заявка в ассоциацию. После одобрения оформите подписку — откроется Рынок и всё, что доступно членам.</Lede>
       <div className="mem-stagger" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
         {bullets.map(({ Icon, t, d }) => (
           <div key={t} className="mem-press" style={{ display: 'flex', gap: 14, alignItems: 'flex-start', padding: '14px 16px', borderRadius: 14, background: T.bgC, border: `1px solid ${T.bd}` }}>
@@ -434,12 +434,12 @@ function PendingStep({ onCabinet }: { onCabinet: () => void }) {
       </div>
       <h1 style={{ fontFamily: T.font, fontSize: 26, lineHeight: 1.2, letterSpacing: '-0.02em', fontWeight: 600, margin: '0 0 10px' }}>Заявка на рассмотрении</h1>
       <p style={{ fontSize: 15, color: T.fg2, lineHeight: 1.5, maxWidth: 320, margin: '0 auto 20px' }}>
-        Ответим в течение 3 рабочих дней. Уведомим в кабинете и по SMS. Продажа партий и Рынок откроются после одобрения и оплаты взноса.
+        Ответим в течение 3 рабочих дней. Уведомим в кабинете и по SMS. Продажа партий и Рынок откроются после одобрения и оформления подписки.
       </p>
       <div className="mem-stagger" style={{ maxWidth: 360, margin: '0 auto 24px', padding: '14px 16px', borderRadius: 14, background: T.bgC, border: `1px solid ${T.bd}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <TimelineRow done label="Документы отправлены" sub="Только что" />
         <TimelineRow current label="Проверка ТУРАН" sub="1–3 рабочих дня" />
-        <TimelineRow label="Оплата взноса" sub="Откроется после одобрения" />
+        <TimelineRow label="Оформление подписки" sub="Откроется после одобрения" />
       </div>
       <StickyDock>
         <CTA onClick={onCabinet}>В кабинет</CTA>

@@ -27,6 +27,12 @@ v1.1 исправляет все критические и серьёзные д
 | **ЗМ-2** | Структурный | Один polling interval → определены 3 тира: critical/30s, standard/60s, analytics/5min (Section 1.2). |
 | **ЗМ-3** | Структурный | `publish_event()` хелпер не в Dok3 → Добавлено примечание: хелпер internal, вызывается только внутри RPC-функций, не из приложения. |
 
+**ARS-268 (2026-07-17, канон-синк биллинга):** +7 Billing-событий (B-01..B-07, §1 + §3.12) —
+уже эмитятся d13_billing.sql, флаг «не в Dok4» снят. `entitlements.invalidated` переведён из
+§3.11 DEFERRED в LIVE (эмитится billing lifecycle). +2 notification-шаблона (`subscription_expired`,
+`payment_failed` → владельцу орг, §7). 3 события admin-ops (extended/plan_changed/resumed)
+зарезервированы, не внесены (RPC не построены — ARS-266/267). Итого canonical событий: 59 → 66.
+
 ---
 
 ## 1. Единый реестр canonical event_type
@@ -98,6 +104,24 @@ v1.1 исправляет все критические и серьёзные д
 | P-03 | **platform.knowledge_chunk.added** | Platform | knowledge_chunk.added | RPC-44 [ADMIN] | — | — | — | — |
 | P-04 | **platform.ai_conversation.started** | Platform | — (отсутствовало) | RPC-40 [AI] | — | — | — | — |
 | P-05 | **platform.consultation.requested** | Platform | — (платформ. уровень) | System/AI | — | — | — | — |
+| B-01 | **membership.subscription.started** | Billing | — (новое, ARS-205) | rpc_subscribe_org_membership [WEB,AI] | ✅ | — | — | — |
+| B-02 | **membership.subscription.canceled** | Billing | — (новое, ARS-205) | rpc_cancel_org_membership [WEB,AI] | ✅ | — | — | — |
+| B-03 | **membership.subscription.renewed** | Billing | — (новое, ARS-206) | rpc_process_membership_renewals [CRON] | ✅ | — | — | ✅ |
+| B-04 | **membership.subscription.expired** | Billing | — (новое, ARS-206) | rpc_process_membership_renewals [CRON] | ✅ | — | ✅ | ✅ |
+| B-05 | **membership.payment.succeeded** | Billing | — (новое, ARS-206) | fn_charge_membership / renewals | ✅ | — | — | — |
+| B-06 | **membership.payment.failed** | Billing | — (новое, ARS-206) | rpc_process_membership_renewals [CRON] | ✅ | — | ✅ | ✅ |
+| B-07 | **entitlements.invalidated** | Billing | — (новое, ARS-205/207) | subscribe / cancel / renewals / admin-ops (ARS-267) | — | ✅ | — | — |
+| B-08 | **membership.subscription.extended** | Billing | — (новое, ARS-267) | rpc_admin_extend_subscription [ADMIN] | ✅ | — | — | — |
+| B-09 | **membership.subscription.plan_changed** | Billing | — (новое, ARS-267) | rpc_admin_change_subscription_plan [ADMIN] | ✅ | — | — | — |
+| B-10 | **membership.subscription.resumed** | Billing | — (новое, ARS-267) | rpc_resume_org_membership [WEB,ADMIN] | ✅ | — | — | — |
+| B-11 | **membership.subscription.revoked** | Billing | — (новое, ARS-267) | rpc_admin_revoke_membership [ADMIN] | ✅ | — | ✅ | — |
+
+> **Billing (B-01..B-11) — статус (ARS-267).** Все 11 событий эмитятся кодом d13_billing.sql.
+> Каноническая нотация домена — `membership.*` / `entitlements.*` (подписочный lifecycle членства;
+> отличается от `identity.membership.*` — те про заявку/level старого стека). B-08..B-11 добавлены
+> при постройке admin-ops RPC (ARS-267): `extended` / `plan_changed` / `resumed` (были зарезервированы)
+> + `revoked` (дисциплинарный терминал, MS2 D-MEM-5 / CEO D-BILL-REVOKE-01). `membership.payment.succeeded`
+> (B-05) и `.renewed` (B-03) теперь эмитятся и из `rpc_admin_record_manual_payment` (payload.provider='manual').
 
 ---
 
@@ -499,15 +523,45 @@ CapexTab (после toggle/qty_override/material_override изменений). 
 
 ### 3.11. Governance Domain — DEFERRED (GOVERNANCE-04)
 
-> **DEFERRED until Microstep 3 (Feature Governance) is implemented.** These three events are registered here as canonical names to prevent name drift when M3 is built. None of them are emitted today. Cross-ref: IMPL_DEBT GOVERNANCE-01/02.
+> **PARTIALLY LIVE (ARS-268 update).** `entitlements.invalidated` is now **emitted** by the
+> billing subscription lifecycle (d13_billing.sql) — see §3.12 / registry B-07. The other two
+> (`feature_gate.updated`, `feature_usage.recorded`) remain **DEFERRED** — M3 governance engine
+> (d14_governance.sql) is deployed but no RPC calls `rpc_check_feature_access` yet and no code
+> records feature usage (0 callers — IMPL_DEBT GOV-WIRING; ARS-269). Cross-ref: IMPL_DEBT GOVERNANCE-01/02.
 
 | canonical_event_type | Status | Producer (future) | Consumers (future) | Описание |
 |----------------------|--------|-------------------|--------------------|----------|
-| **entitlements.invalidated** | **DEFERRED — M3 unbuilt** | M3 Governance engine (RPC, future) | AI Gateway (permission cache flush), UI (re-fetch feature flags) | Fired when an org's entitlement set changes (membership upgrade/downgrade, manual admin override). All downstream caches must flush. |
-| **feature_gate.updated** | **DEFERRED — M3 unbuilt** | M3 Governance engine (RPC, future) | UI (React Query invalidate feature-flags), AI Gateway | Fired when a feature flag definition changes (threshold, enabled/disabled, rollout %). Consumers re-fetch from `feature_gates` table. |
-| **feature_usage.recorded** | **DEFERRED — M3 unbuilt** | System (inline in feature-gated RPCs, future) | Analytics Worker, Quota enforcement | Fired per feature invocation for metering/quota. High-volume; will require its own polling tier (analytics / 5 min). |
+| **entitlements.invalidated** | **LIVE — see §3.12 / B-07** | Emitted by d13 billing lifecycle (subscribe / cancel / renewals) | AI Gateway (permission cache flush), UI (re-fetch feature flags) | Fired when an org's entitlement set changes. Now driven by subscription state changes; M3 admin-override path adds emitters later. |
+| **feature_gate.updated** | **DEFERRED — M3 unwired** | M3 Governance engine (RPC, future) | UI (React Query invalidate feature-flags), AI Gateway | Fired when a feature flag definition changes (threshold, enabled/disabled, rollout %). Consumers re-fetch from `feature_gates` table. |
+| **feature_usage.recorded** | **DEFERRED — M3 unwired** | System (inline in feature-gated RPCs, future) | Analytics Worker, Quota enforcement | Fired per feature invocation for metering/quota. High-volume; will require its own polling tier (analytics / 5 min). |
 
-**Path to implementation:** when M3 is built, add emitters to Governance RPCs and add these three event_types to `event_audit_registry` seed. Do NOT add until M3 RPCs exist (P7 — additive architecture).
+**Path to implementation:** the two deferred events need M3 wiring (ARS-269) — add emitters to feature-gated RPCs and add both to `event_audit_registry` seed. Do NOT add until callers exist (P7 — additive architecture).
+
+---
+
+### 3.12. Billing Domain — Membership Subscription (7 событий, ARS-205/206/207, LIVE)
+
+> Подписочный lifecycle членства (d13_billing.sql). Отличать от `identity.membership.*` (§3.1) —
+> те про заявку/level старого стека; эти — про рекуррентную оплаченную подписку (D-BILL-TRUTH-01).
+> Все 11 эмитятся сегодня (B-08..B-11 добавлены admin-ops ARS-267).
+
+| canonical_event_type | Producer | Consumers | Описание / after-payload key fields |
+|----------------------|----------|-----------|-------------------------------------|
+| **membership.subscription.started** | rpc_subscribe_org_membership [WEB,AI] | Audit, Notification | org_id, plan_code, state (trialing\|active), trial_end, current_period_end |
+| **membership.subscription.canceled** | rpc_cancel_org_membership [WEB,AI] | Audit, Notification | org_id, subscription_id, reason (subscription_canceled), immediate |
+| **membership.subscription.renewed** | rpc_process_membership_renewals [CRON] / rpc_admin_record_manual_payment [ADMIN] | Audit | org_id, subscription_id, period_end, next_billing_at, source (manual_admin для ручной оплаты) |
+| **membership.subscription.expired** | rpc_process_membership_renewals [CRON] | Audit, Notification (owner), AI GW | org_id, subscription_id, reason (canceled_at_period_end \| subscription_expired) |
+| **membership.subscription.extended** | rpc_admin_extend_subscription [ADMIN] | Audit | org_id, subscription_id, days (1..90), note, period_end |
+| **membership.subscription.plan_changed** | rpc_admin_change_subscription_plan [ADMIN] | Audit | org_id, subscription_id, from_plan, to_plan, effective (next_period) |
+| **membership.subscription.resumed** | rpc_resume_org_membership [WEB,ADMIN] | Audit | org_id, subscription_id, was_scheduled_for_cancellation |
+| **membership.subscription.revoked** | rpc_admin_revoke_membership [ADMIN] | Audit, Notification (owner), AI GW | org_id, subscription_id, reason (дисциплинарный, обязателен) |
+| **membership.payment.succeeded** | fn_charge_membership (renewals / subscribe) / rpc_admin_record_manual_payment [ADMIN] | Audit | org_id, subscription_id, amount, currency, provider (stub\|manual), reference (для manual) |
+| **membership.payment.failed** | rpc_process_membership_renewals [CRON] | Audit, Notification (owner), AI GW | org_id, subscription_id, amount, next retry (grace) |
+| **entitlements.invalidated** | subscribe / cancel / renewals / admin-ops (manual payment, extend, revoke) | AI Gateway (cache flush), UI (re-fetch feature flags) | org_id — сигнал клиентам перечитать `rpc_check_feature_access` |
+
+**Notification-шаблоны (ARS-268/267 решение, минимум):** `subscription_expired` + `payment_failed` +
+`subscription_revoked` → владельцу орг (§7). Остальные события — без шаблона (аудит/RT достаточно;
+started/renewed/extended/plan_changed/resumed — не требуют push, canceled инициирован пользователем).
 
 ---
 
@@ -708,6 +762,8 @@ async def should_send(org_id, alert_type, entity_id):
 | consultation_resolved | in_app | Farmer | *Консультация завершена. Рекомендации от {expert_name} в личном кабинете.* |
 | membership_activated | WA + in_app | Farmer | *Статус изменён: {old_level} → {new_level}. {consequence_text}* |
 | membership_suspended | WA + in_app | Farmer | *Членство приостановлено. Причина: {reason}. Для вопросов: {contact_info}.* |
+| subscription_expired | WA + in_app | Org owner | *Членство истекло {expired_date}. Продлите подписку, чтобы вернуть доступ к Рынку TSP. Кабинет → Членство.* |
+| payment_failed | WA + in_app | Org owner | *Не удалось списать оплату членства. Повторим до {grace_until}. Проверьте способ оплаты в кабинете.* |
 | application_approved | WA + in_app | Farmer | *Заявка одобрена! Ваш статус: {new_level}. Откройте кабинет.* |
 | application_rejected | WA + in_app | Farmer | *Заявка отклонена. Причина: {reject_reason}. Контакт: {contact_info}.* |
 | ration_ready | in_app | Farmer | *Рацион рассчитан для «{group_name}». Сводка: {summary}. Раздел → Кормление.* |

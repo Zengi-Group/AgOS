@@ -111,7 +111,10 @@ begin
            from public.organization_type_assignments ota
           where ota.organization_id = o.id),
         m.level,
-        (m.level is not null and m.level <> 'registered')
+        -- ARS-263 / D-BILL-TRUTH-01: paid = live subscription OR legacy level-stack
+        -- (canonical predicate) — was `level <> 'registered'`, which showed a
+        -- subscription-only member (level still 'registered') as "Не оплачено" (B2).
+        public.fn_org_membership_active(o.id)
     from public.users u
     join public.user_organization_roles uor on uor.user_id = u.id
     join public.organizations o on o.id = uor.organization_id

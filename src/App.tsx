@@ -47,6 +47,7 @@ const CreateArticlePage = lazy(() => import('@/pages/admin/news/CreateArticlePag
 const CreateMediaPage = lazy(() => import('@/pages/admin/news/CreateMediaPage'))
 const EditNewsPage = lazy(() => import('@/pages/admin/news/EditNewsPage'))
 const BackfillCoversPage = lazy(() => import('@/pages/admin/news/BackfillCovers'))
+const BannersAdmin = lazy(() => import('@/pages/admin/content/BannersAdmin'))
 const AdminStartupList = lazy(() => import('@/pages/admin/startups/StartupList'))
 const AdminStartupDetail = lazy(() => import('@/pages/admin/startups/StartupDetail'))
 const AdminProgramsPage = lazy(() => import('@/pages/admin/finance/AdminProgramsPage'))
@@ -124,6 +125,9 @@ const CapexMaterialsTab = lazy(() => import('@/pages/admin/capex/CapexReferenceA
 const CapexNormsTab = lazy(() => import('@/pages/admin/capex/CapexReferenceAdmin').then(m => ({ default: m.CapexNormsTab })))
 const CapexSurchargesTab = lazy(() => import('@/pages/admin/capex/CapexReferenceAdmin').then(m => ({ default: m.CapexSurchargesTab })))
 const LivestockPricesAdmin = lazy(() => import('@/pages/admin/livestock-prices/LivestockPricesAdmin').then(m => ({ default: m.LivestockPricesAdmin })))
+const BillingPlansAdmin = lazy(() => import('@/pages/admin/billing/BillingPlansAdmin').then(m => ({ default: m.BillingPlansAdmin })))
+const BillingSubscriptionsAdmin = lazy(() => import('@/pages/admin/billing/BillingSubscriptionsAdmin').then(m => ({ default: m.BillingSubscriptionsAdmin })))
+const BillingPaymentsAdmin = lazy(() => import('@/pages/admin/billing/BillingPaymentsAdmin').then(m => ({ default: m.BillingPaymentsAdmin })))
 const LivestockCategoriesLayout = lazy(() => import('@/pages/admin/livestock-categories/LivestockCategoriesLayout').then(m => ({ default: m.LivestockCategoriesLayout })))
 const LivestockCategoriesTab = lazy(() => import('@/pages/admin/livestock-categories/LivestockCategoriesLayout').then(m => ({ default: m.CategoriesTab })))
 const LivestockRulesTab = lazy(() => import('@/pages/admin/livestock-categories/LivestockCategoriesLayout').then(m => ({ default: m.RulesTab })))
@@ -318,6 +322,11 @@ function App() {
                     </Route>
                     {/* A-GRADE — Формула сорта МПК (упитанность → сорт + защитная цена) */}
                     <Route path="grade-formula" element={<GradeFormulaAdmin />} />
+                    {/* ARS-207 — Конструктор планов членства (CRUD над membership_plan) */}
+                    <Route path="billing/plans" element={<BillingPlansAdmin />} />
+                    {/* ARS-271 — управление подписками (список + карточка) и журнал платежей */}
+                    <Route path="billing/subscriptions" element={<BillingSubscriptionsAdmin />} />
+                    <Route path="billing/payments" element={<BillingPaymentsAdmin />} />
                     <Route path="directories/regions" element={<RegionDirectory />} />
                     <Route path="directories/norms" element={<NormsReferenceAdmin />}>
                       <Route path="facilities" element={<FacilityNormsTab />} />
@@ -352,6 +361,7 @@ function App() {
                     <Route path="news/create-media" element={<Suspense fallback={null}><CreateMediaPage /></Suspense>} />
                     <Route path="news/:id/edit" element={<Suspense fallback={null}><EditNewsPage /></Suspense>} />
                     <Route path="news/backfill-covers" element={<Suspense fallback={null}><BackfillCoversPage /></Suspense>} />
+                    <Route path="content/banners" element={<Suspense fallback={null}><BannersAdmin /></Suspense>} />
                     <Route path="startups" element={<Suspense fallback={null}><AdminStartupList /></Suspense>} />
                     <Route path="startups/:id" element={<Suspense fallback={null}><AdminStartupDetail /></Suspense>} />
                     <Route path="finance/programs" element={<Suspense fallback={null}><AdminProgramsPage /></Suspense>} />

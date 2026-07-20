@@ -4,7 +4,9 @@
    не используются (sendButton/attachButton отключены — Phosphor-only, R-2). */
 
 /* каркас чата: экран без ion-скролла, MessageList скроллит сам */
-.agos-cabinet-stage ion-content.ion-noscroll .phone-scroll { height: 100%; padding-bottom: 10px; display: flex; flex-direction: column; }
+/* padding-bottom + env(safe-area-inset-bottom) (аудит 2026-07-13, L1): на тред-роутах
+   таб-бар скрыт → док ввода = низ экрана; без инсета mic/send лягут под home-indicator. */
+.agos-cabinet-stage ion-content.ion-noscroll .phone-scroll { height: 100%; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; }
 .agos-cabinet-stage .ai-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .agos-cabinet-stage .ai-chat .cs-chat-container { flex: 1; min-height: 0; background: transparent; }
 .agos-cabinet-stage .ai-dock { padding-top: 8px; background: var(--bg); }

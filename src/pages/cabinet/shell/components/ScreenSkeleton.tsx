@@ -18,19 +18,22 @@ function Row({ children, gap = 8 }: { children: React.ReactNode; gap?: number })
 
 export function ScreenSkeleton({ variant }: { variant: SkelVariant }) {
   if (variant === 'home') {
+    // D8 (аудит 2026-07-13): силуэт 1:1 под реальный .home-stack (gap 22, padding-top 14;
+    // высоты замерены на проде) — иначе контент прыгает на ~170px при смене скелет→данные.
     return (
-      <div className="skel-wrap" aria-hidden>
-        {/* баннер-карусель */}
-        <Blk h={132} r={16} />
-        {/* ряд из 4 сервис-плиток */}
-        <Row>
-          {Array.from({ length: 4 }).map((_, i) => <Blk key={i} h={64} w="25%" r={14} />)}
+      <div className="skel-wrap" style={{ gap: 22, padding: '14px 0 0' }} aria-hidden>
+        {/* баннер-карусель (.ban-wrap ≈120) */}
+        <Blk h={120} r={16} />
+        {/* ряд из 4 сервис-плиток (.svc-grid ≈88) */}
+        <Row gap={10}>
+          {Array.from({ length: 4 }).map((_, i) => <Blk key={i} h={88} w="25%" r={14} />)}
         </Row>
-        {/* заголовок секции */}
-        <Blk h={18} w="42%" r={6} />
-        {/* тир-карточки */}
-        <Blk h={96} r={14} />
-        <Blk h={96} r={14} />
+        {/* разделитель (.home-div, hairline) */}
+        <Blk h={1} r={1} />
+        {/* секция «С чего начать»: заголовок + лестница (≈213) */}
+        <Blk h={213} r={14} />
+        {/* секция «Быстрый доступ»: заголовок + карточка Фермы (≈105) */}
+        <Blk h={105} r={14} />
       </div>
     )
   }

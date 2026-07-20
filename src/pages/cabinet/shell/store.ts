@@ -3,6 +3,7 @@
 
 import type { MembershipStatus, Route, RouteName, ShellState } from './types'
 import { MEMB_DATES } from './data/membership'
+import { fmtDGenYear } from './data/fmt'
 import { seedFarm } from './data/farm-seed'
 
 export { MEMB_DATES }
@@ -41,11 +42,13 @@ export const MEMBERSHIP_DICT: Record<MembershipStatus, MembershipEntry> = {
     plate: { tone: 'gray', t: 'Заявка отклонена: нужна выписка о регистрации хозяйства', cta: 'Подать заново', act: 'apply' },
   },
   approved: {
-    cab: 'Заявка одобрена · взнос не оплачен',
-    plate: { tone: 'amber', t: 'Заявка одобрена! Оплатите взнос до ' + MEMB_DATES.payApproved + ', чтобы открыть продажу на Рынке', cta: 'Оплатить взнос', act: 'pay' },
+    cab: 'Заявка одобрена · подписка не оформлена',
+    plate: { tone: 'amber', t: 'Заявка одобрена! Оформите подписку, чтобы открыть Рынок — первый период бесплатно', cta: 'Оформить подписку', act: 'pay' },
   },
   active: {
-    cab: 'Членство активно до ' + MEMB_DATES.activeTill,
+    // ARS-263 (B6): без хардкод-даты. Реальная дата продления добавляется
+    // membershipEntry() из подписки (current_period_end). Демо/легаси без даты — «Членство активно».
+    cab: 'Членство активно',
     plate: null,
   },
   expiring: {
@@ -66,16 +69,52 @@ export const MEMBERSHIP_DICT: Record<MembershipStatus, MembershipEntry> = {
   },
 }
 
-// ---------- маппинг членства БД → UI-кабинета (бета) ----------
-// БД хранит level + статус последней заявки; UI — 9 статусов. Для беты (без оплаты/просрочки):
-// level выше registered = реальный член → 'active'; иначе по последней заявке.
-export function deriveMembership(level: string | null, applicationStatus: string | null): MembershipStatus {
+// ---------- маппинг членства БД → UI-кабинета ----------
+// Источник истины (ARS-263, D-BILL-TRUTH-01): подписка. Зеркалит SQL-предикат
+// fn_org_membership_active — живая подписка (trialing|active|grace) ИЛИ legacy level.
+// Приоритет: подписка → legacy level → терминальная подписка (промпт продления) → заявка.
+// subscriptionState опционален: null/недоступен → падаем на старую level+заявка-логику
+// (легаси-члены и демо не ломаются).
+export function deriveMembership(
+  level: string | null,
+  applicationStatus: string | null,
+  subscriptionState?: string | null,
+): MembershipStatus {
+  // 1) живая подписка = канонический член (доступ ON)
+  if (subscriptionState === 'trialing' || subscriptionState === 'active') return 'active'
+  if (subscriptionState === 'grace') return 'grace'  // доступ ещё ON, но нужен платёж
+  // 2) legacy level-stack член (старый флоу) — тоже активный член по предикату
   if (level && level !== 'registered') return 'active'
-  // Заявка одобрена админом, но взнос ещё не оплачен → 'approved' (доступна оплата).
+  // 3) нет активного членства: промпт из терминального состояния подписки (доступ OFF)
+  if (subscriptionState === 'past_due' || subscriptionState === 'expired') return 'expired'
+  // 4) иначе — по последней заявке (canceled без legacy/заявки → 'none')
   if (applicationStatus === 'approved') return 'approved'
   if (applicationStatus === 'submitted' || applicationStatus === 'under_review') return 'pending'
   if (applicationStatus === 'rejected') return 'rejected'
   return 'none'
+}
+
+// ARS-263 (B6): запись словаря с РЕАЛЬНЫМИ датами подписки вместо хардкода.
+// Аддитивно поверх MEMBERSHIP_DICT (он остаётся фолбэком для легаси/демо/без дат).
+// active  → «Членство активно до <current_period_end>»
+// grace   → плашка «Оплатите до <next_billing_at || current_period_end>»
+export function membershipEntry(
+  membership: MembershipStatus,
+  sub?: { currentPeriodEnd?: string | null; nextBillingAt?: string | null } | null,
+): MembershipEntry {
+  const base = MEMBERSHIP_DICT[membership]
+  if (!sub) return base
+  if (membership === 'active') {
+    const till = fmtDGenYear(sub.currentPeriodEnd)
+    return till ? { ...base, cab: 'Членство активно до ' + till } : base
+  }
+  if (membership === 'grace' && base.plate) {
+    const deadline = fmtDGenYear(sub.nextBillingAt ?? sub.currentPeriodEnd)
+    return deadline
+      ? { ...base, plate: { ...base.plate, t: 'Членство не продлено. Оплатите до ' + deadline + ', чтобы не потерять доступ' } }
+      : base
+  }
+  return base
 }
 
 // ---------- способности (внутренние, в UI не показываются) ----------
@@ -88,13 +127,13 @@ export const execOk = (m: MembershipStatus) => CAN_EXEC.includes(m)
 export const gated = (m: MembershipStatus) => !CAN_EXEC.includes(m)
 
 // ---------- таб для маршрута (shell/app.jsx tabOf) ----------
+// N-2: таб экрана = URL-префикс его таба (см. nav.ts routeToUrl). Флоу-роуты острова
+// (farmwiz→ферма, batchwiz/pub→рынок) и shop→главная, чтобы подсветка/стек совпадали с URL.
 const TAB_MAP: Record<string, RouteName> = {
-  home: 'home', services: 'home', cabinet: 'home',
-  farm: 'farm',
-  market: 'market', p1list: 'market', batch: 'market', review: 'market',
-  shop: 'shop',
+  home: 'home', services: 'home', cabinet: 'home', shop: 'home', turan: 'home',
+  farm: 'farm', farmwiz: 'farm',
+  market: 'market', p1list: 'market', batch: 'market', review: 'market', batchwiz: 'market', pub: 'market',
   messages: 'messages', thread: 'messages',
-  turan: 'home',
 }
 export const tabOf = (r: Route): RouteName => TAB_MAP[r.name] ?? 'home'
 

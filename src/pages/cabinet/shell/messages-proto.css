@@ -80,3 +80,13 @@
 .agos-cabinet-stage .ai-wave i { width: 3px; height: 8px; border-radius: var(--r-full); background: var(--accent); animation: ai-wave 900ms var(--ease) infinite; }
 @keyframes ai-wave { 0%, 100% { height: 8px; opacity: 0.5; } 50% { height: 22px; opacity: 1; } }
 .agos-cabinet-stage .ai-foot { font-size: 11.5px; color: var(--fg3); text-align: center; padding-top: 8px; }
+
+/* ═══ Этап 2 · Отклик на касание — чат/треды (аудит 2026-07-13, аддитивно).
+   Контролы жили только на :hover → на таче фидбек «залипал» после отпускания (T1). ═══ */
+.agos-cabinet-stage .thr-cta:active { background: var(--cta-h); transform: scale(.97); }
+.agos-cabinet-stage .msg-act { transition: all 60ms var(--ease), transform 90ms var(--ease); }
+.agos-cabinet-stage .msg-act:active { transform: scale(.97); }
+.agos-cabinet-stage .ai-mic:active { transform: scale(.92); }
+/* «‹ назад» треда — тап-таргет 28×34 < 44pt (R-25): расширяем зону без сдвига раскладки */
+.agos-cabinet-stage .thr-back { width: 44px; height: 44px; margin-left: -14px; }
+.agos-cabinet-stage .thr-back:active { opacity: .6; }

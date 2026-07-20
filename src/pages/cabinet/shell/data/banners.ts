@@ -31,9 +31,3 @@ export const SHELL_SERVICES: ServiceDef[] = [
   { k: 'reg',     t: 'Рег. животных', ic: 'tag', soon: true },
   { k: 'all',     t: 'Все сервисы',   ic: 'grid' },
 ]
-
-export const NEWS_ITEM = {
-  k: 'НОВОСТИ TURAN',
-  t: 'Семинар по откорму и племенному делу',
-  sub: '28 июня · Шымкент · запись через офис ассоциации',
-}

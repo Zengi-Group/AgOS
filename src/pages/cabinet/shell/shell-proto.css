@@ -128,7 +128,13 @@
 .agos-cabinet-stage .agos-tabbar { --background: var(--bg); background: var(--bg); border-top: 1px solid var(--bd); min-height: auto; padding: 8px 6px calc(8px + env(safe-area-inset-bottom)); contain: none; }
 /* P-4 (ARS-220): единый постоянный бар скрыт на детальных экранах (Список/Партия/Отзыв/
    TURAN) — сохраняет прежний фуллскрин-UX, но сам IonTabBar не пересобирается. */
-.agos-cabinet-stage .agos-tabbar.agos-tabbar--hidden { display: none; }
+/* C6 (ARS-220): скрытие через transform (не display:none) — плавный съезд вниз без рывка
+   раскладки. Бар выведен из потока в ionic.css, поэтому translateY не оставляет пустой полосы. */
+.agos-cabinet-stage .agos-tabbar.agos-tabbar--hidden {
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
+}
 .agos-cabinet-stage .agos-tabbar ion-tab-button {
   --color: var(--fg2); --color-selected: var(--accent);
   --background: transparent; --background-focused: transparent; --ripple-color: transparent;
@@ -188,3 +194,22 @@
 .agos-cabinet-stage .sub-head-t b { font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .agos-cabinet-stage .sub-head-t span { font-size: 11.5px; color: var(--fg3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .agos-cabinet-stage .sub-head-sp { flex: 1; min-width: 0; }
+
+/* ═══ Этап 2 · Отклик на касание — домашние поверхности (аудит 2026-07-13, аддитивно).
+   Большинство home-элементов (.svc/.sh-row/.dec-row-head) уже имеют :active; тут —
+   дозаполнение оставшихся hover-only контролов + усиление «невидимых» pressed. ═══ */
+/* быстрый доступ «Моя ферма» + ask-бар: были только :hover (T5) */
+.agos-cabinet-stage .work-farm { transition: box-shadow 60ms var(--ease), transform 80ms var(--ease); }
+.agos-cabinet-stage .work-farm:active { transform: scale(.99); background: var(--bg-m); }
+.agos-cabinet-stage .askbar:active { background: color-mix(in oklab, var(--fg) 8%, transparent); }
+.agos-cabinet-stage .ask-mic2:active { transform: scale(.92); }
+/* «все партии ›» — hover-only + маленький тап-таргет (T10): 44pt-зона без сдвига раскладки */
+.agos-cabinet-stage .tier-more { min-height: 44px; padding: 6px 0 6px 10px; margin-right: -2px; transition: color 120ms var(--ease); }
+.agos-cabinet-stage .tier-more:active { opacity: .55; }
+/* «невидимые» pressed усилены до различимых (T9): баннер и чипы решений */
+.agos-cabinet-stage .ban-tile:active { opacity: 1; transform: scale(.99); filter: brightness(.96); }
+.agos-cabinet-stage .dec-act:active { transform: scale(.97); }
+.agos-cabinet-stage .dec-act.primary:active { filter: brightness(.92); }
+/* точки-пагинация баннера — визуал 6px, но тап-зона 44px через ::before (T7) */
+.agos-cabinet-stage .ban-dot { position: relative; }
+.agos-cabinet-stage .ban-dot::before { content: ''; position: absolute; inset: -19px -9px; }

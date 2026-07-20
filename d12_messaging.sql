@@ -131,6 +131,32 @@ alter table public.comm_channels     enable row level security;
 alter table public.comm_participants  enable row level security;
 alter table public.comm_messages       enable row level security;
 
+-- fn_my_channel_ids — каналы, видимые текущему пользователю: своей орг ЛИБО где он
+-- активный участник. SECURITY DEFINER (владелец, BYPASSRLS) — тело НЕ триггерит RLS
+-- comm_*, поэтому политики ниже могут ссылаться на него БЕЗ взаимной рекурсии политик
+-- (иначе comm_channels_read ↔ comm_participants_read образуют цикл → Postgres 42P17
+-- «infinite recursion detected in policy» на любом прямом PostgREST-select/Realtime).
+create or replace function public.fn_my_channel_ids()
+returns setof uuid
+language sql security definer stable
+set search_path = public, pg_temp as $$
+    select c.id
+    from public.comm_channels c
+    where c.is_active
+      and (
+        c.organization_id = any(public.fn_my_org_ids())
+        or exists (
+            select 1 from public.comm_participants p
+            where p.channel_id = c.id
+              and p.user_id = public.fn_current_user_id()
+              and p.is_active
+        )
+      );
+$$;
+comment on function public.fn_my_channel_ids() is
+    'Messaging: id каналов, видимых текущему пользователю (своя орг или активное участие).
+     SECURITY DEFINER — разрывает взаимную рекурсию RLS-политик comm_channels/participants/messages.';
+
 -- comm_channels: читает участник / член орг канала / админ. Пишет напрямую — админ
 -- (фермер создаёт/пишет только через RPC).
 drop policy if exists "comm_channels_read" on public.comm_channels;
@@ -138,10 +164,7 @@ create policy "comm_channels_read"
     on public.comm_channels for select
     using (
         organization_id = any(public.fn_my_org_ids())
-        or id in (
-            select channel_id from public.comm_participants
-            where user_id = public.fn_current_user_id() and is_active
-        )
+        or id in (select public.fn_my_channel_ids())
         or public.fn_is_admin()
     );
 drop policy if exists "comm_channels_admin_write" on public.comm_channels;
@@ -155,10 +178,7 @@ create policy "comm_participants_read"
     on public.comm_participants for select
     using (
         user_id = public.fn_current_user_id()
-        or channel_id in (
-            select id from public.comm_channels
-            where organization_id = any(public.fn_my_org_ids())
-        )
+        or channel_id in (select public.fn_my_channel_ids())
         or public.fn_is_admin()
     );
 drop policy if exists "comm_participants_admin_write" on public.comm_participants;
@@ -174,10 +194,7 @@ create policy "comm_messages_read"
     on public.comm_messages for select
     using (
         organization_id = any(public.fn_my_org_ids())
-        or channel_id in (
-            select channel_id from public.comm_participants
-            where user_id = public.fn_current_user_id() and is_active
-        )
+        or channel_id in (select public.fn_my_channel_ids())
         or public.fn_is_admin()
     );
 drop policy if exists "comm_messages_insert" on public.comm_messages;
@@ -241,12 +258,23 @@ begin
       and is_active
     limit 1;
 
-    -- create
+    -- create. Гонка: два одновременных первых входа одной орг (напр. кабинет на двух
+    -- устройствах) оба проходят `not found` → второй INSERT ловит uq_comm_support_channel_per_org.
+    -- Ловим unique_violation и перечитываем существующий канал (get-or-create остаётся идемпотентным).
     if not found then
         select legal_name into v_title from public.organizations where id = p_organization_id;
-        insert into public.comm_channels (organization_id, channel_type, status, title, created_by)
-        values (p_organization_id, 'support', 'active', v_title, v_user_id)
-        returning * into v_ch;
+        begin
+            insert into public.comm_channels (organization_id, channel_type, status, title, created_by)
+            values (p_organization_id, 'support', 'active', v_title, v_user_id)
+            returning * into v_ch;
+        exception when unique_violation then
+            select * into v_ch
+            from public.comm_channels
+            where organization_id = p_organization_id
+              and channel_type = 'support'
+              and is_active
+            limit 1;
+        end;
     end if;
 
     -- ensure participant (лениво). Админ входит как admin, иначе member.

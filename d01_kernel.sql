@@ -3423,6 +3423,16 @@ create index if not exists idx_rpc_registry_dok5
     on public.rpc_name_registry (dok5_tool_name)
     where dok5_tool_name is not null;
 
+-- BILL-F8 (SEC-GRANT-PUBLIC-01): rpc_name_registry is dev metadata (RPC name map). It had
+-- RLS disabled → advisor ERROR (rls_disabled_in_public) + PostgREST-readable by anyone.
+-- Enable RLS; admin-only read via API (cross_check.sh connects as service_role/owner, which
+-- bypasses RLS; no runtime API reader). No write policy — writes only via SQL deploy.
+alter table public.rpc_name_registry enable row level security;
+drop policy if exists "rpc_name_registry_admin_read" on public.rpc_name_registry;
+create policy "rpc_name_registry_admin_read"
+    on public.rpc_name_registry for select
+    using (public.fn_is_admin());
+
 -- ============================================================
 -- Summary of fixes in this migration:
 --

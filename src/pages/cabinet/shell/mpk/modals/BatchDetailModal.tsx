@@ -93,8 +93,8 @@ export function BatchDetailModal({ batch, pools, onClose, toast, onMatch, onOffe
           <div className="mpk-field-label">Ваше предложение (₸/кг)</div>
           <input
             className={'mpk-input' + (offerValid && !aboveMin ? ' error' : '')}
-            type="number"
-            min={1}
+            type="text"
+            inputMode="numeric"
             value={offer}
             onChange={(e) => setOffer(e.target.value)}
           />

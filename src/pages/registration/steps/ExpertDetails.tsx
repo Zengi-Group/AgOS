@@ -100,6 +100,7 @@ export function ExpertDetails({ formData, onChange, onNext }: ExpertDetailsProps
           label="Стоимость выезда (₸, необязательно)"
           value={formData.expert_visit_price}
           onChange={(v) => onChange({ expert_visit_price: v.replace(/\D/g, '').slice(0, 7) })}
+          inputMode="numeric"
         />
 
         <FloatingInput

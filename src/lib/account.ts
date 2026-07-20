@@ -83,6 +83,11 @@ export interface AccountProfile {
   orgTypes: string[]           // org_types выбранной организации (farmer/mpk/...)
   membershipLevel: string | null
   applicationStatus: string | null  // последняя membership_applications.status (submitted/under_review/approved/rejected)
+  // ARS-263 / D-BILL-TRUTH-01: подписка = канонический источник «оплачено/активно».
+  // Читается из rpc_get_org_subscription (одна живая подписка на орг или null).
+  subscriptionState: string | null  // membership_subscription.state (trialing/active/grace/past_due/expired/canceled) или null
+  currentPeriodEnd: string | null   // ISO — реальная дата «членство до» (не хардкод)
+  nextBillingAt: string | null      // ISO — реальная дата следующего продления
 }
 
 async function resolveRegionName(regionId: string | null): Promise<string | null> {
@@ -126,6 +131,22 @@ export async function loadAccountProfile(
     applicationStatus = (appData?.[0] as { status: string } | undefined)?.status ?? null
   }
 
+  // ARS-263: живая подписка орг = канонический источник статуса членства (D-BILL-TRUTH-01).
+  // rpc_get_org_subscription возвращает JSON-объект живой подписки или JSON null. Ошибка/недоступность
+  // → все поля null (кабинет падает на legacy level/заявку — старые члены не ломаются).
+  let subscriptionState: string | null = null
+  let currentPeriodEnd: string | null = null
+  let nextBillingAt: string | null = null
+  if (org) {
+    const { data: subData } = await supabase.rpc('rpc_get_org_subscription', { p_organization_id: org.id })
+    const sub = subData as { state?: string; current_period_end?: string | null; next_billing_at?: string | null } | null
+    if (sub && sub.state) {
+      subscriptionState = sub.state
+      currentPeriodEnd = sub.current_period_end ?? null
+      nextBillingAt = sub.next_billing_at ?? null
+    }
+  }
+
   return {
     userId: ctx.user_id,
     orgId: org?.id ?? null,
@@ -141,5 +162,8 @@ export async function loadAccountProfile(
     orgTypes: org?.org_types ?? [],
     membershipLevel: membership?.level ?? null,
     applicationStatus,
+    subscriptionState,
+    currentPeriodEnd,
+    nextBillingAt,
   }
 }

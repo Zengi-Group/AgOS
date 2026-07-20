@@ -19,7 +19,7 @@ export function PriceSheet({ open, catKey, onClose, onSell }: { open: boolean; c
   const hv = s.herd ? herdValueMln(s.herd, s.price) : null
 
   return (
-    <IonModal isOpen={open} onDidDismiss={onClose} breakpoints={[0, 1]} initialBreakpoint={1} className="agos-sheet-modal">
+    <IonModal isOpen={open} onDidDismiss={onClose} breakpoints={[0, 1]} initialBreakpoint={1} handle={false} className="agos-sheet-modal">
       <div className="ps-sheet" data-screen-label="шторка цен">
         <div className="ps-handle" />
         <div className="ps-head">

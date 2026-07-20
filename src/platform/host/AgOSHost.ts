@@ -31,7 +31,9 @@ export interface AgOSHost {
   registerPushToken(): Promise<PushToken | null>
   onPushToken(handler: (token: PushToken) => void): void
   // Deep-link: и cold-start, и в рантайме. Отдаёт path вида '/cabinet/batch/:id'.
-  onDeepLink(handler: (path: string) => void): void
+  // C10 (аудит 2026-07-13): мультиподписка — верхний PushDeepLinkBridge (v6-navigate вне острова)
+  // и v5-остров CabinetApp (go() внутри острова) слушают одновременно. Возвращает unsubscribe.
+  onDeepLink(handler: (path: string) => void): () => void
   // Capability-gated (могут быть no-op):
   readonly caps: HostCaps
   haptics(style: 'light' | 'medium' | 'heavy'): void

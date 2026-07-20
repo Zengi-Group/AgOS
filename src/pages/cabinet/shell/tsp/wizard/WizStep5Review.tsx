@@ -9,6 +9,7 @@ import { fmtD, fmtDGen, fmtMoney, publishInfo, wizWindow } from '../data/tsp-uti
 import { WizShell } from './WizShell'
 import { MkCta } from '../components/MkCta'
 import { PhIcon } from '../../components/icons/PhIcon'
+import { TuranLoader } from '@/components/TuranLoader'
 
 interface Props {
   w: WizState
@@ -36,7 +37,13 @@ export function WizStep5Review({ w, onPublish, onSaveDraft, onBack, onExit, goto
     <WizShell step={5} onBack={onBack} onExit={onExit} title="Проверим перед публикацией." titleQ
       sub="Что-то нужно поправить — нажмите рядом с пунктом."
       footer={<>
-        <MkCta disabled={isSubmitting} onClick={onPublish}>Опубликовать партию</MkCta>
+        {/* Этап 2 · D11: реальное сетевое ожидание публикации (rpc_create_batch + автоматч)
+            оформлено в кнопке — «Публикуем…» + бренд-лоадер, а не немой disabled. */}
+        <MkCta disabled={isSubmitting} onClick={onPublish}>
+          {isSubmitting
+            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><TuranLoader variant="spin" size={16} color="#fff" /> Публикуем…</span>
+            : 'Опубликовать партию'}
+        </MkCta>
         <button className="mk-link" onClick={onSaveDraft}>Сохранить черновик и выйти</button>
       </>}>
       <div className="mk-prose">

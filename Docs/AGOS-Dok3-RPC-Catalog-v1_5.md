@@ -224,6 +224,45 @@
 
 ---
 
+### 1.10. Billing & Governance (d13_billing.sql, d14_governance.sql, ARS-202..207/263) — ✅ Реализованы
+
+Рекуррентная подписка членства (Microstep 2 lifecycle) + Feature Governance (Microstep 3).
+Источник истины членства = `membership_subscription.state` (D-BILL-TRUTH-01, ARS-263).
+Регистрация имён — §11 (`rpc_name_registry`, D-NEW-A).
+
+| ID | SQL-функция | Caller | Status | Returns |
+|----|-------------|--------|--------|---------|
+| RPC-BILL-1 | `rpc_list_membership_plans(org_id?)` | web, ai | ✅ | jsonb[] активные планы (P8-каталог). ARS-265/BILL-F5: опц. `org_id` фильтрует каталог по типу орг (`applies_org_type` via `organization_type_assignments`, existence=active); `applies_org_type=null` → всем; `org_id=null` → без фильтра (P7, старый zero-arg + anon-preview) |
+| RPC-BILL-2 | `rpc_get_org_subscription(org_id)` | web, admin | ✅ | jsonb живая подписка + план, или null |
+| RPC-BILL-3 | `rpc_subscribe_org_membership(org_id, plan_code)` | web, ai | ✅ | jsonb подписка (trialing/active) |
+| RPC-BILL-4 | `rpc_cancel_org_membership(org_id, immediate?)` | web, admin | ✅ | jsonb (cancel_at_period_end / canceled) |
+| RPC-BILL-5 | `rpc_process_membership_renewals(limit?)` | service_role [CRON] | ✅ | jsonb { processed, renewed, deferred, expired } |
+| RPC-BILL-6 | `rpc_admin_list_membership_plans()` | admin | ✅ | jsonb[] все планы (вкл. неактивные) |
+| RPC-BILL-7 | `rpc_admin_upsert_membership_plan(...)` | admin | ✅ | jsonb план |
+| RPC-BILL-8 | `rpc_admin_set_membership_plan_active(plan_code, is_active)` | admin | ✅ | jsonb план |
+| RPC-BILL-9 | `rpc_admin_list_subscriptions(state?, plan_code?, search?, limit?, offset?)` | admin | ✅ (ARS-266) | jsonb { total, counts_by_state, rows[…sub, org_name, org_bin, plan_title, last_payment_at] }; сорт next_billing_at asc nulls last |
+| RPC-BILL-10 | `rpc_admin_get_subscription(subscription_id)` | admin | ✅ (ARS-266) | jsonb { subscription, plan, organization{id,name,bin}, membership_level, payments[20], events[20] } |
+| RPC-BILL-11 | `rpc_admin_list_membership_payments(org_id?, status?, from?, to?, limit?, offset?)` | admin | ✅ (ARS-266) | jsonb { total, sum_succeeded, rows[…payment, org_name, plan_code] } |
+| RPC-BILL-12 | `rpc_admin_record_manual_payment(subscription_id, amount, reference, note)` | admin | ✅ (ARS-267) | jsonb подписка; пишет payment(provider='manual',succeeded, reference+note обязательны), катит период (→active), события payment.succeeded(manual)+renewed(+entitlements.invalidated) |
+| RPC-BILL-13 | `rpc_admin_extend_subscription(subscription_id, days, note)` | admin | ✅ (ARS-267) | jsonb подписка; days 1..90, note обязателен; period_end/next_billing += days; grace/past_due/expired→active; событие extended |
+| RPC-BILL-14 | `rpc_admin_change_subscription_plan(subscription_id, new_plan_code)` | admin | ✅ (ARS-267) | jsonb подписка; plan_code→новый (эффект след. периода, price_snapshot не трогается); событие plan_changed |
+| RPC-BILL-15 | `rpc_resume_org_membership(org_id)` | web, admin | ✅ (ARS-267) | jsonb подписка; cancel_at_period_end→false (undo отмены); guard member-or-admin; идемпотентно; событие resumed |
+| RPC-BILL-16 | `rpc_admin_revoke_membership(org_id, reason)` | admin | ✅ (ARS-267) | jsonb подписка; дисциплинарный терминал state→'revoked' (MS2 D-MEM-5), reason обязателен; события revoked + entitlements.invalidated |
+| RPC-GOV-1 | `rpc_check_feature_access(feature_code, org_id?)` | web, ai | ✅ (0 вызывающих — wiring ARS-269) | jsonb { allowed, reason, upgrade_hint } fail-closed |
+
+**Внутренние функции (§12, не публичный RPC-контракт):**
+`fn_org_membership_active(org_id)→boolean` (ARS-263, канонический мост-предикат членства: живая
+подписка OR legacy level — зовётся TSP-гейтами + admin membership_paid); `fn_charge_membership(...)`
+(stub платёжного провайдера, service_role); `fn_user_platform_tier(user_id)→text` (ось персональной
+подписки governance, placeholder 'free' до PlatformSubscription).
+
+**Admin-ops write (итерация 2, ARS-267) — построены** (RPC-BILL-12..16, eng-spec §2.2): все
+`SECURITY DEFINER`, guard внутри (`fn_is_admin()`; resume — member-or-admin), ACL `revoke from public, anon`
++ grant authenticated/service_role, в `rpc_name_registry`. Дисциплинарный `revoked` — новое терминальное
+состояние FSM (CEO D-BILL-REVOKE-01). Read-часть (§2.1, RPC-BILL-9..11) построена ARS-266.
+
+---
+
 ## 2. Identity — Идентификация и членство
 
 ### RPC-01 `rpc_register_organization` [WEB] [AI] 📋 Planned

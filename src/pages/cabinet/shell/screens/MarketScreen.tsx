@@ -12,6 +12,7 @@ import { TabHead } from '../components/TabHead'
 import { PhIcon } from '../components/icons/PhIcon'
 import { BatchCard } from '../components/BatchListCard'
 import { ScreenSkeleton } from '../components/ScreenSkeleton'
+import { DemandBoard } from '../components/DemandBoard'
 
 // тизер-гейт «Продаю» (shell/market.jsx SellGate) — для не-членов; вне прототипа, стиль сохранён
 function SellGate({ membership, onApply }: { membership: MembershipStatus; onApply: () => void }) {
@@ -34,15 +35,15 @@ function SellGate({ membership, onApply }: { membership: MembershipStatus; onApp
   )
 }
 
-// Плашка оформления членства: заявка одобрена, но взнос не оплачен (TSP-вход в оплату).
+// Плашка оформления членства: заявка одобрена, подписка ещё не оформлена (TSP-вход в оплату).
 function ApprovedPlate({ onPay }: { onPay: () => void }) {
   return (
     <div className="sell-gate">
       <div className="sg-t">Заявка одобрена — оформите членство</div>
       <div className="sg-note" style={{ marginBottom: 10 }}>
-        Ассоциация одобрила вашу заявку. Оплатите членский взнос, чтобы оформить членство и открыть продажу партий.
+        Ассоциация одобрила вашу заявку. Оформите подписку, чтобы открыть продажу партий — первый период бесплатно.
       </div>
-      <button className="mk-cta primary" onClick={onPay}>Оплатить взнос</button>
+      <button className="mk-cta primary" onClick={onPay}>Оформить подписку</button>
     </div>
   )
 }
@@ -56,9 +57,13 @@ interface Props {
   onPay: () => void
   go: (r: Route) => void
   onRefresh?: () => Promise<unknown>   // S2: pull-to-refresh (spec §7)
+  orgId?: string | null                // ARS-229: доска спроса МПК (обезличенный агрегат)
+  /** D2 (офлайн-чтение): сбой загрузки при пустом кеше — ошибка+retry, не «нет партий». */
+  error?: string | null
+  onRetry?: () => void
 }
 
-export function MarketScreen({ membership, batches, loading, onNew, onApply, onPay, go, onRefresh }: Props) {
+export function MarketScreen({ membership, batches, loading, onNew, onApply, onPay, go, onRefresh, orgId, error, onRetry }: Props) {
   const isGate = gated(membership)
   const approved = membership === 'approved'
   const expired = membership === 'expired'
@@ -105,12 +110,14 @@ export function MarketScreen({ membership, batches, loading, onNew, onApply, onP
                 <span className="badge"><i />{expired ? 'Членство истекло' : 'Льготный период'}</span>
                 <div className="mk-grace-t">
                   {expired
-                    ? 'Текущие сделки можно довести до конца. Для новых партий — продлите членский взнос.'
+                    ? 'Текущие сделки можно довести до конца. Для новых партий — оформите подписку.'
                     : 'Продажа доступна — продлите членство, чтобы не прерывать работу.'}
                 </div>
                 <button className="mk-grace-b" onClick={onPay}>Продлить членство</button>
               </div>
             )}
+
+            <DemandBoard orgId={orgId} />
 
             {nAll > 0 && (
               <div className="mk-tabs">
@@ -122,7 +129,16 @@ export function MarketScreen({ membership, batches, loading, onNew, onApply, onP
               </div>
             )}
 
-            {nAll === 0 ? (
+            {nAll === 0 && error ? (
+              // D2 (офлайн-чтение): пустой кеш из-за сбоя — честная ошибка + «Повторить»,
+              // а не ложное «Пока нет ни одной партии».
+              <div className="mk-empty">
+                <div className="mk-empty-art"><PhIcon name="alert" size={46} /></div>
+                <div className="mk-empty-h">Не удалось загрузить партии</div>
+                <div className="mk-empty-t">Проверьте связь и попробуйте ещё раз.</div>
+                {onRetry && <button className="mk-cta primary" onClick={onRetry}>Повторить</button>}
+              </div>
+            ) : nAll === 0 ? (
               <div className="mk-empty">
                 <div className="mk-empty-art"><PhIcon name="market" size={46} /></div>
                 <div className="mk-empty-h">Пока нет ни одной партии</div>

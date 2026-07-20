@@ -27,6 +27,7 @@ export function createWebHost(): AgOSHost {
 
     onDeepLink() {
       // Deep-link на web = обычная URL-навигация, её обрабатывает react-router.
+      return () => {}
     },
 
     caps: { haptics: false, camera: false, secureStorage: false, statusBar: false },

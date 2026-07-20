@@ -881,7 +881,8 @@ insert into storage.buckets (id, name, public)
 values
   ('news-covers',           'news-covers',           true),
   ('startup-decks',         'startup-decks',         false),
-  ('membership-documents',  'membership-documents',  false)
+  ('membership-documents',  'membership-documents',  false),
+  ('batch-media',           'batch-media',           false)
 on conflict (id) do nothing;
 
 -- news-covers: public read, authenticated write
@@ -924,6 +925,20 @@ set search_path = public, pg_temp as $$
         when (storage.foldername(object_name))[1] ~
              '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
         then (storage.foldername(object_name))[1]::uuid
+        else null
+    end;
+$$;
+
+-- fn_storage_batch_id: SECOND path segment of a Storage object name, as uuid (ARS-229).
+-- For batch-media the convention is {orgId}/{batchId}/{uuid}.{ext} → segment [2] = batchId.
+-- Fails closed (null on malformed) like fn_storage_org_id, so RLS can't be tripped into error.
+create or replace function public.fn_storage_batch_id(object_name text)
+returns uuid language sql immutable
+set search_path = public, pg_temp as $$
+    select case
+        when (storage.foldername(object_name))[2] ~
+             '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        then (storage.foldername(object_name))[2]::uuid
         else null
     end;
 $$;
@@ -972,3 +987,262 @@ create policy "membership_documents_delete_admin"
   on storage.objects for delete
   to authenticated
   using (bucket_id = 'membership-documents' and public.fn_is_admin());
+
+-- batch-media (ARS-227 + ARS-229 reveal): private, org-scoped write/delete; admin full access.
+-- Path convention: batch-media/{orgId}/{batchId}/{uuid}.{ext} — segment[1]=owner org, [2]=batch.
+-- Write/delete = owner + admin only (aggregate-only, Art.171). READ additionally allows the
+-- matched MPK AFTER reveal (fn_batch_revealed_to_me, d02, D-M6-5/12) — never before the deal.
+drop policy if exists "batch_media_insert_org" on storage.objects;
+create policy "batch_media_insert_org"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'batch-media'
+    and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
+  );
+
+drop policy if exists "batch_media_select_org" on storage.objects;
+create policy "batch_media_select_org"
+  on storage.objects for select
+  to authenticated
+  using (
+    bucket_id = 'batch-media'
+    and (
+      public.fn_is_admin()
+      or public.fn_storage_org_id(name) = any(public.fn_my_org_ids())
+      or public.fn_batch_revealed_to_me(public.fn_storage_batch_id(name))  -- ARS-229: matched MPK, post-reveal
+    )
+  );
+
+drop policy if exists "batch_media_update_org" on storage.objects;
+create policy "batch_media_update_org"
+  on storage.objects for update
+  to authenticated
+  using (
+    bucket_id = 'batch-media'
+    and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
+  )
+  with check (
+    bucket_id = 'batch-media'
+    and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
+  );
+
+drop policy if exists "batch_media_delete_org" on storage.objects;
+create policy "batch_media_delete_org"
+  on storage.objects for delete
+  to authenticated
+  using (
+    bucket_id = 'batch-media'
+    and (public.fn_is_admin() or public.fn_storage_org_id(name) = any(public.fn_my_org_ids()))
+  );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 8. HOME BANNERS (in-app promo — Кабинет фермера + МПК)
+--    Управляемый контент Главной без деплоя (P8). Калька паттерна news_articles.
+--    Eng-spec: Docs/AGOS-Slice-AppBanners.md · Brain: projects/agos/specs/app-banners
+--    НЕ per-organization: общий ассоциативный контент, split по app + membership_variant.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+create table if not exists public.home_banners (
+  id                 uuid        not null default gen_random_uuid() primary key,
+  app                text        not null check (app in ('farmer','mpk')),
+  title              text        not null,               -- крупный текст плитки
+  subtitle           text,                               -- подпись / лейбл CTA
+  kicker             text,                               -- мелкий верхний лейбл («ЦЕНЫ TURAN»)
+  image_path         text,                               -- фон: asset-ключ ('banner-prices') ИЛИ https-URL
+  icon               text,                               -- Phosphor-ключ (fallback без картинки)
+  tone               text        not null default 'neutral'
+                                 check (tone in ('gold','green','neutral')),
+  action_type        text        not null default 'none'
+                                 check (action_type in ('internal','external','none')),
+  action_target      text,                               -- internal: enum-ключ; external: https-URL; none: NULL
+  membership_variant text        not null default 'all'
+                                 check (membership_variant in ('all','season','campaign','join')),
+  sort_order         int         not null default 0,
+  active_from        timestamptz,                        -- NULL = без нижней границы
+  active_until       timestamptz,                        -- NULL = бессрочно; иначе актуальность уходит авто
+  is_active          boolean     not null default true,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now(),
+  -- internal → action_target обязателен; none → должен быть пуст
+  constraint home_banners_action_target_chk check (
+    (action_type = 'none'     and action_target is null)
+    or (action_type = 'internal' and action_target is not null)
+    or (action_type = 'external' and action_target is not null)
+  )
+);
+
+create index if not exists idx_home_banners_live
+  on public.home_banners (app, is_active, sort_order);
+
+drop trigger if exists set_home_banners_updated_at on public.home_banners;
+create trigger set_home_banners_updated_at
+  before update on public.home_banners
+  for each row execute function public.update_updated_at_column();
+
+alter table public.home_banners enable row level security;
+
+-- чтение живых баннеров — любому аутентифицированному (фильтр окна делает клиентский RPC)
+drop policy if exists "home_banners_select_live" on public.home_banners;
+create policy "home_banners_select_live"
+  on public.home_banners for select
+  using (is_active = true);
+
+drop policy if exists "home_banners_select_admin" on public.home_banners;
+create policy "home_banners_select_admin"
+  on public.home_banners for select
+  to authenticated
+  using (public.fn_is_admin() or public.fn_is_expert());
+
+drop policy if exists "home_banners_insert_admin" on public.home_banners;
+create policy "home_banners_insert_admin"
+  on public.home_banners for insert
+  to authenticated
+  with check (public.fn_is_admin() or public.fn_is_expert());
+
+drop policy if exists "home_banners_update_admin" on public.home_banners;
+create policy "home_banners_update_admin"
+  on public.home_banners for update
+  to authenticated
+  using (public.fn_is_admin() or public.fn_is_expert())
+  with check (public.fn_is_admin() or public.fn_is_expert());
+
+drop policy if exists "home_banners_delete_admin" on public.home_banners;
+create policy "home_banners_delete_admin"
+  on public.home_banners for delete
+  to authenticated
+  using (public.fn_is_admin());
+
+-- Client read RPC: активные баннеры приложения в окне now(), с учётом варианта членства.
+create or replace function public.rpc_list_home_banners(
+  p_app                text,
+  p_membership_variant text default 'all'
+)
+returns setof public.home_banners
+language sql stable security definer set search_path = public as $$
+  select *
+  from public.home_banners
+  where app = p_app
+    and is_active = true
+    and (active_from  is null or active_from  <= now())
+    and (active_until is null or active_until >= now())
+    and (membership_variant = 'all' or membership_variant = p_membership_variant)
+  order by sort_order asc, created_at asc;
+$$;
+
+-- Admin RPCs (SECURITY DEFINER — bypass RLS; guard внутри, least-privilege).
+
+create or replace function public.admin_list_home_banners(p_app text default null)
+returns setof public.home_banners
+language plpgsql security definer set search_path = public as $$
+begin
+  if not (public.fn_is_admin() or public.fn_is_expert()) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  return query
+    select * from public.home_banners
+    where (p_app is null or app = p_app)
+    order by app asc, sort_order asc, created_at asc;
+end;
+$$;
+
+create or replace function public.admin_save_home_banner(
+  p_id                 uuid        default null,
+  p_app                text        default null,
+  p_title              text        default null,
+  p_subtitle           text        default null,
+  p_kicker             text        default null,
+  p_image_path         text        default null,
+  p_icon               text        default null,
+  p_tone               text        default 'neutral',
+  p_action_type        text        default 'none',
+  p_action_target      text        default null,
+  p_membership_variant text        default 'all',
+  p_sort_order         int         default 0,
+  p_active_from        timestamptz default null,
+  p_active_until       timestamptz default null,
+  p_is_active          boolean     default true
+)
+returns public.home_banners
+language plpgsql security definer set search_path = public as $$
+declare
+  v_row public.home_banners;
+begin
+  if not (public.fn_is_admin() or public.fn_is_expert()) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  if p_id is null then
+    insert into public.home_banners (
+      app, title, subtitle, kicker, image_path, icon, tone,
+      action_type, action_target, membership_variant, sort_order,
+      active_from, active_until, is_active
+    ) values (
+      p_app, p_title, p_subtitle, p_kicker, p_image_path, p_icon, p_tone,
+      p_action_type, p_action_target, p_membership_variant, p_sort_order,
+      p_active_from, p_active_until, p_is_active
+    )
+    returning * into v_row;
+  else
+    update public.home_banners set
+      app                = coalesce(p_app, app),
+      title              = coalesce(p_title, title),
+      subtitle           = p_subtitle,
+      kicker             = p_kicker,
+      image_path         = p_image_path,
+      icon               = p_icon,
+      tone               = coalesce(p_tone, tone),
+      action_type        = coalesce(p_action_type, action_type),
+      action_target      = p_action_target,
+      membership_variant = coalesce(p_membership_variant, membership_variant),
+      sort_order         = coalesce(p_sort_order, sort_order),
+      active_from        = p_active_from,
+      active_until       = p_active_until,
+      is_active          = coalesce(p_is_active, is_active)
+    where id = p_id
+    returning * into v_row;
+  end if;
+
+  return v_row;
+end;
+$$;
+
+create or replace function public.admin_toggle_home_banner(
+  p_id        uuid,
+  p_is_active boolean
+)
+returns public.home_banners
+language plpgsql security definer set search_path = public as $$
+declare
+  v_row public.home_banners;
+begin
+  if not (public.fn_is_admin() or public.fn_is_expert()) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  update public.home_banners set is_active = p_is_active
+  where id = p_id
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+-- Сид текущих 4 фермер-баннеров (HS-2 — не регрессируем визуально). Идемпотентно:
+-- заливаем только если для app='farmer' ещё ничего нет.
+insert into public.home_banners
+  (app, kicker, title, subtitle, image_path, tone, action_type, action_target, membership_variant, sort_order)
+select * from (values
+  ('farmer', 'ЧЛЕНСТВО TURAN', 'Членство TURAN',            'Подать заявку →',            'banner-membership', 'gold',    'internal', 'join_membership', 'join', 1),
+  ('farmer', 'КУРС TURAN',     'Курс TURAN: сезон отёла',   'Открыть курс',               'banner-course',     'green',   'internal', 'open_course',     'all',  2),
+  ('farmer', 'ЦЕНЫ TURAN',     'Справочные цены',           'Открыть справочные цены',    'banner-prices',     'green',   'internal', 'open_prices',     'all',  3),
+  ('farmer', 'МАРКЕТ',         'Маркет · скоро',            'Скоро с партнёрами TURAN',   'banner-market',     'neutral', 'none',     null,              'all',  4)
+) as seed(app, kicker, title, subtitle, image_path, tone, action_type, action_target, membership_variant, sort_order)
+where not exists (select 1 from public.home_banners where app = 'farmer');
+
+-- rpc_name_registry entries (D-NEW-A: canonical name = registry row)
+insert into public.rpc_name_registry (sql_name, dok3_name, created_in, notes) values
+    ('rpc_list_home_banners',    'rpc_list_home_banners',    'd10_public_site.sql (App Banners)', 'Client read: активные баннеры app в окне now() + вариант членства'),
+    ('admin_list_home_banners',  'admin_list_home_banners',  'd10_public_site.sql (App Banners)', 'Admin list всех баннеров (guard expert/admin)'),
+    ('admin_save_home_banner',   'admin_save_home_banner',   'd10_public_site.sql (App Banners)', 'Admin upsert баннера (id NULL → insert)'),
+    ('admin_toggle_home_banner', 'admin_toggle_home_banner', 'd10_public_site.sql (App Banners)', 'Admin переключение is_active')
+on conflict (sql_name) do update
+    set dok3_name = excluded.dok3_name, notes = excluded.notes, created_in = excluded.created_in;
