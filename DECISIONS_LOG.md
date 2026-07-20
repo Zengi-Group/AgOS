@@ -4381,3 +4381,20 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Linear**: ARS-195/196/197/198/199 → Done; ARS-201 (QA) остаётся In Review — остался preview golden-path под админ-логином + негативные FSM-кейсы под админ-JWT (`tests/tsp_admin_rpc_test.sql` против прода не гонялся). ARS-194 (родитель) — In Review до ARS-201.
 
 **Files**: изменений кода нет (деплой канона); prod migration `ars195_198_admin_tsp_write_rpcs`; эта запись.
+
+---
+
+### 2026-07-21: d12-дельта messaging + push-стек — деплой на прод (закрыты deploy-gaps №2 и №3)
+
+**What**: По «го» CEO закрыты два оставшихся deploy-gap'а сверки 2026-07-20 (все дельты = канон дословно):
+- **Миграция `messaging_rls_helper_and_race_fix`** (ARS-223, review-фиксы мержа #98): `fn_my_channel_ids()` (SECURITY DEFINER) + 7 политик comm_channels/participants/messages переписаны на хелпер (разрыв взаимной RLS-рекурсии 42P17 для прямых PostgREST-select/Realtime — пре-реквизит фронт-мержа ARS-225) + race-фикс `rpc_get_or_create_support_channel` (unique_violation → перечитать канал).
+- **Миграция `ars139_140_push_token_stack`** (ARS-139/140): таблица `push_token` + 2 индекса + RLS + 3 политики (read/insert/update own) + `rpc_register_push_token` / `rpc_revoke_push_token` + registry. Индексы с `if not exists` (в d01 без него — нит канона, идемпотентность миграции).
+- **Edge-функция `push-send` v1** (ARS-141) задеплоена, ACTIVE, `verify_jwt=true` (воркер зовёт с service-key Bearer — совместимо). Env-guarded: FCM/APNS-ключи НЕ сконфигурированы → тихий skip по дизайну; секреты — при store-релизе.
+
+**Why**: (1) без `fn_my_channel_ids` мерж фронта ARS-225 дал бы 42P17 на Realtime/select; (2) клиент регистрации токенов (ARS-151) влит и на проде бился об отсутствующую таблицу/RPC; ARS-139/141 числились Done при отсутствующих прод-артефактах.
+
+**Verify**: хелпер prosecdef=1; политики на хелпере = 3, всего comm-политик 7; race-marker (`unique_violation` в prosrc) = true; `push_token` RLS=on, политик 3, RPC 2 (SECURITY DEFINER), registry 2/2; данные целы (каналов 1, сообщений 0, токенов 0); edge в списке функций ACTIVE v1. Прим.: два первых прогона миграций заблокировал auto-mode классификатор Claude Code (policy-DDL на проде) — применено после явного одобрения CEO (вариант 2).
+
+**Хвосты**: RLS-тест орг A≠B по comm_* под authenticated-JWT (приёмка ARS-223) и боевой пуш через воркер (ARS-224, Railway) — не гонялись; FCM/APNS-секреты не заданы. Linear: ARS-223 → In Review, ARS-151 → In Review, комменты в 224/225.
+
+**Files**: изменений кода нет (деплой канона d12/d01 + supabase/functions/push-send); prod migrations `messaging_rls_helper_and_race_fix`, `ars139_140_push_token_stack`; edge `push-send` v1; эта запись.
