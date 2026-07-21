@@ -4533,3 +4533,24 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Осталось**: тела Обзор/Задачи/Стадо строят F5–F9 (ARS-281..285); внешний deep-link в под-таб — F10 (ARS-286). G3 (merge/deploy Vercel) — CEO.
 
 **Files**: `src/pages/cabinet/shell/farm/tabs.ts` (new), `src/pages/cabinet/shell/screens/FarmScreen.tsx` (+82/−7), эта запись.
+
+---
+
+### 2026-07-21: Разбор «прод-флейков» из ARS-280 QA — 2 независимых корня, не один
+
+**What**: Systematic-debugging разбор двух симптомов, замеченных при QA ARS-280 (см. запись выше). Вывод: **это два независимых дефекта**, не общий корень, как предполагалось изначально.
+- **Симптом B (`seed_farmer.mjs` падал на `listUsers`) — подтверждено логами auth-сервиса**: `admin.auth.admin.listUsers()` сканирует ВСЮ таблицу `auth.users` постранично и падает целиком с `"Database error finding users"` / `"Scan error on column index 3, name confirmation_token: converting NULL to string is unsupported"`, если ХОТЬ ОДНА строка в таблице битая — фильтр по телефону клиентской стороной не спасает. Виновны 3 несвязанные мусорные строки (`Ернур`/`Ручной`/`fdsffsdfsdfsdf`, телефоны `+7707555xxxx`, созданы 2026-06-29 в обход обычного GoTrue signup — `+` в поле `phone` вместо нормализованного вида, NULL вместо `''` в `confirmation_token`/`recovery_token`/`email_change_token_new`/`email_change`, 0 org-ролей). Строка QA-фермера (`ab60a661…`) — чистая, не источник. Реальные фермеры не затронуты: обычный логин (`/token`, password-grant) — точечный запрос по одной строке, `listUsers` не вызывает.
+- **Симптом A (`Failed to load user context` в консоли для QA-фермера) — корень НЕ найден на уровне БД**: задеплоенный `rpc_get_my_context` сверен байт-в-байт с `d01_kernel.sql` (канон) — совпадает, `org_types` уже массив (старый флаг-комментарий в `account.ts` устарел, дефект вида «SQL≠деплой» здесь более не воспроизводится). `fn_current_user_id`/`fn_is_admin`/`fn_is_expert` не трогают `auth.users` — связи с симптомом B нет. Postgres-логи (24ч) и PostgREST-логи (recent window) не содержат ни одной ошибки `rpc_get_my_context` — сбой либо транзиентный (сетевой/гонка обновления токена при перезагрузке), либо целиком на клиенте, воспроизвести детерминированно не удалось. Найден усугубляющий фактор диагностируемости: `loadMyContext()` (`account.ts`) глотала ошибку RPC в `null` без единого лога — в отличие от параллельной реализации в `AuthContext.tsx` (та же RPC, но `console.error`), из-за чего для `FarmScreen`-пути (использует `account.ts`) сбой был неотличим от «просто пустой профиль».
+
+**Why**: следовать процессу systematic-debugging (не патчить симптом до root cause) выявило, что задача была сформулирована с ложной посылкой «вероятно один корень» — два симптома лечатся независимо, и было бы ошибкой чинить один в расчёте на то, что «чинится заодно» второй.
+
+**Fix (аддитивно, HS-1/5)**:
+1. `scripts/seed_farmer.mjs` (`findAuthUserByPhone`) и `scripts/seed_admin.mjs` (`findAuthUserByEmail`, тот же паттерн бага, L-2) — добавлен fast-path через `public.users.phone`/`.email` → `admin.auth.admin.getUserById()` (точечный запрос, не подвержен полному скану); старый пагинированный `listUsers()` оставлен как фолбэк, но обёрнут в try/catch — битая строка в будущем больше не валит весь сид.
+2. `src/lib/account.ts` (`loadMyContext`) — добавлен `console.error` реальной ошибки RPC перед возвратом `null` (было: тихо). Поведение (null при ошибке) не изменено. Устаревший комментарий про `org_types`-дефект обновлён на «проверено 2026-07-21, задеплой уже соответствует канону».
+3. **auth.users, с явным подтверждением CEO** (HARD STOP — не трогать auth-данные без confirm): `UPDATE auth.users SET confirmation_token/recovery_token/email_change_token_new/email_change = coalesce(…, '')` на 3 мусорных строках (id `63d002b4…`/`ae473945…`/`1a2d1a82…`). Аккаунты не удалены (0 org-ролей, безопасно, но удаление не выбрано). Подтверждено: 0 строк с NULL в этих колонках осталось в `auth.users`.
+
+**Verify**: `node --check` на обоих скриптах ✅, `tsc --noEmit` без новых ошибок в `account.ts` ✅. Живой прогон `node scripts/seed_farmer.mjs` — НЕ выполнен (в этом воркетри нет `.env`/`SUPABASE_SERVICE_ROLE_KEY`, окружение изолировано от секретов); рекомендуется прогнать один раз из окружения с реальным `.env`. Симптом A: фикс — только логирование (диагностируемость), поведенческий баг не подтверждён и не воспроизведён детерминированно — «стабильно на N перезагрузок без ошибки» не проверялось живым браузером в этой сессии.
+
+**Осталось**: если симптом A повторится — теперь он будет виден в консоли из `account.ts` (не только из `AuthContext.tsx`), что позволит поймать конкретную ошибку PostgREST/сети в момент сбоя вместо повторной догадки.
+
+**Files**: `scripts/seed_farmer.mjs`, `scripts/seed_admin.mjs`, `src/lib/account.ts`, прод-БД (`auth.users`, 3 строки — вне репо-файлов), эта запись.

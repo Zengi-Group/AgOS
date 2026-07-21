@@ -40,16 +40,21 @@ export interface MyContext {
 // Читает контекст текущего пользователя. null = не авторизован / нет данных / бэкенд недоступен.
 export async function loadMyContext(): Promise<MyContext | null> {
   const { data, error } = await supabase.rpc('rpc_get_my_context')
-  if (error || !data) return null
+  if (error) {
+    // 2026-07-21 (ARS-280 QA, «Failed to load user context»): раньше ошибка глоталась в null
+    // без следа — сбой RPC был неотличим в логах от «не авторизован». Логируем, поведение
+    // (null при ошибке) не меняем.
+    console.error('loadMyContext: rpc_get_my_context error:', error)
+    return null
+  }
+  if (!data) return null
   const ctx = data as Partial<MyContext>
   if (!ctx.user_id) return null
   return {
     user_id: ctx.user_id,
-    // Нормализуем org_types: задеплоенный rpc_get_my_context может возвращать
-    // либо org_types (массив, версия из d01_kernel.sql), либо org_type (строка,
-    // более старая версия в БД). Без этого o.org_types.includes(...) в
-    // loadAccountProfile падал с TypeError → профиль null → кабинет уходил в демо.
-    // ДЕФЕКТ (SQL≠деплой): выровнять задеплоенный RPC под d01 (org_types массив).
+    // Нормализация org_types оставлена как защитный слой на случай будущего разъезда
+    // SQL≠деплой (проверено 2026-07-21: задеплоенный rpc_get_my_context уже возвращает
+    // org_types массивом, как в d01_kernel.sql — прежний ДЕФЕКТ здесь устарел/почищен).
     organizations: (ctx.organizations ?? []).map((o) => {
       const raw = o as MyOrg & { org_type?: string | null }
       const types = Array.isArray(raw.org_types)
