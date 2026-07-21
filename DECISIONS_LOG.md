@@ -11,9 +11,11 @@
 
 **Verify**: тело `_fn_farm_attention` и `rpc_get_farm_overview` снято с прод `pg_proc` (`mwtbozflyldcadypherr`) через MCP — байт-в-байт совпало с `d05_ops_edu.sql` (нет тихого L-1 отката) и с union-ветками 1–4 (open_animal/open_window/reschedule_today/open_resources). Шипнутый F5 `OverviewScreen.tsx` ATT_LABEL + switch = те же 4; today-строка рендерит heads/«по отклонению»/window_end/due_time (без СОП/исполнителя).
 
-**Consequences**: закрыт дрейф Slice8 §2.2 ↔ deployed RPC (memory `agos-farm2-ui-build-order`). Открыто (F6/ARS-282, вне скоупа): EngSpec §2.5 обещает в неделе `sop_code` + `assigned_to_name`, а deployed `rpc_get_tasks_horizon.week` отдаёт `assigned_to` (uuid) и НЕ отдаёт `sop_code` → флаг для реконсиляции при F6.
+**Consequences**: закрыт дрейф Slice8 §2.2 ↔ deployed RPC (memory `agos-farm2-ui-build-order`).
 
-**Files**: `Docs/AGOS-Dok6-Slice8-Ferma2-OpsCabinet.md` (§2.2, §2.3), `Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md` (§2.7). Канон-только, кода не трогали.
+**Решения CEO (2026-07-21):** **(1)** Модель Обзора ратифицирована как есть — «Обзор только сигналит; Осмотр/Ветврачу — на Обходе (SCR-WK) и в карточке животного»; #132 корректен, `inspect`/`to_vet` в RPC Обзора НЕ возвращаются (осознанный дизайн, не урезание). **(2)** Дрейф Недели (F6): НЕ ослаблять спеку — **достроить `rpc_get_tasks_horizon.week` под §2.5/§2.3** (вернуть `sop_code` + `assigned_to_name`) при постройке F6/ARS-282; трек = `IMPL_DEBT.md` OPERATIONS-06. Спека→код, живого дрейфа ещё нет (экран не построен). **(3)** Принято правило **D-RPC-CONTRACT-SYNC-01** (CLAUDE.md §Code Rules/RPC): расхождение формы JSON RPC ↔ Dok/EngSpec чинится в ТОМ ЖЕ PR (код или док+DECISIONS_LOG), не «реконсиляцией потом» — корень этого дрейфа.
+
+**Files**: `Docs/AGOS-Dok6-Slice8-Ferma2-OpsCabinet.md` (§2.2, §2.3), `Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md` (§2.7), `CLAUDE.md` (+D-RPC-CONTRACT-SYNC-01), `IMPL_DEBT.md` (+OPERATIONS-06). Канон/правила-только, кода не трогали.
 
 ---
 
