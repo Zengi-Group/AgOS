@@ -3499,9 +3499,18 @@ begin
     -- ── 5. BATCH INSERT: все FarmTask за один запрос ─────────
     -- D-NEW-4: Заменяет вложенный FOR loop (N×M individual INSERTs → 1 batch INSERT).
     -- JOIN: farm_phases(plan_id=v_plan_id) → task_templates(phase_template_id)
+    -- D141 (ARS-279): окна-задачи генерируются здесь (аддитивно к D-NEW-4 batch INSERT).
+    -- window_duration_days is not null → window_start = phase.start + offset,
+    -- window_end = window_start + (duration-1) [inclusive — конвенция фаз, ср. farm_phases
+    -- end = start + duration-1], head_count_planned = head_count группы фазы на момент генерации,
+    -- due_date = window_end (инвариант farm_tasks_window_due_check). Точечная задача
+    -- (window_duration_days null) сохраняет прежнее поведение: window_* = null,
+    -- due_date = phase.start + offset. Пока ни один task_template не задаёт window_duration_days
+    -- (контент — ARS-172) ветка окна = no-op → генерация существующих планов байт-идентична.
     insert into public.farm_tasks (
         farm_phase_id, organization_id, task_template_id,
-        name_ru, category, due_date, status, erp_sync
+        name_ru, category, due_date, status, erp_sync,
+        window_start, window_end, head_count_planned
     )
     select
         fp.id,
@@ -3509,15 +3518,44 @@ begin
         tt.id,
         tt.name_ru,
         tt.category,
-        fp.start_date + coalesce(tt.offset_from_phase_start_days, 0),
+        case when tt.window_duration_days is not null
+             then fp.start_date + coalesce(tt.offset_from_phase_start_days, 0) + (tt.window_duration_days - 1)
+             else fp.start_date + coalesce(tt.offset_from_phase_start_days, 0)
+        end,
         'scheduled',
-        coalesce(tt.erp_sync_required, false)
+        coalesce(tt.erp_sync_required, false),
+        case when tt.window_duration_days is not null
+             then fp.start_date + coalesce(tt.offset_from_phase_start_days, 0) end,
+        case when tt.window_duration_days is not null
+             then fp.start_date + coalesce(tt.offset_from_phase_start_days, 0) + (tt.window_duration_days - 1) end,
+        case when tt.window_duration_days is not null
+             then (select nullif(hg.head_count, 0) from public.herd_groups hg where hg.id = fp.herd_group_id) end
     from   public.farm_phases fp
     join   public.task_templates tt on tt.phase_template_id = fp.phase_template_id
     where  fp.plan_id = v_plan_id
     order  by fp.start_date, tt.sort_order;
 
     get diagnostics v_tasks_created = row_count;
+
+    -- D141 (ARS-279): prep-линк — подготовительная задача (task_templates.is_prep_for_code)
+    -- ссылается на задачу-окно той же фазы; её due_date = window_start окна (дедлайн = старт
+    -- окна, §5.2). Second-pass UPDATE, т.к. parent_task_id — ссылка на sibling-строку внутри
+    -- одного batch INSERT. Пока is_prep_for_code не засеян (ARS-172) — 0 строк, no-op.
+    update public.farm_tasks prep
+    set    parent_task_id = win.id,
+           due_date       = win.window_start,
+           updated_at     = now()
+    from   public.task_templates tt_prep
+    join   public.task_templates tt_win
+           on tt_win.phase_template_id = tt_prep.phase_template_id
+          and tt_win.code = tt_prep.is_prep_for_code
+    join   public.farm_phases fp_win on fp_win.plan_id = v_plan_id
+    join   public.farm_tasks  win
+           on win.task_template_id = tt_win.id and win.farm_phase_id = fp_win.id
+    where  prep.task_template_id      = tt_prep.id
+      and  prep.farm_phase_id         = fp_win.id
+      and  tt_prep.is_prep_for_code is not null
+      and  win.window_start        is not null;
 
     -- ── 6. BATCH INSERT: все FarmKPI за один запрос ──────────
     -- D-NEW-4: Заменяет отдельный FOR loop KPI (M individual INSERTs → 1 batch INSERT).
@@ -4157,4 +4195,801 @@ values ('rpc_generate_plan_from_profile', 'RPC-33a', null, 'd05_ops_edu.sql (ARS
         'F-D11/F-D14: мост archetype→farm_type + порог генерации + draft-ЦТК из профиля. '
         'Делегирует в rpc_start_production_plan (RPC-33).')
 on conflict (sql_name) do update set notes = excluded.notes, created_in = excluded.created_in;
+
+
+-- ============================================================================
+-- SECTION: ARS-279 — Ферма 2.0 · F3 DB (задачи/окна/цикл)
+-- Канон: Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md §1.5-1.6, §2 (2.7-2.11,2.14), §7.
+-- Аддитивная дельта (P7): движок ЦТК (fn_generate_production_plan / fn_shift_phase_cascade /
+-- fn_preview_cascade / rpc_get_active_plan) НЕ перестраивается. Зависит от F2/ARS-278
+-- (animals/animal_events в d01) — apply order d01→…→d05.
+-- ============================================================================
+
+-- ---- §1.5  farm_tasks — window-семантика + связи (D141) --------------------
+alter table public.farm_tasks
+    add column if not exists window_start       date,
+    add column if not exists window_end         date,
+    add column if not exists head_count_planned int  check (head_count_planned > 0),
+    add column if not exists head_count_done    int  not null default 0 check (head_count_done >= 0),
+    add column if not exists parent_task_id     uuid references public.farm_tasks(id),
+    add column if not exists animal_event_id    uuid references public.animal_events(id),
+    add column if not exists assigned_to        uuid references public.users(id),
+    add column if not exists due_time           time,
+    add column if not exists client_task_id     uuid;
+
+alter table public.farm_tasks drop constraint if exists farm_tasks_window_pair_check;
+alter table public.farm_tasks add constraint farm_tasks_window_pair_check
+    check ( (window_start is null) = (window_end is null)
+            and (window_end is null or window_end >= window_start) );
+-- Инвариант: у задачи-окна due_date = window_end (закрытие окна) — существующие
+-- due_soon/overdue кроны и FSM работают без изменений.
+alter table public.farm_tasks drop constraint if exists farm_tasks_window_due_check;
+alter table public.farm_tasks add constraint farm_tasks_window_due_check
+    check ( window_end is null or due_date = window_end );
+create index if not exists idx_farm_tasks_window on public.farm_tasks (window_end)
+    where window_start is not null and status not in ('completed','skipped');
+create index if not exists idx_farm_tasks_event  on public.farm_tasks (animal_event_id) where animal_event_id is not null;
+create unique index if not exists uq_farm_tasks_client
+    on public.farm_tasks (client_task_id) where client_task_id is not null;
+
+comment on column public.farm_tasks.window_start is
+    'D141 (ARS-279): задача-окно = массовая задача над группой с диапазоном дат. Источник —
+     derived (P4): task_template_id → cycle · animal_event_id → deviation · оба null → manual.';
+
+-- ---- §1.6  task_templates — окно в шаблоне (контент — ARS-172) --------------
+alter table public.task_templates
+    add column if not exists window_duration_days int check (window_duration_days > 0),
+    add column if not exists is_prep_for_code     text;
+comment on column public.task_templates.window_duration_days is
+    'D141 (ARS-279): not null → генератор создаёт задачу-окно (window_start/end, head_count_planned).
+     is_prep_for_code → подготовительная задача с parent_task_id + due_date = window_start окна.';
+
+-- ---- §7  fn_feed_days_left — дни запаса (D143), внутренняя (экспозиция 2.12/F12) ----
+create or replace function public.fn_feed_days_left(
+    p_farm_id        uuid,
+    p_today          date default current_date,
+    p_threshold_days int  default 14
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_today     date := coalesce(p_today, current_date);
+    v_threshold int  := coalesce(p_threshold_days, 14);
+    v_season    text;
+    v_farm_type text;
+    v_result    jsonb;
+begin
+    -- Сезон v1: маппинг месяца (константа, override-кандидат P8 §7)
+    v_season := case
+        when extract(month from v_today) in (11,12,1,2,3) then 'winter'
+        when extract(month from v_today) in (6,7,8,9)     then 'summer'
+        else 'transition'
+    end;
+    -- ⚠️ КОНФЛИКТ (flagged, IMPL_DEBT FEED-VOCAB-01): fn_activity_to_farm_type даёт словарь
+    -- cow_calf/finishing/combined/breeding, а feed_consumption_norms.farm_type =
+    -- beef_reproducer/feedlot/sheep_goat. Прямой маппинг архетип→норм-словарь (v1, до решения CEO).
+    v_farm_type := case public.fn_derive_farm_archetype(p_farm_id)
+        when 'cow_calf'  then 'beef_reproducer'
+        when 'mixed'     then 'beef_reproducer'
+        when 'finishing' then 'feedlot'
+        else null
+    end;
+
+    with groups as (
+        select hg.id, hg.animal_category_id, coalesce(hg.head_count,0) as head_count
+        from public.herd_groups hg
+        where hg.farm_id = p_farm_id and hg.is_active and coalesce(hg.head_count,0) > 0
+    ),
+    -- Priority 1: активный рацион группы → текущая версия → items[].quantity_kg_per_day
+    p1 as (
+        select g.id as group_id, g.head_count,
+               (it->>'feed_item_id')::uuid           as feed_item_id,
+               (it->>'quantity_kg_per_day')::numeric as kg_per_day
+        from   groups g
+        join   public.rations r
+               on r.herd_group_id = g.id and r.status = 'active' and r.farm_id = p_farm_id
+        join   public.ration_versions rv on rv.ration_id = r.id and rv.is_current
+        cross  join lateral jsonb_array_elements(rv.items) as it
+        where  (it ? 'feed_item_id') and (it ? 'quantity_kg_per_day')
+    ),
+    p1_groups as (select distinct group_id from p1),
+    -- Priority 2: нормы (для групп БЕЗ активного рациона) → items[].kg_per_day
+    p2 as (
+        select g.id as group_id, g.head_count,
+               (it->>'feed_item_id')::uuid as feed_item_id,
+               (it->>'kg_per_day')::numeric as kg_per_day
+        from   groups g
+        join   public.feed_consumption_norms fcn
+               on fcn.farm_type = v_farm_type
+              and fcn.animal_category_id = g.animal_category_id
+              and fcn.season = v_season
+              and fcn.valid_from <= v_today
+              and (fcn.valid_to is null or fcn.valid_to >= v_today)
+        cross  join lateral jsonb_array_elements(fcn.items) as it
+        where  v_farm_type is not null
+          and  g.id not in (select group_id from p1_groups)
+          and  (it ? 'feed_item_id') and (it ? 'kg_per_day')
+    ),
+    combined as (
+        select feed_item_id, sum(kg_per_day * head_count) as daily_kg
+        from ( select feed_item_id, kg_per_day, head_count from p1
+               union all
+               select feed_item_id, kg_per_day, head_count from p2 ) u
+        where feed_item_id is not null
+        group by feed_item_id
+        having sum(kg_per_day * head_count) > 0
+    ),
+    days as (
+        select fi.feed_item_id, fitem.code as feed_code, fitem.name_ru as feed_name,
+               floor(fi.quantity_kg / c.daily_kg)::int as days_left
+        from   public.farm_feed_inventory fi
+        join   combined c on c.feed_item_id = fi.feed_item_id
+        join   public.feed_items fitem on fitem.id = fi.feed_item_id
+        where  fi.farm_id = p_farm_id
+    )
+    select jsonb_build_object(
+        'tracked', (exists(select 1 from public.farm_feed_inventory where farm_id = p_farm_id)
+                    and exists(select 1 from combined)),
+        'min_days_left', (select min(days_left) from days),
+        'signals', coalesce((select jsonb_agg(jsonb_build_object(
+                        'feed_item_id', d.feed_item_id, 'feed', d.feed_name, 'feed_code', d.feed_code,
+                        'days_left', d.days_left, 'buy', (d.days_left < v_threshold)
+                    ) order by d.days_left asc) from days d), '[]'::jsonb),
+        'threshold_days', v_threshold,
+        'season', v_season
+    ) into v_result;
+    return v_result;
+end;
+$$;
+revoke execute on function public.fn_feed_days_left(uuid, date, int) from public, anon;
+comment on function public.fn_feed_days_left(uuid, date, int) is
+    'D143 (ARS-279): дни запаса = quantity_kg ÷ плановый суточный расход. Priority 1 активный
+     рацион → Priority 2 feed_consumption_norms → Priority 3 НЕТ (группа без базы не считается).
+     Внутренняя; зовётся 2.7 (зона Ресурсы) и 2.12/F12. FEED-VOCAB-01: маппинг farm_type flagged.';
+
+-- ---- 2.7  rpc_get_farm_overview — весь экран «Обзор» одним вызовом ----------
+create or replace function public.rpc_get_farm_overview(
+    p_organization_id uuid,
+    p_farm_id         uuid,
+    p_today           date default current_date
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_today   date := coalesce(p_today, current_date);
+    v_plan    record;
+    v_phase   record;
+    v_result  jsonb;
+    v_feed    jsonb;
+    v_cycle   jsonb;
+begin
+    if not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin() or public.fn_is_expert()) then
+        raise exception 'FORBIDDEN: not a member of organization %', p_organization_id using errcode = 'P0001';
+    end if;
+    if not exists (select 1 from public.farms f
+                   where f.id = p_farm_id and f.organization_id = p_organization_id and f.is_active) then
+        raise exception 'FORBIDDEN: farm % does not belong to organization %', p_farm_id, p_organization_id using errcode = 'P0001';
+    end if;
+
+    -- Активный план + текущая фаза
+    select fpp.* into v_plan
+    from public.farm_production_plans fpp
+    where fpp.farm_id = p_farm_id and fpp.organization_id = p_organization_id and fpp.status = 'active'
+    limit 1;
+
+    if v_plan.id is not null then
+        select fp.* into v_phase
+        from public.farm_phases fp
+        where fp.plan_id = v_plan.id and fp.status <> 'skipped'
+          and v_today between fp.start_date and fp.end_date
+        order by fp.start_date limit 1;
+        if v_phase.id is null then  -- между фазами — берём ближайшую будущую/активную
+            select fp.* into v_phase from public.farm_phases fp
+            where fp.plan_id = v_plan.id and fp.status not in ('completed','skipped')
+            order by fp.start_date limit 1;
+        end if;
+
+        v_cycle := jsonb_build_object(
+            'plan_id', v_plan.id, 'no_plan', false, 'draft_plan_id', null,
+            'phase_name', v_phase.name_ru,
+            'day', case when v_phase.id is not null then (v_today - v_phase.start_date) + 1 end,
+            'days_total', case when v_phase.id is not null then (v_phase.end_date - v_phase.start_date) + 1 end,
+            'next_window', (
+                select jsonb_build_object('task_id', ft.id, 'name', ft.name_ru,
+                            'ends_in_days', (ft.window_end - v_today),
+                            'burning', (ft.window_end - v_today) <= 2)
+                from public.farm_tasks ft
+                join public.farm_phases fp2 on fp2.id = ft.farm_phase_id
+                where fp2.plan_id = v_plan.id and ft.window_start is not null
+                  and ft.status not in ('completed','skipped') and ft.window_end >= v_today
+                order by ft.window_end asc limit 1
+            )
+        );
+    else
+        v_cycle := jsonb_build_object(
+            'plan_id', null, 'no_plan', true, 'phase_name', null, 'day', null, 'days_total', null,
+            'next_window', null,
+            'draft_plan_id', (select id from public.farm_production_plans
+                              where farm_id = p_farm_id and organization_id = p_organization_id
+                                and status = 'draft' order by created_at desc limit 1)
+        );
+    end if;
+
+    v_feed := public.fn_feed_days_left(p_farm_id, v_today);
+
+    select jsonb_build_object(
+        'as_of', now(),
+        'herd', jsonb_build_object(
+            'total', coalesce((select sum(head_count) from public.herd_groups where farm_id = p_farm_id and is_active),0),
+            'walkthrough_marked', exists(select 1 from public.farm_walkthroughs where farm_id = p_farm_id and walk_date = v_today),
+            'marked_at', (select marked_at from public.farm_walkthroughs where farm_id = p_farm_id and walk_date = v_today limit 1),
+            'groups_count', (select count(*) from public.herd_groups where farm_id = p_farm_id and is_active)
+        ),
+        'cycle', v_cycle,
+        'tasks', (
+            select jsonb_build_object(
+                'today_total', count(*) filter (where ft.due_date = v_today and ft.status <> 'skipped'),
+                'today_done',  count(*) filter (where ft.due_date = v_today and ft.status = 'completed'),
+                'overdue',     count(*) filter (where ft.due_date < v_today and ft.status not in ('completed','skipped'))
+            )
+            from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+            where fp.plan_id = coalesce(v_plan.id, '00000000-0000-0000-0000-000000000000'::uuid)
+        ),
+        'resources', jsonb_build_object(
+            'tracked', (v_feed->>'tracked')::boolean,
+            'min_days_left', (v_feed->'min_days_left'),
+            'signals', (v_feed->'signals')
+        ),
+        'attention', public._fn_farm_attention(p_farm_id, v_plan.id, v_today, v_feed),
+        'today', coalesce((
+            select jsonb_agg(t order by t_due, t_time nulls last) from (
+                select jsonb_build_object('task_id', ft.id, 'name', ft.name_ru, 'status', ft.status,
+                            'category', ft.category, 'due_date', ft.due_date, 'due_time', ft.due_time,
+                            'source', case when ft.task_template_id is not null then 'cycle'
+                                           when ft.animal_event_id is not null then 'deviation' else 'manual' end,
+                            'window_end', ft.window_end, 'heads', ft.head_count_planned) as t,
+                       ft.due_date as t_due, ft.due_time as t_time
+                from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+                where fp.plan_id = coalesce(v_plan.id, '00000000-0000-0000-0000-000000000000'::uuid)
+                  and ft.status not in ('completed','skipped') and ft.due_date >= v_today
+                order by ft.due_date asc, ft.due_time asc nulls last limit 3
+            ) sub), '[]'::jsonb),
+        'today_more_count', greatest(0, coalesce((
+            select count(*) from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+            where fp.plan_id = coalesce(v_plan.id, '00000000-0000-0000-0000-000000000000'::uuid)
+              and ft.status not in ('completed','skipped') and ft.due_date >= v_today),0) - 3)
+    ) into v_result;
+
+    return v_result;
+end;
+$$;
+grant execute on function public.rpc_get_farm_overview(uuid, uuid, date) to authenticated;
+revoke execute on function public.rpc_get_farm_overview(uuid, uuid, date) from public, anon;
+comment on function public.rpc_get_farm_overview(uuid, uuid, date) is
+    'ARS-279 §2.7: агрегат экрана «Обзор» = кэш-юнит офлайна (D145). Зоны herd/cycle/tasks/
+     resources + «Требует внимания» (приоритет §2.6: животное→окно→просрочка→корма) + 3 ближайшие.';
+
+-- ---- attention-хелпер (§2.6 приоритеты, sort на сервере) --------------------
+create or replace function public._fn_farm_attention(
+    p_farm_id uuid, p_plan_id uuid, p_today date, p_feed jsonb
+)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+    with items as (
+        -- (1) угроза животному: открытые animal_events
+        select 1 as priority, 'animal' as kind,
+               ('№' || a.tag_number || ' — ' || aet.name_ru) as title,
+               to_char(ae.occurred_at, 'DD.MM') as subtitle,
+               jsonb_build_object('type','open_animal','ref_id', ae.animal_id) as action,
+               ae.occurred_at as ord
+        from public.animal_events ae
+        join public.animals a on a.id = ae.animal_id
+        join public.animal_event_types aet on aet.id = ae.event_type_id
+        where ae.farm_id = p_farm_id and ae.status = 'open'
+        union all
+        -- (2) окно: закрылось с остатком ИЛИ горит (≤2 дн до закрытия)
+        select 2, 'window', ft.name_ru,
+               case when ft.window_end < p_today
+                    then ('окно закрыто · ' || ft.head_count_done || '/' || coalesce(ft.head_count_planned,0) || ' голов')
+                    else ('закрытие через ' || (ft.window_end - p_today) || ' дн') end,
+               jsonb_build_object('type','open_window','ref_id', ft.id),
+               ft.window_end::timestamptz
+        from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+        where fp.plan_id = p_plan_id and ft.window_start is not null
+          and ft.status not in ('completed','skipped')
+          and ( (ft.window_end < p_today and ft.head_count_done < coalesce(ft.head_count_planned,0))
+                or (ft.window_end - p_today between 0 and 2) )
+        union all
+        -- (3) просрочка: обычные задачи (не окна) с истёкшим сроком
+        select 3, 'task', ft.name_ru,
+               ('просрочено ' || (p_today - ft.due_date) || ' дн'),
+               jsonb_build_object('type','reschedule_today','ref_id', ft.id),
+               ft.due_date::timestamptz
+        from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+        where fp.plan_id = p_plan_id and ft.window_start is null
+          and ft.status not in ('completed','skipped') and ft.due_date < p_today
+        union all
+        -- (4) ресурсы: сигналы кормов buy=true
+        select 4, 'feed', (s->>'feed'),
+               ('осталось ' || (s->>'days_left') || ' дн'),
+               jsonb_build_object('type','open_resources','ref_id', (s->>'feed_item_id')),
+               p_today::timestamptz
+        from jsonb_array_elements(coalesce(p_feed->'signals','[]'::jsonb)) s
+        where (s->>'buy')::boolean is true
+    )
+    select coalesce(jsonb_agg(jsonb_build_object(
+                'kind', kind, 'priority', priority, 'title', title,
+                'subtitle', subtitle, 'action', action
+           ) order by priority asc, ord asc), '[]'::jsonb)
+    from items;
+$$;
+revoke execute on function public._fn_farm_attention(uuid, uuid, date, jsonb) from public, anon;
+
+-- ---- 2.8  rpc_get_tasks_horizon — Неделя / Месяц / Год ----------------------
+create or replace function public.rpc_get_tasks_horizon(
+    p_organization_id uuid,
+    p_farm_id         uuid,
+    p_horizon         text,
+    p_anchor          date default current_date
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_anchor date := coalesce(p_anchor, current_date);
+    v_plan   record;
+    v_phase  record;
+    v_result jsonb;
+    v_from   date;
+    v_to     date;
+begin
+    if p_horizon is null or p_horizon not in ('week','month','year') then
+        return jsonb_build_object('ok', false, 'reason', 'BAD_HORIZON');
+    end if;
+    if not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin() or public.fn_is_expert()) then
+        raise exception 'FORBIDDEN: not a member of organization %', p_organization_id using errcode = 'P0001';
+    end if;
+    if not exists (select 1 from public.farms f
+                   where f.id = p_farm_id and f.organization_id = p_organization_id and f.is_active) then
+        raise exception 'FORBIDDEN: farm % does not belong to organization %', p_farm_id, p_organization_id using errcode = 'P0001';
+    end if;
+
+    select fpp.* into v_plan from public.farm_production_plans fpp
+    where fpp.farm_id = p_farm_id and fpp.organization_id = p_organization_id and fpp.status = 'active'
+    limit 1;
+    if v_plan.id is null then
+        return jsonb_build_object('ok', true, 'no_plan', true, 'horizon', p_horizon);
+    end if;
+
+    if p_horizon = 'week' then
+        v_from := date_trunc('week', v_anchor)::date;      -- понедельник
+        v_to   := v_from + 6;
+        select fp.* into v_phase from public.farm_phases fp
+        where fp.plan_id = v_plan.id and fp.status <> 'skipped'
+          and v_anchor between fp.start_date and fp.end_date order by fp.start_date limit 1;
+
+        v_result := jsonb_build_object(
+            'ok', true, 'horizon', 'week', 'no_plan', false,
+            'range', jsonb_build_object('from', v_from, 'to', v_to),
+            'context', case when v_phase.id is not null then jsonb_build_object(
+                'phase_name', v_phase.name_ru, 'day', (v_anchor - v_phase.start_date) + 1,
+                'days_total', (v_phase.end_date - v_phase.start_date) + 1) end,
+            -- «горит» непролистываем: просрочки + окна ≤2 дн
+            'burning', coalesce((
+                select jsonb_agg(jsonb_build_object('kind', b.kind, 'task_id', b.id, 'name', b.name_ru,
+                            'sub', b.sub, 'action', b.action) order by b.ord)
+                from (
+                    select 'overdue' as kind, ft.id, ft.name_ru,
+                           ('просрочено ' || (v_anchor - ft.due_date) || ' дн') as sub,
+                           jsonb_build_object('type','reschedule_today','ref_id',ft.id) as action, ft.due_date as ord
+                    from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+                    where fp.plan_id = v_plan.id and ft.window_start is null
+                      and ft.status not in ('completed','skipped') and ft.due_date < v_anchor
+                    union all
+                    select 'window', ft.id, ft.name_ru,
+                           ('закрытие через ' || (ft.window_end - v_anchor) || ' дн'),
+                           jsonb_build_object('type','open_window','ref_id',ft.id), ft.window_end
+                    from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+                    where fp.plan_id = v_plan.id and ft.window_start is not null
+                      and ft.status not in ('completed','skipped') and (ft.window_end - v_anchor between 0 and 2)
+                ) b), '[]'::jsonb),
+            'days', (
+                select jsonb_agg(jsonb_build_object(
+                    'd', d.day,
+                    'load', (select count(*) from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+                             where fp.plan_id = v_plan.id and ft.due_date = d.day and ft.status <> 'skipped'),
+                    'has_overdue', exists(select 1 from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+                             where fp.plan_id = v_plan.id and ft.due_date = d.day and ft.due_date < v_anchor
+                               and ft.status not in ('completed','skipped')),
+                    'tasks', coalesce((
+                        select jsonb_agg(jsonb_build_object('id', ft.id, 'name', ft.name_ru, 'status', ft.status,
+                                    'category', ft.category, 'heads', ft.head_count_planned, 'due_time', ft.due_time,
+                                    'assigned_to', ft.assigned_to, 'window_end', ft.window_end,
+                                    'source', case when ft.task_template_id is not null then 'cycle'
+                                                   when ft.animal_event_id is not null then 'deviation' else 'manual' end)
+                                order by ft.due_time asc nulls last)
+                        from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+                        where fp.plan_id = v_plan.id and ft.due_date = d.day), '[]'::jsonb)
+                ) order by d.day)
+                from generate_series(v_from, v_to, interval '1 day') as d(day)
+            )
+        );
+
+    elsif p_horizon = 'month' then
+        v_from := date_trunc('month', v_anchor)::date;
+        v_to   := (date_trunc('month', v_anchor) + interval '1 month - 1 day')::date;
+        v_result := jsonb_build_object(
+            'ok', true, 'horizon', 'month', 'no_plan', false,
+            'range', jsonb_build_object('from', v_from, 'to', v_to),
+            'grid', (
+                select jsonb_agg(jsonb_build_object(
+                    'd', d.day,
+                    'load', (select count(*) from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+                             where fp.plan_id = v_plan.id and ft.due_date = d.day and ft.status <> 'skipped'),
+                    'has_overdue', exists(select 1 from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+                             where fp.plan_id = v_plan.id and ft.due_date = d.day and ft.due_date < v_anchor
+                               and ft.status not in ('completed','skipped')),
+                    'window_ids', coalesce((select jsonb_agg(ft.id)
+                             from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+                             where fp.plan_id = v_plan.id and ft.window_start is not null
+                               and d.day between ft.window_start and ft.window_end), '[]'::jsonb)
+                ) order by d.day)
+                from generate_series(v_from, v_to, interval '1 day') as d(day)
+            ),
+            -- окна: ops (задачи-окна) + vet (vaccination_plan_items) замержены по датам (D75)
+            'windows', (
+                select coalesce(jsonb_agg(w order by w_start), '[]'::jsonb) from (
+                    select jsonb_build_object('id', ft.id, 'source', 'ops', 'name', ft.name_ru,
+                                'date_start', ft.window_start, 'date_end', ft.window_end,
+                                'heads_planned', ft.head_count_planned, 'heads_done', ft.head_count_done) as w,
+                           ft.window_start as w_start
+                    from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+                    where fp.plan_id = v_plan.id and ft.window_start is not null
+                      and daterange(ft.window_start, ft.window_end, '[]') && daterange(v_from, v_to, '[]')
+                    union all
+                    select jsonb_build_object('id', vpi.id, 'source', 'vet', 'name', vp2.name_ru,
+                                'date_start', vpi.scheduled_date, 'date_end', vpi.scheduled_date,
+                                'heads_planned', vpi.head_count_planned, 'heads_done', null),
+                           vpi.scheduled_date
+                    from public.vaccination_plan_items vpi
+                    join public.vaccination_plans vp on vp.id = vpi.vaccination_plan_id
+                    left join public.vaccination_protocols vp2 on vp2.id = vpi.vaccination_protocol_id
+                    where vp.farm_id = p_farm_id and vpi.scheduled_date between v_from and v_to
+                      and vpi.status not in ('completed','skipped')
+                ) merged
+            ),
+            'prep', coalesce((
+                select jsonb_agg(jsonb_build_object('task_id', ft.id, 'name', ft.name_ru,
+                            'deadline', ft.due_date, 'days_left', (ft.due_date - v_anchor), 'window_ref', ft.parent_task_id)
+                        order by ft.due_date)
+                from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+                where fp.plan_id = v_plan.id and ft.parent_task_id is not null
+                  and ft.status not in ('completed','skipped') and ft.due_date between v_from and v_to), '[]'::jsonb),
+            -- вехи derived (D146): границы фаз, попадающие в месяц
+            'milestones', coalesce((
+                select jsonb_agg(jsonb_build_object('phase_id', fp.id, 'name', fp.name_ru,
+                            'date', fp.start_date, 'kind', 'phase_start') order by fp.start_date)
+                from public.farm_phases fp
+                where fp.plan_id = v_plan.id and fp.status <> 'skipped' and fp.start_date between v_from and v_to), '[]'::jsonb)
+        );
+
+    else  -- year
+        v_result := jsonb_build_object(
+            'ok', true, 'horizon', 'year', 'no_plan', false,
+            'plan', jsonb_build_object('id', v_plan.id, 'name', v_plan.name,
+                        'cycle_start', v_plan.cycle_start_date, 'cycle_end', v_plan.cycle_end_date),
+            'phases', coalesce((
+                select jsonb_agg(jsonb_build_object('id', fp.id, 'name_ru', fp.name_ru,
+                            'start_date', fp.start_date, 'end_date', fp.end_date, 'status', fp.status,
+                            'day', case when v_anchor between fp.start_date and fp.end_date then (v_anchor - fp.start_date)+1 end,
+                            'days_total', (fp.end_date - fp.start_date)+1,
+                            'progress_pct', case when v_anchor >= fp.end_date then 100
+                                                 when v_anchor <= fp.start_date then 0
+                                                 else round(100.0 * (v_anchor - fp.start_date) / nullif(fp.end_date - fp.start_date,0)) end,
+                            'milestones', '[]'::jsonb) order by fp.start_date)
+                from public.farm_phases fp where fp.plan_id = v_plan.id), '[]'::jsonb),
+            'breeding', (
+                select jsonb_build_object('phase_id', fp.id, 'start_date', fp.start_date, 'editable', true)
+                from public.farm_phases fp
+                join public.phase_templates pt on pt.id = fp.phase_template_id
+                where fp.plan_id = v_plan.id and pt.code = 'BREEDING' and fp.status not in ('completed','skipped')
+                order by fp.start_date limit 1
+            )
+        );
+    end if;
+
+    return v_result;
+end;
+$$;
+grant execute on function public.rpc_get_tasks_horizon(uuid, uuid, text, date) to authenticated;
+revoke execute on function public.rpc_get_tasks_horizon(uuid, uuid, text, date) from public, anon;
+comment on function public.rpc_get_tasks_horizon(uuid, uuid, text, date) is
+    'ARS-279 §2.8: Неделя/Месяц/Год по p_horizon. Кэш-юнит = (horizon, anchor). Месяц мержит
+     вет-окна (vaccination_plan_items) по датам (D75); вехи derived (D146).';
+
+-- ---- 2.9  rpc_shift_breeding_start — фермерская обёртка D104 (D144) ---------
+create or replace function public.rpc_shift_breeding_start(
+    p_organization_id uuid,
+    p_farm_id         uuid,
+    p_new_start_date  date,
+    p_actor_id        uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_plan_id     uuid;
+    v_phase       record;
+    v_old_start   date;
+    v_delta       int;
+    v_cascade     jsonb;
+    v_phase_ids   uuid[];
+    v_tasks_cnt   int := 0;
+begin
+    -- (1) ownership-guard org→farm→active plan (у fn_shift_phase_cascade guard'а НЕТ)
+    if not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin()) then
+        raise exception 'FORBIDDEN: not a member of organization %', p_organization_id using errcode = 'P0001';
+    end if;
+    select fpp.id into v_plan_id from public.farm_production_plans fpp
+    where fpp.farm_id = p_farm_id and fpp.organization_id = p_organization_id and fpp.status = 'active' limit 1;
+    if v_plan_id is null then
+        return jsonb_build_object('ok', false, 'reason', 'NO_ACTIVE_PLAN');
+    end if;
+
+    -- (2) фаза случки активного плана (phase_templates.code = 'BREEDING', сверено с seed L-7)
+    select fp.* into v_phase
+    from public.farm_phases fp
+    join public.phase_templates pt on pt.id = fp.phase_template_id
+    where fp.plan_id = v_plan_id and pt.code = 'BREEDING' and fp.status not in ('completed','skipped')
+    order by fp.start_date limit 1;
+    if v_phase.id is null then
+        return jsonb_build_object('ok', false, 'reason', 'NO_BREEDING_PHASE');
+    end if;
+
+    v_old_start := v_phase.start_date;
+    v_delta     := p_new_start_date - v_old_start;
+    if v_delta = 0 then
+        return jsonb_build_object('ok', true, 'shifted_phases', '[]'::jsonb, 'shifted_tasks_count', 0, 'no_change', true);
+    end if;
+
+    -- (3) делегировать D104 (каскад двигает фазы, задачи — НЕ его забота, P7)
+    v_cascade := public.fn_shift_phase_cascade(v_phase.id, p_new_start_date, p_actor_id);
+
+    -- (4) сдвинуть задачи сдвинутых фаз на тот же delta (uniform: длительности/лаги сохранены).
+    --     Прошлое неприкосновенно: только будущие статусы; completed/skipped не трогаются (§9.4).
+    select array_agg((e->>'phase_id')::uuid) into v_phase_ids
+    from jsonb_array_elements(v_cascade) e;
+
+    update public.farm_tasks ft
+    set    due_date     = ft.due_date + v_delta,
+           window_start = case when ft.window_start is not null then ft.window_start + v_delta end,
+           window_end   = case when ft.window_end   is not null then ft.window_end   + v_delta end,
+           updated_at   = now()
+    where  ft.farm_phase_id = any(v_phase_ids)
+      and  ft.status in ('scheduled','reminded','overdue');
+    get diagnostics v_tasks_cnt = row_count;
+
+    -- (5) эмит существующего ops.farm_phase.rescheduled (O-04) — payload несёт cascaded_phases[]
+    insert into public.platform_events (event_type, entity_type, entity_id, organization_id, actor_type, actor_id, payload)
+    values ('ops.farm_phase.rescheduled', 'farm_phases', v_phase.id, p_organization_id,
+            'farmer', p_actor_id,
+            jsonb_build_object('phase_id', v_phase.id, 'old_start', v_old_start, 'new_start', p_new_start_date,
+                'shift_days', v_delta, 'cascaded_phases', v_cascade, 'shifted_tasks_count', v_tasks_cnt));
+
+    return jsonb_build_object('ok', true, 'shifted_phases', v_cascade, 'shifted_tasks_count', v_tasks_cnt);
+end;
+$$;
+grant execute on function public.rpc_shift_breeding_start(uuid, uuid, date, uuid) to authenticated;
+revoke execute on function public.rpc_shift_breeding_start(uuid, uuid, date, uuid) from public, anon;
+comment on function public.rpc_shift_breeding_start(uuid, uuid, date, uuid) is
+    'ARS-279 §2.9 (D144): фермерская обёртка D104. Ownership-guard + fn_shift_phase_cascade +
+     сдвиг задач будущих фаз (scheduled/reminded/overdue) на тот же delta + emit O-04. UI: сначала
+     fn_preview_cascade (RPC-36) → confirm → этот RPC. fn_shift_phase_cascade НЕ меняется (P7).';
+
+-- ---- 2.10  rpc_reschedule_farm_task — «На сегодня» (окно неподвижно) --------
+create or replace function public.rpc_reschedule_farm_task(
+    p_organization_id uuid,
+    p_task_id         uuid,
+    p_new_due_date    date,
+    p_actor_id        uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_task record;
+begin
+    if not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin()) then
+        raise exception 'FORBIDDEN: not a member of organization %', p_organization_id using errcode = 'P0001';
+    end if;
+    select ft.* into v_task from public.farm_tasks ft
+    where ft.id = p_task_id and ft.organization_id = p_organization_id;
+    if not found then
+        return jsonb_build_object('ok', false, 'reason', 'NOT_FOUND');
+    end if;
+    -- Перенос задачи НЕ двигает окно (§9.4): задача-окно immovable
+    if v_task.window_start is not null then
+        return jsonb_build_object('ok', false, 'reason', 'WINDOW_TASK_IMMOVABLE');
+    end if;
+
+    update public.farm_tasks
+    set    due_date   = p_new_due_date,
+           status     = case when status = 'overdue' and p_new_due_date >= current_date then 'scheduled' else status end,
+           updated_at = now()
+    where  id = p_task_id;
+
+    return jsonb_build_object('ok', true, 'task_id', p_task_id, 'due_date', p_new_due_date);
+end;
+$$;
+grant execute on function public.rpc_reschedule_farm_task(uuid, uuid, date, uuid) to authenticated;
+revoke execute on function public.rpc_reschedule_farm_task(uuid, uuid, date, uuid) from public, anon;
+comment on function public.rpc_reschedule_farm_task(uuid, uuid, date, uuid) is
+    'ARS-279 §2.10: перенос просрочки. Задача-окно → WINDOW_TASK_IMMOVABLE (перенос не двигает
+     окно, §9.4). overdue → scheduled при новой дате ≥ сегодня. NK-идемпотентность.';
+
+-- ---- 2.11  rpc_activate_production_plan — draft→active (retire FARM-02) -----
+create or replace function public.rpc_activate_production_plan(
+    p_organization_id uuid,
+    p_plan_id         uuid,
+    p_actor_id        uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_plan     record;
+    v_other    uuid;
+begin
+    if not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin()) then
+        raise exception 'FORBIDDEN: not a member of organization %', p_organization_id using errcode = 'P0001';
+    end if;
+    select fpp.* into v_plan from public.farm_production_plans fpp
+    where fpp.id = p_plan_id and fpp.organization_id = p_organization_id;
+    if not found then
+        return jsonb_build_object('ok', false, 'reason', 'NOT_FOUND');
+    end if;
+    if v_plan.status = 'active' then   -- FSM-идемпотентность
+        return jsonb_build_object('ok', true, 'plan_id', p_plan_id, 'status', 'active',
+                                  'activated_at', v_plan.activated_at, 'already_active', true);
+    end if;
+    if v_plan.status <> 'draft' then
+        return jsonb_build_object('ok', false, 'reason', 'PLAN_NOT_DRAFT', 'status', v_plan.status);
+    end if;
+    -- один active-план на ферму (idx_farm_plan_one_active)
+    select id into v_other from public.farm_production_plans
+    where farm_id = v_plan.farm_id and status = 'active' and id <> p_plan_id limit 1;
+    if v_other is not null then
+        return jsonb_build_object('ok', false, 'reason', 'PLAN_ALREADY_ACTIVE_EXISTS', 'active_plan_id', v_other);
+    end if;
+
+    update public.farm_production_plans
+    set status = 'active', activated_at = now(), updated_at = now()
+    where id = p_plan_id;
+
+    insert into public.platform_events (event_type, entity_type, entity_id, organization_id, actor_type, actor_id, payload)
+    values ('ops.production_plan.started', 'farm_production_plans', p_plan_id, p_organization_id,
+            'farmer', p_actor_id,
+            jsonb_build_object('plan_id', p_plan_id, 'farm_id', v_plan.farm_id, 'activation', true));
+
+    return jsonb_build_object('ok', true, 'plan_id', p_plan_id, 'status', 'active', 'activated_at', now());
+end;
+$$;
+grant execute on function public.rpc_activate_production_plan(uuid, uuid, uuid) to authenticated;
+revoke execute on function public.rpc_activate_production_plan(uuid, uuid, uuid) from public, anon;
+comment on function public.rpc_activate_production_plan(uuid, uuid, uuid) is
+    'ARS-279 §2.11: draft→active (retire IMPL_DEBT FARM-02). Guard одного active-плана
+     (idx_farm_plan_one_active) → PLAN_ALREADY_ACTIVE_EXISTS. Эмит O-01 (payload.activation=true).';
+
+-- ---- 2.14  rpc_create_farm_task — ручная задача / задача из отклонения ------
+create or replace function public.rpc_create_farm_task(
+    p_organization_id uuid,
+    p_farm_id         uuid,
+    p_name_ru         text,
+    p_due_date        date,
+    p_due_time        time  default null,
+    p_category        text  default 'management',
+    p_assigned_to     uuid  default null,
+    p_animal_event_id uuid  default null,
+    p_client_task_id  uuid  default null,
+    p_actor_id        uuid  default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_plan_id  uuid;
+    v_phase_id uuid;
+    v_existing uuid;
+    v_task_id  uuid;
+begin
+    if not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin()) then
+        raise exception 'FORBIDDEN: not a member of organization %', p_organization_id using errcode = 'P0001';
+    end if;
+    if not exists (select 1 from public.farms f
+                   where f.id = p_farm_id and f.organization_id = p_organization_id and f.is_active) then
+        raise exception 'FORBIDDEN: farm % does not belong to organization %', p_farm_id, p_organization_id using errcode = 'P0001';
+    end if;
+    -- CID-идемпотентность реплея
+    if p_client_task_id is not null then
+        select id into v_existing from public.farm_tasks where client_task_id = p_client_task_id;
+        if v_existing is not null then
+            return jsonb_build_object('ok', true, 'task_id', v_existing, 'already_created', true);
+        end if;
+    end if;
+
+    select id into v_plan_id from public.farm_production_plans
+    where farm_id = p_farm_id and organization_id = p_organization_id and status = 'active' limit 1;
+    if v_plan_id is null then
+        return jsonb_build_object('ok', false, 'reason', 'NO_ACTIVE_PLAN');
+    end if;
+
+    -- фаза, покрывающая due_date; иначе ближайшая незавершённая
+    select fp.id into v_phase_id from public.farm_phases fp
+    where fp.plan_id = v_plan_id and fp.status <> 'skipped' and p_due_date between fp.start_date and fp.end_date
+    order by fp.start_date limit 1;
+    if v_phase_id is null then
+        select fp.id into v_phase_id from public.farm_phases fp
+        where fp.plan_id = v_plan_id and fp.status not in ('completed','skipped')
+        order by abs(fp.start_date - p_due_date) limit 1;
+    end if;
+    if v_phase_id is null then
+        select fp.id into v_phase_id from public.farm_phases fp
+        where fp.plan_id = v_plan_id order by fp.start_date desc limit 1;
+    end if;
+
+    insert into public.farm_tasks (
+        farm_phase_id, organization_id, task_template_id, name_ru, category, due_date,
+        due_time, assigned_to, animal_event_id, client_task_id, status
+    ) values (
+        v_phase_id, p_organization_id, null, p_name_ru, coalesce(p_category,'management'), p_due_date,
+        p_due_time, p_assigned_to, p_animal_event_id, p_client_task_id, 'scheduled'
+    ) returning id into v_task_id;
+
+    return jsonb_build_object('ok', true, 'task_id', v_task_id,
+        'source', case when p_animal_event_id is not null then 'deviation' else 'manual' end);
+end;
+$$;
+grant execute on function public.rpc_create_farm_task(uuid, uuid, text, date, time, text, uuid, uuid, uuid, uuid) to authenticated;
+revoke execute on function public.rpc_create_farm_task(uuid, uuid, text, date, time, text, uuid, uuid, uuid, uuid) from public, anon;
+comment on function public.rpc_create_farm_task(uuid, uuid, text, date, time, text, uuid, uuid, uuid, uuid) is
+    'ARS-279 §2.14: единственный создающий RPC вне генератора ЦТК — кнопка «+» (ручная) и «Осмотр»
+     (p_animal_event_id → source=deviation). Привязка к фазе active-плана; нет плана → NO_ACTIVE_PLAN.
+     Окно НЕ задаётся (окна только из генератора). CID-идемпотентность (client_task_id).';
+
+-- ---- Реестр имён (D-NEW-A) --------------------------------------------------
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
+  ('rpc_get_farm_overview',        null, null, 'd05_ops_edu.sql (ARS-279)', 'Ferma 2.0 §2.7: агрегат Обзора'),
+  ('rpc_get_tasks_horizon',        null, null, 'd05_ops_edu.sql (ARS-279)', 'Ferma 2.0 §2.8: Неделя/Месяц/Год'),
+  ('rpc_shift_breeding_start',     null, null, 'd05_ops_edu.sql (ARS-279)', 'Ferma 2.0 §2.9: фермерская обёртка D104 (D144)'),
+  ('rpc_reschedule_farm_task',     null, null, 'd05_ops_edu.sql (ARS-279)', 'Ferma 2.0 §2.10: перенос без сдвига окна'),
+  ('rpc_activate_production_plan', null, null, 'd05_ops_edu.sql (ARS-279)', 'Ferma 2.0 §2.11: draft→active, retire FARM-02'),
+  ('rpc_create_farm_task',         null, null, 'd05_ops_edu.sql (ARS-279)', 'Ferma 2.0 §2.14: ручная задача / из отклонения, CID-идемпотентность')
+on conflict (sql_name) do update set created_in = excluded.created_in, notes = excluded.notes;
+
+-- ============================================================================
+-- END SECTION ARS-279
+-- ============================================================================
 
