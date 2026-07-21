@@ -4345,7 +4345,10 @@ begin
     return v_result;
 end;
 $$;
-revoke execute on function public.fn_feed_days_left(uuid, date, int) from public, anon;
+-- Внутренняя (зовётся только definer-RPC 2.7/2.12 как owner) — authenticated НЕ должен звать
+-- напрямую: у fn нет org-guard, прямой вызов = межорг-утечка сигналов кормов (advisor SEC).
+-- Supabase default-privileges грантит execute authenticated на новые fn → снимаем явно.
+revoke execute on function public.fn_feed_days_left(uuid, date, int) from public, anon, authenticated;
 comment on function public.fn_feed_days_left(uuid, date, int) is
     'D143 (ARS-279): дни запаса = quantity_kg ÷ плановый суточный расход. Priority 1 активный
      рацион → Priority 2 feed_consumption_norms → Priority 3 НЕТ (группа без базы не считается).
@@ -4535,7 +4538,9 @@ as $$
            ) order by priority asc, ord asc), '[]'::jsonb)
     from items;
 $$;
-revoke execute on function public._fn_farm_attention(uuid, uuid, date, jsonb) from public, anon;
+-- Внутренняя (зовётся только rpc_get_farm_overview как owner) — у fn нет org-guard,
+-- прямой authenticated-вызов = межорг-утечка (открытые события/просрочки чужой фермы). Advisor SEC.
+revoke execute on function public._fn_farm_attention(uuid, uuid, date, jsonb) from public, anon, authenticated;
 
 -- ---- 2.8  rpc_get_tasks_horizon — Неделя / Месяц / Год ----------------------
 create or replace function public.rpc_get_tasks_horizon(

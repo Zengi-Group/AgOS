@@ -13,7 +13,9 @@
 
 **Consequences**: легко — F5-F9 UI строятся на готовых агрегатах (кэш-юнит = 1 RPC, D145); раскол-чек аддитивно садится на `head_count_done`. Открыто — FEED-VOCAB-01 (маппинг farm_type зашит в `fn_feed_days_left`, решение CEO, см. IMPL_DEBT); генератор-окна дормантен до сид-контента ARS-172.
 
-**Files**: `d05_ops_edu.sql` (секция ARS-279 + правка `fn_generate_production_plan`), `d07_ai_gateway.sql` (`rpc_complete_farm_task`), `IMPL_DEBT.md` (retire FARM-01/02, +FEED-VOCAB-01). Ветка `smartmope/ars-279-…`.
+**Deployed (2026-07-21, прод `mwtbozflyldcadypherr`)**: дельта ARS-279 накачена двумя атомарными tx (схема+8 fn+реестр; затем правки `fn_generate_production_plan`+`rpc_complete_farm_task`). Пост-деплой probe/smoke реальной authenticated-сессией — все зоны Обзора, horizon, fn_feed_days_left отвечают на проде. **SEC-фикс по advisor:** `fn_feed_days_left`/`_fn_farm_attention` (внутренние, без org-guard) получали execute от `authenticated` через Supabase default-privileges — `revoke ... from authenticated` (межорг-утечка закрыта; definer-RPC зовут их как owner, не сломано). `pg_proc` сверен: 8 fn live, `rpc_complete_farm_task` = 1 сигнатура (P7).
+
+**Files**: `d05_ops_edu.sql` (секция ARS-279 + правка `fn_generate_production_plan` + revoke authenticated на 2 внутр. fn), `d07_ai_gateway.sql` (`rpc_complete_farm_task`), `IMPL_DEBT.md` (retire FARM-01/02, +FEED-VOCAB-01). Ветка `smartmope/ars-279-…`, PR #126 (merged 5b15d34).
 
 ---
 
