@@ -56,12 +56,29 @@ const admin = createClient(url, serviceKey, { auth: { autoRefreshToken: false, p
 const anon = createClient(url, anonKey, { auth: { autoRefreshToken: false, persistSession: false } })
 
 async function findAuthUserByPhone(phone) {
-  for (let page = 1; page <= 50; page++) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 })
-    if (error) throw new Error('listUsers: ' + error.message)
-    const found = (data?.users || []).find((u) => u.phone === phone.replace(/^\+/, ''))
-    if (found) return found
-    if (!data?.users || data.users.length < 200) break
+  const digits = phone.replace(/^\+/, '')
+  // Быстрый путь: public.users.phone — точечный запрос по одной строке, не зависит от
+  // admin.auth.admin.listUsers() (см. фолбэк ниже). При повторных запусках фермер уже
+  // существует — это основной путь, listUsers вообще не вызывается.
+  const { data: pubUser } = await admin.from('users').select('auth_id').eq('phone', digits).maybeSingle()
+  if (pubUser?.auth_id) {
+    const { data, error } = await admin.auth.admin.getUserById(pubUser.auth_id)
+    if (!error && data?.user) return data.user
+  }
+  // Фолбэк: пагинированный listUsers сканирует ВСЕ строки auth.users и падает целиком,
+  // если хотя бы одна строка в таблице битая (NULL в confirmation_token и т.п. — баг GoTrue
+  // admin API на строках, вставленных мимо обычного signup; 2026-07-21, ARS-280 QA). Не валим
+  // весь сид — предупреждаем и продолжаем без найденного пользователя.
+  try {
+    for (let page = 1; page <= 50; page++) {
+      const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 })
+      if (error) throw new Error('listUsers: ' + error.message)
+      const found = (data?.users || []).find((u) => u.phone === digits)
+      if (found) return found
+      if (!data?.users || data.users.length < 200) break
+    }
+  } catch (e) {
+    console.warn('• findAuthUserByPhone: listUsers-фолбэк упал (битые строки в auth.users), продолжаю без него:', e.message)
   }
   return null
 }

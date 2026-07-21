@@ -65,13 +65,25 @@ const supabase = createClient(url, serviceKey, {
 
 // Найти существующего auth-пользователя по email (createUser не возвращает его при дубле).
 async function findAuthUserByEmail(email) {
-  // listUsers пагинируется; на проде пользователей немного — пройдёмся по страницам.
-  for (let page = 1; page <= 50; page++) {
-    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 200 })
-    if (error) throw new Error('listUsers: ' + error.message)
-    const found = (data?.users || []).find((u) => (u.email || '').toLowerCase() === email)
-    if (found) return found
-    if (!data?.users || data.users.length < 200) break
+  // Быстрый путь: public.users.email — точечный запрос, не зависит от listUsers (см. фолбэк
+  // ниже). Тот же баг обнаружен и починен в scripts/seed_farmer.mjs (2026-07-21, ARS-280 QA).
+  const { data: pubUser } = await supabase.from('users').select('auth_id').eq('email', email).maybeSingle()
+  if (pubUser?.auth_id) {
+    const { data, error } = await supabase.auth.admin.getUserById(pubUser.auth_id)
+    if (!error && data?.user) return data.user
+  }
+  // Фолбэк: listUsers пагинируется и падает целиком, если хоть одна строка auth.users битая
+  // (NULL в confirmation_token — известный баг GoTrue admin API). Не валим сид — продолжаем.
+  try {
+    for (let page = 1; page <= 50; page++) {
+      const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 200 })
+      if (error) throw new Error('listUsers: ' + error.message)
+      const found = (data?.users || []).find((u) => (u.email || '').toLowerCase() === email)
+      if (found) return found
+      if (!data?.users || data.users.length < 200) break
+    }
+  } catch (e) {
+    console.warn('• findAuthUserByEmail: listUsers-фолбэк упал (битые строки в auth.users), продолжаю без него:', e.message)
   }
   return null
 }
