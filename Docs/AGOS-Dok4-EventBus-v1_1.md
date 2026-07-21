@@ -95,6 +95,10 @@ v1.1 исправляет все критические и серьёзные д
 | O-06 | **ops.farm_task.due_soon** | Ops | — (отсутствовало) | System cron | — | — | ✅ | ✅ |
 | O-07 | **ops.farm_task.overdue** | Ops | — (отсутствовало) | System cron | — | — | ✅ | ✅ |
 | O-08 | **ops.farm_kpi.missed** | Ops | — (отсутствовало) | System (fn_evaluate_kpi) | — | — | ✅ | — |
+| O-09 | **ops.walkthrough.marked** | Ops | — (новое, ARS-277) | rpc_mark_walkthrough [WEB,AI] | — | ✅ | — | — |
+| O-10 | **ops.animal_event.opened** | Ops | — (новое, ARS-277) | rpc_log_animal_event [WEB,AI] | — | ✅ | — | — |
+| O-11 | **ops.animal_event.closed** | Ops | — (новое, ARS-277) | rpc_close_animal_event [WEB,AI] | — | ✅ | — | — |
+| O-12 | **ops.task.window_closed_incomplete** | Ops | — (новое, ARS-277) 📋 planned | System cron | — | — | ✅ | ✅ |
 | E-01 | **edu.course.enrolled** | Edu | course.enrolled | RPC-38 [WEB,AI] | — | — | — | — |
 | E-02 | **edu.lesson.completed** | Edu | lesson.completed | RPC-39 [WEB,AI] | — | — | — | — |
 | E-03 | **edu.course.completed** | Edu | course.completed | RPC-39 [WEB,AI] | — | — | — | — |
@@ -440,7 +444,7 @@ INSERT INTO public.user_notification_preferences (user_id, channel)
 
 > *ВАЖНО: `vet.epidemic_signal.confirmed` (не `detected`) является триггером для AI-проактивного оповещения фермеров региона. Эпидемия должна быть подтверждена экспертом до рассылки. Это требование зафиксировано в Dok3 RPC-43 (`requires_expert_approval=true` для `epidemic_warning`).*
 
-### 3.6. Operations Domain (8 событий)
+### 3.6. Operations Domain (8 + 4 события Ферма 2.0 — §3.6a)
 
 | canonical_event_type | Producer | Consumers | Описание |
 |----------------------|----------|-----------|----------|
@@ -452,6 +456,24 @@ INSERT INTO public.user_notification_preferences (user_id, channel)
 | **ops.farm_task.due_soon** | System cron ✅ | AI GW ✅, Farmer Notification | task_id, farm_id, phase_id, task_name, due_date, days_until |
 | **ops.farm_task.overdue** | System cron ✅ | AI GW ✅, Expert Notification | task_id, farm_id, task_name, due_date, days_overdue |
 | **ops.farm_kpi.missed** | System (fn_evaluate_kpi) | AI GW ✅, Expert Console | plan_id, kpi_code, target, actual, gap_pct |
+
+#### 3.6a. Ферма 2.0 — операционный кабинет (ARS-277, +4 события O-09..O-12)
+
+> Канон payload/семантики — слайс `Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md` §3 (P4).
+> RT-консьюмер — сам кабинет фермера (live-инвалидация кэш-юнитов, паттерн
+> `useEntitlementsRealtimeSync`; `platform_events` в publication — миграция ARS-269).
+
+| canonical_event_type | Producer | Consumers | Payload (ядро) |
+|----------------------|----------|-----------|----------------|
+| **ops.walkthrough.marked** | rpc_mark_walkthrough [WEB,AI] (только первая вставка суток) | Cabinet RT (зона «Стадо») | farm_id, walk_date, marked_at, marked_by |
+| **ops.animal_event.opened** | rpc_log_animal_event [WEB,AI] | Cabinet RT («Требует внимания»); AI GW — кандидат проактивной вет-реакции (Dok 5, отдельный такт) | event_id, farm_id, animal_id, tag_number, event_type_code, herd_group_id, occurred_at |
+| **ops.animal_event.closed** | rpc_close_animal_event [WEB,AI] (только переход open→closed) | Cabinet RT | event_id, farm_id, animal_id, closed_at |
+| **ops.task.window_closed_incomplete** 📋 planned | System cron (вводится с появлением потребителя уведомления; до этого состояние derived при чтении) | AI GW ✅, Farmer Notification | task_id, farm_id, window_end, head_count_planned, head_count_done, remainder |
+
+Не вводится нового события для: эскалации «Ветврачу» (реиспользуется **vet.case.opened** V-01
+с аддитивным `payload.animal_event_id`), активации плана (реиспользуется
+**ops.production_plan.started** O-01 с `payload.activation=true`; producer += `rpc_activate_production_plan`),
+переноса задачи (нет потребителя). Новых notification-шаблонов v1 нет.
 
 ### 3.7. Education Domain (4 события)
 

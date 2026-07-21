@@ -234,7 +234,7 @@
 
 ### FARM-02 — нет RPC перехода draft→active (петля активации ЦТК неполна)
 **Context:** `farm_production_plans.status` = draft/active/completed/cancelled (d05:372). Draft создаётся `rpc_start_production_plan` (d05:3159); активация в `active` происходит **только при создании** через `p_auto_activate:=true`. Отдельного `rpc_activate_production_plan` (draft→active после создания) НЕТ — существующие `rpc_activate_*` принадлежат другим доменам (d02 pool, d04 vaccination). Self-service петля F-D12 (фермер → draft → просмотр → активация) собрана только на 1/3.
-**Retire-when:** добавить аддитивный `rpc_activate_production_plan(p_organization_id, p_plan_id, …)` с проверкой `idx_farm_plan_one_active` (один active на ферму) + emit события. Реализовать в ARS-172.
+**Retire-when:** добавить аддитивный `rpc_activate_production_plan(p_organization_id, p_plan_id, …)` с проверкой `idx_farm_plan_one_active` (один active на ферму) + emit события. Реализовать в ARS-172. *(Обновление 2026-07-21: контракт зафиксирован в слайсе Ферма 2.0 — `Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md` §2.11; строится в ARS-279/F3 вместе с фиксом FARM-01.)*
 **Severity:** medium (блокирует self-service активацию из фермерского кабинета; сейчас активировать может только auto-путь при создании или эксперт вручную в консоли). **Owner surface:** `d05_ops_edu.sql` (RPC-слой ЦТК), `rpc_name_registry`.
 
 ## 💬 Messaging (d12, ARS-223/224 — backend merge 2026-07-16)

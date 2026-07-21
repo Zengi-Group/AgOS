@@ -156,6 +156,11 @@ Layer 0: KERNEL
 
 **Note:** FeedBudget and NutrientBalance are computed RPCs, not entities (see Section 5.6). CourseInstructor is a junction table (Course ↔ ExpertProfile).
 
+> **Ферма 2.0 delta (ARS-277, 2026-07-21):** Farm domain +4 сущности — `Animal` (identity-слой
+> ПОВЕРХ D20, D140), `AnimalEvent` + `AnimalEventType*` (словарь P8, D142), `FarmWalkthrough`
+> (суточный факт обхода). Итог: Farm 7→11, Total 93→97 (reference/lookup 25→26).
+> Канон дизайна — слайс `Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md` §1 (сюда не дублируется, P4).
+
 ---
 
 ## 3. Consolidated ERD
@@ -793,6 +798,25 @@ erDiagram
     PlatformEvent }o..o{ AuditLog : "subset audited"
 ```
 
+### 3.x. Ферма 2.0 delta (ARS-277) — animals-лайт / обход / окна
+
+> Канон: слайс `Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md` §1 (DDL, индексы, RLS). Здесь — только связи.
+
+```mermaid
+erDiagram
+    Farm ||--o{ Animal : "identity-слой (D140, lazy)"
+    HerdGroup |o--o{ Animal : "текущая группа (nullable)"
+    Animal ||--o{ AnimalEvent : "история событий"
+    AnimalEventType ||--o{ AnimalEvent : "тип из словаря (D142)"
+    AnimalEvent |o--o| VetCase : "эскалация Ветврачу (D147, FK в d04)"
+    AnimalEvent |o--o{ FarmTask : "задача «по отклонению» (animal_event_id)"
+    Farm ||--o{ FarmWalkthrough : "отметка обхода (1/сутки)"
+    FarmTask |o--o{ FarmTask : "подготовительная → задача-окно (parent_task_id, D141)"
+```
+
+`head_count` остаётся ТОЛЬКО на HerdGroup (P4/D20); Animal не участвует в подсчёте поголовья.
+Окно = window-семантика на FarmTask (D141), координация с VaccPlanItem — по датам (D75), не FK.
+
 ---
 
 ## 4. Ownership Matrix
@@ -837,6 +861,15 @@ erDiagram
 | AnimalCategory | — | C/U/A | — | — | R | R |
 | Breed | — | C/U/A | U | — | R | R |
 | ProductivityDirection | — | C/U/A | — | — | R | R |
+
+**Ферма 2.0 delta (ARS-277; детали — слайс §1):**
+
+| Entity | Farmer | Admin | Expert | System | AI Gateway | ERP |
+|--------|--------|-------|--------|--------|------------|-----|
+| Animal | C/U (lazy, RPC) | R | R | — | C/U (те же RPC) | U/A (L4, будущий ИСЖ/RFID) |
+| AnimalEvent | C/U (open→closed) | R | R | — | C (created_via='ai') | — |
+| AnimalEventType | R | C/U/A | R (ветврач консультирует seed) | — | R | — |
+| FarmWalkthrough | C/A | R | R | — | C (те же RPC) | — |
 
 ### 4.3. Market/TSP Domain
 
@@ -1225,6 +1258,23 @@ published → archived
 enrolled → in_progress → completed | expired
 ```
 
+### Ферма 2.0 (ARS-277; канон — слайс §1)
+
+**Animal:**
+```
+in_herd → left_herd
+```
+- in_herd → left_herd: выбытие (left_reason: sold|died|transferred|other); уходит из чипов/чек-листов, история сохраняется (§9.6 handoff). `is_active=false` — отдельная ось (создано ошибкой), не FSM-переход.
+
+**AnimalEvent:**
+```
+open → closed
+```
+- open: держит строку в «Требует внимания» Обзора
+- open → closed: фермер закрывает (resolution_note); авто-закрытие при resolve vet_case — кандидат след. скоупа
+
+**FarmTask** — FSM НЕ меняется (scheduled → reminded → in_progress → completed | skipped | overdue); window-семантика (D141) live на конвенции `due_date = window_end`, существующие переходы/кроны работают без изменений.
+
 ---
 
 ## 5.8. Enum Value Registry
@@ -1295,6 +1345,27 @@ veterinary          — vaccination, treatment, diagnostics
 management          — purchasing, selling, reporting, paperwork
 ```
 
+### AnimalEventType.code — seed словаря отклонений (Ферма 2.0, D142; lookup-таблица, НЕ enum)
+
+```
+LYING        — лежит
+LAME         — хромает
+NOT_EATING   — не ест
+INJURY       — травма
+HEAT_SIGNS   — признаки охоты
+OTHER        — другое (текст в note)
+```
+Словарь конфигурируемый (admin-write, финал с ветврачом — слайс §12.2); значения выше — seed, не CHECK.
+
+### Animal.status / AnimalEvent.status / Animal.left_reason (Ферма 2.0)
+
+```
+Animal.status:      in_herd | left_herd
+Animal.left_reason: sold | died | transferred | other
+AnimalEvent.status: open | closed
+AnimalEvent.created_via: cabinet | ai
+```
+
 ---
 
 ## 5.9. Legal Constraints
@@ -1361,6 +1432,14 @@ The following text MUST be displayed wherever reference prices are shown (PriceG
 | D50 | HerdEvent merged with GroupLifecycleEvent | One journal, one truth |
 | D54 | shelter_type, calving_system on Farm | Location properties, not group |
 | D139 | Animal Taxonomy — L1 canonical + L2 projections (ADR-ANIMAL-01) | 7 параллельных таксономий сведены к одному writer (`animal_categories` с осями purpose/state/age_band) и декларативным проекциям (`animal_category_mappings`, `external_category_mappings`). Lifecycle ADD/SPLIT/MERGE/DEPRECATE через `valid_from`/`valid_to` + `at_date` параметр для temporal consistency. ИСЖ/RFID/ERP подключаются строками в БД без кода. См. DECISIONS_LOG.md §2026-04-15 |
+| D140 | `animals` = лёгкий identity-слой ПОВЕРХ D20 (Ферма 2.0) | Lazy-создание при первом событии; `head_count` остаётся на `herd_groups` (P4); НЕ поголовный учёт движения. Полный контекст+альтернативы: слайс ARS-277 §9 |
+| D141 | Окно = window-семантика на `farm_tasks`, не отдельная сущность | `window_start/end`, `head_count_planned/done`, `parent_task_id`; конвенция `due_date = window_end` — существующие FSM/кроны работают; координация с вет-окнами по датам (D75). Слайс ARS-277 §9 |
+| D142 | Словарь отклонений = `animal_event_types` lookup (P8) | Платформенный, seed 6 типов, admin-write; правка словаря = данные, не деплой. Слайс ARS-277 §9 |
+| D143 | Дни запаса = `quantity_kg ÷ плановый суточный расход`; Priority 3 отсутствует | Рацион → нормы → «не ведётся» (без выдуманных цифр — инвариант «ок без данных запрещён»); порог 14 дн = параметр-конфиг. Слайс ARS-277 §7/§9 |
+| D144 | Сдвиг «старта случки» = `rpc_shift_breeding_start` — фермерская обёртка над D104 | Ownership-guard + сдвиг задач сдвинутых фаз (только будущее) + confirm через `fn_preview_cascade`; `fn_shift_phase_cascade` не меняется (P7). Слайс ARS-277 §2.9/§9 |
+| D145 | Offline-контракт: read-кэш агрегатов с меткой + outbox; 3 класса идемпотентности (NK/CID/FSM) | Ошибки реплея видимы («не записалось»), тихого дропа нет; агрегатные RPC = границы кэша. Слайс ARS-277 §8/§9 |
+| D146 | Вехи = derived (границы фаз + задачи-окна + вет-items), без таблицы | Второй дом для уже хранимых фактов нарушил бы P4 и требовал бы каскада при D104. Слайс ARS-277 §9 |
+| D147 | «Ветврачу» = `animal_events.vet_case_id` → `vet_cases` (`created_via='cabinet_farmer'`); `herd_events` не трогаем | `herd_events` — количественный журнал групп (другой факт); эскалация реиспользует V-01 c `payload.animal_event_id`. Слайс ARS-277 §9 |
 
 ### Education (D12–D17)
 
