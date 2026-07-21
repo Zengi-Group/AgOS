@@ -239,6 +239,10 @@ TSP is coordination infrastructure of the association, NOT a marketplace. It doe
 - Canonical name = what's in `rpc_name_registry` table (D-NEW-A)
 - Never modify signatures of existing RPCs — additive only (P7)
 
+### RPC contract ↔ doc sync (D-RPC-CONTRACT-SYNC-01)
+
+The **JSON shape an RPC returns** — field sets, action-type enums, status vocabularies, not just table/column names — is part of its contract in Dok 6 / EngSpec. If a PR makes an RPC's returned shape diverge from its documented contract, that SAME PR MUST either (a) change the code to match the doc, or (b) update the doc + add a `DECISIONS_LOG` line. **Never merge a code↔doc divergence to be "reconciled later"** — deferred reconciliation is exactly how Slice8 §2.2 drifted (spec said `inspect`/`to_vet`; deployed `_fn_farm_attention` emitted 4 other types; caught only at F5, doc fixed a PR later — ARS-279 → #132). This extends the general **Conflict resolution** rule above ("both must be fixed to agree") with a *when*: in the originating PR, not after. Same discipline as `D-UI-FARMER-RULES-01` for design, applied to RPC return contracts.
+
 ### UI
 
 - UX/UI work BEFORE coding: User Story → User Flow → Wireframe → Dok 6 contract → code

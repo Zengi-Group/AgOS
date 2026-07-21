@@ -27,6 +27,7 @@ interface Props {
   farmId: string
   goFarmTab: GoFarmTab
   refreshNonce: number
+  createdNonce?: number   // инкремент после ручной задачи «+» (TasksScreen, F6) — тихий refetch
 }
 
 const MON_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
@@ -47,7 +48,7 @@ const dow = (d: string) => (parseD(d).getDay() + 6) % 7 // 0=Пн..6=Вс
 const dayInAnyWindow = (d: string, windows: MonthWindow[]) =>
   windows.some((w) => d >= w.date_start && d <= w.date_end)
 
-export function MonthScreen({ orgId, farmId, goFarmTab, refreshNonce }: Props) {
+export function MonthScreen({ orgId, farmId, goFarmTab, refreshNonce, createdNonce }: Props) {
   const [anchor, setAnchor] = useState<Date>(() => firstOfMonth(new Date()))
   const [data, setData] = useState<MonthHorizon | null>(null)
   const [noPlan, setNoPlan] = useState(false)
@@ -77,6 +78,7 @@ export function MonthScreen({ orgId, farmId, goFarmTab, refreshNonce }: Props) {
 
   useEffect(() => { load() }, [load])
   useEffect(() => { if (refreshNonce > 0) load(true) }, [refreshNonce, load])
+  useEffect(() => { if (createdNonce && createdNonce > 0) load(true) }, [createdNonce, load])
 
   const flash = (m: string) => {
     setErr(m)

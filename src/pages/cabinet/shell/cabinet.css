@@ -1064,3 +1064,72 @@
 .agos-cabinet-stage .mo-ms:active { background:var(--bg-s); }
 .agos-cabinet-stage .mo-ms-d { font-size:12px; color:var(--fg2); flex-shrink:0; }
 .agos-cabinet-stage .mo-ms-t { flex:1; min-width:0; font-size:13px; font-weight:500; }
+
+/* ═══ F6 · SCR-TA «Задачи» · Неделя (ARS-282) ═══
+   Канон: Slice8 §3. Шапка (сегмент+«+») общая для F6/F7/F8; горит-блок непролистываем,
+   план дня переиспользует анатомию строки Обзора (.fo-tr/.fo-check/.fo-tr-main, §2.3)
+   + новый аватар-инициал исполнителя (.ta-avatar). */
+
+.agos-cabinet-stage .ta-seg { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
+.agos-cabinet-stage .ta-seg-btns { display:flex; background:var(--bg-s); border-radius:var(--r-full); padding:3px; gap:2px; }
+.agos-cabinet-stage .ta-seg-b { border:none; background:none; padding:7px 14px; border-radius:var(--r-full); font-size:12.5px;
+    font-weight:600; color:var(--fg2); font-family:inherit; cursor:pointer; transition:background 100ms var(--ease), color 100ms var(--ease); }
+.agos-cabinet-stage .ta-seg-b.on { background:var(--cta); color:var(--cta-fg); }
+.agos-cabinet-stage .ta-add { position:relative; flex-shrink:0; width:36px; height:36px; border-radius:var(--r-full);
+    border:1px solid var(--bd-h); background:var(--bg-c); color:var(--fg); display:grid; place-items:center; cursor:pointer;
+    transition:transform 60ms var(--ease); }
+.agos-cabinet-stage .ta-add::before { content:""; position:absolute; inset:-4px; }
+.agos-cabinet-stage .ta-add:active { transform:scale(.92); }
+
+.agos-cabinet-stage .ta-ctx { font-size:11.5px; color:var(--fg2); margin:-6px 0 12px; }
+
+/* — горит: закреплённый блок, первый, непролистываем (§3.1) — */
+.agos-cabinet-stage .ta-burn { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); overflow:hidden; margin-bottom:14px; }
+.agos-cabinet-stage .ta-burn-row { display:flex; align-items:center; gap:10px; width:100%; text-align:left; padding:11px 13px;
+    border:none; background:none; font-family:inherit; cursor:default; }
+.agos-cabinet-stage .ta-burn-row + .ta-burn-row { border-top:1px solid var(--bd-s); }
+.agos-cabinet-stage .ta-burn-link { cursor:pointer; transition:background 80ms var(--ease); }
+.agos-cabinet-stage .ta-burn-link:active { background:var(--bg-s); }
+.agos-cabinet-stage .ta-burn-main { flex:1; min-width:0; }
+.agos-cabinet-stage .ta-burn-t { font-size:13px; font-weight:500; color:var(--fg); line-height:1.35; }
+.agos-cabinet-stage .ta-burn-s { font-size:11px; color:var(--fg3); margin-top:2px; }
+.agos-cabinet-stage .ta-burn-btn { position:relative; flex-shrink:0; min-height:36px; padding:0 12px; border:1px solid var(--bd-h);
+    background:var(--bg-c); color:var(--fg); border-radius:var(--r-md); font-size:12px; font-weight:600; font-family:inherit;
+    cursor:pointer; transition:transform 60ms var(--ease); }
+.agos-cabinet-stage .ta-burn-btn::before { content:""; position:absolute; inset:-5px; }
+.agos-cabinet-stage .ta-burn-btn:active { transform:scale(.96); }
+.agos-cabinet-stage .ta-burn-btn:disabled { opacity:.5; cursor:default; }
+
+/* — полоса недели — */
+.agos-cabinet-stage .ta-strip { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:14px; }
+.agos-cabinet-stage .ta-day { display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 2px 7px;
+    border:1px solid var(--bd); border-radius:var(--r-md); background:var(--bg-c); cursor:pointer; font-family:inherit;
+    transition:transform 60ms var(--ease), border-color 120ms var(--ease); }
+.agos-cabinet-stage .ta-day:active { transform:scale(.95); }
+.agos-cabinet-stage .ta-day.sel { border-color:var(--cta); border-width:1.5px; }
+.agos-cabinet-stage .ta-day.today .ta-day-n { background:var(--cta); color:var(--cta-fg); border-radius:var(--r-full); }
+.agos-cabinet-stage .ta-day-w { font-size:9.5px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--fg3); }
+.agos-cabinet-stage .ta-day-n { font-size:14px; font-weight:600; color:var(--fg); width:22px; height:22px; display:grid; place-items:center; }
+.agos-cabinet-stage .ta-day-dots { display:flex; gap:2px; height:5px; align-items:center; }
+.agos-cabinet-stage .ta-day-dots i { width:4px; height:4px; border-radius:var(--r-full); background:var(--fg3); font-style:normal; }
+.agos-cabinet-stage .ta-day-dots i.bad { background:var(--bad); }
+
+/* — межфазье: веха вместо пустоты (§3.1) — */
+.agos-cabinet-stage .ta-next { display:flex; align-items:center; gap:8px; padding:11px 13px; margin-bottom:14px;
+    border:1px dashed var(--bd-h); border-radius:var(--r-lg); color:var(--fg2); font-size:12.5px; }
+
+/* — план дня: анатомия строки переиспользует .fo-tr/.fo-check/.fo-tr-main (§2.3) — */
+.agos-cabinet-stage .ta-sop { padding:1px 6px; border-radius:var(--r-sm); background:var(--bg-s); color:var(--fg2);
+    font-size:10px; font-weight:600; letter-spacing:.01em; }
+.agos-cabinet-stage .ta-avatar { flex-shrink:0; width:22px; height:22px; border-radius:var(--r-full); background:var(--bg-s);
+    color:var(--fg2); font-size:10.5px; font-weight:700; display:grid; place-items:center; }
+.agos-cabinet-stage .ta-collapse { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%;
+    text-align:left; padding:11px 13px; border:none; border-top:1px solid var(--bd-s); background:none; font-size:12px;
+    color:var(--fg2); cursor:pointer; font-family:inherit; }
+.agos-cabinet-stage .ta-collapse:active { background:var(--bg-s); }
+
+/* — «+» ручная задача (Slice8 §3, eng-spec §2.14) — */
+.agos-cabinet-stage .ta-input { display:block; width:100%; box-sizing:border-box; padding:11px 12px; margin-bottom:8px;
+    border:1px solid var(--bd-h); border-radius:var(--r-md); background:var(--bg-c); color:var(--fg); font-size:13.5px;
+    font-family:inherit; }
+.agos-cabinet-stage .ta-input:focus { outline:none; border-color:var(--cta); }

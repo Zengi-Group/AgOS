@@ -4595,20 +4595,23 @@ begin
                 'phase_name', v_phase.name_ru, 'day', (v_anchor - v_phase.start_date) + 1,
                 'days_total', (v_phase.end_date - v_phase.start_date) + 1) end,
             -- «горит» непролистываем: просрочки + окна ≤2 дн
+            -- heads/ref_date (ARS-282): Slice8 §3.1 копирайт «план был Х · N голов» / «осталось N дн · M голов».
             'burning', coalesce((
                 select jsonb_agg(jsonb_build_object('kind', b.kind, 'task_id', b.id, 'name', b.name_ru,
-                            'sub', b.sub, 'action', b.action) order by b.ord)
+                            'sub', b.sub, 'action', b.action, 'heads', b.heads, 'ref_date', b.ord) order by b.ord)
                 from (
                     select 'overdue' as kind, ft.id, ft.name_ru,
                            ('просрочено ' || (v_anchor - ft.due_date) || ' дн') as sub,
-                           jsonb_build_object('type','reschedule_today','ref_id',ft.id) as action, ft.due_date as ord
+                           jsonb_build_object('type','reschedule_today','ref_id',ft.id) as action,
+                           ft.due_date as ord, ft.head_count_planned as heads
                     from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
                     where fp.plan_id = v_plan.id and ft.window_start is null
                       and ft.status not in ('completed','skipped') and ft.due_date < v_anchor
                     union all
                     select 'window', ft.id, ft.name_ru,
                            ('закрытие через ' || (ft.window_end - v_anchor) || ' дн'),
-                           jsonb_build_object('type','open_window','ref_id',ft.id), ft.window_end
+                           jsonb_build_object('type','open_window','ref_id',ft.id),
+                           ft.window_end, ft.head_count_planned
                     from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
                     where fp.plan_id = v_plan.id and ft.window_start is not null
                       and ft.status not in ('completed','skipped') and (ft.window_end - v_anchor between 0 and 2)
@@ -4624,11 +4627,19 @@ begin
                     'tasks', coalesce((
                         select jsonb_agg(jsonb_build_object('id', ft.id, 'name', ft.name_ru, 'status', ft.status,
                                     'category', ft.category, 'heads', ft.head_count_planned, 'due_time', ft.due_time,
-                                    'assigned_to', ft.assigned_to, 'window_end', ft.window_end,
+                                    'assigned_to', ft.assigned_to, 'assigned_to_name', u.full_name, 'window_end', ft.window_end,
+                                    'sop_code', (
+                                        select sd.code from public.task_template_sops tts
+                                        join public.sop_documents sd on sd.id = tts.sop_document_id
+                                        where tts.task_template_id = ft.task_template_id
+                                        order by (tts.relation_type = 'required') desc, sd.code
+                                        limit 1
+                                    ),
                                     'source', case when ft.task_template_id is not null then 'cycle'
                                                    when ft.animal_event_id is not null then 'deviation' else 'manual' end)
                                 order by ft.due_time asc nulls last)
                         from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
+                        left join public.users u on u.id = ft.assigned_to
                         where fp.plan_id = v_plan.id and ft.due_date = d.day), '[]'::jsonb)
                 ) order by d.day)
                 from generate_series(v_from, v_to, interval '1 day') as d(day)
@@ -4725,7 +4736,11 @@ grant execute on function public.rpc_get_tasks_horizon(uuid, uuid, text, date) t
 revoke execute on function public.rpc_get_tasks_horizon(uuid, uuid, text, date) from public, anon;
 comment on function public.rpc_get_tasks_horizon(uuid, uuid, text, date) is
     'ARS-279 §2.8: Неделя/Месяц/Год по p_horizon. Кэш-юнит = (horizon, anchor). Месяц мержит
-     вет-окна (vaccination_plan_items) по датам (D75); вехи derived (D146).';
+     вет-окна (vaccination_plan_items) по датам (D75); вехи derived (D146). ARS-282
+     (OPERATIONS-06, D-RPC-CONTRACT-SYNC-01, CEO 2026-07-21): week-ветка аддитивно несёт
+     assigned_to_name (join users), sop_code (join task_template_sops→sop_documents, required
+     приоритетнее reference) и heads/ref_date в burning[] — доводит RPC до контракта §2.5/§2.3,
+     который F3 не заполнял.';
 
 -- ---- 2.9  rpc_shift_breeding_start — фермерская обёртка D104 (D144) ---------
 create or replace function public.rpc_shift_breeding_start(
