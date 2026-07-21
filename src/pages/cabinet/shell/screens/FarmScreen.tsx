@@ -19,6 +19,7 @@ import { HERD_FIELDS, type HerdKey } from '../farm/types'
 import { loadFarmCtx, loadFarmPlan, type FarmCtx, type FarmPlan } from '../farm/data/farm-profile'
 import { FARM_TABS, type FarmTab, type FarmTabParams, type GoFarmTab } from '../farm/tabs'
 import { OverviewScreen } from '../farm/OverviewScreen'
+import { MonthScreen } from '../farm/MonthScreen'
 import { ScreenSkeleton } from '../components/ScreenSkeleton'
 
 interface Props {
@@ -108,9 +109,23 @@ export function FarmScreen({ onStart, onResume }: Props) {
                 <div className="fw-herd-note">Профиль загружается…</div>
               )
             ) : active.tab === 'tasks' ? (
+              // ARS-283 (F7) · сегмент «Месяц» — самодостаточный экран (см. MonthScreen.tsx —
+              // ARS-282/F6 параллельно строит общую шапку Неделя|Месяц|Год в другом воркетри,
+              // ещё не смёржено; интеграция в общий SCR-TA — один свап при мердже, DECISIONS_LOG).
               // HS-2-мост: показ плана (ARS-215) достижим в «Задачах» до F8 (ARS-284), куда его
               // переносит канон (Slice8 §1.2); F8 заменит мост полноценным SCR-TA.
-              plan
+              active.params?.horizon === 'month' ? (
+                ctx?.organizationId && ctx.farmId ? (
+                  <MonthScreen
+                    orgId={ctx.organizationId}
+                    farmId={ctx.farmId}
+                    goFarmTab={goFarmTab}
+                    refreshNonce={refreshNonce}
+                  />
+                ) : (
+                  <div className="fw-herd-note">Профиль загружается…</div>
+                )
+              ) : plan
                 ? <FarmPlanView plan={plan} heads={heads} total={total} onEdit={onStart} />
                 : <TasksSoon />
             ) : active.tab === 'herd' ? (
