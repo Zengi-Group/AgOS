@@ -15,9 +15,10 @@ import { IonShellFrame } from '../components/IonShellFrame'
 import { TabHead } from '../components/TabHead'
 import { PhIcon } from '../components/icons/PhIcon'
 import { MkCta } from '../tsp/components/MkCta'
-import { HERD_FIELDS, branchSteps, type HerdKey } from '../farm/types'
+import { HERD_FIELDS, type HerdKey } from '../farm/types'
 import { loadFarmCtx, loadFarmPlan, type FarmCtx, type FarmPlan } from '../farm/data/farm-profile'
 import { FARM_TABS, type FarmTab, type FarmTabParams, type GoFarmTab } from '../farm/tabs'
+import { OverviewScreen } from '../farm/OverviewScreen'
 import { ScreenSkeleton } from '../components/ScreenSkeleton'
 
 interface Props {
@@ -29,6 +30,7 @@ export function FarmScreen({ onStart, onResume }: Props) {
   const [ctx, setCtx] = useState<FarmCtx | null>(null)
   const [plan, setPlan] = useState<FarmPlan | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshNonce, setRefreshNonce] = useState(0)  // PTR-триггер для SCR-OV (F5)
 
   // Этап 2 · D3: загрузка вынесена в reload — переиспользуется pull-to-refresh
   // (единственный экран данных, у которого раньше не было НИ PTR, НИ поллинга).
@@ -62,7 +64,7 @@ export function FarmScreen({ onStart, onResume }: Props) {
   const empty = !plan && !hasHerd
 
   return (
-    <IonShellFrame label="Ферма" onRefresh={() => reload({ silent: true })}>
+    <IonShellFrame label="Ферма" onRefresh={() => { setRefreshNonce((n) => n + 1); return reload({ silent: true }) }}>
       <TabHead title="Ферма" />
       <div className="mk">
         {loading && !ctx ? (
@@ -93,12 +95,24 @@ export function FarmScreen({ onStart, onResume }: Props) {
               ))}
             </div>
             {active.tab === 'overview' ? (
-              // Обзор пока держит существующий контент (SCR-OV строит F5, ARS-281).
+              // SCR-OV «Обзор» (F5, ARS-281) — 4 зоны + внимание + сегодня; один rpc_get_farm_overview.
+              ctx?.organizationId && ctx.farmId ? (
+                <OverviewScreen
+                  orgId={ctx.organizationId}
+                  farmId={ctx.farmId}
+                  goFarmTab={goFarmTab}
+                  onSetupPlan={onResume}
+                  refreshNonce={refreshNonce}
+                />
+              ) : (
+                <div className="fw-herd-note">Профиль загружается…</div>
+              )
+            ) : active.tab === 'tasks' ? (
+              // HS-2-мост: показ плана (ARS-215) достижим в «Задачах» до F8 (ARS-284), куда его
+              // переносит канон (Slice8 §1.2); F8 заменит мост полноценным SCR-TA.
               plan
                 ? <FarmPlanView plan={plan} heads={heads} total={total} onEdit={onStart} />
-                : <FarmResume heads={heads} total={total} onResume={onResume} onEdit={onStart} />
-            ) : active.tab === 'tasks' ? (
-              <TasksSoon />
+                : <TasksSoon />
             ) : active.tab === 'herd' ? (
               <HerdSoon />
             ) : (
@@ -126,34 +140,7 @@ function HerdBox({ heads }: { heads: Record<HerdKey, number> }) {
   )
 }
 
-function FarmResume({ heads, total, onResume, onEdit }: {
-  heads: Record<HerdKey, number>; total: number; onResume: () => void; onEdit: () => void
-}) {
-  const branch = branchSteps(heads)
-  const canPlan = heads.cows > 0  // cow_calf/combined → план строится; иначе finishing/прочее
-  const n = branch.length
-  const qWord = n === 1 ? 'вопрос' : n < 5 ? 'вопроса' : 'вопросов'
-
-  return (
-    <>
-      <div className="fw-herd-eyebrow">ВАШЕ СТАДО · {total} ГОЛОВ</div>
-      <HerdBox heads={heads} />
-      {canPlan ? (
-        <>
-          <MkCta onClick={onResume}>{`Ещё ${n} ${qWord} — план работ`}</MkCta>
-          <button className="mk-link" onClick={onEdit}>Поправить состав стада</button>
-        </>
-      ) : (
-        <>
-          <div className="fw-herd-note">Цены по вашему стаду — на Главной и в «Рынке»</div>
-          <button className="mk-link" onClick={onEdit}>Поправить состав стада</button>
-        </>
-      )}
-    </>
-  )
-}
-
-// ── State C · Показ плана (ARS-215) ──
+// ── State C · Показ плана (ARS-215) — reader, переиспользуется в «Задачах» (HS-2-мост до F8) ──
 // Данные = payload rpc_get_production_plan (FARM-01/ARS-214). Дизайн: плоские карты r-12,
 // один акцент на блок — амбер-чип только у активной фазы; цифры/даты в mk-mono (R-9).
 
