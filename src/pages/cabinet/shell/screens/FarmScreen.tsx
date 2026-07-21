@@ -19,6 +19,7 @@ import { HERD_FIELDS, type HerdKey } from '../farm/types'
 import { loadFarmCtx, loadFarmPlan, type FarmCtx, type FarmPlan } from '../farm/data/farm-profile'
 import { FARM_TABS, type FarmTab, type FarmTabParams, type GoFarmTab } from '../farm/tabs'
 import { OverviewScreen } from '../farm/OverviewScreen'
+import { TasksScreen } from '../farm/TasksScreen'
 import { ScreenSkeleton } from '../components/ScreenSkeleton'
 
 interface Props {
@@ -108,11 +109,23 @@ export function FarmScreen({ onStart, onResume }: Props) {
                 <div className="fw-herd-note">Профиль загружается…</div>
               )
             ) : active.tab === 'tasks' ? (
-              // HS-2-мост: показ плана (ARS-215) достижим в «Задачах» до F8 (ARS-284), куда его
-              // переносит канон (Slice8 §1.2); F8 заменит мост полноценным SCR-TA.
-              plan
-                ? <FarmPlanView plan={plan} heads={heads} total={total} onEdit={onStart} />
-                : <TasksSoon />
+              // SCR-TA «Задачи» (F6, ARS-282) — шапка (Неделя|Месяц|Год) + Неделя рабочая.
+              // Год пока держит HS-2-мост (показ плана ARS-215) — до полноценного SCR-TA (F8,
+              // ARS-284, Slice8 §1.2); Месяц — заглушка (F7, ARS-283).
+              ctx?.organizationId && ctx.farmId ? (
+                <TasksScreen
+                  orgId={ctx.organizationId}
+                  farmId={ctx.farmId}
+                  goFarmTab={goFarmTab}
+                  params={active.params}
+                  yearBridge={plan
+                    ? <FarmPlanView plan={plan} heads={heads} total={total} onEdit={onStart} />
+                    : <TasksSoon />}
+                  refreshNonce={refreshNonce}
+                />
+              ) : (
+                <div className="fw-herd-note">Профиль загружается…</div>
+              )
             ) : active.tab === 'herd' ? (
               <HerdSoon />
             ) : (
