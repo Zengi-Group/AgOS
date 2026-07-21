@@ -4487,3 +4487,17 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **НЕ задеплоено** (G3+CEO): прод-apply дельт `d01`/`d04` — отдельный шаг; до него фича инертна на проде (таблиц нет). Merge PR ≠ deploy. Связано: [[agos-merge-not-equal-deploy]].
 
 **Files**: `d01_kernel.sql` (+секция FERMA-2.0 F2: 4 таблицы, RLS, триггеры, 5 RPC, реестр), `d04_vet.sql` (+секция FERMA-2.0 F2: deferred FK + `rpc_create_vet_case_from_event` + реестр), `Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md` (токен V-01 → `vet.vet_case.opened`), `IMPL_DEBT.md` (VET-EVENT-NAME-01), эта запись.
+
+---
+
+### 2026-07-21: ARS-278 (Ферма 2.0 · F2) — ПРОД-ДЕПЛОЙ дельт d01/d04
+
+**What**: После мержа PR #124 задеплоены на прод (`mwtbozflyldcadypherr`) F2-дельты двумя идемпотентными миграциями: `ferma2_f2_db_animals_events_walkthrough_ars278` (d01: 4 таблицы + seed 6 + RLS + триггеры + 5 RPC + реестр) и `ferma2_f2_vet_case_from_event_ars278` (d04: deferred FK `fk_animal_events_vet_case` + `rpc_create_vet_case_from_event` + реестр). Деплой = только дельта-секции (не пере-прогон всего d-файла — L-1); сверено byte-identical с `git show origin/main:d01/d04`. Обновляет запись выше: «НЕ задеплоено» → **задеплоено**.
+
+**Why**: G3 — CEO green-light 2026-07-21 («смёрджил, делай прод-деплой»). Разблокирует ARS-285 (F9 UI): RPC 2.1–2.6 живые на проде.
+
+**Verify (post-deploy, live prod)**: 4 таблицы present; RLS enabled + 2 политики/таблица; `animal_event_types` seed=6; FK present; реестр 6/6; **гранты чистые** — `proacl = {postgres,authenticated,service_role}` без PUBLIC, `has_function_privilege('anon')`=false на всех 6 (SEC-GRANT-PUBLIC-01 clean, сверено на живом ACL, не по SQL-строке — [[security-definer-review-checklist]]). Live smoke по деплойнутым RPC (rollback-tx, без персиста, authenticated через `request.jwt.claims`): mark/lazy-create/CID-replay/herd_board/escalate/close ✅, cross-org guard блокирует orgB→orgA ✅.
+
+**Осталось**: полный seed-фермер authenticated e2e (реальный JWT/PostgREST + raw-RLS под ролью `authenticated`, `scripts/seed_farmer.mjs`) — скоуп F11 QA (ARS-288). ARS-278 остаётся In Review до решения CEO о закрытии.
+
+**Files**: прод-БД (2 миграции — вне репо-файлов, канон = дельты в d01/d04); эта запись. Связано: [[agos-merge-not-equal-deploy]].
