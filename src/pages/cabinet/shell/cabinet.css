@@ -939,3 +939,89 @@
 .agos-cabinet-stage ion-tab-bar.agos-tabbar {
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
+
+/* ═══ F5 · SCR-OV «Обзор» (ARS-281) ═══
+   Канон: Slice8 §2 + FarmerCabinet-DesignRules. Плоские карты r-12 (§6, без теней),
+   статус = точка 6px + текст (без заливок), красный текст только на данных, mono только
+   цифры (R-9), :active-отклик на каждом интерактиве (R-28), хиты ≥44. */
+
+.agos-cabinet-stage .fo-asof { font-size:11px; color:var(--fg3); margin:-6px 0 12px; letter-spacing:.01em; }
+
+/* — 4 зоны контроля · сетка 2×2 (§2.1) — */
+.agos-cabinet-stage .fo-zgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:18px; }
+.agos-cabinet-stage .fo-zone { position:relative; display:flex; flex-direction:column; gap:5px; min-height:104px;
+    text-align:left; border:1px solid var(--bd); background:var(--bg-c); border-radius:var(--r-xl); padding:12px 12px 11px;
+    cursor:pointer; font-family:inherit; transition:transform 60ms var(--ease), border-color 120ms var(--ease); }
+.agos-cabinet-stage .fo-zone:active { transform:scale(.985); }
+@media (hover:hover) { .agos-cabinet-stage .fo-zone:hover { border-color:var(--bd-h); } }
+.agos-cabinet-stage .fo-z-cap { font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--fg3); padding-right:16px; }
+.agos-cabinet-stage .fo-z-num { font-size:23px; font-weight:600; color:var(--fg); line-height:1.05; letter-spacing:-.02em; }
+.agos-cabinet-stage .fo-z-num.sm { font-size:16px; font-weight:600; letter-spacing:-.01em; }
+.agos-cabinet-stage .fo-z-slash { color:var(--fg3); font-weight:500; }
+.agos-cabinet-stage .fo-z-sub { font-size:11px; color:var(--fg2); }
+.agos-cabinet-stage .fo-z-st { display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--fg2); line-height:1.3; margin-top:auto; }
+.agos-cabinet-stage .fo-z-st.bad { color:var(--bad); font-weight:500; }
+.agos-cabinet-stage .fo-chev { position:absolute; top:11px; right:10px; color:var(--bd-h); display:grid; place-items:center; }
+.agos-cabinet-stage .fo-prog { height:3px; border-radius:2px; background:var(--bg-m); overflow:hidden; }
+.agos-cabinet-stage .fo-prog > i { display:block; height:100%; background:var(--cta); border-radius:2px; }
+/* state D — зона «Цикл» с CTA (§2.4) */
+.agos-cabinet-stage .fo-z-cta { align-self:flex-start; margin-top:2px; min-height:32px; padding:0 11px; border-radius:var(--r-md);
+    border:1px solid var(--cta); background:var(--cta); color:var(--cta-fg); font-size:12px; font-weight:600; font-family:inherit;
+    cursor:pointer; transition:transform 60ms var(--ease); }
+.agos-cabinet-stage .fo-z-cta.ghost { background:var(--bg-c); color:var(--fg); border-color:var(--bd-h); }
+.agos-cabinet-stage .fo-z-cta:active { transform:scale(.97); }
+.agos-cabinet-stage .fo-z-cta:disabled { opacity:.55; cursor:default; }
+
+/* точка статуса (тон задаёт модификатор) */
+.agos-cabinet-stage .fo-dot { width:6px; height:6px; border-radius:var(--r-full); flex-shrink:0; background:var(--fg3); }
+.agos-cabinet-stage .fo-dot.ok { background:var(--ok); }
+.agos-cabinet-stage .fo-dot.warn { background:var(--warn); }
+.agos-cabinet-stage .fo-dot.bad { background:var(--bad); }
+
+/* — блоки-секции — */
+.agos-cabinet-stage .fo-sec-h { display:flex; align-items:center; gap:8px; margin:2px 0 10px; }
+.agos-cabinet-stage .fo-sec-h b { font-size:13px; font-weight:600; color:var(--fg); letter-spacing:-.01em; }
+.agos-cabinet-stage .fo-sec-cnt { display:inline-grid; place-items:center; min-width:18px; height:18px; padding:0 5px;
+    background:var(--bad); color:#fff; border-radius:var(--r-full); font-size:10.5px; font-weight:600; }
+.agos-cabinet-stage .fo-box { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c); overflow:hidden; margin-bottom:18px; }
+
+/* — «Требует внимания» (§2.2) — */
+.agos-cabinet-stage .fo-att { display:flex; align-items:center; gap:10px; padding:11px 13px; }
+.agos-cabinet-stage .fo-att + .fo-att { border-top:1px solid var(--bd-s); }
+.agos-cabinet-stage .fo-att-main { flex:1; min-width:0; }
+.agos-cabinet-stage .fo-att-t { font-size:13px; font-weight:500; color:var(--fg); line-height:1.35; }
+.agos-cabinet-stage .fo-att-s { font-size:11px; color:var(--fg3); margin-top:2px; }
+.agos-cabinet-stage .fo-att-btn { position:relative; flex-shrink:0; min-height:36px; padding:0 12px; border:1px solid var(--bd-h);
+    background:var(--bg-c); color:var(--fg); border-radius:var(--r-md); font-size:12px; font-weight:600; font-family:inherit;
+    cursor:pointer; transition:transform 60ms var(--ease); }
+.agos-cabinet-stage .fo-att-btn::before { content:""; position:absolute; inset:-5px; }  /* добор хита до ≥44 */
+.agos-cabinet-stage .fo-att-btn:active { transform:scale(.96); }
+.agos-cabinet-stage .fo-att-btn:disabled { opacity:.5; cursor:default; }
+.agos-cabinet-stage .fo-att-badge { flex-shrink:0; display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--green-d); font-weight:600; }
+.agos-cabinet-stage .fo-att-clear { display:flex; align-items:center; gap:8px; padding:12px 13px; font-size:12.5px; color:var(--fg2); }
+
+/* — «Сегодня — ближайшие» (§2.3) — */
+.agos-cabinet-stage .fo-tr { display:flex; align-items:center; gap:11px; padding:9px 13px; }
+.agos-cabinet-stage .fo-tr + .fo-tr { border-top:1px solid var(--bd-s); }
+.agos-cabinet-stage .fo-check { position:relative; flex-shrink:0; width:22px; height:22px; border-radius:var(--r-full);
+    border:1.5px solid var(--bd-h); background:var(--bg-c); display:grid; place-items:center; padding:0; cursor:pointer;
+    color:transparent; transition:transform 80ms var(--ease), background 80ms var(--ease), border-color 80ms var(--ease); }
+.agos-cabinet-stage .fo-check::before { content:""; position:absolute; inset:-13px; }  /* тап-зона 48px */
+.agos-cabinet-stage .fo-check.on { background:var(--cta); border-color:var(--cta); color:var(--cta-fg); }
+.agos-cabinet-stage .fo-check:active { transform:scale(.9); }
+.agos-cabinet-stage .fo-tr-main { flex:1; min-width:0; }
+.agos-cabinet-stage .fo-tr-t { font-size:13.5px; font-weight:500; color:var(--fg); line-height:1.35; }
+.agos-cabinet-stage .fo-tr.done .fo-tr-t { color:var(--fg3); text-decoration:line-through; }
+.agos-cabinet-stage .fo-tr-m { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:11px; color:var(--fg3); margin-top:2px; }
+.agos-cabinet-stage .fo-tr-m .win { color:var(--amber); }
+.agos-cabinet-stage .fo-tr-m .dev { display:inline-flex; align-items:center; gap:4px; color:var(--bad); }
+.agos-cabinet-stage .fo-tr-time { flex-shrink:0; font-size:12px; color:var(--fg2); }
+.agos-cabinet-stage .fo-more { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%;
+    text-align:left; padding:11px 13px; border:none; border-top:1px solid var(--bd-s); background:none; font-size:12px;
+    color:var(--fg2); cursor:pointer; font-family:inherit; }
+.agos-cabinet-stage .fo-more:active { background:var(--bg-s); }
+.agos-cabinet-stage .fo-note { font-size:12.5px; color:var(--fg2); padding:12px 13px; line-height:1.5; }
+
+/* лёгкая ошибка мутации (§8 — «не записалось», без тихих откатов) */
+.agos-cabinet-stage .fo-err { display:flex; align-items:center; gap:7px; background:var(--red-m); border:1px solid color-mix(in srgb, var(--red) 30%, var(--bd));
+    color:var(--red); border-radius:var(--r-md); padding:9px 12px; font-size:12px; margin-bottom:12px; }
