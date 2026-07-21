@@ -1,9 +1,9 @@
-// AgOS · ARS-282 (Ферма 2.0 · F6) · SCR-TA «Задачи».
+// AgOS · ARS-282/ARS-283 (Ферма 2.0 · F6/F7) · SCR-TA «Задачи».
 // Шапка (сегмент Неделя|Месяц|Год + «+») — общая для F6/F7/F8, строится здесь первой (Slice8 §3).
-// Неделя (§3.1, единственный полностью рабочий сегмент здесь): горит-блок (непролистываем) →
-// полоса недели → план дня. Месяц — заглушка (F7, ARS-283). Год — существующий мост
-// FarmPlanView (ARS-215, HS-2), передаётся снаружи как yearBridge — до полноценного SCR-TA (F8).
-// Чек/перенос — общие RPC с Обзором (farm-overview.ts), общий факт (slice §6).
+// Неделя (§3.1, F6): горит-блок (непролистываем) → полоса недели → план дня. Месяц (§3.2, F7,
+// MonthScreen.tsx): календарная сетка-диапазоны → «Подготовиться к окнам» → «Вехи месяца». Год —
+// существующий мост FarmPlanView (ARS-215, HS-2), передаётся снаружи как yearBridge — до
+// полноценного SCR-TA (F8). Чек/перенос — общие RPC с Обзором (farm-overview.ts), общий факт (slice §6).
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { PhIcon } from '../components/icons/PhIcon'
@@ -16,6 +16,7 @@ import {
   loadWeekHorizon, loadNextMilestone, createFarmTask,
   type WeekHorizon, type WeekTask, type BurningItem, type MonthMilestone,
 } from './data/farm-tasks'
+import { MonthScreen } from './MonthScreen'
 
 interface Props {
   orgId: string
@@ -67,7 +68,7 @@ export function TasksScreen({ orgId, farmId, goFarmTab, params, yearBridge, refr
       {horizon === 'week' ? (
         <WeekView orgId={orgId} farmId={farmId} refreshNonce={refreshNonce} createdNonce={createdNonce} />
       ) : horizon === 'month' ? (
-        <MonthSoon />
+        <MonthScreen orgId={orgId} farmId={farmId} goFarmTab={goFarmTab} refreshNonce={refreshNonce} createdNonce={createdNonce} />
       ) : (
         yearBridge
       )}
@@ -80,16 +81,6 @@ export function TasksScreen({ orgId, farmId, goFarmTab, params, yearBridge, refr
         onCreated={() => setCreatedNonce((n) => n + 1)}
       />
     </>
-  )
-}
-
-function MonthSoon() {
-  return (
-    <div className="mk-empty">
-      <div className="mk-empty-art"><PhIcon name="calendar" size={46} /></div>
-      <div className="mk-empty-h">Месяц скоро появится</div>
-      <div className="mk-empty-t">Календарь окон и подготовка к ним. Готовим этот экран.</div>
-    </div>
   )
 }
 

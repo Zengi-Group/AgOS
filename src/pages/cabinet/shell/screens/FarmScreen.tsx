@@ -109,9 +109,9 @@ export function FarmScreen({ onStart, onResume }: Props) {
                 <div className="fw-herd-note">Профиль загружается…</div>
               )
             ) : active.tab === 'tasks' ? (
-              // SCR-TA «Задачи» (F6, ARS-282) — шапка (Неделя|Месяц|Год) + Неделя рабочая.
-              // Год пока держит HS-2-мост (показ плана ARS-215) — до полноценного SCR-TA (F8,
-              // ARS-284, Slice8 §1.2); Месяц — заглушка (F7, ARS-283).
+              // SCR-TA «Задачи» (F6, ARS-282) — шапка (Неделя|Месяц|Год) + Неделя рабочая, Месяц —
+              // SCR-TA·Месяц (F7, ARS-283). Год пока держит HS-2-мост (показ плана ARS-215) — до
+              // полноценного SCR-TA (F8, ARS-284, Slice8 §1.2).
               ctx?.organizationId && ctx.farmId ? (
                 <TasksScreen
                   orgId={ctx.organizationId}
