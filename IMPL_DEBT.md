@@ -265,3 +265,12 @@
 **Retire-when:** реальный платёжный провайдер + async webhook (ARS-206b / ARS-270). До тех пор перед публичным go-live биллинга — feature-flag/guard, чтобы stub не «оплачивал» молча в проде.
 **Guard (ARS-264):** движок теперь армируется pg_cron, но арм-DDL (`cron.schedule('membership-renewals', …)`) вынесен в ОТДЕЛЬНУЮ миграцию `supabase/migrations/20260717120000_membership_renewals_pg_cron.sql` с пометкой **STAGING ONLY** — прод-деплой канонического `d13_billing.sql` НЕ армирует движок. Прод-включение = отдельное G3+CEO решение после замены stub (ARS-270). Это и есть требуемый guard.
 **Severity:** medium (нет реальной монетизации; риск = раздача доступа бесплатно, если запустить биллинг до провайдера). **Owner surface:** `d13_billing.sql` (fn_charge_membership), ARS-206b/ARS-270, `supabase/migrations/20260717120000_membership_renewals_pg_cron.sql`.
+
+---
+
+## 🐄 Ферма 2.0 (ARS-278 · F2 DB — 2026-07-21)
+
+### VET-EVENT-NAME-01 — Dok4 V-01 `vet.case.opened` ≠ задеплоенный код `vet.vet_case.opened`
+**Context:** Dok4 §1/§3.6/§431/§473 (и заметка «убран дубль entity») фиксируют канонический токен V-01 как `vet.case.opened`. Задеплоенный код (`d07_ai_gateway.sql` `rpc_create_vet_case`, подтверждено на prod `pg_proc`) эмитит `vet.vet_case.opened` (формат D66 `domain.entity.action`, entity=`vet_case` таблицы `vet_cases`). Обнаружено при ARS-278: 2.6 `rpc_create_vet_case_from_event` реиспользует существующий V-01-стрим → эмитит **реальный** токен `vet.vet_case.opened` (иначе консьюмеры живого стрима пропустят эскалацию). Eng-spec Ферма 2.0 §2.6/§3 выровнен на код-токен.
+**Retire-when:** решение вет-домена — либо переименовать код-эмиссию на `vet.case.opened` (миграция + все консьюмеры + подписки Realtime), либо принять `vet.vet_case.opened` каноном и поправить Dok4 (V-01 rows §1/§3.6/§431/§473, + сверить консьюмеров Expert Console/Notification). Реальность (что получают консьюмеры) = `vet.vet_case.opened`. Дубль токенов для «одного» события НЕ вводить.
+**Severity:** low (два эмиттера — d07 и новый d04 — согласованы на код-токене; расходится только doc Dok4, консьюмеры слушают реальный токен). **Owner surface:** `d07_ai_gateway.sql` (rpc_create_vet_case), `d04_vet.sql` (rpc_create_vet_case_from_event, ARS-278), `Docs/AGOS-Dok4-EventBus-v1_1.md` (V-01 rows).
