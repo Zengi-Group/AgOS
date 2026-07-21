@@ -1021,6 +1021,40 @@ Columns: `id, category_id, category_code, category_name_ru, region_id, region_na
 
 ---
 
+## 7a. Operations — Ферма 2.0 · операционный кабинет (ARS-277)
+
+> Добавлено: 2026-07-21 · Решения: D140–D147 · **Канон контрактов (сигнатуры, семантика,
+> идемпотентность, guard'ы) — слайс `Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md` §2**
+> (reference model P4 — сюда не дублируется). Idem-классы: NK = natural key ·
+> CID = client_event_id · FSM = повтор возвращает текущее состояние.
+
+| RPC ID | Функция | File (build) | Caller | Idem | Status |
+|--------|---------|--------------|--------|------|--------|
+| RPC-OPS2-01 | `rpc_mark_walkthrough` | d01 (ARS-278) | [WEB] [AI] | NK | 📋 Contract-fixed |
+| RPC-OPS2-02 | `rpc_log_animal_event` | d01 (ARS-278) | [WEB] [AI] | CID | 📋 Contract-fixed |
+| RPC-OPS2-03 | `rpc_close_animal_event` | d01 (ARS-278) | [WEB] [AI] | FSM | 📋 Contract-fixed |
+| RPC-OPS2-04 | `rpc_get_herd_board` | d01 (ARS-278) | [WEB] [AI] | read | 📋 Contract-fixed |
+| RPC-OPS2-05 | `rpc_get_animal_card` | d01 (ARS-278) | [WEB] [AI] | read | 📋 Contract-fixed |
+| RPC-OPS2-06 | `rpc_create_vet_case_from_event` | d04 (ARS-278) | [WEB] [AI] | FSM | 📋 Contract-fixed |
+| RPC-OPS2-07 | `rpc_get_farm_overview` | d05 (ARS-279) | [WEB] [AI] | read | 📋 Contract-fixed |
+| RPC-OPS2-08 | `rpc_get_tasks_horizon` | d05 (ARS-279) | [WEB] [AI] | read | 📋 Contract-fixed |
+| RPC-OPS2-09 | `rpc_shift_breeding_start` | d05 (ARS-279) | [WEB] [AI] | FSM | 📋 Contract-fixed |
+| RPC-OPS2-10 | `rpc_reschedule_farm_task` | d05 (ARS-279) | [WEB] [AI] | NK | 📋 Contract-fixed |
+| RPC-OPS2-11 | `rpc_activate_production_plan` | d05 (ARS-279) | [WEB] [AI] | FSM | 📋 Contract-fixed (retire IMPL_DEBT FARM-02) |
+| RPC-OPS2-12 | `rpc_create_farm_task` | d05 (ARS-279) | [WEB] [AI] | CID | 📋 Contract-fixed |
+| RPC-OPS2-13 | `rpc_get_feed_days_left` | d03 (ARS-287) | [WEB] [AI] | read | 📋 Contract-fixed (опционально, F12) |
+
+**Поправка поведения (сигнатура не меняется, P7):** RPC-34 `rpc_complete_farm_task` (d07)
+становится FSM-идемпотентным — повторный complete → success `{already_completed:true}`,
+первая запись выигрывает (пререквизит offline-реплея, слайс §2.13/§8). Там же ARS-279 чинит
+FARM-01 (3 имени колонок в `rpc_get_production_plan`, d07).
+
+**Фермерская обёртка над RPC-35:** прямой вызов `fn_shift_phase_cascade` из фермерского UI
+запрещён (нет ownership-guard) — только `rpc_shift_breeding_start` (D144); эксперт-консоль
+продолжает звать RPC-35/36 как раньше.
+
+---
+
 ## 8. Education
 
 ### RPC-38 `rpc_enroll_in_course` [WEB] [AI] 📋 Planned
@@ -1617,6 +1651,7 @@ rpc_retire_livestock_price(p_code text) RETURNS int  -- soft-delete: sets valid_
 | v1.2 | Февраль 2026 | CTO | Feed, Vet, Operations RPCs |
 | v1.3 | Март 2026 | CTO | event_type canonical (→ domain.entity.action per Dok 4) |
 | v1.4 | Март 2026 | CTO | Architecture Audit + Schema Consolidation: RPC-25 rename, RPC-41 deprecated, 22 AI Gateway RPCs added, Canonical Name Registry, status marking, D-NEW-A |
+| v1.5 +7a | 2026-07-21 | Architect (ARS-277) | §7a Ферма 2.0: 13 RPC contract-fixed (RPC-OPS2-01..13) + FSM-идемпотентность RPC-34 + запрет прямого фермерского вызова RPC-35; канон — слайс EngSpec (P4) |
 
 ---
 

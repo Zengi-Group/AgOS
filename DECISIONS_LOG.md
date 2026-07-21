@@ -4450,3 +4450,21 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Флаг (вне ARS-269)**: `useTaxonomyRealtimeSync` латентно не работает на проде (его таблицы тоже не в публикации, замаскировано staleTime=60s) — отдельный фикс (IMPL_DEBT REALTIME-01).
 
 **Files**: `src/hooks/useEntitlementsRealtimeSync.ts` (new), `src/pages/cabinet/shell/CabinetApp.tsx` (+import, +`refreshContext` из useAuth, +`reloadEntitlements`+mount), `supabase/migrations/20260720120000_realtime_publish_platform_events.sql` (new).
+
+---
+
+### 2026-07-21: ARS-277 (Ферма 2.0 · F1) — eng-spec слайс + Dok6 Slice8 + дельты Dok1/Dok3/Dok4 (D140–D147)
+
+**What**: G2-артефакт эпика ARS-276 «Ферма 2.0 — операционный кабинет». Doc-only, SQL/код не тронут.
+- **Слайс** `Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md` (канон дизайна Ферма 2.0): data model (4 новые таблицы: `animals`, `animal_events`, `animal_event_types`, `farm_walkthroughs`; аддитивная window-дельта `farm_tasks` + `task_templates`), 14 RPC-контрактов (13 новых + FSM-идемпотентность `rpc_complete_farm_task`), события O-09..O-12, формула «дни запаса», offline-контракт (кэш агрегатов + outbox, 3 класса идемпотентности NK/CID/FSM), матрица живых связей handoff §7 → контракт инвалидации, маппинг F2..F12 (ARS-278..288), владельцы открытых вопросов §12.
+- **Dok6 Slice8** `Docs/AGOS-Dok6-Slice8-Ferma2-OpsCabinet.md`: контракты 4 табов (Обзор·Задачи·Стадо·Ещё, паттерн `.mk-tabs`) + 3 экранов (SCR-OV/SCR-TA/SCR-WK) + SHEET-AN; HS-2-секция сохранения мастера ARS-212 и плана ARS-215.
+- **Решения D140–D147** (полные — слайс §9, зеркала-строки — Dok1 §6 Farm): D140 animals=identity-слой ПОВЕРХ D20 (lazy, head_count на группах, P4) · D141 окно=window-семантика на farm_tasks (`due_date=window_end`, не новая сущность) · D142 словарь отклонений=lookup P8 (seed 6, финал с ветврачом) · D143 дни запаса=рацион→нормы→«не ведётся» (Priority 3 хардкода НЕТ) · D144 сдвиг случки=фермерская обёртка над D104 (guard + сдвиг будущих задач + confirm) · D145 offline=read-кэш с меткой + outbox, ошибки реплея видимы · D146 вехи=derived без таблицы · D147 Ветврачу=animal_events.vet_case_id→vet_cases('cabinet_farmer'), herd_events не трогаем.
+- **Дельты канона (reference model P4 — секции указывают на слайс):** Dok1 §2-note/§3.x ERD/§4.2-delta Ownership/§5.7 FSM (Animal, AnimalEvent)/§5.8 enum/§6 D140–D147; Dok3 §7a (RPC-OPS2-01..13 + история v1.5+7a); Dok4 §1 реестр O-09..O-12 + §3.6a каталог. IMPL_DEBT FARM-02 — retire-план перенесён на ARS-279 (контракт §2.11 слайса).
+
+**Why**: до этого слайса подзадачи эпика не могли перейти в Ready for Dev (G2-гейт); ключевые семантические развилки (поголовный учёт vs identity-лайт, окно как сущность vs колонки, источники «дней запаса», безопасный фермерский сдвиг цикла, offline-идемпотентность) требовали архитектурной фиксации ДО кода — цена ошибки в data model 10x.
+
+**Флаги для CEO (G2)**: (1) существующий долг — `fn_shift_phase_cascade` SECURITY DEFINER без org-guard и с PUBLIC execute (класс SEC-GRANT-PUBLIC-01); фермерский путь закрыт обёрткой D144, рекомендован revoke в F3 после сверки вызывающих эксперт-консоли. (2) `rpc_create_farm_task` v1 требует активный план (`NO_ACTIVE_PLAN` — graceful) — ручные задачи без ЦТК не живут, синхронно с состоянием D зоны «Задачи». (3) Новых notification-шаблонов v1 нет — напоминание об обходе связано с открытым вопросом «вечерняя отметка» (§12.4).
+
+**Verify**: doc-only; `cross_check.sh` прогнан (см. PR); acceptance ARS-277 сверен по пунктам (слайс/дельты без дублирования/D-записи/реестр имён в спеке для F2-F3/матрица→контракт/владельцы §12). Прод не тронут.
+
+**Files**: `Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md` (new), `Docs/AGOS-Dok6-Slice8-Ferma2-OpsCabinet.md` (new), `Docs/AGOS-Dok1-v1_9.md` (+6 аддитивных блоков), `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md` (+§7a, +история), `Docs/AGOS-Dok4-EventBus-v1_1.md` (+O-09..O-12, +§3.6a), `IMPL_DEBT.md` (FARM-02 note), эта запись.
