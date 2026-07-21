@@ -4517,3 +4517,19 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Осталось**: полный seed-фермер authenticated e2e (реальный JWT/PostgREST + raw-RLS под ролью `authenticated`, `scripts/seed_farmer.mjs`) — скоуп F11 QA (ARS-288). ARS-278 остаётся In Review до решения CEO о закрытии.
 
 **Files**: прод-БД (2 миграции — вне репо-файлов, канон = дельты в d01/d04); эта запись. Связано: [[agos-merge-not-equal-deploy]].
+
+---
+
+### 2026-07-21: ARS-280 (Ферма 2.0 · F4 UI) — каркас модуля: верхние табы Обзор·Задачи·Стадо·Ещё
+
+**What**: F4-такт эпика ARS-276 по контракту Slice8 §1 (ARS-277). Аддитивно (P7/HS-5); `FarmScreen` не переписан — обёрнут точечно (HS-1). `CabinetApp.tsx` НЕ тронут (`onStart`/`onResume` те же), ноль нового CSS (реюз `.mk-tabs`/`.mk-empty`/`.fw-*`/`.mk-link`/`.mk-menu` — все канон-чистые).
+- **new `src/pages/cabinet/shell/farm/tabs.ts`**: контракт табов — `FarmTab` (`overview`|`tasks`|`herd`|`more`), `FarmTabParams` (horizon/day/taskId/mode/animalId, Slice8 §1.1), `GoFarmTab`, `FARM_TABS`. Шов, из которого F5–F9 импортируют тип `goFarmTab`.
+- **`FarmScreen.tsx`** (+82/−7): контейнер. Профиль пуст (нет ни стада, ни плана) → полноэкранный хук SCR-F0a БЕЗ табов (ARS-212 first-run без изменений — решение CEO 2026-07-21: «хук-первым, табы после стада»). Есть стадо/план → бар `.mk-tabs` (текст-сегменты, без иконок/счётчиков, §0) + переключение тел через `goFarmTab` (дефолт Обзор). Обзор держит существующий контент (`FarmPlanView` ARS-215 / `FarmResume` F0b — переиспользованы БЕЗ изменений; SCR-OV строит F5); Задачи/Стадо — заглушки-швы (блоб empty-state R-6/R-24, PhIcon R-2); Ещё (§6) — профиль хозяйства (сводка `HerdBox` + «Поправить состав» → мастер ARS-212) + корма «не ведётся» (D143).
+
+**Why**: F4 — хард-пререк всех экранов фермы (blocks ARS-281..286); каркас + `goFarmTab` разблокируют F5–F9.
+
+**Verify**: `tsc -b` exit 0; `vite build ✓ 9.07s` (0 новых ошибок; chunk-size warning pre-existing). Live на seed-фермере (`+77010000001`, `scripts/seed_farmer.mjs`) — оба стейта руками: план виден (Обзор → «ЦТК 2027» + фазы, ARS-215) · пустой профиль → хук без табов · 4 таба живые, дефолт Обзор · Задачи/Стадо заглушки · Ещё (профиль 25 голов + «Поправить состав» + корма «не ведётся») · «Поправить состав» → мастер «Кто у вас в стаде?» (HS-2 ✅) · нижний таб-бар не тронут · консоль без ошибок от таб-кода. Замечание среды: прод периодически отдавал `Failed to load user context` для QA-фермера + `seed_farmer.mjs` падал на Admin-API `listUsers` — НЕ F4-код (логика корректно рендерит хук при пустом ctx, поведение не изменилось относительно до-F4), прод-флейки.
+
+**Осталось**: тела Обзор/Задачи/Стадо строят F5–F9 (ARS-281..285); внешний deep-link в под-таб — F10 (ARS-286). G3 (merge/deploy Vercel) — CEO.
+
+**Files**: `src/pages/cabinet/shell/farm/tabs.ts` (new), `src/pages/cabinet/shell/screens/FarmScreen.tsx` (+82/−7), эта запись.

@@ -3,6 +3,12 @@
 // SCR-F0b · Resume (состав есть, плана нет): сводка стада + resume-CTA + «Поправить состав».
 // State C · План есть (ARS-215): годовой план (draft-ЦТК) + фазы + сводка стада — payoff Узла 1.
 // Каркас — IonShellFrame + TabHead (у shell свой заголовок, Topbar-принцип не применяется).
+//
+// ARS-280 (Ферма 2.0 · F4) · Каркас модуля: пока стада нет — полноэкранный хук (табы не
+// показываем, ARS-212 first-run без изменений); как только есть состав/план — верхние табы
+// Обзор·Задачи·Стадо·Ещё (дефолт Обзор), паттерн `.mk-tabs` Рынка (Slice8 §0/§1). Обзор пока
+// держит существующий контент (план ARS-215 / resume F0b) — SCR-OV строит F5; Задачи/Стадо —
+// заглушки-швы (F6–F9); Ещё (§6) — профиль + корма, «Поправить состав» достижим (HS-2).
 
 import { useCallback, useEffect, useState } from 'react'
 import { IonShellFrame } from '../components/IonShellFrame'
@@ -11,6 +17,7 @@ import { PhIcon } from '../components/icons/PhIcon'
 import { MkCta } from '../tsp/components/MkCta'
 import { HERD_FIELDS, branchSteps, type HerdKey } from '../farm/types'
 import { loadFarmCtx, loadFarmPlan, type FarmCtx, type FarmPlan } from '../farm/data/farm-profile'
+import { FARM_TABS, type FarmTab, type FarmTabParams, type GoFarmTab } from '../farm/tabs'
 import { ScreenSkeleton } from '../components/ScreenSkeleton'
 
 interface Props {
@@ -45,17 +52,23 @@ export function FarmScreen({ onStart, onResume }: Props) {
   const total = (Object.values(heads) as number[]).reduce((s, n) => s + n, 0)
   const hasHerd = ctx?.hasHerd ?? false
 
+  // F4 · активный верхний таб + параметры перехода. goFarmTab — единый внутримодульный вызов
+  // (Slice8 §1.1): в F4 его дёргает таб-бар; параметры несёт состояние и читают тела F5–F9.
+  const [active, setActive] = useState<{ tab: FarmTab; params?: FarmTabParams }>({ tab: 'overview' })
+  const goFarmTab = useCallback<GoFarmTab>((tab, params) => setActive({ tab, params }), [])
+
+  // Профиль пуст (нет ни стада, ни плана) → полноэкранный хук БЕЗ табов (ARS-212 first-run
+  // без изменений). Табы появляются, как только есть состав/план.
+  const empty = !plan && !hasHerd
+
   return (
     <IonShellFrame label="Ферма" onRefresh={() => reload({ silent: true })}>
       <TabHead title="Ферма" />
       <div className="mk">
         {loading && !ctx ? (
           <ScreenSkeleton variant="farm" />
-        ) : plan ? (
-          // ── State C · План есть (ARS-215) ──
-          <FarmPlanView plan={plan} heads={heads} total={total} onEdit={onStart} />
-        ) : !hasHerd ? (
-          // ── SCR-F0a · Хук ──
+        ) : empty ? (
+          // ── SCR-F0a · Хук (профиль пуст) ──
           <div className="es fw-hook">
             <div className="es-art"><PhIcon name="cow" size={46} /></div>
             <div className="fw-hook-t">Расскажите, кто у вас в стаде</div>
@@ -66,8 +79,32 @@ export function FarmScreen({ onStart, onResume }: Props) {
             </div>
           </div>
         ) : (
-          // ── SCR-F0b · Resume ──
-          <FarmResume heads={heads} total={total} onResume={onResume} onEdit={onStart} />
+          // ── F4 · Каркас: верхние табы (дефолт Обзор), паттерн .mk-tabs Рынка (Slice8 §0) ──
+          <>
+            <div className="mk-tabs">
+              {FARM_TABS.map((t) => (
+                <button
+                  key={t.key}
+                  className={'mk-tab' + (active.tab === t.key ? ' on' : '')}
+                  onClick={() => goFarmTab(t.key)}
+                >
+                  <span className="mk-tab-t">{t.label}</span>
+                </button>
+              ))}
+            </div>
+            {active.tab === 'overview' ? (
+              // Обзор пока держит существующий контент (SCR-OV строит F5, ARS-281).
+              plan
+                ? <FarmPlanView plan={plan} heads={heads} total={total} onEdit={onStart} />
+                : <FarmResume heads={heads} total={total} onResume={onResume} onEdit={onStart} />
+            ) : active.tab === 'tasks' ? (
+              <TasksSoon />
+            ) : active.tab === 'herd' ? (
+              <HerdSoon />
+            ) : (
+              <MoreTab heads={heads} total={total} onEditComposition={onStart} />
+            )}
+          </>
         )}
       </div>
     </IonShellFrame>
@@ -177,6 +214,44 @@ function FarmPlanView({ plan, heads, total, onEdit }: {
       <div className="fw-herd-eyebrow">ВАШЕ СТАДО · {total} ГОЛОВ</div>
       <HerdBox heads={heads} />
       <button className="mk-link" onClick={onEdit}>Поправить состав стада</button>
+    </>
+  )
+}
+
+// ── F4 · Задачи/Стадо — заглушки-швы (тела строят F6–F9). Блоб-язык empty-state (R-6/R-24),
+// без пунктирных рамок; иконка функциональная (PhIcon, R-2). ──
+function TasksSoon() {
+  return (
+    <div className="mk-empty">
+      <div className="mk-empty-art"><PhIcon name="calendar" size={46} /></div>
+      <div className="mk-empty-h">План работ скоро появится</div>
+      <div className="mk-empty-t">Неделя, месяц и год техкарты — что делать и когда. Готовим этот экран.</div>
+    </div>
+  )
+}
+
+function HerdSoon() {
+  return (
+    <div className="mk-empty">
+      <div className="mk-empty-art"><PhIcon name="cow" size={46} /></div>
+      <div className="mk-empty-h">Стадо и обход скоро появятся</div>
+      <div className="mk-empty-t">Группы стада и ежедневный обход — отметка и отклонения за пару касаний. Готовим этот экран.</div>
+    </div>
+  )
+}
+
+// ── F4 · Ещё (Slice8 §6): профиль хозяйства (сводка + «Поправить состав» → мастер ARS-212,
+// обязательный путь HS-2) + корма-остатки (честное «не ведётся» до F12). ──
+function MoreTab({ heads, total, onEditComposition }: {
+  heads: Record<HerdKey, number>; total: number; onEditComposition: () => void
+}) {
+  return (
+    <>
+      <div className="fw-herd-eyebrow">ПРОФИЛЬ ХОЗЯЙСТВА · {total} ГОЛОВ</div>
+      <HerdBox heads={heads} />
+      <button className="mk-link" onClick={onEditComposition}>Поправить состав стада</button>
+      <div className="fw-herd-eyebrow">КОРМА · ОСТАТКИ</div>
+      <div className="fw-herd-note">Учёт остатков кормов пока не ведётся — появится в отдельном обновлении. Тогда покажем, на сколько дней хватает запаса.</div>
     </>
   )
 }
