@@ -319,7 +319,8 @@ Idempotency-классы (D145): **NK** = natural key · **CID** = client_event_
   "resources": { "tracked": true, "min_days_left": 9, "signals": [ {"feed":"сено","days_left":9,"buy":true} ] },
   "attention": [ { "kind": "animal|window|task|feed", "priority": 1,   // §2.6 handoff: сортировка на сервере
                    "title": "№41, 87 — не ест повторно", "subtitle": "просрочено 2 дн · 8 голов",
-                   "action": { "type": "inspect|open_animal|open_window|to_vet|reschedule_today", "ref_id": "…" } } ],
+                   "action": { "type": "open_animal|open_window|reschedule_today|open_resources", "ref_id": "…" } } ],
+                   // action.type: РОВНО эти 4 (verified прод _fn_farm_attention + d05, 2026-07-21). inspect/to_vet — экран «Обход» SCR-WK (F9), НЕ Обзор — Dok6 Slice8 §2.2/§4
   "today":     [ /* 3 ближайшие невыполненные задачи, анатомия §4.3 handoff */ ],
   "today_more_count": 5
 }
