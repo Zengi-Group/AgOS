@@ -7,8 +7,11 @@
 // ARS-280 (Ферма 2.0 · F4) · Каркас модуля: пока стада нет — полноэкранный хук (табы не
 // показываем, ARS-212 first-run без изменений); как только есть состав/план — верхние табы
 // Обзор·Задачи·Стадо·Ещё (дефолт Обзор), паттерн `.mk-tabs` Рынка (Slice8 §0/§1). Обзор пока
-// держит существующий контент (план ARS-215 / resume F0b) — SCR-OV строит F5; Задачи/Стадо —
-// заглушки-швы (F6–F9); Ещё (§6) — профиль + корма, «Поправить состав» достижим (HS-2).
+// держит существующий контент (план ARS-215 / resume F0b) — SCR-OV строит F5; Стадо — заглушка
+// (F9). Ещё (§6) — профиль + корма, «Поправить состав» достижим (HS-2).
+// ARS-284 (F8): полноценный SCR-TA·Год (TasksScreen) заменил временный мост FarmPlanView —
+// карточки фаз/чипы статуса переехали туда же (визуальный reuse, HS-2); plan здесь остаётся
+// (гейт `empty` ниже всё ещё смотрит на него — F0a показывается, пока нет ни стада, ни плана).
 
 import { useCallback, useEffect, useState } from 'react'
 import { IonShellFrame } from '../components/IonShellFrame'
@@ -25,9 +28,10 @@ import { ScreenSkeleton } from '../components/ScreenSkeleton'
 interface Props {
   onStart: () => void    // F0a CTA / «Поправить состав» → мастер с F1 (prefill)
   onResume: () => void   // F0b resume-CTA → мастер, ярус 2
+  toast: (text: string) => void
 }
 
-export function FarmScreen({ onStart, onResume }: Props) {
+export function FarmScreen({ onStart, onResume, toast }: Props) {
   const [ctx, setCtx] = useState<FarmCtx | null>(null)
   const [plan, setPlan] = useState<FarmPlan | null>(null)
   const [loading, setLoading] = useState(true)
@@ -60,12 +64,19 @@ export function FarmScreen({ onStart, onResume }: Props) {
   const [active, setActive] = useState<{ tab: FarmTab; params?: FarmTabParams }>({ tab: 'overview' })
   const goFarmTab = useCallback<GoFarmTab>((tab, params) => setActive({ tab, params }), [])
 
+  // Полный refetch модуля (Slice8 §7: сдвиг старта случки → ВСЕ кэш-юниты) — тот же эффект,
+  // что у pull-to-refresh, но вызывается программно (ARS-284, после confirm в SCR-TA·Год).
+  const bumpRefresh = useCallback(() => {
+    setRefreshNonce((n) => n + 1)
+    return reload({ silent: true })
+  }, [reload])
+
   // Профиль пуст (нет ни стада, ни плана) → полноэкранный хук БЕЗ табов (ARS-212 first-run
   // без изменений). Табы появляются, как только есть состав/план.
   const empty = !plan && !hasHerd
 
   return (
-    <IonShellFrame label="Ферма" onRefresh={() => { setRefreshNonce((n) => n + 1); return reload({ silent: true }) }}>
+    <IonShellFrame label="Ферма" onRefresh={bumpRefresh}>
       <TabHead title="Ферма" />
       <div className="mk">
         {loading && !ctx ? (
@@ -109,18 +120,16 @@ export function FarmScreen({ onStart, onResume }: Props) {
                 <div className="fw-herd-note">Профиль загружается…</div>
               )
             ) : active.tab === 'tasks' ? (
-              // SCR-TA «Задачи» (F6, ARS-282) — шапка (Неделя|Месяц|Год) + Неделя рабочая.
-              // Год пока держит HS-2-мост (показ плана ARS-215) — до полноценного SCR-TA (F8,
-              // ARS-284, Slice8 §1.2); Месяц — заглушка (F7, ARS-283).
+              // SCR-TA «Задачи» (F6/F7/F8) — шапка (Неделя|Месяц|Год); Неделя (ARS-282) и
+              // Год (ARS-284) рабочие. Месяц — заглушка (F7, ARS-283).
               ctx?.organizationId && ctx.farmId ? (
                 <TasksScreen
                   orgId={ctx.organizationId}
                   farmId={ctx.farmId}
                   goFarmTab={goFarmTab}
                   params={active.params}
-                  yearBridge={plan
-                    ? <FarmPlanView plan={plan} heads={heads} total={total} onEdit={onStart} />
-                    : <TasksSoon />}
+                  toast={toast}
+                  onGlobalRefresh={bumpRefresh}
                   refreshNonce={refreshNonce}
                 />
               ) : (
@@ -153,83 +162,8 @@ function HerdBox({ heads }: { heads: Record<HerdKey, number> }) {
   )
 }
 
-// ── State C · Показ плана (ARS-215) — reader, переиспользуется в «Задачах» (HS-2-мост до F8) ──
-// Данные = payload rpc_get_production_plan (FARM-01/ARS-214). Дизайн: плоские карты r-12,
-// один акцент на блок — амбер-чип только у активной фазы; цифры/даты в mk-mono (R-9).
-
-const PHASE_CHIP: Record<string, { label: string; cls: string }> = {
-  active:    { label: 'идёт',      cls: ' on' },
-  upcoming:  { label: 'впереди',   cls: '' },
-  completed: { label: 'готово',    cls: ' ok' },
-  skipped:   { label: 'пропущена', cls: '' },
-}
-
-const fmtDate = (d: string) => new Date(d).toLocaleDateString('ru-RU')
-const fmtDayMonth = (d: string) => new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
-
-function FarmPlanView({ plan, heads, total, onEdit }: {
-  plan: FarmPlan; heads: Record<HerdKey, number>; total: number; onEdit: () => void
-}) {
-  return (
-    <>
-      <div className="fw-herd-eyebrow">ПЛАН РАБОТ НА ГОД</div>
-      <div className="fw-plan-card">
-        <div className="fw-plan-head">
-          <div>
-            <div className="fw-plan-name">{plan.plan_name}</div>
-            <div className="fw-plan-period mk-mono">
-              {fmtDate(plan.start_date)}{plan.end_date ? ` — ${fmtDate(plan.end_date)}` : ''}
-            </div>
-          </div>
-          {plan.status === 'draft' && <span className="fw-plan-chip">Черновик</span>}
-        </div>
-      </div>
-      {plan.phases.length > 0 ? (
-        <div className="fw-plan-box">
-          {plan.phases.map((ph) => {
-            const chip = PHASE_CHIP[ph.status] ?? { label: ph.status, cls: '' }
-            return (
-              <div className="fw-ph" key={ph.phase_id}>
-                <div>
-                  <div className="fw-ph-n">
-                    {ph.is_sale_phase && <PhIcon name="tag" size={13} />}
-                    {ph.name}
-                  </div>
-                  <div className="fw-ph-d">
-                    <span className="mk-mono">{fmtDayMonth(ph.start_date)} — {fmtDayMonth(ph.end_date)}</span>
-                    {ph.task_counts.total > 0 && (
-                      <> · <span className="mk-mono">{ph.task_counts.completed}/{ph.task_counts.total}</span> задач</>
-                    )}
-                  </div>
-                </div>
-                <span className={`fw-ph-chip${chip.cls}`}>{chip.label}</span>
-              </div>
-            )
-          })}
-        </div>
-      ) : (
-        // R4: шаблон типа хозяйства ещё не наполнен фазами (combined) — план есть, работы позже.
-        <div className="fw-herd-note">Работы по месяцам появятся здесь — мы дополняем план под ваш тип хозяйства</div>
-      )}
-      <div className="fw-herd-eyebrow">ВАШЕ СТАДО · {total} ГОЛОВ</div>
-      <HerdBox heads={heads} />
-      <button className="mk-link" onClick={onEdit}>Поправить состав стада</button>
-    </>
-  )
-}
-
-// ── F4 · Задачи/Стадо — заглушки-швы (тела строят F6–F9). Блоб-язык empty-state (R-6/R-24),
+// ── F4 · Стадо — заглушка-шов (тело строит F9). Блоб-язык empty-state (R-6/R-24),
 // без пунктирных рамок; иконка функциональная (PhIcon, R-2). ──
-function TasksSoon() {
-  return (
-    <div className="mk-empty">
-      <div className="mk-empty-art"><PhIcon name="calendar" size={46} /></div>
-      <div className="mk-empty-h">План работ скоро появится</div>
-      <div className="mk-empty-t">Неделя, месяц и год техкарты — что делать и когда. Готовим этот экран.</div>
-    </div>
-  )
-}
-
 function HerdSoon() {
   return (
     <div className="mk-empty">

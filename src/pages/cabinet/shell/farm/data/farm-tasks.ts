@@ -3,6 +3,8 @@
 // Чек/перенос — общие RPC с Обзором (farm-overview.ts), НЕ дублируем (P4). Формы ниже сверены
 // с телом задеплоенной функции на проде (pg_get_functiondef), не с доком (L-6) — включая
 // ARS-282-дельту (assigned_to_name join + heads/ref_date в burning[]), которую в неё внесли.
+// Горизонт Год (ARS-284, F8) — внизу файла: та же rpc_get_tasks_horizon('year') + сдвиг
+// старта случки (fn_preview_cascade превью → rpc_shift_breeding_start, D144, slice §2.9).
 
 import { supabase } from '@/lib/supabase'
 import { localToday, type RpcResult } from './farm-overview'
@@ -116,4 +118,89 @@ export async function createFarmTask(
   })
   if (error) throw error
   return data as RpcResult | null
+}
+
+// ── Год (F8, ARS-284) — Slice8 §3.3: таймлайн фаз + сдвиг старта случки ───────
+
+export interface YearMilestone { date: string; name: string }
+
+export interface YearPhase {
+  id: string
+  name_ru: string
+  start_date: string
+  end_date: string
+  status: 'upcoming' | 'active' | 'completed' | 'skipped'
+  day: number | null
+  days_total: number
+  progress_pct: number
+  milestones: YearMilestone[]
+  expected_heads: number | null // herd_group.head_count фазы; null — группа не назначена (D143, честное отсутствие)
+}
+
+export interface YearBreeding { phase_id: string; start_date: string; editable: true }
+
+export interface YearHorizon {
+  ok: true
+  horizon: 'year'
+  no_plan: false
+  plan: { id: string; name: string; cycle_start: string; cycle_end: string }
+  phases: YearPhase[]
+  breeding: YearBreeding | null
+}
+
+export type YearHorizonResult = YearHorizon | NoPlanHorizon
+
+export async function loadYearHorizon(orgId: string, farmId: string, anchor?: string): Promise<YearHorizonResult> {
+  const { data, error } = await supabase.rpc('rpc_get_tasks_horizon', {
+    p_organization_id: orgId,
+    p_farm_id: farmId,
+    p_horizon: 'year',
+    p_anchor: anchor ?? localToday(),
+  })
+  if (error) throw error
+  return data as YearHorizonResult
+}
+
+export interface CascadePreviewItem {
+  phase_id: string
+  phase_name: string
+  old_start: string
+  new_start: string
+  old_end: string
+  new_end: string
+  shift_days: number
+  date_type: string
+  depth: number
+}
+
+// Превью каскада (slice §3.3, RPC-36) — read-only, ничего не пишет. fn_preview_cascade несёт
+// собственный access-check (L-7: org фермы через user_organization_roles) — вызывается напрямую,
+// без organization_id (не self-RPC). Остаточный долг: PUBLIC execute на fn_preview_cascade/
+// fn_shift_phase_cascade не отозван (SEC-GRANT-PUBLIC-01, Dok6 §10) — не эксплойт (guard внутри
+// защищает), точечный revoke — отдельный проход после сверки эксперт-консоли.
+export async function previewBreedingShift(phaseId: string, newStartDate: string): Promise<CascadePreviewItem[]> {
+  const { data, error } = await supabase.rpc('fn_preview_cascade', {
+    p_phase_id: phaseId,
+    p_new_start_date: newStartDate,
+  })
+  if (error) throw error
+  return (data as CascadePreviewItem[]) ?? []
+}
+
+export type ShiftBreedingResult =
+  | { ok: true; shifted_tasks_count: number; no_change?: boolean }
+  | { ok: false; reason: string }
+
+// Сдвиг старта случки (slice §2.9, D144) — фермерская обёртка: ownership-guard + fn_shift_phase_cascade
+// (не меняется, P7) + сдвиг задач сдвинутых фаз на тот же delta. Прошлое не трогает (только
+// scheduled/reminded/overdue). Вызывать ТОЛЬКО после confirm по превью — эта функция уже пишет.
+export async function shiftBreedingStart(orgId: string, farmId: string, newStartDate: string): Promise<ShiftBreedingResult> {
+  const { data, error } = await supabase.rpc('rpc_shift_breeding_start', {
+    p_organization_id: orgId,
+    p_farm_id: farmId,
+    p_new_start_date: newStartDate,
+    p_actor_id: null,
+  })
+  if (error) throw error
+  return data as ShiftBreedingResult
 }

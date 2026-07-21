@@ -953,6 +953,7 @@ export function CabinetApp() {
     <FarmScreen
       onStart={() => { setFarmWizStart('herd'); go({ name: 'farmwiz' }) }}
       onResume={() => { setFarmWizStart('plan'); go({ name: 'farmwiz' }) }}
+      toast={showToast}
     />
   )
   // N-3/N-5/M4/M5 (аудит нативности): мастер фермы — реальный роут острова, а не state-оверлей.

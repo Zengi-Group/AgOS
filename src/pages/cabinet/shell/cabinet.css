@@ -1094,3 +1094,54 @@
     border:1px solid var(--bd-h); border-radius:var(--r-md); background:var(--bg-c); color:var(--fg); font-size:13.5px;
     font-family:inherit; }
 .agos-cabinet-stage .ta-input:focus { outline:none; border-color:var(--cta); }
+
+/* ═══ F8 · SCR-TA «Задачи» · Год (ARS-284) ═══
+   Канон: Slice8 §3.3. Вертикальный таймлайн фаз — пройденная=галка, активная=акцент+карточка
+   (день/прогресс/вехи), будущая=контур+диапазон+аннотация. Правка «старт случки» — только
+   в карточке фазы случки (превью→confirm, §3.3.3). */
+
+.agos-cabinet-stage .ta-yr-h { margin-bottom:16px; }
+.agos-cabinet-stage .ta-yr-name { font-size:15px; font-weight:600; color:var(--fg); }
+.agos-cabinet-stage .ta-yr-range { font-size:12px; color:var(--fg2); margin-top:2px; }
+
+.agos-cabinet-stage .ta-yr-line { display:flex; flex-direction:column; }
+
+.agos-cabinet-stage .ta-yr-row { display:flex; align-items:flex-start; gap:11px; padding:9px 0; }
+.agos-cabinet-stage .ta-yr-row + .ta-yr-row { border-top:1px solid var(--bd-s); }
+.agos-cabinet-stage .ta-yr-dot { flex-shrink:0; width:18px; height:18px; margin-top:1px; border-radius:var(--r-full);
+    border:1.5px solid var(--bd-h); background:var(--bg-c); display:grid; place-items:center; }
+.agos-cabinet-stage .ta-yr-dot.on { border-color:var(--cta); background:var(--cta); box-shadow:0 0 0 3px color-mix(in srgb, var(--cta) 16%, transparent); }
+.agos-cabinet-stage .ta-yr-dot.done { color:var(--ok); }
+.agos-cabinet-stage .ta-yr-row-main { flex:1; min-width:0; }
+.agos-cabinet-stage .ta-yr-row-n { font-size:13px; font-weight:500; color:var(--fg); line-height:1.35; }
+.agos-cabinet-stage .ta-yr-row-n.muted { color:var(--fg3); }
+.agos-cabinet-stage .ta-yr-row-d { font-size:11.5px; color:var(--fg3); margin-top:2px; }
+
+/* — активная фаза: карточка вместо строки (акцент, §3.3.2) — */
+.agos-cabinet-stage .ta-yr-card { border:1px solid var(--bd-h); border-radius:var(--r-lg); background:var(--bg-c);
+    padding:12px 13px 13px; margin:8px 0; }
+.agos-cabinet-stage .ta-yr-card .ta-yr-row { padding:0; }
+.agos-cabinet-stage .ta-yr-bar { height:4px; border-radius:var(--r-full); background:var(--bg-s); overflow:hidden; margin-top:10px; }
+.agos-cabinet-stage .ta-yr-bar-f { height:100%; background:var(--cta); border-radius:var(--r-full); transition:width 200ms var(--ease); }
+
+.agos-cabinet-stage .ta-yr-mile { margin-top:10px; padding-top:10px; border-top:1px solid var(--bd-s); display:flex; flex-direction:column; gap:6px; }
+.agos-cabinet-stage .ta-yr-mile-row { display:flex; align-items:baseline; gap:8px; font-size:12px; color:var(--fg2); }
+.agos-cabinet-stage .ta-yr-mile-row span:last-child { color:var(--fg); }
+
+.agos-cabinet-stage .ta-yr-edit { display:flex; align-items:center; gap:7px; width:100%; margin-top:11px; padding-top:11px;
+    border:none; border-top:1px solid var(--bd-s); background:none; text-align:left; font-size:12.5px; font-weight:600;
+    color:var(--cta); font-family:inherit; cursor:pointer; }
+.agos-cabinet-stage .ta-yr-edit:active { opacity:.7; }
+.agos-cabinet-stage .ta-yr-edit-sm { position:relative; flex-shrink:0; width:28px; height:28px; border-radius:var(--r-full);
+    border:1px solid var(--bd-h); background:var(--bg-c); color:var(--fg2); display:grid; place-items:center; cursor:pointer; }
+.agos-cabinet-stage .ta-yr-edit-sm::before { content:""; position:absolute; inset:-6px; }
+
+/* — превью каскада (§3.3.3, step 2) — */
+.agos-cabinet-stage .ta-yr-prev-note { font-size:12.5px; color:var(--fg2); margin:-4px 0 12px; }
+.agos-cabinet-stage .ta-yr-prev-list { border:1px solid var(--bd); border-radius:var(--r-lg); background:var(--bg-c);
+    overflow:hidden; margin-bottom:12px; max-height:240px; overflow-y:auto; }
+.agos-cabinet-stage .ta-yr-prev-row { display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:10px 13px; font-size:12.5px; }
+.agos-cabinet-stage .ta-yr-prev-row + .ta-yr-prev-row { border-top:1px solid var(--bd-s); }
+.agos-cabinet-stage .ta-yr-prev-n { color:var(--fg); flex:1; min-width:0; }
+.agos-cabinet-stage .ta-yr-prev-d { color:var(--fg2); flex-shrink:0; }
