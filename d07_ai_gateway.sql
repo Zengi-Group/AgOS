@@ -211,7 +211,9 @@ begin
     end if;
 
     if v_task.status = 'completed' then
-        return jsonb_build_object('task_id', p_task_id, 'status', 'already_completed');
+        -- ARS-279 §2.13: офлайн-реплей (D145) — повтор complete = success, первая запись
+        -- выигрывает (completed_at/result_data не перезаписываются, дубль herd_event не создаётся).
+        return jsonb_build_object('task_id', p_task_id, 'status', 'already_completed', 'already_completed', true);
     end if;
 
     update public.farm_tasks
@@ -221,6 +223,13 @@ begin
                                    then jsonb_build_object('notes', p_result_description)
                                    else null end),
            notes        = coalesce(p_result_description, notes),
+           -- ARS-279 §2.13: задача-окно + result_data.head_count → head_count_done (v1-writer
+           -- раскол-чека). least с планом — не превысить head_count_planned.
+           head_count_done = case
+               when v_task.window_start is not null and (p_result_data->>'head_count') is not null
+               then least((p_result_data->>'head_count')::int,
+                          coalesce(v_task.head_count_planned, (p_result_data->>'head_count')::int))
+               else head_count_done end,
            completed_by = p_actor_id,
            completed_at = now(),
            updated_at   = now()
