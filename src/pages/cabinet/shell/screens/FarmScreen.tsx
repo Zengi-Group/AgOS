@@ -120,8 +120,8 @@ export function FarmScreen({ onStart, onResume, toast }: Props) {
                 <div className="fw-herd-note">Профиль загружается…</div>
               )
             ) : active.tab === 'tasks' ? (
-              // SCR-TA «Задачи» (F6/F7/F8) — шапка (Неделя|Месяц|Год); Неделя (ARS-282) и
-              // Год (ARS-284) рабочие. Месяц — заглушка (F7, ARS-283).
+              // SCR-TA «Задачи» (F6/F7/F8) — шапка (Неделя|Месяц|Год); Неделя (ARS-282), Месяц
+              // (ARS-283, MonthScreen.tsx) и Год (ARS-284) все рабочие.
               ctx?.organizationId && ctx.farmId ? (
                 <TasksScreen
                   orgId={ctx.organizationId}

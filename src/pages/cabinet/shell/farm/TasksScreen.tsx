@@ -1,10 +1,11 @@
-// AgOS · ARS-282 (Ферма 2.0 · F6) · SCR-TA «Задачи».
+// AgOS · ARS-282/ARS-283 (Ферма 2.0 · F6/F7) · SCR-TA «Задачи».
 // Шапка (сегмент Неделя|Месяц|Год + «+») — общая для F6/F7/F8, строится здесь первой (Slice8 §3).
-// Неделя (§3.1, полностью рабочий сегмент, F6): горит-блок (непролистываем) → полоса недели →
-// план дня. Месяц — заглушка (F7, ARS-283). Год (§3.3, F8/ARS-284) — вертикальный таймлайн фаз
-// + единственная ручная правка «Старт случки» (превью→confirm→rpc_shift_breeding_start); заменяет
-// временный мост FarmPlanView (ARS-215) — см. FarmScreen.tsx (HS-2: читатель ARS-215 переиспользован
-// визуально — карточки фаз/чипы статуса — не выброшен, а поднят в полноценный SCR-TA).
+// Неделя (§3.1, F6): горит-блок (непролистываем) → полоса недели → план дня. Месяц (§3.2, F7,
+// MonthScreen.tsx): календарная сетка-диапазоны → «Подготовиться к окнам» → «Вехи месяца». Год
+// (§3.3, F8/ARS-284): вертикальный таймлайн фаз + единственная ручная правка «Старт случки»
+// (превью→confirm→rpc_shift_breeding_start); заменяет временный мост FarmPlanView (ARS-215) —
+// см. FarmScreen.tsx (HS-2: читатель ARS-215 переиспользован визуально — карточки фаз/чипы
+// статуса — не выброшен, а поднят в полноценный SCR-TA). Все три сегмента теперь рабочие.
 // Чек/перенос — общие RPC с Обзором (farm-overview.ts), общий факт (slice §6).
 
 import { useCallback, useEffect, useState } from 'react'
@@ -20,6 +21,7 @@ import {
   type WeekHorizon, type WeekTask, type BurningItem, type MonthMilestone,
   type YearHorizon, type YearPhase, type CascadePreviewItem,
 } from './data/farm-tasks'
+import { MonthScreen } from './MonthScreen'
 
 interface Props {
   orgId: string
@@ -75,7 +77,7 @@ export function TasksScreen({ orgId, farmId, goFarmTab, params, toast, onGlobalR
       {horizon === 'week' ? (
         <WeekView orgId={orgId} farmId={farmId} refreshNonce={refreshNonce} createdNonce={createdNonce} />
       ) : horizon === 'month' ? (
-        <MonthSoon />
+        <MonthScreen orgId={orgId} farmId={farmId} goFarmTab={goFarmTab} refreshNonce={refreshNonce} createdNonce={createdNonce} />
       ) : (
         <YearView orgId={orgId} farmId={farmId} refreshNonce={refreshNonce} toast={toast} onGlobalRefresh={onGlobalRefresh} />
       )}
@@ -88,16 +90,6 @@ export function TasksScreen({ orgId, farmId, goFarmTab, params, toast, onGlobalR
         onCreated={() => setCreatedNonce((n) => n + 1)}
       />
     </>
-  )
-}
-
-function MonthSoon() {
-  return (
-    <div className="mk-empty">
-      <div className="mk-empty-art"><PhIcon name="calendar" size={46} /></div>
-      <div className="mk-empty-h">Месяц скоро появится</div>
-      <div className="mk-empty-t">Календарь окон и подготовка к ним. Готовим этот экран.</div>
-    </div>
   )
 }
 
