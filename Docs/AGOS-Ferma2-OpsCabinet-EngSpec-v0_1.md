@@ -303,7 +303,7 @@ Idempotency-классы (D145): **NK** = natural key · **CID** = client_event_
 Событие уже связано (`vet_case_id not null`) → вернуть существующий кейс, `already_linked=true`.
 Иначе: создать `vet_cases` (`created_via='cabinet_farmer'`, `herd_group_id` из события,
 `affected_head_count=1`, `symptoms_text = '<name_ru>; бирка №<tag_number>; <note>'`) + проставить
-`animal_events.vet_case_id` атомарно. Эмитит существующий `vet.case.opened` (V-01) с
+`animal_events.vet_case_id` атомарно. Эмитит существующий `vet.vet_case.opened` (V-01) с
 `payload.animal_event_id` — нового события не вводим. Дозы/диагнозы НЕ генерируются (D61).
 
 **2.7** `rpc_get_farm_overview(p_organization_id uuid, p_farm_id uuid, p_today date default current_date) returns jsonb`
@@ -421,7 +421,7 @@ on conflict do nothing;
 - *AI по O-10 — кандидат проактивной реакции vet-консультанта (Dok 5, отдельный такт; в v1 только запись).
 - O-12 — planned: до крона состояние «окно закрылось с остатком» derived при чтении (§1.5);
   cron вводится, когда появится потребитель уведомления (P11/HS-4).
-- Эскалация «Ветврачу» НЕ вводит нового события — существующий `vet.case.opened` (V-01)
+- Эскалация «Ветврачу» НЕ вводит нового события — существующий `vet.vet_case.opened` (V-01)
   получает `payload.animal_event_id` (аддитивно). Активация плана реиспользует O-01
   (`payload.activation=true`), перенос задачи события не эмитит (нет потребителя).
 - Новых notification-шаблонов v1 НЕТ: обходные напоминания — открытый вопрос §12

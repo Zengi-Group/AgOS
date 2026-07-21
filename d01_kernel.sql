@@ -6366,3 +6366,514 @@ values
 on conflict (sql_name) do update
     set notes      = excluded.notes,
         created_in = excluded.created_in;
+
+
+-- ============================================================
+-- SECTION FERMA-2.0 · F2 — Обход + события животных (ARS-278)
+-- ============================================================
+-- Date: 2026-07-21
+-- Canon: Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md §1.1–1.4, §2.1–2.5, §3
+--        (F1 eng-spec = ARS-277). Brain: [[projects/agos/specs/farm-ops-cabinet]].
+-- Decisions: D140 (animals = identity-lite ПОВЕРХ D20, lazy-создание, НЕ поголовный учёт),
+--            D142 (animal_event_types lookup, P8), D147 (animal_events ≠ herd_events).
+-- ALL statements additive + idempotent (P7). RLS зеркалит herd_groups (org-scoped).
+-- Deferred FK animal_events.vet_case_id → vet_cases живёт в d04 (паттерн D57,
+--   разрывает цикл порядка d01→d04). RPC 2.6 (эскалация Ветврачу) — тоже d04.
+-- Farmer-cabinet RPC (web); AI-путь переиспользует те же RPC отдельным тактом (Dok 5).
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- 1.2  animal_event_types — словарь типов отклонений (D142, P8)
+--      Платформенный справочник (без organization_id) = стандарт ассоциации.
+--      Правка словаря = data update, не деплой. Финализируется с ветврачом (§12).
+--      Это НЕ дозировки и НЕ диагнозы (D61 не затрагивается).
+-- ------------------------------------------------------------
+create table if not exists public.animal_event_types (
+    id          uuid primary key default gen_random_uuid(),
+    code        text not null unique,       -- 'LYING'|'LAME'|'NOT_EATING'|'INJURY'|'HEAT_SIGNS'|'OTHER'
+    name_ru     text not null,
+    sort_order  int  not null default 0,
+    is_active   boolean not null default true,
+    created_at  timestamptz not null default now(),
+    updated_at  timestamptz not null default now()
+);
+
+insert into public.animal_event_types (code, name_ru, sort_order) values
+    ('LYING',      'лежит',           10),
+    ('LAME',       'хромает',         20),
+    ('NOT_EATING', 'не ест',          30),
+    ('INJURY',     'травма',          40),
+    ('HEAT_SIGNS', 'признаки охоты',  50),
+    ('OTHER',      'другое',          60)
+on conflict (code) do nothing;
+
+-- ------------------------------------------------------------
+-- 1.1  animals — лёгкий identity-слой ПОВЕРХ D20 (D140).
+--      Реестр «номер бирки» ровно там, где отклонение адресное. Lazy-создание
+--      (P11). НЕ участвует в подсчёте поголовья (head_count живёт на herd_groups, P4).
+--      §9.6: выбытие (left_herd) убирает из чек-листов; история событий сохраняется.
+-- ------------------------------------------------------------
+create table if not exists public.animals (
+    id              uuid primary key default gen_random_uuid(),
+    farm_id         uuid not null references public.farms(id) on delete cascade,
+    organization_id uuid not null references public.organizations(id),        -- denorm RLS
+    herd_group_id   uuid references public.herd_groups(id) on delete set null, -- текущая группа; nullable
+    tag_number      text not null,                                             -- номер бирки как вводит фермер; нормализация btrim в RPC
+    status          text not null default 'in_herd'
+                        check (status in ('in_herd','left_herd')),             -- FSM §5.7
+    left_at         date,
+    left_reason     text check (left_reason in ('sold','died','transferred','other')),
+    data_source     text not null default 'platform'
+                        check (data_source in ('registration','ai_extracted','platform','erp')),
+    notes           text,
+    is_active       boolean not null default true,                             -- false = создано ошибкой (опечатка №); ≠ left_herd
+    created_by      uuid references public.users(id),
+    created_at      timestamptz not null default now(),
+    updated_at      timestamptz not null default now()
+);
+-- Живой номер уникален в пределах фермы; история выбывших может повторять номера (P5)
+create unique index if not exists uq_animals_farm_tag_live
+    on public.animals (farm_id, lower(btrim(tag_number)))
+    where status = 'in_herd' and is_active;
+create index if not exists idx_animals_farm  on public.animals (farm_id) where status = 'in_herd' and is_active;
+create index if not exists idx_animals_org   on public.animals (organization_id);   -- RLS
+create index if not exists idx_animals_group on public.animals (herd_group_id) where herd_group_id is not null;
+
+-- ------------------------------------------------------------
+-- 1.3  animal_events — адресное отклонение по животному (D140/D147).
+--      ≠ herd_events (D147): herd_events = количественный журнал ГРУПП (append-only);
+--      animal_events = адресные отклонения по ИДЕНТИЧНОСТИ. Никаких записей в
+--      herd_events из флоу обхода. FSM: open → closed. Открытое держит строку
+--      в «Требует внимания». vet_case_id: FK добавляется в d04 (deferred, D57).
+-- ------------------------------------------------------------
+create table if not exists public.animal_events (
+    id              uuid primary key default gen_random_uuid(),
+    organization_id uuid not null references public.organizations(id),        -- denorm RLS
+    farm_id         uuid not null references public.farms(id),
+    animal_id       uuid not null references public.animals(id),
+    herd_group_id   uuid references public.herd_groups(id) on delete set null, -- снапшот группы на момент события
+    event_type_id   uuid not null references public.animal_event_types(id),
+    note            text,
+    photo_url       text,                                                      -- Supabase Storage (опционально)
+    status          text not null default 'open'
+                        check (status in ('open','closed')),
+    occurred_at     timestamptz not null default now(),                        -- полевое время; офлайн-реплей шлёт клиентский таймстамп
+    recorded_by     uuid references public.users(id),
+    created_via     text not null default 'cabinet' check (created_via in ('cabinet','ai')),
+    client_event_id uuid,                                                      -- идемпотентность offline-реплея (D145)
+    vet_case_id     uuid,                                                      -- FK → vet_cases в d04 (deferred, D57)
+    closed_at       timestamptz,
+    closed_by       uuid references public.users(id),
+    resolution_note text,
+    created_at      timestamptz not null default now(),
+    updated_at      timestamptz not null default now()
+);
+create unique index if not exists uq_animal_events_client
+    on public.animal_events (client_event_id) where client_event_id is not null;
+create index if not exists idx_animal_events_farm_open on public.animal_events (farm_id) where status = 'open';
+create index if not exists idx_animal_events_animal    on public.animal_events (animal_id, occurred_at desc);
+create index if not exists idx_animal_events_org       on public.animal_events (organization_id);  -- RLS
+
+-- ------------------------------------------------------------
+-- 1.4  farm_walkthroughs — суточная отметка обхода.
+--      NK = (farm_id, walk_date) — естественный ключ идемпотентности. walk_date =
+--      ЛОКАЛЬНАЯ дата фермера (клиент передаёт явно; серверный current_date — fallback).
+--      «Назавтра снова не отмечен» = чистая функция чтения (walk_date = p_today), не cron.
+-- ------------------------------------------------------------
+create table if not exists public.farm_walkthroughs (
+    id              uuid primary key default gen_random_uuid(),
+    farm_id         uuid not null references public.farms(id) on delete cascade,
+    organization_id uuid not null references public.organizations(id),        -- denorm RLS
+    walk_date       date not null,
+    marked_at       timestamptz not null default now(),
+    marked_by       uuid references public.users(id),
+    created_at      timestamptz not null default now(),
+    unique (farm_id, walk_date)
+);
+create index if not exists idx_farm_walkthroughs_farm on public.farm_walkthroughs (farm_id, walk_date desc);
+create index if not exists idx_farm_walkthroughs_org  on public.farm_walkthroughs (organization_id);
+
+-- ------------------------------------------------------------
+-- RLS — зеркало herd_groups (org-scoped) + reference-паттерн для словаря.
+-- ------------------------------------------------------------
+alter table public.animals            enable row level security;
+alter table public.animal_events      enable row level security;
+alter table public.farm_walkthroughs  enable row level security;
+alter table public.animal_event_types enable row level security;
+
+drop policy if exists "animals_read_own" on public.animals;
+create policy "animals_read_own" on public.animals for select
+    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin() or public.fn_is_expert());
+drop policy if exists "animals_write_own" on public.animals;
+create policy "animals_write_own" on public.animals for all
+    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+
+drop policy if exists "animal_events_read_own" on public.animal_events;
+create policy "animal_events_read_own" on public.animal_events for select
+    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin() or public.fn_is_expert());
+drop policy if exists "animal_events_write_own" on public.animal_events;
+create policy "animal_events_write_own" on public.animal_events for all
+    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+
+drop policy if exists "farm_walkthroughs_read_own" on public.farm_walkthroughs;
+create policy "farm_walkthroughs_read_own" on public.farm_walkthroughs for select
+    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin() or public.fn_is_expert());
+drop policy if exists "farm_walkthroughs_write_own" on public.farm_walkthroughs;
+create policy "farm_walkthroughs_write_own" on public.farm_walkthroughs for all
+    using (organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin());
+
+-- animal_event_types — платформенный справочник: read authenticated, write admin (зеркало reference-таблиц)
+drop policy if exists "animal_event_types_read_authenticated" on public.animal_event_types;
+create policy "animal_event_types_read_authenticated" on public.animal_event_types for select
+    using (auth.uid() is not null);
+drop policy if exists "animal_event_types_admin_write" on public.animal_event_types;
+create policy "animal_event_types_admin_write" on public.animal_event_types for all
+    using (public.fn_is_admin());
+
+-- updated_at triggers (fn_set_updated_at из SECTION 7). farm_walkthroughs — суточный факт, updated_at нет.
+drop trigger if exists trg_animals_updated_at on public.animals;
+create trigger trg_animals_updated_at
+    before update on public.animals for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_animal_events_updated_at on public.animal_events;
+create trigger trg_animal_events_updated_at
+    before update on public.animal_events for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_animal_event_types_updated_at on public.animal_event_types;
+create trigger trg_animal_event_types_updated_at
+    before update on public.animal_event_types for each row execute function public.fn_set_updated_at();
+
+-- ------------------------------------------------------------
+-- 2.1  rpc_mark_walkthrough — отметка обхода (NK-идемпотентность).
+--      Повтор (same farm+date) → существующая строка, already_marked=true, событие НЕ эмитим.
+-- ------------------------------------------------------------
+create or replace function public.rpc_mark_walkthrough(
+    p_organization_id uuid,
+    p_farm_id         uuid,
+    p_walk_date       date default current_date,
+    p_actor_id        uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_row       public.farm_walkthroughs;
+    v_inserted  boolean := false;
+    v_date      date := coalesce(p_walk_date, current_date);
+begin
+    -- Authz (SEC-RPC-ORGTRUST-01): caller ∈ org (или admin) + farm ∈ org
+    if not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin()) then
+        raise exception 'FORBIDDEN: not a member of organization %', p_organization_id using errcode = 'P0001';
+    end if;
+    if not exists (select 1 from public.farms f
+                   where f.id = p_farm_id and f.organization_id = p_organization_id and f.is_active) then
+        raise exception 'FORBIDDEN: farm % does not belong to organization %', p_farm_id, p_organization_id using errcode = 'P0001';
+    end if;
+
+    insert into public.farm_walkthroughs (farm_id, organization_id, walk_date, marked_by)
+    values (p_farm_id, p_organization_id, v_date, p_actor_id)
+    on conflict (farm_id, walk_date) do nothing
+    returning * into v_row;
+
+    if v_row.id is not null then
+        v_inserted := true;
+    else
+        select * into v_row from public.farm_walkthroughs
+        where farm_id = p_farm_id and walk_date = v_date;
+    end if;
+
+    if v_inserted then
+        insert into public.platform_events (event_type, entity_type, entity_id, organization_id, actor_type, actor_id, payload)
+        values ('ops.walkthrough.marked', 'farm_walkthroughs', v_row.id, p_organization_id, 'farmer', p_actor_id,
+                jsonb_build_object('farm_id', p_farm_id, 'walk_date', v_row.walk_date,
+                                   'marked_at', v_row.marked_at, 'marked_by', p_actor_id));
+    end if;
+
+    return jsonb_build_object('ok', true, 'walkthrough_id', v_row.id, 'walk_date', v_row.walk_date,
+                              'marked_at', v_row.marked_at, 'already_marked', not v_inserted);
+end;
+$$;
+grant execute on function public.rpc_mark_walkthrough(uuid, uuid, date, uuid) to authenticated;
+revoke execute on function public.rpc_mark_walkthrough(uuid, uuid, date, uuid) from public, anon;
+
+-- ------------------------------------------------------------
+-- 2.2  rpc_log_animal_event — отклонение по бирке (CID-идемпотентность).
+--      (1) client_event_id уже есть → вернуть существующее (реплей);
+--      (2) найти животное (live) или lazy-создать (D140); (3) событие open; (4) O-10.
+--      Тип по code (L-7: UI шлёт code, не name).
+-- ------------------------------------------------------------
+create or replace function public.rpc_log_animal_event(
+    p_organization_id uuid,
+    p_farm_id         uuid,
+    p_tag_number      text,
+    p_event_type_code text,
+    p_herd_group_id   uuid        default null,
+    p_note            text        default null,
+    p_photo_url       text        default null,
+    p_occurred_at     timestamptz default now(),
+    p_client_event_id uuid        default null,
+    p_actor_id        uuid        default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_tag            text := btrim(coalesce(p_tag_number, ''));
+    v_type_id        uuid;
+    v_animal_id      uuid;
+    v_animal_created boolean := false;
+    v_event          public.animal_events;
+    v_existing       public.animal_events;
+begin
+    if not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin()) then
+        raise exception 'FORBIDDEN: not a member of organization %', p_organization_id using errcode = 'P0001';
+    end if;
+    if not exists (select 1 from public.farms f
+                   where f.id = p_farm_id and f.organization_id = p_organization_id and f.is_active) then
+        raise exception 'FORBIDDEN: farm % does not belong to organization %', p_farm_id, p_organization_id using errcode = 'P0001';
+    end if;
+
+    -- (1) CID-реплей
+    if p_client_event_id is not null then
+        select * into v_existing from public.animal_events where client_event_id = p_client_event_id;
+        if v_existing.id is not null then
+            return jsonb_build_object('ok', true, 'event_id', v_existing.id, 'animal_id', v_existing.animal_id,
+                                      'animal_created', false, 'status', v_existing.status, 'replayed', true);
+        end if;
+    end if;
+
+    if v_tag = '' then
+        return jsonb_build_object('ok', false, 'reason', 'TAG_REQUIRED');
+    end if;
+
+    select id into v_type_id from public.animal_event_types where code = p_event_type_code and is_active;
+    if v_type_id is null then
+        return jsonb_build_object('ok', false, 'reason', 'UNKNOWN_EVENT_TYPE');
+    end if;
+
+    if p_herd_group_id is not null and not exists (
+        select 1 from public.herd_groups hg where hg.id = p_herd_group_id and hg.farm_id = p_farm_id
+    ) then
+        return jsonb_build_object('ok', false, 'reason', 'HERD_GROUP_NOT_ON_FARM');
+    end if;
+
+    -- (2) найти live-животное по бирке или lazy-создать (D140)
+    select id into v_animal_id from public.animals
+    where farm_id = p_farm_id and lower(btrim(tag_number)) = lower(v_tag)
+      and status = 'in_herd' and is_active
+    limit 1;
+
+    if v_animal_id is null then
+        insert into public.animals (farm_id, organization_id, herd_group_id, tag_number, data_source, created_by)
+        values (p_farm_id, p_organization_id, p_herd_group_id, v_tag, 'platform', p_actor_id)
+        returning id into v_animal_id;
+        v_animal_created := true;
+    end if;
+
+    -- (3) событие open
+    insert into public.animal_events (organization_id, farm_id, animal_id, herd_group_id, event_type_id,
+                                      note, photo_url, status, occurred_at, recorded_by, created_via, client_event_id)
+    values (p_organization_id, p_farm_id, v_animal_id, p_herd_group_id, v_type_id,
+            p_note, p_photo_url, 'open', coalesce(p_occurred_at, now()), p_actor_id, 'cabinet', p_client_event_id)
+    returning * into v_event;
+
+    -- (4) O-10
+    insert into public.platform_events (event_type, entity_type, entity_id, organization_id, actor_type, actor_id, payload)
+    values ('ops.animal_event.opened', 'animal_events', v_event.id, p_organization_id, 'farmer', p_actor_id,
+            jsonb_build_object('event_id', v_event.id, 'farm_id', p_farm_id, 'animal_id', v_animal_id,
+                               'tag_number', v_tag, 'event_type_code', p_event_type_code,
+                               'herd_group_id', p_herd_group_id, 'occurred_at', v_event.occurred_at));
+
+    return jsonb_build_object('ok', true, 'event_id', v_event.id, 'animal_id', v_animal_id,
+                              'animal_created', v_animal_created, 'status', 'open');
+end;
+$$;
+grant execute on function public.rpc_log_animal_event(uuid, uuid, text, text, uuid, text, text, timestamptz, uuid, uuid) to authenticated;
+revoke execute on function public.rpc_log_animal_event(uuid, uuid, text, text, uuid, text, text, timestamptz, uuid, uuid) from public, anon;
+
+-- ------------------------------------------------------------
+-- 2.3  rpc_close_animal_event — закрытие события (FSM-идемпотентность).
+--      Уже closed → вернуть как есть (реплей-safe). Переход → O-11.
+-- ------------------------------------------------------------
+create or replace function public.rpc_close_animal_event(
+    p_organization_id uuid,
+    p_event_id        uuid,
+    p_resolution_note text default null,
+    p_actor_id        uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_event public.animal_events;
+begin
+    if not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin()) then
+        raise exception 'FORBIDDEN: not a member of organization %', p_organization_id using errcode = 'P0001';
+    end if;
+
+    select * into v_event from public.animal_events
+    where id = p_event_id and organization_id = p_organization_id;
+    if v_event.id is null then
+        return jsonb_build_object('ok', false, 'reason', 'EVENT_NOT_FOUND');
+    end if;
+
+    if v_event.status = 'closed' then
+        return jsonb_build_object('ok', true, 'event_id', v_event.id, 'status', 'closed',
+                                  'closed_at', v_event.closed_at, 'already_closed', true);
+    end if;
+
+    update public.animal_events
+       set status = 'closed', closed_at = now(), closed_by = p_actor_id,
+           resolution_note = coalesce(p_resolution_note, resolution_note)
+     where id = p_event_id
+    returning * into v_event;
+
+    insert into public.platform_events (event_type, entity_type, entity_id, organization_id, actor_type, actor_id, payload)
+    values ('ops.animal_event.closed', 'animal_events', v_event.id, p_organization_id, 'farmer', p_actor_id,
+            jsonb_build_object('event_id', v_event.id, 'farm_id', v_event.farm_id,
+                               'animal_id', v_event.animal_id, 'closed_at', v_event.closed_at));
+
+    return jsonb_build_object('ok', true, 'event_id', v_event.id, 'status', 'closed',
+                              'closed_at', v_event.closed_at, 'already_closed', false);
+end;
+$$;
+grant execute on function public.rpc_close_animal_event(uuid, uuid, text, uuid) to authenticated;
+revoke execute on function public.rpc_close_animal_event(uuid, uuid, text, uuid) from public, anon;
+
+-- ------------------------------------------------------------
+-- 2.4  rpc_get_herd_board — агрегат таба «Стадо»+«Обход» одним вызовом (кэш-юнит D145).
+--      category_name = animal_categories.name_ru (herd_groups хранит animal_category_id).
+--      task_id = null в F2: farm_tasks.animal_event_id добавляется в F3 (ARS-279),
+--      до-wire этого RPC — там же; поле в контракте присутствует (стабильность для F9 UI).
+-- ------------------------------------------------------------
+create or replace function public.rpc_get_herd_board(
+    p_organization_id uuid,
+    p_farm_id         uuid,
+    p_today           date default current_date
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_today  date := coalesce(p_today, current_date);
+    v_result jsonb;
+begin
+    if not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin() or public.fn_is_expert()) then
+        raise exception 'FORBIDDEN: not a member of organization %', p_organization_id using errcode = 'P0001';
+    end if;
+    if not exists (select 1 from public.farms f
+                   where f.id = p_farm_id and f.organization_id = p_organization_id and f.is_active) then
+        raise exception 'FORBIDDEN: farm % does not belong to organization %', p_farm_id, p_organization_id using errcode = 'P0001';
+    end if;
+
+    select jsonb_build_object(
+        'ok', true,
+        'herd_total', coalesce((select sum(hg.head_count) from public.herd_groups hg
+                                where hg.farm_id = p_farm_id and hg.is_active), 0),
+        'groups', coalesce((select jsonb_agg(jsonb_build_object(
+                        'id', hg.id, 'category_name', ac.name_ru,
+                        'head_count', hg.head_count, 'avg_weight_kg', hg.avg_weight_kg
+                    ) order by ac.sort_order)
+                    from public.herd_groups hg
+                    join public.animal_categories ac on ac.id = hg.animal_category_id
+                    where hg.farm_id = p_farm_id and hg.is_active), '[]'::jsonb),
+        'walkthrough', coalesce(
+                    (select jsonb_build_object('marked', true, 'marked_at', w.marked_at)
+                     from public.farm_walkthroughs w
+                     where w.farm_id = p_farm_id and w.walk_date = v_today limit 1),
+                    jsonb_build_object('marked', false, 'marked_at', null)),
+        'open_events', coalesce((select jsonb_agg(jsonb_build_object(
+                        'event_id', ae.id, 'tag_number', a.tag_number,
+                        'type_code', aet.code, 'type_name', aet.name_ru,
+                        'occurred_at', ae.occurred_at, 'note', ae.note,
+                        'vet_case_id', ae.vet_case_id, 'task_id', null
+                    ) order by ae.occurred_at desc)
+                    from public.animal_events ae
+                    join public.animals a on a.id = ae.animal_id
+                    join public.animal_event_types aet on aet.id = ae.event_type_id
+                    where ae.farm_id = p_farm_id and ae.status = 'open'), '[]'::jsonb),
+        'today_events_count', (select count(*) from public.animal_events ae
+                               where ae.farm_id = p_farm_id and ae.occurred_at::date = v_today),
+        'animals_recent', coalesce((select jsonb_agg(x order by rn) from (
+                        select jsonb_build_object('animal_id', a.id, 'tag_number', a.tag_number,
+                                                  'herd_group_id', a.herd_group_id) as x,
+                               row_number() over (order by a.updated_at desc) as rn
+                        from public.animals a
+                        where a.farm_id = p_farm_id and a.status = 'in_herd' and a.is_active
+                        order by a.updated_at desc limit 30
+                    ) sub), '[]'::jsonb)
+    ) into v_result;
+
+    return v_result;
+end;
+$$;
+grant execute on function public.rpc_get_herd_board(uuid, uuid, date) to authenticated;
+revoke execute on function public.rpc_get_herd_board(uuid, uuid, date) from public, anon;
+
+-- ------------------------------------------------------------
+-- 2.5  rpc_get_animal_card — животное + история событий (кэш-юнит animal_card).
+-- ------------------------------------------------------------
+create or replace function public.rpc_get_animal_card(
+    p_organization_id uuid,
+    p_animal_id       uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_animal public.animals;
+    v_result jsonb;
+begin
+    if not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin() or public.fn_is_expert()) then
+        raise exception 'FORBIDDEN: not a member of organization %', p_organization_id using errcode = 'P0001';
+    end if;
+
+    select * into v_animal from public.animals
+    where id = p_animal_id and organization_id = p_organization_id;
+    if v_animal.id is null then
+        return jsonb_build_object('ok', false, 'reason', 'ANIMAL_NOT_FOUND');
+    end if;
+
+    select jsonb_build_object(
+        'ok', true,
+        'animal', jsonb_build_object(
+            'id', v_animal.id, 'tag_number', v_animal.tag_number, 'status', v_animal.status,
+            'herd_group_id', v_animal.herd_group_id,
+            'herd_group_name', (select ac.name_ru from public.herd_groups hg
+                                join public.animal_categories ac on ac.id = hg.animal_category_id
+                                where hg.id = v_animal.herd_group_id),
+            'left_at', v_animal.left_at, 'left_reason', v_animal.left_reason,
+            'notes', v_animal.notes, 'created_at', v_animal.created_at),
+        'events', coalesce((select jsonb_agg(jsonb_build_object(
+                        'event_id', ae.id, 'type_code', aet.code, 'type_name', aet.name_ru,
+                        'status', ae.status, 'note', ae.note, 'photo_url', ae.photo_url,
+                        'occurred_at', ae.occurred_at, 'closed_at', ae.closed_at,
+                        'resolution_note', ae.resolution_note, 'vet_case_id', ae.vet_case_id
+                    ) order by ae.occurred_at desc)
+                    from public.animal_events ae
+                    join public.animal_event_types aet on aet.id = ae.event_type_id
+                    where ae.animal_id = p_animal_id), '[]'::jsonb)
+    ) into v_result;
+
+    return v_result;
+end;
+$$;
+grant execute on function public.rpc_get_animal_card(uuid, uuid) to authenticated;
+revoke execute on function public.rpc_get_animal_card(uuid, uuid) from public, anon;
+
+-- Реестр имён (D-NEW-A). supabase_call = generated column (не вставляем).
+insert into public.rpc_name_registry (sql_name, dok3_name, created_in, notes) values
+  ('rpc_mark_walkthrough', null, 'd01_kernel.sql (ARS-278)', 'Ferma 2.0: отметка обхода, NK-идемпотентность'),
+  ('rpc_log_animal_event', null, 'd01_kernel.sql (ARS-278)', 'Ferma 2.0: отклонение по бирке, lazy-создание animal (D140)'),
+  ('rpc_close_animal_event', null, 'd01_kernel.sql (ARS-278)', 'Ferma 2.0: закрытие события (FSM-идемпотентность)'),
+  ('rpc_get_herd_board', null, 'd01_kernel.sql (ARS-278)', 'Ferma 2.0: агрегат таба Стадо/Обход'),
+  ('rpc_get_animal_card', null, 'd01_kernel.sql (ARS-278)', 'Ferma 2.0: карточка животного + история событий')
+on conflict (sql_name) do update set notes = excluded.notes, created_in = excluded.created_in;

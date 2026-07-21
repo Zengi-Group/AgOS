@@ -4468,3 +4468,22 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: doc-only; `cross_check.sh` прогнан (см. PR); acceptance ARS-277 сверен по пунктам (слайс/дельты без дублирования/D-записи/реестр имён в спеке для F2-F3/матрица→контракт/владельцы §12). Прод не тронут.
 
 **Files**: `Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md` (new), `Docs/AGOS-Dok6-Slice8-Ferma2-OpsCabinet.md` (new), `Docs/AGOS-Dok1-v1_9.md` (+6 аддитивных блоков), `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md` (+§7a, +история), `Docs/AGOS-Dok4-EventBus-v1_1.md` (+O-09..O-12, +§3.6a), `IMPL_DEBT.md` (FARM-02 note), эта запись.
+
+---
+
+### 2026-07-21: ARS-278 (Ферма 2.0 · F2 DB) — обход + события животных (animals/animal_events/farm_walkthroughs + 6 RPC)
+
+**What**: F2-слайс эпика ARS-276 по контракту F1 (ARS-277). Аддитивно (P7), 0 изменённых существующих строк — новые секции в конце `d01_kernel.sql` и `d04_vet.sql`.
+- **Таблицы (d01):** `animal_event_types` (словарь P8, seed 6: LYING/LAME/NOT_EATING/INJURY/HEAT_SIGNS/OTHER), `animals` (identity-лайт D140, lazy, uq по `(farm_id, lower(btrim(tag_number)))` на live-строках), `animal_events` (open/closed FSM, `client_event_id` для CID-реплея, `vet_case_id` плоский), `farm_walkthroughs` (NK `(farm_id, walk_date)`). RLS зеркалит `herd_groups` (org read+expert / write+admin); словарь = reference-паттерн (read authenticated, write admin). `updated_at`-триггеры на 3 таблицы.
+- **RPC (d01):** 2.1 `rpc_mark_walkthrough` (NK) · 2.2 `rpc_log_animal_event` (CID + lazy-create) · 2.3 `rpc_close_animal_event` (FSM) · 2.4 `rpc_get_herd_board` · 2.5 `rpc_get_animal_card`. Все SECURITY DEFINER + guard (caller∈org∨admin + farm∈org, SEC-RPC-ORGTRUST-01) + `grant authenticated; revoke public, anon` (SEC-GRANT-PUBLIC-01 clean с рождения). События O-09/O-10/O-11 (`actor_type='farmer'`). Реестр имён +5.
+- **RPC + FK (d04):** deferred FK `animal_events.vet_case_id → vet_cases` (паттерн D57); 2.6 `rpc_create_vet_case_from_event` (`created_via='cabinet_farmer'`, `affected_head_count=1`, эмит `vet.vet_case.opened` + `payload.animal_event_id`, FSM `already_linked`). Реестр +1. `herd_events` НЕ тронут (D147).
+
+**Why**: контракт F1 (D140–D147) требует DB-слой до UI-тактов F5..F9; F2 разблокирует ARS-285 (F9 UI, relation blocks).
+
+**Verify**: `cross_check.sh` 0 critical (CHECK 7 — все 6 RPC зарегистрированы). **Probe+rollback на проде** (`mwtbozflyldcadypherr`, `begin…rollback`, ничего не персистнуто; authenticated-сессия сымитирована через `request.jwt.claims` → fast-path `fn_my_org_ids`): все 6 RPC исполнились без ошибок runtime-резолюции (plpgsql blind spot закрыт); подтверждено — NK/CID/FSM-идемпотентность (повтор не дублирует), lazy-создание `animals` (D140), reuse live-животного по бирке, graceful `UNKNOWN_EVENT_TYPE`, `category_name` из `animal_categories.name_ru`, `task_id=null` (граница F2), эскалация→`vet_cases` + `already_linked`, **cross-org guard блокирует orgB→orgA** (`FORBIDDEN: not a member`). Полный seed-фермер authenticated e2e (реальный JWT-роль + raw RLS-политики) — отложен до G3-деплоя (Option A, CEO green-light; §12#2: словарь финализируется с ветврачом до прод-деплоя F2).
+
+**Находки**: (1) `rpc_name_registry.supabase_call` = **generated column** (NOT NULL, авто из `sql_name`) — 4-колоночная вставка из спеки корректна (подтверждено probe; не дефект). (2) **Расхождение канон↔код V-01**: Dok4 называет событие `vet.case.opened`, задеплоенный код (`d07:367`) эмитит `vet.vet_case.opened` — pre-existing, зафиксировано в IMPL_DEBT **VET-EVENT-NAME-01**; 2.6 эмитит реальный токен (reuse живого стрима), eng-spec §2.6/§3 выровнен на `vet.vet_case.opened`.
+
+**НЕ задеплоено** (G3+CEO): прод-apply дельт `d01`/`d04` — отдельный шаг; до него фича инертна на проде (таблиц нет). Merge PR ≠ deploy. Связано: [[agos-merge-not-equal-deploy]].
+
+**Files**: `d01_kernel.sql` (+секция FERMA-2.0 F2: 4 таблицы, RLS, триггеры, 5 RPC, реестр), `d04_vet.sql` (+секция FERMA-2.0 F2: deferred FK + `rpc_create_vet_case_from_event` + реестр), `Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md` (токен V-01 → `vet.vet_case.opened`), `IMPL_DEBT.md` (VET-EVENT-NAME-01), эта запись.

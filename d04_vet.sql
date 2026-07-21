@@ -2910,3 +2910,89 @@ insert into public.rpc_name_registry (sql_name, dok3_name, created_in, notes)
 values ('rpc_get_expert_kpi', null, 'd04_vet.sql (Read RPCs)', 'M06: expert KPI stats — consultations + avg response time')
 on conflict (sql_name) do update set notes = excluded.notes;
 
+
+-- ============================================================
+-- SECTION FERMA-2.0 · F2 — Эскалация «Ветврачу» из обхода (ARS-278)
+-- ============================================================
+-- Date: 2026-07-21
+-- Canon: Docs/AGOS-Ferma2-OpsCabinet-EngSpec-v0_1.md §2.6, D147.
+-- animal_events создаётся в d01 (ARS-278). Здесь: deferred FK
+-- animal_events.vet_case_id → vet_cases (паттерн D57 — разрывает цикл
+-- порядка применения d01→d04) + RPC эскалации. herd_events НЕ трогаем (D147).
+-- ============================================================
+
+-- Deferred FK (idempotent: drop+add — Postgres не поддерживает ADD CONSTRAINT IF NOT EXISTS).
+alter table public.animal_events drop constraint if exists fk_animal_events_vet_case;
+alter table public.animal_events
+    add constraint fk_animal_events_vet_case
+    foreign key (vet_case_id) references public.vet_cases(id);
+
+-- ------------------------------------------------------------
+-- 2.6  rpc_create_vet_case_from_event — событие обхода → vet_cases (D147).
+--      FSM: событие уже связано → вернуть существующий кейс (already_linked).
+--      Иначе: vet_cases (created_via='cabinet_farmer', affected_head_count=1) +
+--      атомарная связь animal_events.vet_case_id + эмит vet.vet_case.opened
+--      (реальный токен d07, +payload.animal_event_id — нового события не вводим).
+--      Дозы/диагнозы НЕ генерируются (D61): symptoms_text = наблюдение фермера.
+-- ------------------------------------------------------------
+create or replace function public.rpc_create_vet_case_from_event(
+    p_organization_id uuid,
+    p_event_id        uuid,
+    p_actor_id        uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_event    public.animal_events;
+    v_tag      text;
+    v_type_ru  text;
+    v_case_id  uuid;
+    v_severity text := 'moderate';   -- наблюдение фермера, не диагноз; trigger fn_vet_case_auto_escalate не эскалирует (не critical)
+begin
+    if not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin()) then
+        raise exception 'FORBIDDEN: not a member of organization %', p_organization_id using errcode = 'P0001';
+    end if;
+
+    select * into v_event from public.animal_events
+    where id = p_event_id and organization_id = p_organization_id;
+    if v_event.id is null then
+        return jsonb_build_object('ok', false, 'reason', 'EVENT_NOT_FOUND');
+    end if;
+
+    -- FSM: уже связано → вернуть существующий кейс (реплей-safe)
+    if v_event.vet_case_id is not null then
+        return jsonb_build_object('ok', true, 'vet_case_id', v_event.vet_case_id, 'already_linked', true);
+    end if;
+
+    select a.tag_number into v_tag from public.animals a where a.id = v_event.animal_id;
+    select aet.name_ru  into v_type_ru from public.animal_event_types aet where aet.id = v_event.event_type_id;
+
+    insert into public.vet_cases (organization_id, farm_id, herd_group_id, affected_head_count,
+                                  symptoms_text, severity, status, created_via, created_by)
+    values (p_organization_id, v_event.farm_id, v_event.herd_group_id, 1,
+            concat_ws('; ', v_type_ru, 'бирка №' || coalesce(v_tag, '—'),
+                      nullif(btrim(coalesce(v_event.note, '')), '')),
+            v_severity, 'open', 'cabinet_farmer', p_actor_id)
+    returning id into v_case_id;
+
+    update public.animal_events set vet_case_id = v_case_id where id = p_event_id;
+
+    -- эмит существующего vet.vet_case.opened (V-01) + animal_event_id (аддитивно; d07 токен)
+    insert into public.platform_events (event_type, entity_type, entity_id, organization_id, actor_type, actor_id, payload)
+    values ('vet.vet_case.opened', 'vet_cases', v_case_id, p_organization_id, 'farmer', p_actor_id,
+            jsonb_build_object('vet_case_id', v_case_id, 'severity', v_severity,
+                               'farm_id', v_event.farm_id, 'animal_event_id', p_event_id));
+
+    return jsonb_build_object('ok', true, 'vet_case_id', v_case_id, 'already_linked', false);
+end;
+$$;
+grant execute on function public.rpc_create_vet_case_from_event(uuid, uuid, uuid) to authenticated;
+revoke execute on function public.rpc_create_vet_case_from_event(uuid, uuid, uuid) from public, anon;
+
+insert into public.rpc_name_registry (sql_name, dok3_name, created_in, notes) values
+  ('rpc_create_vet_case_from_event', null, 'd04_vet.sql (ARS-278)', 'Ferma 2.0: эскалация Ветврачу из события обхода (D147); эмит vet.vet_case.opened +animal_event_id')
+on conflict (sql_name) do update set notes = excluded.notes, created_in = excluded.created_in;
+
