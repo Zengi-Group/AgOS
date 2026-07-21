@@ -1,11 +1,14 @@
 // AgOS · ARS-282/ARS-283 (Ферма 2.0 · F6/F7) · SCR-TA «Задачи».
 // Шапка (сегмент Неделя|Месяц|Год + «+») — общая для F6/F7/F8, строится здесь первой (Slice8 §3).
 // Неделя (§3.1, F6): горит-блок (непролистываем) → полоса недели → план дня. Месяц (§3.2, F7,
-// MonthScreen.tsx): календарная сетка-диапазоны → «Подготовиться к окнам» → «Вехи месяца». Год —
-// существующий мост FarmPlanView (ARS-215, HS-2), передаётся снаружи как yearBridge — до
-// полноценного SCR-TA (F8). Чек/перенос — общие RPC с Обзором (farm-overview.ts), общий факт (slice §6).
+// MonthScreen.tsx): календарная сетка-диапазоны → «Подготовиться к окнам» → «Вехи месяца». Год
+// (§3.3, F8/ARS-284): вертикальный таймлайн фаз + единственная ручная правка «Старт случки»
+// (превью→confirm→rpc_shift_breeding_start); заменяет временный мост FarmPlanView (ARS-215) —
+// см. FarmScreen.tsx (HS-2: читатель ARS-215 переиспользован визуально — карточки фаз/чипы
+// статуса — не выброшен, а поднят в полноценный SCR-TA). Все три сегмента теперь рабочие.
+// Чек/перенос — общие RPC с Обзором (farm-overview.ts), общий факт (slice §6).
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { PhIcon } from '../components/icons/PhIcon'
 import { ScreenSkeleton } from '../components/ScreenSkeleton'
 import { Sheet } from '../components/Sheet'
@@ -14,7 +17,9 @@ import type { FarmTab, FarmTabParams, GoFarmTab } from './tabs'
 import { completeFarmTask, rescheduleFarmTaskToday, localToday } from './data/farm-overview'
 import {
   loadWeekHorizon, loadNextMilestone, createFarmTask,
+  loadYearHorizon, previewBreedingShift, shiftBreedingStart,
   type WeekHorizon, type WeekTask, type BurningItem, type MonthMilestone,
+  type YearHorizon, type YearPhase, type CascadePreviewItem,
 } from './data/farm-tasks'
 import { MonthScreen } from './MonthScreen'
 
@@ -23,18 +28,22 @@ interface Props {
   farmId: string
   goFarmTab: GoFarmTab
   params?: FarmTabParams
-  yearBridge: ReactNode
+  toast: (text: string) => void
+  onGlobalRefresh: () => void
   refreshNonce: number
 }
 
 const WEEKDAY = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 const MON_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+const MON_ABBR = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
 
 const parseD = (d: string) => new Date(d + 'T00:00:00')
 const dow = (d: string) => (parseD(d).getDay() + 6) % 7 // 0=Пн..6=Вс
 const dm = (d: string) => `${parseD(d).getDate()} ${MON_GEN[parseD(d).getMonth()]}`
 const hmTime = (t: string | null) => (t ? t.slice(0, 5) : '')
 const daysUntil = (d: string) => Math.max(0, Math.round((parseD(d).getTime() - parseD(localToday()).getTime()) / 86400000))
+// Год (§3.3): диапазон цикла в шапке — «июн 26 → окт 27» (абброморфы месяца + 2-значный год).
+const monYear = (d: string) => `${MON_ABBR[parseD(d).getMonth()]} ${String(parseD(d).getFullYear()).slice(-2)}`
 
 const SEGMENTS: ReadonlyArray<{ key: NonNullable<FarmTabParams['horizon']>; label: string }> = [
   { key: 'week', label: 'Неделя' },
@@ -42,7 +51,7 @@ const SEGMENTS: ReadonlyArray<{ key: NonNullable<FarmTabParams['horizon']>; labe
   { key: 'year', label: 'Год' },
 ]
 
-export function TasksScreen({ orgId, farmId, goFarmTab, params, yearBridge, refreshNonce }: Props) {
+export function TasksScreen({ orgId, farmId, goFarmTab, params, toast, onGlobalRefresh, refreshNonce }: Props) {
   const horizon = params?.horizon ?? 'week'
   const [createOpen, setCreateOpen] = useState(false)
   const [createdNonce, setCreatedNonce] = useState(0)
@@ -70,7 +79,7 @@ export function TasksScreen({ orgId, farmId, goFarmTab, params, yearBridge, refr
       ) : horizon === 'month' ? (
         <MonthScreen orgId={orgId} farmId={farmId} goFarmTab={goFarmTab} refreshNonce={refreshNonce} createdNonce={createdNonce} />
       ) : (
-        yearBridge
+        <YearView orgId={orgId} farmId={farmId} refreshNonce={refreshNonce} toast={toast} onGlobalRefresh={onGlobalRefresh} />
       )}
 
       <CreateTaskSheet
@@ -310,6 +319,236 @@ function TaskRow({ t, isDone, onToggle }: { t: WeekTask; isDone: boolean; onTogg
       )}
       {t.due_time && <div className="fo-tr-time mk-mono">{hmTime(t.due_time)}</div>}
     </div>
+  )
+}
+
+// ── Год (F8, ARS-284) — вертикальный таймлайн фаз + сдвиг старта случки (§3.3) ─
+
+function YearView({ orgId, farmId, refreshNonce, toast, onGlobalRefresh }: {
+  orgId: string; farmId: string; refreshNonce: number; toast: (text: string) => void; onGlobalRefresh: () => void
+}) {
+  const [data, setData] = useState<YearHorizon | null>(null)
+  const [noPlan, setNoPlan] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+
+  const load = useCallback(async (silent?: boolean) => {
+    if (!silent) setLoading(true)
+    try {
+      const d = await loadYearHorizon(orgId, farmId)
+      if (d.no_plan) { setNoPlan(true); setData(null) } else { setNoPlan(false); setData(d) }
+      setFailed(false)
+    } catch {
+      setFailed(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [orgId, farmId])
+
+  useEffect(() => { load() }, [load])
+  useEffect(() => { if (refreshNonce > 0) load(true) }, [refreshNonce, load])
+
+  if (loading && !data && !noPlan) return <ScreenSkeleton variant="farm" />
+  if (failed && !data) {
+    return (
+      <div className="mk-empty">
+        <div className="mk-empty-art"><PhIcon name="alert" size={40} /></div>
+        <div className="mk-empty-h">Не удалось загрузить план</div>
+        <div className="mk-empty-t">Проверьте связь и попробуйте ещё раз.</div>
+        <button className="mk-cta ghost" onClick={() => load()}>Обновить</button>
+      </div>
+    )
+  }
+  if (noPlan) {
+    return (
+      <div className="mk-empty">
+        <div className="mk-empty-art"><PhIcon name="calendar" size={46} /></div>
+        <div className="mk-empty-h">Плана пока нет</div>
+        <div className="mk-empty-t">Как только запустите техкарту — здесь появится план на год.</div>
+      </div>
+    )
+  }
+  if (!data) return null
+
+  const breeding = data.breeding
+  const breedingPhase = breeding ? data.phases.find((p) => p.id === breeding.phase_id) ?? null : null
+
+  return (
+    <>
+      <div className="ta-yr-h">
+        <div className="ta-yr-name">Цикл {parseD(data.plan.cycle_start).getFullYear()} — целиком</div>
+        <div className="ta-yr-range mk-mono">{monYear(data.plan.cycle_start)} → {monYear(data.plan.cycle_end)}</div>
+      </div>
+
+      <div className="ta-yr-line">
+        {data.phases.map((ph) => (
+          <YearPhaseRow key={ph.id} ph={ph} isBreeding={breeding?.phase_id === ph.id} onEditBreeding={() => setEditOpen(true)} />
+        ))}
+      </div>
+
+      {breedingPhase && (
+        <BreedingShiftSheet
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          orgId={orgId}
+          farmId={farmId}
+          phase={breedingPhase}
+          onShifted={(tasksCount) => {
+            toast(tasksCount > 0 ? `Пересчитано задач: ${tasksCount}` : 'Дата не изменилась — пересчёт не нужен')
+            load(true)
+            onGlobalRefresh()
+          }}
+        />
+      )}
+    </>
+  )
+}
+
+function YearPhaseRow({ ph, isBreeding, onEditBreeding }: { ph: YearPhase; isBreeding: boolean; onEditBreeding: () => void }) {
+  if (ph.status === 'completed' || ph.status === 'skipped') {
+    return (
+      <div className="ta-yr-row">
+        <span className="ta-yr-dot done"><PhIcon name="check" size={11} /></span>
+        <div className="ta-yr-row-main">
+          <div className="ta-yr-row-n muted">{ph.name_ru}</div>
+          <div className="ta-yr-row-d mk-mono">{dm(ph.start_date)} — {dm(ph.end_date)}</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (ph.status === 'active') {
+    return (
+      <div className="ta-yr-card">
+        <div className="ta-yr-row">
+          <span className="ta-yr-dot on" />
+          <div className="ta-yr-row-main">
+            <div className="ta-yr-row-n">{ph.name_ru}</div>
+            <div className="ta-yr-row-d">день <span className="mk-mono">{ph.day}</span>/<span className="mk-mono">{ph.days_total}</span></div>
+          </div>
+        </div>
+        <div className="ta-yr-bar"><div className="ta-yr-bar-f" style={{ width: `${ph.progress_pct}%` }} /></div>
+        {ph.milestones.length > 0 && (
+          <div className="ta-yr-mile">
+            {ph.milestones.map((m, i) => (
+              <div className="ta-yr-mile-row" key={i}>
+                <span className="mk-mono">{dm(m.date)}</span>
+                <span>{m.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {isBreeding && (
+          <button className="ta-yr-edit" onClick={onEditBreeding}>
+            <PhIcon name="pencil" size={14} />
+            <span>Старт случки — {dm(ph.start_date)} · изменить</span>
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  // upcoming
+  return (
+    <div className="ta-yr-row">
+      <span className="ta-yr-dot" />
+      <div className="ta-yr-row-main">
+        <div className="ta-yr-row-n">{ph.name_ru}</div>
+        <div className="ta-yr-row-d">
+          <span className="mk-mono">{dm(ph.start_date)} — {dm(ph.end_date)}</span>
+          {ph.expected_heads != null && <> · ожидается ~<span className="mk-mono">{ph.expected_heads}</span> голов</>}
+        </div>
+      </div>
+      {isBreeding && (
+        <button className="ta-yr-edit-sm" aria-label="Старт случки — изменить" onClick={onEditBreeding}>
+          <PhIcon name="pencil" size={14} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+// Флоу §3.3.3: date-picker → превью (fn_preview_cascade, read-only) → confirm → rpc_shift_breeding_start.
+// Отмена на любом шаге — ничего не вызвано (превью само по себе ничего не пишет).
+function BreedingShiftSheet({ open, onClose, orgId, farmId, phase, onShifted }: {
+  open: boolean; onClose: () => void; orgId: string; farmId: string; phase: YearPhase
+  onShifted: (shiftedTasksCount: number) => void
+}) {
+  const [step, setStep] = useState<'pick' | 'preview'>('pick')
+  const [date, setDate] = useState(phase.start_date)
+  const [preview, setPreview] = useState<CascadePreviewItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (open) { setStep('pick'); setDate(phase.start_date); setPreview([]); setErr(null) }
+  }, [open, phase.start_date])
+
+  const showPreview = async () => {
+    if (!date || loading) return
+    setLoading(true)
+    setErr(null)
+    try {
+      setPreview(await previewBreedingShift(phase.id, date))
+      setStep('preview')
+    } catch {
+      setErr('Не удалось построить превью — попробуйте ещё')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const confirm = async () => {
+    if (saving) return
+    setSaving(true)
+    setErr(null)
+    try {
+      const r = await shiftBreedingStart(orgId, farmId, date)
+      if (r.ok) {
+        onShifted(r.no_change ? 0 : r.shifted_tasks_count)
+        onClose()
+      } else {
+        setErr('Не удалось пересчитать — попробуйте ещё')
+      }
+    } catch {
+      setErr('Не удалось пересчитать — попробуйте ещё')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Sheet open={open} onClose={onClose}>
+      {step === 'pick' ? (
+        <>
+          <div className="sh-t">Старт случки</div>
+          <input className="ta-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          {err && <div className="fo-err"><PhIcon name="alert" size={14} />{err}</div>}
+          <Cta onClick={showPreview} disabled={!date || loading}>{loading ? 'Считаю…' : 'Далее'}</Cta>
+          <Cta variant="ghost" onClick={onClose}>Отмена</Cta>
+        </>
+      ) : (
+        <>
+          <div className="sh-t">Пересчитает все будущие окна и вехи</div>
+          <div className="ta-yr-prev-note">Прошлое не изменится.</div>
+          {preview.length > 0 && (
+            <div className="ta-yr-prev-list">
+              {preview.map((p) => (
+                <div className="ta-yr-prev-row" key={p.phase_id}>
+                  <span className="ta-yr-prev-n">{p.phase_name}</span>
+                  <span className="ta-yr-prev-d mk-mono">{dm(p.old_start)} → {dm(p.new_start)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {err && <div className="fo-err"><PhIcon name="alert" size={14} />{err}</div>}
+          <Cta onClick={confirm} disabled={saving}>{saving ? 'Пересчитываю…' : 'Подтвердить'}</Cta>
+          <Cta variant="ghost" onClick={() => setStep('pick')}>Назад</Cta>
+        </>
+      )}
+    </Sheet>
   )
 }
 

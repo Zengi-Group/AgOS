@@ -3059,13 +3059,17 @@ as $$
         union all
 
         -- Зависимые sequential фазы (рекурсия)
+        -- ARS-284 bugfix: было `+ 1` — расходилось с реальным писателем fn_shift_phase_cascade
+        -- (v_dep_new_start := v_new_end_date + lag_days, БЕЗ +1) → превью всегда обещало на 1 день
+        -- позже, чем каскад реально применял (обнаружено живым QA ARS-284: preview "10 авг → 21 июля",
+        -- committed "20 июля"). Формула приведена к писателю — превью = зеркало, не разошедшийся дубль.
         select  child.id,
                 child.name_ru,
                 child.start_date,
-                (parent.new_end + child.lag_days + 1)::date,
+                (parent.new_end + child.lag_days)::date,
                 child.end_date,
-                (parent.new_end + child.lag_days + 1 + (child.end_date - child.start_date))::date,
-                (parent.new_end + child.lag_days + 1 - child.start_date),
+                (parent.new_end + child.lag_days + (child.end_date - child.start_date))::date,
+                (parent.new_end + child.lag_days - child.start_date),
                 child.date_type,
                 parent.depth + 1
         from    public.farm_phases child
@@ -3091,10 +3095,12 @@ comment on function public.fn_preview_cascade(uuid, date) is
     'L-7 PATCHED: Добавлен access check через CTE.
      Без доступа к org фермы — возвращает 0 строк (не exception).
      Предотвращает утечку оперативных планов конкурентов (ст. 5.9 Dok 1).
-     
+
      Оригинальная функция: 008_patch_cascade.sql.
-     Изменение: только security fix в WHERE clause через access_check CTE.
-     Логика каскада не изменена.';
+     Изменение: security fix в WHERE clause через access_check CTE.
+     ARS-284: убран лишний `+ 1` из рекурсивной ветки (было расхождение с
+     fn_shift_phase_cascade — превью обещало на 1 день позже реально применяемого
+     каскада). Формула снова = зеркало писателя, fn_shift_phase_cascade не менялся (P7).';
 
 -- ============================================================
 -- MIGRATION COMPLETE
@@ -4618,7 +4624,11 @@ begin
                 ) b), '[]'::jsonb),
             'days', (
                 select jsonb_agg(jsonb_build_object(
-                    'd', d.day,
+                    -- ARS-284 bugfix: generate_series(date,date,interval) возвращает timestamp,
+                    -- не date — без каста jsonb сериализовал полный ISO-таймстамп ("...T00:00:00+00:00"),
+                    -- фронт (parseD: `d + 'T00:00:00'`) склеивал два таймстампа → Invalid Date → NaN
+                    -- по всей неделе (обнаружено живым QA ARS-284, баг существовал с F6/ARS-282).
+                    'd', d.day::date,
                     'load', (select count(*) from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
                              where fp.plan_id = v_plan.id and ft.due_date = d.day and ft.status <> 'skipped'),
                     'has_overdue', exists(select 1 from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
@@ -4654,7 +4664,11 @@ begin
             'range', jsonb_build_object('from', v_from, 'to', v_to),
             'grid', (
                 select jsonb_agg(jsonb_build_object(
-                    'd', d.day,
+                    -- ARS-284 bugfix: generate_series(date,date,interval) возвращает timestamp,
+                    -- не date — без каста jsonb сериализовал полный ISO-таймстамп ("...T00:00:00+00:00"),
+                    -- фронт (parseD: `d + 'T00:00:00'`) склеивал два таймстампа → Invalid Date → NaN
+                    -- по всей неделе (обнаружено живым QA ARS-284, баг существовал с F6/ARS-282).
+                    'd', d.day::date,
                     'load', (select count(*) from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
                              where fp.plan_id = v_plan.id and ft.due_date = d.day and ft.status <> 'skipped'),
                     'has_overdue', exists(select 1 from public.farm_tasks ft join public.farm_phases fp on fp.id = ft.farm_phase_id
@@ -4717,7 +4731,23 @@ begin
                             'progress_pct', case when v_anchor >= fp.end_date then 100
                                                  when v_anchor <= fp.start_date then 0
                                                  else round(100.0 * (v_anchor - fp.start_date) / nullif(fp.end_date - fp.start_date,0)) end,
-                            'milestones', '[]'::jsonb) order by fp.start_date)
+                            -- ARS-284 §3.3: "ближайшие вехи фазы" — только у активной (карточка), не у всех
+                            -- (payload бы разросся на весь год). Источник — те же farm_tasks.window_start,
+                            -- что у Месяца (§2.8 windows), но по фазе, не по календарю.
+                            'milestones', case when v_anchor between fp.start_date and fp.end_date then coalesce((
+                                select jsonb_agg(jsonb_build_object('date', m.window_start, 'name', m.name_ru) order by m.window_start)
+                                from (
+                                    select ft.window_start, ft.name_ru
+                                    from public.farm_tasks ft
+                                    where ft.farm_phase_id = fp.id and ft.window_start is not null
+                                      and ft.status not in ('completed','skipped') and ft.window_start >= v_anchor
+                                    order by ft.window_start limit 3
+                                ) m), '[]'::jsonb) else '[]'::jsonb end,
+                            -- ARS-284 §3.3: аннотация будущих фаз ("ожидается ~N голов") — herd_group
+                            -- фазы, если эксперт его назначил (§1.5 automatch); NULL → фронт не рисует
+                            -- аннотацию (D143: без данных — честное отсутствие, не выдуманное число).
+                            'expected_heads', (select hg.head_count from public.herd_groups hg where hg.id = fp.herd_group_id)
+                            ) order by fp.start_date)
                 from public.farm_phases fp where fp.plan_id = v_plan.id), '[]'::jsonb),
             'breeding', (
                 select jsonb_build_object('phase_id', fp.id, 'start_date', fp.start_date, 'editable', true)
@@ -4740,7 +4770,11 @@ comment on function public.rpc_get_tasks_horizon(uuid, uuid, text, date) is
      (OPERATIONS-06, D-RPC-CONTRACT-SYNC-01, CEO 2026-07-21): week-ветка аддитивно несёт
      assigned_to_name (join users), sop_code (join task_template_sops→sop_documents, required
      приоритетнее reference) и heads/ref_date в burning[] — доводит RPC до контракта §2.5/§2.3,
-     который F3 не заполнял.';
+     который F3 не заполнял. ARS-284 (D-RPC-CONTRACT-SYNC-01): year-ветка аддитивно несёт
+     phases[].milestones (реальные ближайшие вехи активной фазы — было захардкожено ''[]'') и
+     phases[].expected_heads (herd_group.head_count фазы, NULL если группа не назначена) —
+     доводит до контракта Slice8 §3.3. Тем же ARS-284 закрыт баг F6: week/month `d.day` из
+     generate_series кастуется в ::date (был timestamp → NaN на фронте, живёт с ARS-282).';
 
 -- ---- 2.9  rpc_shift_breeding_start — фермерская обёртка D104 (D144) ---------
 create or replace function public.rpc_shift_breeding_start(
