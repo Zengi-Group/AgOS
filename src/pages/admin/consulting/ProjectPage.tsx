@@ -25,6 +25,7 @@ interface ProjectMeta {
   name: string
   status: string
   needs_recalc: boolean
+  organization_id: string
   latestInputParams: Record<string, unknown> | null
 }
 
@@ -32,15 +33,18 @@ export function ProjectPage() {
   const { projectId } = useParams()
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { organization } = useAuth()
+  const { organization, isAdmin, isExpert } = useAuth()
   const [project, setProject] = useState<ProjectMeta | null>(null)
   const [projects, setProjects] = useState<{ id: string }[]>([])
   const [recalcLoading, setRecalcLoading] = useState(false)
 
   const orgId = organization?.id
+  // TURAN admin/expert accounts have no farmer organization_id of their own (P2) —
+  // DEF-CONSULTING-AUTH-02 lets them pass p_organization_id: null to reach any project.
+  const canManageAllOrgs = isAdmin || isExpert
   const base = `/admin/consulting/${projectId}`
 
-  const loadProject = useCallback((oId: string, pId: string) => {
+  const loadProject = useCallback((oId: string | null, pId: string) => {
     supabase
       .rpc('rpc_get_consulting_project', {
         p_organization_id: oId,
@@ -53,6 +57,7 @@ export function ProjectPage() {
             name: data.name,
             status: data.status,
             needs_recalc: data.needs_recalc ?? false,
+            organization_id: data.organization_id,
             latestInputParams: versions[0]?.input_params ?? null,
           })
         }
@@ -60,33 +65,36 @@ export function ProjectPage() {
   }, [])
 
   useEffect(() => {
-    if (!orgId || !projectId) return
-    loadProject(orgId, projectId)
-  }, [orgId, projectId, loadProject])
+    if ((!orgId && !canManageAllOrgs) || !projectId) return
+    loadProject(orgId ?? null, projectId)
+  }, [orgId, canManageAllOrgs, projectId, loadProject])
 
   const handleRecalculate = useCallback(async () => {
-    if (!orgId || !projectId || !project?.latestInputParams) return
+    // Project's own org, not the viewer's — an admin has none, and even a
+    // consultant with an org shouldn't recalc under the wrong one (DEF-CONSULTING-AUTH-02).
+    const recalcOrgId = project?.organization_id ?? orgId
+    if (!recalcOrgId || !projectId || !project?.latestInputParams) return
     setRecalcLoading(true)
     try {
       await calculateProject({
         project_id: projectId,
-        organization_id: orgId,
+        organization_id: recalcOrgId,
         input_params: project.latestInputParams,
       })
-      loadProject(orgId, projectId)
+      loadProject(recalcOrgId, projectId)
     } catch {
       // keep badge visible on error — user can retry
     } finally {
       setRecalcLoading(false)
     }
-  }, [orgId, projectId, project?.latestInputParams, loadProject])
+  }, [orgId, projectId, project?.organization_id, project?.latestInputParams, loadProject])
 
   useEffect(() => {
-    if (!orgId) return
+    if (!orgId && !canManageAllOrgs) return
     supabase
-      .rpc('rpc_list_consulting_projects', { p_organization_id: orgId })
+      .rpc('rpc_list_consulting_projects', { p_organization_id: orgId ?? null })
       .then(({ data }) => { if (data) setProjects(data) })
-  }, [orgId])
+  }, [orgId, canManageAllOrgs])
 
   const STATUS_LABELS: Record<string, string> = {
     draft: 'Черновик', calculating: 'Расчёт...', calculated: 'Рассчитан', archived: 'Архив',

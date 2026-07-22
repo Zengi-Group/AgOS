@@ -12,9 +12,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { useSetTopbar } from '@/components/layout/TopbarContext'
 import { useAuth } from '@/hooks/useAuth'
+import { useAdminOrgs } from '@/hooks/admin/useAdminOrgs'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 
@@ -60,14 +62,19 @@ const COL_TEMPLATE = 'minmax(200px,2fr) 120px 130px 90px 110px'
 
 export function ConsultingDashboard() {
   const navigate = useNavigate()
-  const { organization } = useAuth()
+  const { organization, isAdmin, isExpert } = useAuth()
   const [projects, setProjects] = useState<ConsultingProject[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newOrgId, setNewOrgId] = useState('')
   const [creating, setCreating] = useState(false)
 
   const orgId = organization?.id
+  // TURAN admin/expert accounts have no farmer organization_id of their own (P2) —
+  // they still need to see/create projects across client orgs (DEF-CONSULTING-AUTH-02).
+  const canManageAllOrgs = isAdmin || isExpert
+  const { data: clientOrgs } = useAdminOrgs('')
 
   useSetTopbar({
     title: 'Инвестиционные проекты',
@@ -81,10 +88,10 @@ export function ConsultingDashboard() {
   })
 
   const loadProjects = async () => {
-    if (!orgId) return
+    if (!orgId && !canManageAllOrgs) { setLoading(false); return }
     setLoading(true)
     const { data, error } = await supabase.rpc('rpc_list_consulting_projects', {
-      p_organization_id: orgId,
+      p_organization_id: orgId ?? null,
     })
     if (error) {
       toast.error('Ошибка загрузки проектов')
@@ -95,13 +102,13 @@ export function ConsultingDashboard() {
     setLoading(false)
   }
 
-  useEffect(() => { loadProjects() }, [orgId])
+  useEffect(() => { loadProjects() }, [orgId, canManageAllOrgs])
 
   const handleCreate = async () => {
-    if (!orgId || !newName.trim()) return
+    if (!newOrgId || !newName.trim()) return
     setCreating(true)
     const { data, error } = await supabase.rpc('rpc_create_consulting_project', {
-      p_organization_id: orgId,
+      p_organization_id: newOrgId,
       p_name: newName.trim(),
       p_farm_type: 'beef_reproducer',
     })
@@ -113,6 +120,7 @@ export function ConsultingDashboard() {
       toast.success('Проект создан')
       setShowCreate(false)
       setNewName('')
+      setNewOrgId('')
       navigate(`/admin/consulting/${data}/edit`)
     }
   }
@@ -313,6 +321,17 @@ export function ConsultingDashboard() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
+              <Label>Организация-клиент</Label>
+              <Select value={newOrgId} onValueChange={setNewOrgId}>
+                <SelectTrigger><SelectValue placeholder="Выберите организацию" /></SelectTrigger>
+                <SelectContent>
+                  {(clientOrgs ?? []).map(o => (
+                    <SelectItem key={o.id} value={o.id}>{o.legal_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>Название проекта</Label>
               <Input
                 placeholder="Например: Ферма Караарна 300 голов"
@@ -324,7 +343,7 @@ export function ConsultingDashboard() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Отмена</Button>
-            <Button onClick={handleCreate} disabled={!newName.trim() || creating}>
+            <Button onClick={handleCreate} disabled={!newOrgId || !newName.trim() || creating}>
               {creating ? 'Создание...' : 'Создать'}
             </Button>
           </DialogFooter>

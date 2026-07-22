@@ -210,6 +210,18 @@ declare
     v_user_id uuid;
     v_project_id uuid;
 begin
+    -- DEF-CONSULTING-AUTH-02 (2026-07-22): p_organization_id was trusted from the
+    -- client with no ownership check — any authenticated caller could create a
+    -- project under an org they don't belong to. Same fn_my_org_ids()/fn_is_admin()
+    -- guard already used elsewhere (e.g. d05_ops_edu.sql farm RPCs).
+    if not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or public.fn_is_expert()
+    ) then
+        raise exception 'FORBIDDEN' using errcode = 'P0001';
+    end if;
+
     select u.id into v_user_id
     from public.users u
     where u.auth_id = auth.uid();
@@ -267,6 +279,22 @@ as $$
 declare
     v_result jsonb;
 begin
+    -- DEF-CONSULTING-AUTH-02 (2026-07-22): p_organization_id null + admin/expert
+    -- (TURAN staff have no farmer organization_id of their own, P2) → list across
+    -- all client orgs. Non-null values are still checked against fn_my_org_ids()
+    -- so a farmer can't read another org's projects by passing an arbitrary id.
+    if p_organization_id is null then
+        if not (public.fn_is_admin() or public.fn_is_expert()) then
+            raise exception 'FORBIDDEN' using errcode = 'P0001';
+        end if;
+    elsif not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or public.fn_is_expert()
+    ) then
+        raise exception 'FORBIDDEN' using errcode = 'P0001';
+    end if;
+
     select coalesce(jsonb_agg(
         jsonb_build_object(
             'id', cp.id,
@@ -290,7 +318,7 @@ begin
         ) order by cp.updated_at desc
     ), '[]'::jsonb) into v_result
     from public.consulting_projects cp
-    where cp.organization_id = p_organization_id
+    where (p_organization_id is null or cp.organization_id = p_organization_id)
       and cp.is_active = true;
 
     return v_result;
@@ -299,7 +327,8 @@ $$;
 
 comment on function public.rpc_list_consulting_projects(uuid) is
     'RPC-C02 | Dok 3 §Consulting | Phase 0
-     Lists all active projects for org with latest version NPV/IRR.';
+     Lists all active projects for org with latest version NPV/IRR.
+     p_organization_id null + fn_is_admin()/fn_is_expert() → all orgs (DEF-CONSULTING-AUTH-02).';
 
 
 -- ---- RPC-C03: Get consulting project detail ----
@@ -316,12 +345,27 @@ as $$
 declare
     v_result jsonb;
 begin
+    -- DEF-CONSULTING-AUTH-02 (2026-07-22): same admin/expert bypass as
+    -- rpc_list_consulting_projects — see that function's comment.
+    if p_organization_id is null then
+        if not (public.fn_is_admin() or public.fn_is_expert()) then
+            raise exception 'FORBIDDEN' using errcode = 'P0001';
+        end if;
+    elsif not (
+        p_organization_id = any(public.fn_my_org_ids())
+        or public.fn_is_admin()
+        or public.fn_is_expert()
+    ) then
+        raise exception 'FORBIDDEN' using errcode = 'P0001';
+    end if;
+
     select jsonb_build_object(
         'id', cp.id,
         'name', cp.name,
         'farm_type', cp.farm_type,
         'status', cp.status,
         'needs_recalc', cp.needs_recalc,
+        'organization_id', cp.organization_id,
         'created_by', cp.created_by,
         'created_at', cp.created_at,
         'updated_at', cp.updated_at,
@@ -342,7 +386,7 @@ begin
     ) into v_result
     from public.consulting_projects cp
     where cp.id = p_project_id
-      and cp.organization_id = p_organization_id
+      and (p_organization_id is null or cp.organization_id = p_organization_id)
       and cp.is_active = true;
 
     if v_result is null then
@@ -355,7 +399,10 @@ $$;
 
 comment on function public.rpc_get_consulting_project(uuid, uuid) is
     'RPC-C03 | Dok 3 §Consulting | Phase 0
-     Returns project detail with all versions (without full results).';
+     Returns project detail with all versions (without full results).
+     p_organization_id null + fn_is_admin()/fn_is_expert() → any org (DEF-CONSULTING-AUTH-02).
+     Returns organization_id (added 2026-07-22) so admin callers can act on the
+     project''s real org rather than their own (which they may not have).';
 
 
 -- ---- RPC-C04: Update consulting project ----
