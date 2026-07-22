@@ -7,11 +7,13 @@
 // ARS-280 (Ферма 2.0 · F4) · Каркас модуля: пока стада нет — полноэкранный хук (табы не
 // показываем, ARS-212 first-run без изменений); как только есть состав/план — верхние табы
 // Обзор·Задачи·Стадо·Ещё (дефолт Обзор), паттерн `.mk-tabs` Рынка (Slice8 §0/§1). Обзор пока
-// держит существующий контент (план ARS-215 / resume F0b) — SCR-OV строит F5; Стадо — заглушка
-// (F9). Ещё (§6) — профиль + корма, «Поправить состав» достижим (HS-2).
+// держит существующий контент (план ARS-215 / resume F0b) — SCR-OV строит F5. Ещё (§6) —
+// профиль + корма, «Поправить состав» достижим (HS-2).
 // ARS-284 (F8): полноценный SCR-TA·Год (TasksScreen) заменил временный мост FarmPlanView —
 // карточки фаз/чипы статуса переехали туда же (визуальный reuse, HS-2); plan здесь остаётся
 // (гейт `empty` ниже всё ещё смотрит на него — F0a показывается, пока нет ни стада, ни плана).
+// ARS-285 (F9): «Стадо»-заглушка (HerdSoon) заменена полноценным HerdScreen (SCR-HD «Стадо» +
+// SCR-WK «Обход» + SHEET-AN карточка животного) — тот же приём, что у Обзора/Задач (F5-F8).
 
 import { useCallback, useEffect, useState } from 'react'
 import { IonShellFrame } from '../components/IonShellFrame'
@@ -23,6 +25,7 @@ import { loadFarmCtx, loadFarmPlan, type FarmCtx, type FarmPlan } from '../farm/
 import { FARM_TABS, type FarmTab, type FarmTabParams, type GoFarmTab } from '../farm/tabs'
 import { OverviewScreen } from '../farm/OverviewScreen'
 import { TasksScreen } from '../farm/TasksScreen'
+import { HerdScreen } from '../farm/HerdScreen'
 import { ScreenSkeleton } from '../components/ScreenSkeleton'
 
 interface Props {
@@ -136,7 +139,19 @@ export function FarmScreen({ onStart, onResume, toast }: Props) {
                 <div className="fw-herd-note">Профиль загружается…</div>
               )
             ) : active.tab === 'herd' ? (
-              <HerdSoon />
+              // SCR-HD «Стадо» + SCR-WK «Обход» + SHEET-AN (F9, ARS-285) — rpc_get_herd_board.
+              ctx?.organizationId && ctx.farmId ? (
+                <HerdScreen
+                  orgId={ctx.organizationId}
+                  farmId={ctx.farmId}
+                  goFarmTab={goFarmTab}
+                  params={active.params}
+                  toast={toast}
+                  refreshNonce={refreshNonce}
+                />
+              ) : (
+                <div className="fw-herd-note">Профиль загружается…</div>
+              )
             ) : (
               <MoreTab heads={heads} total={total} onEditComposition={onStart} />
             )}
@@ -158,18 +173,6 @@ function HerdBox({ heads }: { heads: Record<HerdKey, number> }) {
           <span className="fw-herd-h mk-mono">{heads[f.key]}</span>
         </div>
       ))}
-    </div>
-  )
-}
-
-// ── F4 · Стадо — заглушка-шов (тело строит F9). Блоб-язык empty-state (R-6/R-24),
-// без пунктирных рамок; иконка функциональная (PhIcon, R-2). ──
-function HerdSoon() {
-  return (
-    <div className="mk-empty">
-      <div className="mk-empty-art"><PhIcon name="cow" size={46} /></div>
-      <div className="mk-empty-h">Стадо и обход скоро появятся</div>
-      <div className="mk-empty-t">Группы стада и ежедневный обход — отметка и отклонения за пару касаний. Готовим этот экран.</div>
     </div>
   )
 }

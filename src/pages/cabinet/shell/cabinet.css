@@ -1184,3 +1184,106 @@
 .agos-cabinet-stage .ta-yr-prev-row + .ta-yr-prev-row { border-top:1px solid var(--bd-s); }
 .agos-cabinet-stage .ta-yr-prev-n { color:var(--fg); flex:1; min-width:0; }
 .agos-cabinet-stage .ta-yr-prev-d { color:var(--fg2); flex-shrink:0; }
+
+/* ═══ F9 · SCR-HD «Стадо» + SCR-WK «Обход» + SHEET-AN (ARS-285) ═══
+   Канон: Slice8 §4/§5. Плоские карты r-12 (§6, без теней), статус = точка+текст (без заливок),
+   mono только цифры (R-9), :active-отклик на каждом интерактиве (R-28), хиты ≥44 (обход ≥48). */
+
+/* — карточка обхода, первый блок SCR-HD (§5) — */
+.agos-cabinet-stage .hd-walk-card { position:relative; display:flex; align-items:center; gap:10px; width:100%;
+    text-align:left; border:1px solid var(--bd); background:var(--bg-c); border-radius:var(--r-xl);
+    padding:13px 14px; margin-bottom:16px; cursor:pointer; font-family:inherit;
+    transition:transform 60ms var(--ease), border-color 120ms var(--ease); }
+.agos-cabinet-stage .hd-walk-card.warn { border-color:color-mix(in srgb, var(--amber) 40%, var(--bd)); }
+.agos-cabinet-stage .hd-walk-card:active { transform:scale(.99); }
+.agos-cabinet-stage .hd-walk-card-main { flex:1; min-width:0; }
+.agos-cabinet-stage .hd-walk-card-t { font-size:13.5px; font-weight:600; color:var(--fg); }
+.agos-cabinet-stage .hd-walk-card-s { font-size:11.5px; color:var(--fg2); margin-top:2px; }
+.agos-cabinet-stage .hd-walk-card-cta { flex-shrink:0; display:flex; align-items:center; gap:3px;
+    font-size:12.5px; font-weight:600; color:var(--cta); }
+
+/* — группы (§5) — информационные строки, тап не назначен до ARS-171 — */
+.agos-cabinet-stage .hd-grp-row { display:flex; align-items:center; gap:10px; padding:10px 13px; }
+.agos-cabinet-stage .hd-grp-row + .hd-grp-row { border-top:1px solid var(--bd-s); }
+.agos-cabinet-stage .hd-grp-main { flex:1; min-width:0; }
+.agos-cabinet-stage .hd-grp-n { font-size:13px; font-weight:500; color:var(--fg); }
+.agos-cabinet-stage .hd-grp-w { font-size:11px; color:var(--fg3); margin-top:2px; }
+.agos-cabinet-stage .hd-grp-h { display:flex; align-items:baseline; gap:4px; font-size:15px; font-weight:600; color:var(--fg); }
+.agos-cabinet-stage .hd-grp-h-u { font-size:11px; font-weight:500; color:var(--fg3); }
+
+/* — открытые события (§5) — строка = кнопка (тап → SHEET-AN); реюз .fo-att разметки — */
+.agos-cabinet-stage .hd-att-row { width:100%; text-align:left; border:none; background:none;
+    font-family:inherit; cursor:pointer; color:inherit; transition:background 80ms var(--ease); }
+.agos-cabinet-stage .hd-att-row:active { background:var(--bg-s); }
+
+/* — SCR-WK «Обход»: шапка (§4.1) — */
+.agos-cabinet-stage .wk-head { display:flex; align-items:flex-start; gap:10px; margin-bottom:10px; }
+.agos-cabinet-stage .wk-back { position:relative; flex-shrink:0; width:32px; height:32px; margin-top:-2px;
+    border-radius:var(--r-full); border:1px solid var(--bd); background:var(--bg-c); color:var(--fg2);
+    display:grid; place-items:center; cursor:pointer; }
+.agos-cabinet-stage .wk-back::before { content:""; position:absolute; inset:-6px; }
+.agos-cabinet-stage .wk-back:active { transform:scale(.92); background:var(--bg-s); }
+.agos-cabinet-stage .wk-head-main { flex:1; min-width:0; }
+.agos-cabinet-stage .wk-head-t { font-size:16px; font-weight:600; color:var(--fg); letter-spacing:-.01em; }
+.agos-cabinet-stage .wk-head-d { font-size:12px; color:var(--fg2); margin-top:2px; }
+.agos-cabinet-stage .wk-offline { display:flex; align-items:center; gap:5px; flex-shrink:0; padding:4px 9px;
+    border-radius:var(--r-full); background:color-mix(in srgb, var(--amber) 14%, var(--bg-c));
+    color:var(--amber); font-size:11px; font-weight:600; margin-top:2px; }
+.agos-cabinet-stage .wk-hint { font-size:12px; color:var(--fg3); line-height:1.4; margin-bottom:14px; }
+
+/* — блок отметки обхода (§4.2) — */
+.agos-cabinet-stage .wk-mark { display:flex; align-items:center; gap:11px; border:1px solid var(--bd);
+    border-radius:var(--r-xl); background:var(--bg-c); padding:13px 14px; margin-bottom:18px; }
+.agos-cabinet-stage .wk-mark.warn { border-color:color-mix(in srgb, var(--amber) 40%, var(--bd)); }
+.agos-cabinet-stage .wk-mark-main { flex:1; min-width:0; }
+.agos-cabinet-stage .wk-mark-t { font-size:13.5px; font-weight:600; color:var(--fg); }
+.agos-cabinet-stage .wk-mark-s { font-size:11.5px; color:var(--fg2); margin-top:2px; }
+.agos-cabinet-stage .wk-mark-cta { flex-shrink:0; min-height:48px; padding:0 18px; border:none; border-radius:var(--r-lg);
+    background:var(--cta); color:var(--cta-fg); font-size:13.5px; font-weight:700; font-family:inherit;
+    cursor:pointer; transition:transform 60ms var(--ease); }
+.agos-cabinet-stage .wk-mark-cta:active { transform:scale(.96); }
+.agos-cabinet-stage .wk-mark-cta:disabled { opacity:.6; cursor:default; }
+
+/* — «Отклонения с обхода» (§4.3) — */
+.agos-cabinet-stage .wk-dash { margin:2px 0 16px; padding:16px 13px; border:1px dashed var(--bd-h);
+    border-radius:var(--r-lg); text-align:center; font-size:12.5px; color:var(--fg2); }
+.agos-cabinet-stage .wk-row-actions { flex-shrink:0; display:flex; gap:6px; }
+.agos-cabinet-stage .wk-act-btn { position:relative; min-height:32px; padding:0 10px; border:1px solid var(--bd-h);
+    background:var(--bg-c); color:var(--fg); border-radius:var(--r-md); font-size:11.5px; font-weight:600;
+    font-family:inherit; cursor:pointer; transition:transform 60ms var(--ease); }
+.agos-cabinet-stage .wk-act-btn::before { content:""; position:absolute; inset:-6px -4px; }
+.agos-cabinet-stage .wk-act-btn:active { transform:scale(.95); }
+.agos-cabinet-stage .wk-act-btn:disabled { opacity:.5; cursor:default; }
+
+/* — «+ Отклонение» вход + футнот (§4.4/§4.5) — */
+.agos-cabinet-stage .wk-add { position:relative; display:flex; align-items:center; justify-content:center; gap:7px;
+    width:100%; min-height:46px; margin-bottom:14px; border:1px solid var(--bd-h); border-radius:var(--r-lg);
+    background:var(--bg-c); color:var(--fg); font-size:13px; font-weight:600; font-family:inherit;
+    cursor:pointer; transition:transform 60ms var(--ease); }
+.agos-cabinet-stage .wk-add:active { transform:scale(.98); background:var(--bg-s); }
+.agos-cabinet-stage .wk-foot { font-size:11px; color:var(--fg3); line-height:1.5; padding:0 2px; }
+
+/* — визард 2 шагов (§4.4), внутри Sheet — */
+.agos-cabinet-stage .wk-chips { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.agos-cabinet-stage .wk-chip { position:relative; min-width:44px; min-height:44px; padding:0 14px;
+    border:1px solid var(--bd-h); border-radius:var(--r-full); background:var(--bg-c); color:var(--fg);
+    font-size:13px; font-weight:600; font-family:inherit; cursor:pointer; transition:transform 60ms var(--ease); }
+.agos-cabinet-stage .wk-chip:active { transform:scale(.94); background:var(--bg-s); }
+.agos-cabinet-stage .wk-chip:disabled { opacity:.5; cursor:default; }
+.agos-cabinet-stage .wk-search { display:flex; gap:8px; margin-bottom:14px; }
+.agos-cabinet-stage .wk-search .ta-input { margin-bottom:0; flex:1; }
+.agos-cabinet-stage .wk-search-go { flex-shrink:0; min-width:44px; min-height:44px; padding:0 14px; border:1px solid var(--bd-h);
+    border-radius:var(--r-md); background:var(--bg-c); color:var(--fg); font-size:13px; font-weight:600;
+    font-family:inherit; cursor:pointer; }
+.agos-cabinet-stage .wk-search-go:disabled { opacity:.45; cursor:default; }
+.agos-cabinet-stage .wk-search-go:active:not(:disabled) { transform:scale(.95); }
+.agos-cabinet-stage .wk-vet-note { font-size:13px; color:var(--fg2); margin:-4px 0 14px; }
+.agos-cabinet-stage .wk-sheet-loading { padding:20px 4px; text-align:center; font-size:12.5px; color:var(--fg2); }
+
+/* — SHEET-AN · карточка животного (§5) — */
+.agos-cabinet-stage .an-sub { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--fg2); margin:-4px 0 16px; }
+.agos-cabinet-stage .an-badge-left { padding:2px 8px; border-radius:var(--r-full); background:var(--bg-s);
+    color:var(--fg3); font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+.agos-cabinet-stage .an-ev-box { margin-bottom:16px; }
+.agos-cabinet-stage .an-ev-row { display:flex; align-items:center; gap:10px; padding:11px 13px; }
+.agos-cabinet-stage .an-ev-row + .an-ev-row { border-top:1px solid var(--bd-s); }
