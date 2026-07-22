@@ -84,8 +84,11 @@ function makeId() {
 export function StaffTab() {
   const { projectId } = useParams()
   const { organization } = useAuth()
-  const orgId = organization?.id
-  const { version, loading } = useProjectData()
+  const { project, version, loading } = useProjectData()
+  // Project's own org, not the viewer's — admin/expert have none of their own
+  // (DEF-CONSULTING-AUTH-02); calculateProject matches against the project's
+  // real org, not the caller's identity.
+  const orgId = project?.organization_id ?? organization?.id
 
   const [calculating, setCalculating] = useState(false)
 
