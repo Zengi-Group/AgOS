@@ -294,10 +294,10 @@ Idempotency-классы (D145): **NK** = natural key · **CID** = client_event_
 Уже `closed` → вернуть как есть (реплей-safe). Переход → `closed_at/closed_by` + эмит O-11.
 
 **2.4** `rpc_get_herd_board(p_organization_id uuid, p_farm_id uuid, p_today date default current_date) returns jsonb`
-`{herd_total, groups:[{id, category_name, head_count, avg_weight_kg}], walkthrough:{marked, marked_at}, open_events:[{event_id, tag_number, type_code, type_name, occurred_at, note, vet_case_id, task_id}], today_events_count, animals_recent:[{animal_id, tag_number, herd_group_id}]}` — `animals_recent` (последние ~30 по активности) = источник чипов шага 1 визарда отклонения; новый номер вводится свободно (lazy).
+`{herd_total, groups:[{id, category_name, head_count, avg_weight_kg}], walkthrough:{marked, marked_at}, open_events:[{event_id, animal_id, tag_number, type_code, type_name, occurred_at, note, vet_case_id, task_id}], today_events_count, animals_recent:[{animal_id, tag_number, herd_group_id}]}` — `animals_recent` (последние ~30 по активности) = источник чипов шага 1 визарда отклонения; новый номер вводится свободно (lazy). `open_events[].animal_id` (F9/ARS-285, найдено при сборке SHEET-AN — `rpc_get_animal_card` принимает `p_animal_id`, не `tag_number`) добавлен additive поверх исходного F2/ARS-278 контракта.
 
 **2.5** `rpc_get_animal_card(p_organization_id uuid, p_animal_id uuid) returns jsonb`
-`{animal:{id, tag_number, status, herd_group…}, events:[… occurred_at desc]}`.
+`{animal:{id, tag_number, status, herd_group…}, events:[{event_id, type_code, type_name, status, note, photo_url, occurred_at, recorded_by_name, closed_at, closed_by_name, resolution_note, vet_case_id} … occurred_at desc]}` — `recorded_by_name`/`closed_by_name` (F9/ARS-285) — Slice8 §5 требует «кто» в истории событий; `users.full_name` может быть `null`.
 
 **2.6** `rpc_create_vet_case_from_event(p_organization_id uuid, p_event_id uuid, p_actor_id uuid default null) returns jsonb`
 Событие уже связано (`vet_case_id not null`) → вернуть существующий кейс, `already_linked=true`.

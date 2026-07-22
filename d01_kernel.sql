@@ -6749,6 +6749,8 @@ revoke execute on function public.rpc_close_animal_event(uuid, uuid, text, uuid)
 --      category_name = animal_categories.name_ru (herd_groups хранит animal_category_id).
 --      task_id = null в F2: farm_tasks.animal_event_id добавляется в F3 (ARS-279),
 --      до-wire этого RPC — там же; поле в контракте присутствует (стабильность для F9 UI).
+--      animal_id в open_events (F9/ARS-285): нужен для SHEET-AN (rpc_get_animal_card
+--      принимает p_animal_id, не tag_number) — additive-фикс контракта, найден при сборке F9.
 -- ------------------------------------------------------------
 create or replace function public.rpc_get_herd_board(
     p_organization_id uuid,
@@ -6789,7 +6791,7 @@ begin
                      where w.farm_id = p_farm_id and w.walk_date = v_today limit 1),
                     jsonb_build_object('marked', false, 'marked_at', null)),
         'open_events', coalesce((select jsonb_agg(jsonb_build_object(
-                        'event_id', ae.id, 'tag_number', a.tag_number,
+                        'event_id', ae.id, 'animal_id', ae.animal_id, 'tag_number', a.tag_number,
                         'type_code', aet.code, 'type_name', aet.name_ru,
                         'occurred_at', ae.occurred_at, 'note', ae.note,
                         'vet_case_id', ae.vet_case_id, 'task_id', null
@@ -6818,6 +6820,9 @@ revoke execute on function public.rpc_get_herd_board(uuid, uuid, date) from publ
 
 -- ------------------------------------------------------------
 -- 2.5  rpc_get_animal_card — животное + история событий (кэш-юнит animal_card).
+--      recorded_by_name/closed_by_name (F9/ARS-285, найдено при ревью): Slice8 §5 требует
+--      «кто» в истории событий SHEET-AN; users.full_name может быть null (не заполнено) —
+--      UI показывает поле опционально.
 -- ------------------------------------------------------------
 create or replace function public.rpc_get_animal_card(
     p_organization_id uuid,
@@ -6855,11 +6860,14 @@ begin
         'events', coalesce((select jsonb_agg(jsonb_build_object(
                         'event_id', ae.id, 'type_code', aet.code, 'type_name', aet.name_ru,
                         'status', ae.status, 'note', ae.note, 'photo_url', ae.photo_url,
-                        'occurred_at', ae.occurred_at, 'closed_at', ae.closed_at,
+                        'occurred_at', ae.occurred_at, 'recorded_by_name', ru.full_name,
+                        'closed_at', ae.closed_at, 'closed_by_name', cu.full_name,
                         'resolution_note', ae.resolution_note, 'vet_case_id', ae.vet_case_id
                     ) order by ae.occurred_at desc)
                     from public.animal_events ae
                     join public.animal_event_types aet on aet.id = ae.event_type_id
+                    left join public.users ru on ru.id = ae.recorded_by
+                    left join public.users cu on cu.id = ae.closed_by
                     where ae.animal_id = p_animal_id), '[]'::jsonb)
     ) into v_result;
 
