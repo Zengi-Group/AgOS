@@ -9,6 +9,7 @@
 
 import { supabase } from '@/lib/supabase'
 import { localToday } from './farm-overview'
+import { cachedFetch, type CachedResult } from './offline-cache'
 
 export interface MonthGridDay {
   d: string             // date 'YYYY-MM-DD'
@@ -62,13 +63,20 @@ export interface MonthHorizonNoPlan {
 export type MonthHorizonResult = MonthHorizon | MonthHorizonNoPlan
 
 // p_anchor — любая дата внутри целевого месяца (пагинация ‹ ›, slice §2.8); по умолчанию сегодня.
-export async function loadMonthHorizon(orgId: string, farmId: string, anchor?: string): Promise<MonthHorizonResult> {
-  const { data, error } = await supabase.rpc('rpc_get_tasks_horizon', {
-    p_organization_id: orgId,
-    p_farm_id: farmId,
-    p_horizon: 'month',
-    p_anchor: anchor ?? localToday(),
+// ARS-286 (F10): через cachedFetch — кэш-юнит на (horizon='month', anchor), тот же ключ,
+// которым делится loadNextMilestone (farm-tasks.ts) — идентичные данные, одна запись в appStorage.
+export async function loadMonthHorizon(
+  orgId: string, farmId: string, anchor?: string,
+): Promise<CachedResult<MonthHorizonResult>> {
+  const a = anchor ?? localToday()
+  return cachedFetch(farmId + ':horizon:month:' + a, async () => {
+    const { data, error } = await supabase.rpc('rpc_get_tasks_horizon', {
+      p_organization_id: orgId,
+      p_farm_id: farmId,
+      p_horizon: 'month',
+      p_anchor: a,
+    })
+    if (error) throw error
+    return data as MonthHorizonResult
   })
-  if (error) throw error
-  return data as MonthHorizonResult
 }

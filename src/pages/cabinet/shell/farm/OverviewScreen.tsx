@@ -52,14 +52,16 @@ export function OverviewScreen({ orgId, farmId, goFarmTab, onSetupPlan, refreshN
   const [resolved, setResolved] = useState<Record<string, string>>({}) // ref_id → бейдж после действия
   const [activating, setActivating] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [online, setOnline] = useState<boolean>(() =>
-    typeof navigator === 'undefined' ? true : navigator.onLine)
+  // Офлайн-метка «данные на HH:MM» (F10/ARS-286) — от cachedFetch (source:'cache'), не от
+  // навигаторского online/offline: сеть может быть «есть», а RPC всё равно упасть (5xx/таймаут).
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null)
+  const [source, setSource] = useState<'live' | 'cache'>('live')
 
   const load = useCallback(async (silent?: boolean) => {
     if (!silent) setLoading(true)
     try {
-      const d = await loadFarmOverview(orgId, farmId)
-      setData(d); setFailed(false)
+      const r = await loadFarmOverview(orgId, farmId)
+      setData(r.data); setFetchedAt(r.fetchedAt); setSource(r.source); setFailed(false)
     } catch {
       setFailed(true)
     } finally {
@@ -70,14 +72,6 @@ export function OverviewScreen({ orgId, farmId, goFarmTab, onSetupPlan, refreshN
   useEffect(() => { load() }, [load])
   // PTR из IonShellFrame: FarmScreen инкрементит refreshNonce (0 на маунте — пропускаем).
   useEffect(() => { if (refreshNonce > 0) load(true) }, [refreshNonce, load])
-  // офлайн-метка «данные на HH:MM» (полный офлайн-слой — F10)
-  useEffect(() => {
-    const on = () => setOnline(true)
-    const off = () => setOnline(false)
-    window.addEventListener('online', on)
-    window.addEventListener('offline', off)
-    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
-  }, [])
 
   const flash = (m: string) => {
     setErr(m)
@@ -89,7 +83,7 @@ export function OverviewScreen({ orgId, farmId, goFarmTab, onSetupPlan, refreshN
     if (done.has(t.task_id)) return
     setDone((prev) => new Set(prev).add(t.task_id))
     try {
-      await completeFarmTask(orgId, t.task_id)
+      await completeFarmTask(orgId, farmId, t.task_id)
       load(true)
     } catch {
       setDone((prev) => { const n = new Set(prev); n.delete(t.task_id); return n })
@@ -111,7 +105,7 @@ export function OverviewScreen({ orgId, farmId, goFarmTab, onSetupPlan, refreshN
         if (!rid || busy.has(rid)) return
         setBusy((prev) => new Set(prev).add(rid))
         try {
-          const r = await rescheduleFarmTaskToday(orgId, rid)
+          const r = await rescheduleFarmTaskToday(orgId, farmId, rid)
           if (r && r.ok === false) {
             flash(r.reason === 'WINDOW_TASK_IMMOVABLE' ? 'Задача-окно не переносится' : 'Не удалось перенести')
           } else {
@@ -157,7 +151,7 @@ export function OverviewScreen({ orgId, farmId, goFarmTab, onSetupPlan, refreshN
   }
   if (!data) return null
 
-  const { herd, cycle, tasks, resources, attention, today, today_more_count, as_of } = data
+  const { herd, cycle, tasks, resources, attention, today, today_more_count } = data
 
   // Зона «Задачи сегодня» — оптимистичный пересчёт: +1 за каждую отмеченную задачу С СЕГОДНЯШНЕЙ
   // датой (после refetch выполненная уходит из today[], двойного счёта нет).
@@ -172,7 +166,7 @@ export function OverviewScreen({ orgId, farmId, goFarmTab, onSetupPlan, refreshN
 
   return (
     <>
-      {!online && <div className="fo-asof">данные на {hm(as_of)}</div>}
+      {source === 'cache' && fetchedAt && <div className="fo-asof">данные на {hm(fetchedAt)}</div>}
       {err && <div className="fo-err"><PhIcon name="alert" size={14} />{err}</div>}
 
       {/* ── 4 зоны контроля · 2×2 (§2.1) ── */}

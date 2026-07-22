@@ -22,6 +22,7 @@ import { PhIcon } from '../components/icons/PhIcon'
 import { MkCta } from '../tsp/components/MkCta'
 import { HERD_FIELDS, type HerdKey } from '../farm/types'
 import { loadFarmCtx, loadFarmPlan, type FarmCtx, type FarmPlan } from '../farm/data/farm-profile'
+import { wireOutboxAutoDrain } from '../farm/data/outbox'
 import { FARM_TABS, type FarmTab, type FarmTabParams, type GoFarmTab } from '../farm/tabs'
 import { OverviewScreen } from '../farm/OverviewScreen'
 import { TasksScreen } from '../farm/TasksScreen'
@@ -57,6 +58,13 @@ export function FarmScreen({ onStart, onResume, toast }: Props) {
     reload().catch(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [reload])
+
+  // ARS-286 (F10): автодренаж outbox — один раз на монтировании модуля Фермы (не на каждом
+  // экране, FarmScreen — единственная точка монтирования, F4/ARS-280) + при возврате сети.
+  useEffect(() => {
+    if (!ctx?.farmId) return
+    return wireOutboxAutoDrain(ctx.farmId)
+  }, [ctx?.farmId])
 
   const heads = ctx?.heads ?? { cows: 0, calves: 0, heifers: 0, steers: 0, bull: 0 }
   const total = (Object.values(heads) as number[]).reduce((s, n) => s + n, 0)

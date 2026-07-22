@@ -35,6 +35,8 @@ const WEEKDAY_H = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
 const parseD = (d: string) => new Date(d + 'T00:00:00')
 const dm = (d: string) => `${parseD(d).getDate()} ${['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'][parseD(d).getMonth()]}`
+// HH:MM из ISO-таймстампа fetchedAt (F10/ARS-286) — тот же приём, что hm() в OverviewScreen.tsx.
+const hm = (ts: string) => new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 const firstOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1)
 const toAnchor = (d: Date) => {
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -56,11 +58,15 @@ export function MonthScreen({ orgId, farmId, goFarmTab, refreshNonce, createdNon
   const [failed, setFailed] = useState(false)
   const [done, setDone] = useState<Set<string>>(new Set())
   const [err, setErr] = useState<string | null>(null)
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null)
+  const [source, setSource] = useState<'live' | 'cache'>('live')
 
   const load = useCallback(async (silent?: boolean) => {
     if (!silent) setLoading(true)
     try {
-      const d = await loadMonthHorizon(orgId, farmId, toAnchor(anchor))
+      const r = await loadMonthHorizon(orgId, farmId, toAnchor(anchor))
+      setFetchedAt(r.fetchedAt); setSource(r.source)
+      const d = r.data
       if (d.no_plan) {
         setNoPlan(true)
         setData(null)
@@ -89,7 +95,7 @@ export function MonthScreen({ orgId, farmId, goFarmTab, refreshNonce, createdNon
     if (done.has(t.task_id)) return
     setDone((prev) => new Set(prev).add(t.task_id))
     try {
-      await completeFarmTask(orgId, t.task_id)
+      await completeFarmTask(orgId, farmId, t.task_id)
       load(true)
     } catch {
       setDone((prev) => { const n = new Set(prev); n.delete(t.task_id); return n })
@@ -144,6 +150,7 @@ export function MonthScreen({ orgId, farmId, goFarmTab, refreshNonce, createdNon
   return (
     <>
       {header}
+      {source === 'cache' && fetchedAt && <div className="fo-asof">данные на {hm(fetchedAt)}</div>}
       {err && <div className="fo-err"><PhIcon name="alert" size={14} />{err}</div>}
 
       {/* Календарная сетка месяца (§3.2.1) */}

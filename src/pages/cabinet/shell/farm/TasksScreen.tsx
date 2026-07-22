@@ -41,6 +41,8 @@ const parseD = (d: string) => new Date(d + 'T00:00:00')
 const dow = (d: string) => (parseD(d).getDay() + 6) % 7 // 0=Пн..6=Вс
 const dm = (d: string) => `${parseD(d).getDate()} ${MON_GEN[parseD(d).getMonth()]}`
 const hmTime = (t: string | null) => (t ? t.slice(0, 5) : '')
+// HH:MM из ISO-таймстампа fetchedAt (F10/ARS-286, offline-cache.ts) — тот же приём, что hm() в OverviewScreen.tsx.
+const hm = (ts: string) => new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 const daysUntil = (d: string) => Math.max(0, Math.round((parseD(d).getTime() - parseD(localToday()).getTime()) / 86400000))
 // Год (§3.3): диапазон цикла в шапке — «июн 26 → окт 27» (абброморфы месяца + 2-значный год).
 const monYear = (d: string) => `${MON_ABBR[parseD(d).getMonth()]} ${String(parseD(d).getFullYear()).slice(-2)}`
@@ -108,11 +110,16 @@ function WeekView({ orgId, farmId, refreshNonce, createdNonce }: {
   const [busy, setBusy] = useState<Set<string>>(new Set())
   const [err, setErr] = useState<string | null>(null)
   const [earlierOpen, setEarlierOpen] = useState(false)
+  // «данные на HH:MM» (F10/ARS-286) — виден только при source==='cache' (не при обычной live-загрузке).
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null)
+  const [source, setSource] = useState<'live' | 'cache'>('live')
 
   const load = useCallback(async (silent?: boolean) => {
     if (!silent) setLoading(true)
     try {
-      const d = await loadWeekHorizon(orgId, farmId)
+      const r = await loadWeekHorizon(orgId, farmId)
+      const d = r.data
+      setFetchedAt(r.fetchedAt); setSource(r.source)
       if (d.no_plan) {
         setNoPlan(true)
         setData(null)
@@ -147,7 +154,7 @@ function WeekView({ orgId, farmId, refreshNonce, createdNonce }: {
     if (t.status === 'completed' || done.has(t.id)) return
     setDone((prev) => new Set(prev).add(t.id))
     try {
-      await completeFarmTask(orgId, t.id)
+      await completeFarmTask(orgId, farmId, t.id)
       load(true)
     } catch {
       setDone((prev) => { const n = new Set(prev); n.delete(t.id); return n })
@@ -159,7 +166,7 @@ function WeekView({ orgId, farmId, refreshNonce, createdNonce }: {
     if (busy.has(taskId)) return
     setBusy((prev) => new Set(prev).add(taskId))
     try {
-      const r = await rescheduleFarmTaskToday(orgId, taskId)
+      const r = await rescheduleFarmTaskToday(orgId, farmId, taskId)
       if (r && r.ok === false) {
         flash(r.reason === 'WINDOW_TASK_IMMOVABLE' ? 'Задача-окно не переносится' : 'Не удалось перенести')
       } else {
@@ -208,6 +215,7 @@ function WeekView({ orgId, farmId, refreshNonce, createdNonce }: {
           {data.context.phase_name} — день <span className="mk-mono">{data.context.day}</span>/<span className="mk-mono">{data.context.days_total}</span>
         </div>
       )}
+      {source === 'cache' && fetchedAt && <div className="fo-asof">данные на {hm(fetchedAt)}</div>}
       {err && <div className="fo-err"><PhIcon name="alert" size={14} />{err}</div>}
 
       {/* Горит — закреплённый блок, первый, непролистываем (§3.1) */}
@@ -332,11 +340,15 @@ function YearView({ orgId, farmId, refreshNonce, toast, onGlobalRefresh }: {
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null)
+  const [source, setSource] = useState<'live' | 'cache'>('live')
 
   const load = useCallback(async (silent?: boolean) => {
     if (!silent) setLoading(true)
     try {
-      const d = await loadYearHorizon(orgId, farmId)
+      const r = await loadYearHorizon(orgId, farmId)
+      setFetchedAt(r.fetchedAt); setSource(r.source)
+      const d = r.data
       if (d.no_plan) { setNoPlan(true); setData(null) } else { setNoPlan(false); setData(d) }
       setFailed(false)
     } catch {
@@ -380,6 +392,7 @@ function YearView({ orgId, farmId, refreshNonce, toast, onGlobalRefresh }: {
         <div className="ta-yr-name">Цикл {parseD(data.plan.cycle_start).getFullYear()} — целиком</div>
         <div className="ta-yr-range mk-mono">{monYear(data.plan.cycle_start)} → {monYear(data.plan.cycle_end)}</div>
       </div>
+      {source === 'cache' && fetchedAt && <div className="fo-asof">данные на {hm(fetchedAt)}</div>}
 
       <div className="ta-yr-line">
         {data.phases.map((ph) => (

@@ -4,8 +4,16 @@
 // rpc_complete_farm_task (чек задачи), rpc_reschedule_farm_task («На сегодня»),
 // rpc_activate_production_plan (state D «Активировать план»). AI и веб зовут те же RPC.
 // Формы возврата ниже сверены с телом задеплоенных функций (pg_proc, prod), не с доком (L-6).
+//
+// ARS-286 (F10) · Офлайн-слой: loadFarmOverview идёт через cachedFetch (offline-cache.ts) —
+// сбой RPC отдаёт последний закэшированный ответ вместо ошибки. completeFarmTask/
+// rescheduleFarmTaskToday идут через outbox.callOrQueue (outbox.ts) — офлайн/сетевой сбой
+// ставит мутацию в FIFO-очередь этой фермы вместо падения; activateProductionPlan НЕ трогаем
+// (вне скоупа F10 — редкая state-D мутация, не часть «полевого» офлайн-флоу §4/§8).
 
 import { supabase } from '@/lib/supabase'
+import { cachedFetch, type CachedResult } from './offline-cache'
+import { callOrQueue } from './outbox'
 
 // Локальная дата фермера (YYYY-MM-DD) — окно/обход считаются от локального дня (Slice8 §1.4),
 // поэтому p_today передаём явно, а не полагаемся на серверный current_date.
@@ -73,19 +81,24 @@ export interface FarmOverview {
 // Доменный ответ мутаций-RPC (SKIP LOCKED / guard-паттерн): {ok:false, reason} при отказе.
 export interface RpcResult { ok?: boolean; reason?: string; [k: string]: unknown }
 
-export async function loadFarmOverview(orgId: string, farmId: string): Promise<FarmOverview> {
-  const { data, error } = await supabase.rpc('rpc_get_farm_overview', {
-    p_organization_id: orgId,
-    p_farm_id: farmId,
-    p_today: localToday(),
+export async function loadFarmOverview(orgId: string, farmId: string): Promise<CachedResult<FarmOverview>> {
+  return cachedFetch(farmId + ':overview', async () => {
+    const { data, error } = await supabase.rpc('rpc_get_farm_overview', {
+      p_organization_id: orgId,
+      p_farm_id: farmId,
+      p_today: localToday(),
+    })
+    if (error) throw error
+    return data as FarmOverview
   })
-  if (error) throw error
-  return data as FarmOverview
 }
 
 // Чек задачи дня (§2.3). actor=null → RPC берёт auth.uid() (клиент авторизован JWT фермера).
-export async function completeFarmTask(orgId: string, taskId: string): Promise<void> {
-  const { error } = await supabase.rpc('rpc_complete_farm_task', {
+// ARS-286: через outbox — офлайн/сетевой сбой ставит чек в очередь этой фермы (FSM already_
+// completed на сервере идемпотентен, client id не нужен), UI уже читает только успех/провал
+// (Promise<void> — сигнатура и поведение вызывающих не меняются, п. G2 контракта).
+export async function completeFarmTask(orgId: string, farmId: string, taskId: string): Promise<void> {
+  await callOrQueue(farmId, 'rpc_complete_farm_task', {
     p_organization_id: orgId,
     p_task_id: taskId,
     p_result_description: null,
@@ -93,19 +106,21 @@ export async function completeFarmTask(orgId: string, taskId: string): Promise<v
     p_actor_id: null,
     p_ai_context: null,
   })
-  if (error) throw error
 }
 
 // «На сегодня» для просрочки (§2.2). Guard задачи-окна → {ok:false, reason:'WINDOW_TASK_IMMOVABLE'}.
-export async function rescheduleFarmTaskToday(orgId: string, taskId: string): Promise<RpcResult | null> {
-  const { data, error } = await supabase.rpc('rpc_reschedule_farm_task', {
+// ARS-286: через outbox — при queued синтезируем ответ формы rpc_reschedule_farm_task из уже
+// известных локально значений (taskId, дата — та же p_new_due_date, что ушла бы на сервер).
+export async function rescheduleFarmTaskToday(orgId: string, farmId: string, taskId: string): Promise<RpcResult | null> {
+  const newDueDate = localToday()
+  const r = await callOrQueue<RpcResult | null>(farmId, 'rpc_reschedule_farm_task', {
     p_organization_id: orgId,
     p_task_id: taskId,
-    p_new_due_date: localToday(),
+    p_new_due_date: newDueDate,
     p_actor_id: null,
   })
-  if (error) throw error
-  return data as RpcResult | null
+  if (r.queued) return { ok: true, queued: true, task_id: taskId, due_date: newDueDate }
+  return r.data
 }
 
 // State D: активация draft-плана (§2.4 / eng-spec §2.11). PLAN_ALREADY_ACTIVE_EXISTS → {ok:false}.
