@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = [
         "http://localhost:5173",
         "https://ag-os.vercel.app",
+        "https://turanstandard.kz",
+        "https://www.turanstandard.kz",
     ]
 
     # Feature flags
