@@ -57,9 +57,12 @@ const BLOCK_CONFIG = [
 export function CapexTab() {
   const { organization } = useAuth()
   const { projectId } = useParams()
-  const { results, version, loading, refetch } = useProjectData()
+  const { project, results, version, loading, refetch } = useProjectData()
   const { data: materialsData } = useRpc<Material[]>('rpc_list_construction_materials', {})
-  const orgId = organization?.id
+  // Project's own org, not the viewer's — admin/expert have none of their own
+  // (DEF-CONSULTING-AUTH-02); rpc_save_project_infra_override/calculateProject
+  // match against the project's real org, not the caller's identity.
+  const orgId = project?.organization_id ?? organization?.id
 
   const [overrides, setOverrides] = useState<OverrideRow[]>([])
   const [saving, setSaving] = useState(false)

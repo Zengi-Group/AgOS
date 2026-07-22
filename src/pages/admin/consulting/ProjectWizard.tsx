@@ -216,7 +216,7 @@ function WizardField({ label, value, onChange, type = 'number', suffix, hint, st
 export function ProjectWizard() {
   const navigate = useNavigate()
   const { projectId } = useParams()
-  const { organization } = useAuth()
+  const { organization, isAdmin, isExpert } = useAuth()
   const [mode, setMode] = useState<'view' | 'edit'>(() => {
     try {
       const saved = sessionStorage.getItem(`wizard_mode_${projectId}`)
@@ -249,9 +249,13 @@ export function ProjectWizard() {
   const [catalogPrices, setCatalogPrices] = useState<Record<string, number>>({})
   const [catalogSteerByAge, setCatalogSteerByAge] = useState<Record<number, number>>({})
   const [isNarrow, setIsNarrow] = useState(() => window.innerWidth < 1024)
+  // Project's own org (from rpc_get_consulting_project), not the viewer's —
+  // admin/expert have none of their own (DEF-CONSULTING-AUTH-02).
+  const [projectOrgId, setProjectOrgId] = useState<string | null>(null)
 
 
   const orgId = organization?.id
+  const canManageAllOrgs = isAdmin || isExpert
 
   // Resize listener for responsive fallback
   useEffect(() => {
@@ -307,7 +311,7 @@ export function ProjectWizard() {
 
   // Load saved params + results from last version
   useEffect(() => {
-    if (!orgId || !projectId) return
+    if ((!orgId && !canManageAllOrgs) || !projectId) { setParamsLoading(false); return }
 
     // Load results from sessionStorage cache for Highlights
     try {
@@ -321,9 +325,10 @@ export function ProjectWizard() {
     } catch { /* ignore */ }
 
     supabase.rpc('rpc_get_consulting_project', {
-      p_organization_id: orgId,
+      p_organization_id: orgId ?? null,
       p_project_id: projectId,
     }).then(({ data: proj, error }) => {
+      if (!error && proj) setProjectOrgId(proj.organization_id ?? null)
       if (!error && proj?.versions?.length > 0) {
         setMode('view')
         const saved = proj.versions[0].input_params
@@ -370,7 +375,7 @@ export function ProjectWizard() {
       }
       setParamsLoading(false)
     })
-  }, [orgId, projectId])
+  }, [orgId, projectId, canManageAllOrgs])
 
   // ADR-PRICES-01: nullable price fields — empty input resets to catalog (null).
   const NULLABLE_FIELDS = new Set<keyof WizardParams>([
@@ -398,7 +403,10 @@ export function ProjectWizard() {
   }, [])
 
   const handleCalculate = async () => {
-    if (!orgId || !projectId) return
+    // Project's own org, not the viewer's — admin/expert have none of their
+    // own (DEF-CONSULTING-AUTH-02), same fix as ProjectPage's handleRecalculate.
+    const calcOrgId = projectOrgId ?? orgId
+    if (!calcOrgId || !projectId) return
     setCalculating(true)
     try {
       // ADR-CAPEX-01: persist material choice to consulting_projects row BEFORE
@@ -408,7 +416,7 @@ export function ProjectWizard() {
       // project row (NULL-preserve semantic, see d09:956). Wizard only owns
       // materials; CapexTab owns per-item overrides — no cross-write race.
       const { error: saveError } = await supabase.rpc('rpc_save_project_infra_override', {
-        p_organization_id: orgId,
+        p_organization_id: calcOrgId,
         p_project_id: projectId,
         p_enclosed: params.construction_material_enclosed,
         p_support: params.construction_material_support,
@@ -422,7 +430,7 @@ export function ProjectWizard() {
 
       const result = await calculateProject({
         project_id: projectId,
-        organization_id: orgId,
+        organization_id: calcOrgId,
         input_params: {
           ...params,
           // Convert % fields back to decimals

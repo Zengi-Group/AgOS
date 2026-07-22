@@ -91,10 +91,13 @@ export function RationTab() {
     () => JSON.parse(JSON.stringify(DEFAULT_RATIONS))
   )
 
-  const orgId = organization?.id
-
-  const { version, results, loading: projectLoading, refetch: refetchProject } = useProjectData()
+  const { project, version, results, loading: projectLoading, refetch: refetchProject } = useProjectData()
   const herd = results?.herd
+
+  // Project's own org, not the viewer's — admin/expert have none of their own
+  // (DEF-CONSULTING-AUTH-02); rpc_get_consulting_rations/calculateProject match
+  // against the project's real org, not the caller's identity.
+  const orgId = project?.organization_id ?? organization?.id
 
   const { data: feedingGroupData } = useAnimalCategoryMappings('feeding_group')
   const { data: rations, isLoading, refetch } = useRpc<ConsultingRation[]>(

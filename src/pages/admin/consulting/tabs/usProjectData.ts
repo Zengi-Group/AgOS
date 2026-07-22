@@ -34,15 +34,18 @@ function getCachedResults(projectId: string) {
 
 export function useProjectData() {
   const { projectId } = useParams()
-  const { organization } = useAuth()
+  const { organization, isAdmin, isExpert } = useAuth()
   const [project, setProject] = useState<any>(null)
   const [version, setVersion] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
   const orgId = organization?.id
+  // Admin/expert (TURAN staff) have no farmer organization_id of their own
+  // (DEF-CONSULTING-AUTH-02) — still need to load any client's project.
+  const canManageAllOrgs = isAdmin || isExpert
 
   const load = useCallback(async () => {
-    if (!orgId || !projectId) return
+    if ((!orgId && !canManageAllOrgs) || !projectId) { setLoading(false); return }
     setLoading(true)
 
     // 1. Check sessionStorage cache first
@@ -53,15 +56,17 @@ export function useProjectData() {
 
     // 2. Load project from Supabase
     const { data: proj } = await supabase.rpc('rpc_get_consulting_project', {
-      p_organization_id: orgId,
+      p_organization_id: orgId ?? null,
       p_project_id: projectId,
     })
     setProject(proj)
 
-    // 3. Load latest version from Supabase (overwrites cache if available)
+    // 3. Load latest version from Supabase (overwrites cache if available).
+    // Use the project's own organization_id — rpc_get_consulting_version matches
+    // it directly (no admin bypass), so the viewer's (possibly absent) org won't do.
     if (proj?.versions?.length > 0) {
       const { data: ver } = await supabase.rpc('rpc_get_consulting_version', {
-        p_organization_id: orgId,
+        p_organization_id: proj.organization_id ?? orgId,
         p_version_id: proj.versions[0].id,
       })
       if (ver?.results) {
@@ -69,7 +74,7 @@ export function useProjectData() {
       }
     }
     setLoading(false)
-  }, [orgId, projectId])
+  }, [orgId, projectId, canManageAllOrgs])
 
   useEffect(() => {
     load()
