@@ -27,6 +27,7 @@ import { FARM_TABS, type FarmTab, type FarmTabParams, type GoFarmTab } from '../
 import { OverviewScreen } from '../farm/OverviewScreen'
 import { TasksScreen } from '../farm/TasksScreen'
 import { HerdScreen } from '../farm/HerdScreen'
+import { FarmEventCapture } from '../farm/EventCaptureSheet'
 import { ScreenSkeleton } from '../components/ScreenSkeleton'
 
 interface Props {
@@ -86,8 +87,15 @@ export function FarmScreen({ onStart, onResume, toast }: Props) {
   // без изменений). Табы появляются, как только есть состав/план.
   const empty = !plan && !hasHerd
 
+  // Захват «Записать событие» (ARS-300/CAP-1) — глобальный CTA в док-футере (.sh-foot), только
+  // когда есть стадо/план (в хуке SCR-F0a фиксировать нечего). Диспетчер fan-out-ит по типу
+  // факта; реализованы «Проблема»+«Лечение», остальные плитки — «скоро» (ARS-305..310).
+  const captureFooter = (!empty && ctx?.organizationId && ctx.farmId)
+    ? <FarmEventCapture orgId={ctx.organizationId} farmId={ctx.farmId} toast={toast} onRecorded={bumpRefresh} />
+    : undefined
+
   return (
-    <IonShellFrame label="Ферма" onRefresh={bumpRefresh}>
+    <IonShellFrame label="Ферма" onRefresh={bumpRefresh} footer={captureFooter}>
       <TabHead title="Ферма" />
       <div className="mk">
         {loading && !ctx ? (
