@@ -12,7 +12,7 @@
 // Инварианты: статус = точка+текст без заливок; mono только цифры (R-9); :active на каждом
 // интерактиве (R-28); хиты ≥44 (кнопка обхода ≥48).
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { PhIcon } from '../components/icons/PhIcon'
 import { ScreenSkeleton } from '../components/ScreenSkeleton'
 import { Sheet } from '../components/Sheet'
@@ -26,6 +26,9 @@ import {
   type HerdBoard, type OpenEventRow, type RecentAnimal, type AnimalEventTypeOption, type AnimalCardData,
   type AnimalCardEvent,
 } from './data/farm-herd'
+import {
+  subscribeOutbox, getPendingCount, getFailedItems, getPendingItems, retryItem, removeItem, type OutboxItem,
+} from './data/outbox'
 
 interface Props {
   orgId: string
@@ -40,6 +43,16 @@ const hm = (ts: string | null) =>
   ts ? new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''
 const isToday = (ts: string) => ts.slice(0, 10) === localToday()
 
+// «Не записалось» (F10/ARS-286, «тихого дропа НЕТ») — русская подпись элемента очереди по RPC.
+const OUTBOX_LABEL: Record<string, string> = {
+  rpc_mark_walkthrough: 'Отметка обхода',
+  rpc_log_animal_event: 'Отклонение',
+  rpc_close_animal_event: 'Закрытие события',
+  rpc_create_farm_task: 'Задача',
+  rpc_complete_farm_task: 'Выполнение задачи',
+  rpc_reschedule_farm_task: 'Перенос задачи',
+}
+
 // Цифры внутри русской фразы → mono (R-9), тот же приём, что OverviewScreen.tsx.
 const monoNums = (s: string) =>
   s.split(/(\d+)/).map((p, i) => (/^\d+$/.test(p) ? <span key={i} className="mk-mono">{p}</span> : <span key={i}>{p}</span>))
@@ -48,12 +61,15 @@ export function HerdScreen({ orgId, farmId, goFarmTab, params, toast, refreshNon
   const [data, setData] = useState<HerdBoard | null>(null)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
+  // «данные на HH:MM» (F10/ARS-286) — виден только при source==='cache'.
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null)
+  const [source, setSource] = useState<'live' | 'cache'>('live')
 
   const load = useCallback(async (silent?: boolean) => {
     if (!silent) setLoading(true)
     try {
-      const d = await loadHerdBoard(orgId, farmId)
-      setData(d)
+      const r = await loadHerdBoard(orgId, farmId)
+      setData(r.data); setFetchedAt(r.fetchedAt); setSource(r.source)
       setFailed(false)
     } catch {
       setFailed(true)
@@ -83,6 +99,7 @@ export function HerdScreen({ orgId, farmId, goFarmTab, params, toast, refreshNon
 
   return (
     <>
+      {source === 'cache' && fetchedAt && <div className="fo-asof">данные на {hm(fetchedAt)}</div>}
       {walkMode ? (
         <WalkView
           orgId={orgId} farmId={farmId} data={data} toast={toast}
@@ -183,13 +200,68 @@ function WalkView({ orgId, farmId, data, toast, onBack, onReload }: {
   const [resolved, setResolved] = useState<Record<string, string>>({})
   const [vetTarget, setVetTarget] = useState<OpenEventRow | null>(null)
   const [vetBusy, setVetBusy] = useState(false)
+  const [outboxBusy, setOutboxBusy] = useState<Set<string>>(new Set())
+
+  // Outbox — «не записалось» (F10/ARS-286): подписка зеркалит useOnline() (platform/network.ts).
+  const pendingCount = useSyncExternalStore(
+    useCallback((l: () => void) => subscribeOutbox(farmId, l), [farmId]),
+    useCallback(() => getPendingCount(farmId), [farmId]),
+  )
+  const failedItems = useSyncExternalStore(
+    useCallback((l: () => void) => subscribeOutbox(farmId, l), [farmId]),
+    useCallback(() => getFailedItems(farmId), [farmId]),
+  )
+  const pendingItems = useSyncExternalStore(
+    useCallback((l: () => void) => subscribeOutbox(farmId, l), [farmId]),
+    useCallback(() => getPendingItems(farmId), [farmId]),
+  )
+  // Для «строка появляется без ожидания сети» (§7) нужно имя типа, а не только код — тот же
+  // справочник, что уже грузит DeviationForm (loadEventTypes, платформенный, без organization_id).
+  const [eventTypeNames, setEventTypeNames] = useState<Record<string, string>>({})
+  useEffect(() => {
+    loadEventTypes().then((list) => {
+      setEventTypeNames(Object.fromEntries(list.map((t) => [t.code, t.name_ru])))
+    }).catch(() => { /* офлайн/сбой — покажем код вместо имени, не критично */ })
+  }, [])
+
+  const doRetry = async (opId: string) => {
+    if (outboxBusy.has(opId)) return
+    setOutboxBusy((p) => new Set(p).add(opId))
+    try {
+      await retryItem(farmId, opId)
+    } finally {
+      setOutboxBusy((p) => { const n = new Set(p); n.delete(opId); return n })
+    }
+  }
 
   const walkOk = data.walkthrough.marked || optimisticMarkedAt != null
   const markedAt = data.walkthrough.marked ? data.walkthrough.marked_at : optimisticMarkedAt
   // «Отклонения с обхода» (§4.3) — счётчик и список за СЕГОДНЯ, отдельно от «Открытые события»
   // Стадо-таба (§5, все статус=open вне зависимости от даты) — иначе счётчик разойдётся со
   // списком (today_events_count считает сегодняшние, open_events — все открытые).
-  const todayEvents = data.open_events.filter((e) => isToday(e.occurred_at))
+  // Ещё-не-синканные log_animal_event идут первыми (самый свежий факт) — строка гаснет сама,
+  // когда drainOutbox уводит элемент из очереди (см. комментарий у getPendingItems, outbox.ts).
+  const pendingDeviationRows: OpenEventRow[] = pendingItems
+    .filter((it) => it.rpcName === 'rpc_log_animal_event')
+    .map((it): OpenEventRow => {
+      const p = it.params as Record<string, unknown>
+      const occurredAt = String(p.p_occurred_at ?? it.queuedAt)
+      const code = String(p.p_event_type_code ?? '')
+      return {
+        event_id: it.opId,
+        animal_id: '',
+        tag_number: String(p.p_tag_number ?? ''),
+        type_code: code,
+        type_name: eventTypeNames[code] ?? code,
+        occurred_at: occurredAt,
+        note: (p.p_note as string | null) ?? null,
+        vet_case_id: null,
+        task_id: null,
+      }
+    })
+    .filter((e) => isToday(e.occurred_at))
+  const pendingEventIds = new Set(pendingDeviationRows.map((e) => e.event_id))
+  const todayEvents = [...pendingDeviationRows, ...data.open_events.filter((e) => isToday(e.occurred_at))]
   const now = new Date()
 
   const doMark = async () => {
@@ -258,6 +330,9 @@ function WalkView({ orgId, farmId, data, toast, onBack, onReload }: {
         {!online && <div className="wk-offline"><PhIcon name="wifiSlash" size={14} /><span>офлайн — запишется</span></div>}
       </div>
       <div className="wk-hint">По умолчанию все <span className="mk-mono">{data.herd_total}</span> в порядке. Вводите только отклонения.</div>
+      {pendingCount > 0 && (
+        <div className="wk-hint">Не отправлено — <span className="mk-mono">{pendingCount}</span> {pendingCount === 1 ? 'запись' : 'записи'}, отправим при связи.</div>
+      )}
 
       {/* Блок отметки обхода (§4.2) */}
       {walkOk ? (
@@ -289,26 +364,56 @@ function WalkView({ orgId, farmId, data, toast, onBack, onReload }: {
       <div className="fo-box">
         {todayEvents.length === 0 ? (
           <div className="wk-dash">Пока ничего — это хорошо</div>
-        ) : todayEvents.map((e) => (
-          <div className="fo-att" key={e.event_id}>
-            <span className="fo-dot bad" />
-            <div className="fo-att-main">
-              <div className="fo-att-t">{monoNums(`№${e.tag_number} — ${e.type_name}`)}</div>
-              <div className="fo-att-s">{hm(e.occurred_at)}</div>
-            </div>
-            {e.vet_case_id ? (
-              <span className="fo-att-badge"><PhIcon name="checkCircle" size={14} />кейс открыт</span>
-            ) : resolved[e.event_id] ? (
-              <span className="fo-att-badge"><PhIcon name="checkCircle" size={14} />{resolved[e.event_id]}</span>
-            ) : (
-              <div className="wk-row-actions">
-                <button className="wk-act-btn" disabled={busy.has(e.event_id)} onClick={() => doInspect(e)}>Осмотр</button>
-                <button className="wk-act-btn" disabled={busy.has(e.event_id)} onClick={() => setVetTarget(e)}>Ветврачу</button>
+        ) : todayEvents.map((e) => {
+          // Ещё-не-синканная строка (event_id = opId, не реальный id) — «Осмотр»/«Ветврачу» шлют
+          // p_animal_event_id на сервер; событие там пока не существует, действие бы упало.
+          // Блокируем действия до синка, а не притворяемся, что они сработают (§8: тихого дропа НЕТ).
+          const isPending = pendingEventIds.has(e.event_id)
+          return (
+            <div className="fo-att" key={e.event_id}>
+              <span className="fo-dot bad" />
+              <div className="fo-att-main">
+                <div className="fo-att-t">{monoNums(`№${e.tag_number} — ${e.type_name}`)}</div>
+                <div className="fo-att-s">{isPending ? 'запишется при связи' : hm(e.occurred_at)}</div>
               </div>
-            )}
-          </div>
-        ))}
+              {isPending ? (
+                <span className="fo-att-badge"><PhIcon name="wifiSlash" size={14} />в очереди</span>
+              ) : e.vet_case_id ? (
+                <span className="fo-att-badge"><PhIcon name="checkCircle" size={14} />кейс открыт</span>
+              ) : resolved[e.event_id] ? (
+                <span className="fo-att-badge"><PhIcon name="checkCircle" size={14} />{resolved[e.event_id]}</span>
+              ) : (
+                <div className="wk-row-actions">
+                  <button className="wk-act-btn" disabled={busy.has(e.event_id)} onClick={() => doInspect(e)}>Осмотр</button>
+                  <button className="wk-act-btn" disabled={busy.has(e.event_id)} onClick={() => setVetTarget(e)}>Ветврачу</button>
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
+
+      {/* «Не записалось» (§7/§8, «тихого дропа НЕТ») — доменные отказы outbox, retry/remove. */}
+      {failedItems.length > 0 && (
+        <>
+          <div className="fo-sec-h"><b>Не записалось</b><span className="fo-sec-cnt mk-mono">{failedItems.length}</span></div>
+          <div className="fo-box">
+            {failedItems.map((it: OutboxItem) => (
+              <div className="fo-att" key={it.opId}>
+                <span className="fo-dot bad" />
+                <div className="fo-att-main">
+                  <div className="fo-att-t">{OUTBOX_LABEL[it.rpcName] ?? it.rpcName}</div>
+                  {it.failReason && <div className="fo-att-s">{it.failReason}</div>}
+                </div>
+                <div className="wk-row-actions">
+                  <button className="wk-act-btn" disabled={outboxBusy.has(it.opId)} onClick={() => doRetry(it.opId)}>Повторить</button>
+                  <button className="wk-act-btn" disabled={outboxBusy.has(it.opId)} onClick={() => removeItem(farmId, it.opId)}>Убрать</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <button className="wk-add" onClick={() => setWizardOpen(true)}>
         <PhIcon name="plus" size={16} /><span>Отклонение</span>
@@ -421,15 +526,18 @@ function AnimalCardSheet({ orgId, farmId, animalId, toast, onClose, onChanged }:
   const [busy, setBusy] = useState<Set<string>>(new Set())
   const [adding, setAdding] = useState(false)
   const [closeTarget, setCloseTarget] = useState<AnimalCardEvent | null>(null)
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null)
+  const [source, setSource] = useState<'live' | 'cache'>('live')
 
   const load = useCallback(async () => {
     try {
-      const r = await loadAnimalCard(orgId, animalId)
-      if (r.ok) { setCard(r); setFailed(false) } else { setFailed(true) }
+      const res = await loadAnimalCard(orgId, farmId, animalId)
+      const r = res.data
+      if (r.ok) { setCard(r); setFetchedAt(res.fetchedAt); setSource(res.source); setFailed(false) } else { setFailed(true) }
     } catch {
       setFailed(true)
     }
-  }, [orgId, animalId])
+  }, [orgId, farmId, animalId])
 
   useEffect(() => { load() }, [load])
 
@@ -439,7 +547,7 @@ function AnimalCardSheet({ orgId, farmId, animalId, toast, onClose, onChanged }:
     const eventId = closeTarget.event_id
     setBusy((p) => new Set(p).add(eventId))
     try {
-      const r = await closeAnimalEvent(orgId, eventId)
+      const r = await closeAnimalEvent(orgId, farmId, eventId)
       if (r.ok === false) toast('Не удалось закрыть событие')
       else { load(); onChanged() }
     } catch {
@@ -461,6 +569,7 @@ function AnimalCardSheet({ orgId, farmId, animalId, toast, onClose, onChanged }:
             {card.animal.herd_group_name ?? '—'}
             {card.animal.status === 'left_herd' && <span className="an-badge-left">выбыло</span>}
           </div>
+          {source === 'cache' && fetchedAt && <div className="fo-asof">данные на {hm(fetchedAt)}</div>}
 
           <div className="fo-sec-h"><b>История событий</b></div>
           <div className="fo-box an-ev-box">

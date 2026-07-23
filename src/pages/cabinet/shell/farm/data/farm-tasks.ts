@@ -8,6 +8,8 @@
 
 import { supabase } from '@/lib/supabase'
 import { localToday, type RpcResult } from './farm-overview'
+import { cachedFetch, type CachedResult } from './offline-cache'
+import { callOrQueue } from './outbox'
 
 export type Horizon = 'week' | 'month' | 'year'
 
@@ -72,52 +74,69 @@ export interface NoPlanHorizon {
 
 export type WeekHorizonResult = WeekHorizon | NoPlanHorizon
 
-export async function loadWeekHorizon(orgId: string, farmId: string, anchor?: string): Promise<WeekHorizonResult> {
-  const { data, error } = await supabase.rpc('rpc_get_tasks_horizon', {
-    p_organization_id: orgId,
-    p_farm_id: farmId,
-    p_horizon: 'week',
-    p_anchor: anchor ?? localToday(),
+// ARS-286 (F10): через cachedFetch — кэш-юнит на (horizon='week', anchor).
+export async function loadWeekHorizon(
+  orgId: string, farmId: string, anchor?: string,
+): Promise<CachedResult<WeekHorizonResult>> {
+  const a = anchor ?? localToday()
+  return cachedFetch(farmId + ':horizon:week:' + a, async () => {
+    const { data, error } = await supabase.rpc('rpc_get_tasks_horizon', {
+      p_organization_id: orgId,
+      p_farm_id: farmId,
+      p_horizon: 'week',
+      p_anchor: a,
+    })
+    if (error) throw error
+    return data as WeekHorizonResult
   })
-  if (error) throw error
-  return data as WeekHorizonResult
 }
 
-// Только для «пустой недели» (межфазье, §3.1) — ближайшая веха месяца, когда в Неделе нечего показать.
+// Только для «пустой недели» (межфазье, §3.1) — ближайшая веха месяца, когда в Неделе нечего
+// показать. ARS-286: тот же RPC (horizon='month') и тот же cacheKey, что loadMonthHorizon
+// (farm-tasks-month.ts) — одна запись в appStorage вместо дублирования идентичных данных;
+// возврат остаётся плоским значением (внутренний helper, не экранный агрегат, D145 §6).
 export async function loadNextMilestone(orgId: string, farmId: string, anchor?: string): Promise<MonthMilestone | null> {
-  const { data, error } = await supabase.rpc('rpc_get_tasks_horizon', {
-    p_organization_id: orgId,
-    p_farm_id: farmId,
-    p_horizon: 'month',
-    p_anchor: anchor ?? localToday(),
+  const a = anchor ?? localToday()
+  const { data: month } = await cachedFetch<MonthHorizon | NoPlanHorizon>(farmId + ':horizon:month:' + a, async () => {
+    const { data, error } = await supabase.rpc('rpc_get_tasks_horizon', {
+      p_organization_id: orgId,
+      p_farm_id: farmId,
+      p_horizon: 'month',
+      p_anchor: a,
+    })
+    if (error) throw error
+    return data as MonthHorizon | NoPlanHorizon
   })
-  if (error) throw error
-  const month = data as MonthHorizon | NoPlanHorizon
   if (month.no_plan) return null
-  const today = anchor ?? localToday()
-  return (month as MonthHorizon).milestones.find((m) => m.date >= today) ?? null
+  return (month as MonthHorizon).milestones.find((m) => m.date >= a) ?? null
 }
 
 // «+» ручная задача (slice §3, eng-spec §2.14). Исполнитель не выбираем — нет ростера участников
 // (открытый вопрос handoff §12 «раздача помощникам» не решён CEO; поле — когда решится модель).
+// ARS-286: через outbox с CID (p_client_task_id = opId) — офлайн/сетевой сбой ставит задачу в
+// очередь; при queued синтезируем {ok:true, task_id: opId} (тот же приём, что createInspectionTask,
+// farm-herd.ts — тот же RPC, category='management' вместо 'veterinary').
 export async function createFarmTask(
   orgId: string, farmId: string,
   params: { nameRu: string; dueDate: string; dueTime?: string | null },
 ): Promise<RpcResult | null> {
-  const { data, error } = await supabase.rpc('rpc_create_farm_task', {
-    p_organization_id: orgId,
-    p_farm_id: farmId,
-    p_name_ru: params.nameRu,
-    p_due_date: params.dueDate,
-    p_due_time: params.dueTime ?? null,
-    p_category: 'management',
-    p_assigned_to: null,
-    p_animal_event_id: null,
-    p_client_task_id: null,
-    p_actor_id: null,
-  })
-  if (error) throw error
-  return data as RpcResult | null
+  const r = await callOrQueue<RpcResult | null>(
+    farmId, 'rpc_create_farm_task',
+    {
+      p_organization_id: orgId,
+      p_farm_id: farmId,
+      p_name_ru: params.nameRu,
+      p_due_date: params.dueDate,
+      p_due_time: params.dueTime ?? null,
+      p_category: 'management',
+      p_assigned_to: null,
+      p_animal_event_id: null,
+      p_actor_id: null,
+    },
+    'p_client_task_id',
+  )
+  if (r.queued) return { ok: true, queued: true, task_id: r.opId }
+  return r.data
 }
 
 // ── Год (F8, ARS-284) — Slice8 §3.3: таймлайн фаз + сдвиг старта случки ───────
@@ -150,15 +169,21 @@ export interface YearHorizon {
 
 export type YearHorizonResult = YearHorizon | NoPlanHorizon
 
-export async function loadYearHorizon(orgId: string, farmId: string, anchor?: string): Promise<YearHorizonResult> {
-  const { data, error } = await supabase.rpc('rpc_get_tasks_horizon', {
-    p_organization_id: orgId,
-    p_farm_id: farmId,
-    p_horizon: 'year',
-    p_anchor: anchor ?? localToday(),
+// ARS-286 (F10): через cachedFetch — кэш-юнит на (horizon='year', anchor).
+export async function loadYearHorizon(
+  orgId: string, farmId: string, anchor?: string,
+): Promise<CachedResult<YearHorizonResult>> {
+  const a = anchor ?? localToday()
+  return cachedFetch(farmId + ':horizon:year:' + a, async () => {
+    const { data, error } = await supabase.rpc('rpc_get_tasks_horizon', {
+      p_organization_id: orgId,
+      p_farm_id: farmId,
+      p_horizon: 'year',
+      p_anchor: a,
+    })
+    if (error) throw error
+    return data as YearHorizonResult
   })
-  if (error) throw error
-  return data as YearHorizonResult
 }
 
 export interface CascadePreviewItem {
