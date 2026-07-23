@@ -5047,3 +5047,92 @@ on conflict (sql_name) do update set created_in = excluded.created_in, notes = e
 -- END SECTION ARS-279
 -- ============================================================================
 
+-- ============================================================================
+-- SECTION: ARS-311 — SEC: guard raw D104-каскада (fn_shift_phase_cascade /
+--          fn_preview_cascade) — отзыв прямого клиентского EXECUTE + обёртка превью
+-- ============================================================================
+-- Дефект (F11-QA, FARM2-SEC-01): обе D104-функции — SECURITY DEFINER, но EXECUTE был
+--   выдан public/anon/authenticated (Supabase default-privileges, security-definer-review-
+--   checklist Trap 2b). fn_shift_phase_cascade НЕ имеет ownership-guard → прямой клиентский
+--   вызов supabase.rpc('fn_shift_phase_cascade', …) с чужим farm_phases.id двигал даты/фазы
+--   чужого цикла мимо org-изоляции (нарушение CLAUDE.md §Data Isolation).
+-- Фикс (аддитивно, P7): raw D104-функции сигнатуры НЕ меняют; доступны только owner'у —
+--   их зовут SECURITY DEFINER обёртки (write: rpc_shift_breeding_start §2.9, как owner →
+--   регрессии F8 нет; read: rpc_preview_breeding_shift ниже). Клиент ходит только через
+--   guarded RPC. Прямой EXECUTE отозван у public/anon/authenticated (см. хвост секции).
+
+-- ---- rpc_preview_breeding_shift — guarded превью-двойник rpc_shift_breeding_start --------
+-- P-AI-2: organization_id в сигнатуре (как rpc_shift_breeding_start §2.9). phase_id — что превьюим.
+create or replace function public.rpc_preview_breeding_shift(
+    p_organization_id uuid,
+    p_phase_id        uuid,
+    p_new_start_date  date
+)
+returns table (
+    phase_id   uuid,
+    phase_name text,
+    old_start  date,
+    new_start  date,
+    old_end    date,
+    new_end    date,
+    shift_days int,
+    date_type  text,
+    depth      int
+)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+stable
+as $$
+declare
+    v_org_id uuid;
+begin
+    -- (1) ownership-guard: членство вызывающего в заявленной org (P-AI-2).
+    if not (p_organization_id = any(public.fn_my_org_ids()) or public.fn_is_admin()) then
+        raise exception 'FORBIDDEN: not a member of organization %', p_organization_id using errcode = 'P0001';
+    end if;
+
+    -- (2) фаза должна принадлежать заявленной org (farm_phases→plan→farm) — иначе confused-deputy
+    --     через свой org_id + чужой phase_id. Нет фазы / чужая org → пустое превью (как L-7, не exception).
+    select f.organization_id into v_org_id
+    from   public.farm_phases            fp
+    join   public.farm_production_plans  pp on pp.id = fp.plan_id
+    join   public.farms                  f  on f.id  = pp.farm_id
+    where  fp.id = p_phase_id;
+
+    if v_org_id is null or v_org_id <> p_organization_id then
+        return;
+    end if;
+
+    -- (3) делегируем raw D104-превью как owner. fn_preview_cascade несёт собственный L-7 CTE по
+    --     fn_current_user_id() (auth.uid() читается из JWT-claim и внутри SECURITY DEFINER — так что
+    --     для легитимного пользователя строки возвращаются; двойная защита, не регрессия).
+    return query
+        select * from public.fn_preview_cascade(p_phase_id, p_new_start_date);
+end;
+$$;
+grant execute on function public.rpc_preview_breeding_shift(uuid, uuid, date) to authenticated;
+revoke execute on function public.rpc_preview_breeding_shift(uuid, uuid, date) from public, anon;
+comment on function public.rpc_preview_breeding_shift(uuid, uuid, date) is
+    'ARS-311: guarded превью-обёртка D104 (мост к RPC-36). P-AI-2: org в сигнатуре. Guard: членство
+     в p_organization_id (fn_my_org_ids/fn_is_admin) + фаза принадлежит этой org → делегирует
+     fn_preview_cascade как owner. Форма возврата = 1:1 с fn_preview_cascade (9 колонок). Клиент больше
+     НЕ зовёт fn_preview_cascade напрямую (execute отозван у public/anon/authenticated). Read-only
+     двойник rpc_shift_breeding_start (§2.9).';
+
+-- ---- Отзыв прямого клиентского EXECUTE у raw D104-функций (ядро фикса) -------------------
+-- fn_shift_phase_cascade: легитимный вход — rpc_shift_breeding_start (зовёт как owner).
+-- fn_preview_cascade:     легитимный вход — rpc_preview_breeding_shift (зовёт как owner).
+revoke execute on function public.fn_shift_phase_cascade(uuid, date, uuid) from public, anon, authenticated;
+revoke execute on function public.fn_preview_cascade(uuid, date)           from public, anon, authenticated;
+
+-- ---- Реестр имён (D-NEW-A) --------------------------------------------------------------
+insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
+  ('rpc_preview_breeding_shift', null, null, 'd05_ops_edu.sql (ARS-311)',
+   'SEC: guarded превью-обёртка D104; заменяет прямой клиентский вызов fn_preview_cascade')
+on conflict (sql_name) do update set created_in = excluded.created_in, notes = excluded.notes;
+
+-- ============================================================================
+-- END SECTION ARS-311
+-- ============================================================================
+

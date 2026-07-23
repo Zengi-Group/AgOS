@@ -1,4 +1,11 @@
 /**
+ * ⚠️ DEPRECATED / RETIRED — ARS-311 (2026-07-23, SEC). Больше НЕ роутится: маршрут
+ * /cabinet-legacy/plan/cascade и обе nav-точки (Timeline, ProductionPlan) сняты.
+ * Экран вытеснен Ферма 2.0 F8 (TasksScreen · «Старт случки»). Прямые вызовы ниже
+ * (fn_preview_cascade / fn_shift_phase_cascade) БОЛЬШЕ НЕ РАБОТАЮТ — EXECUTE отозван у
+ * anon/authenticated. Возрождать только через guarded RPC: rpc_preview_breeding_shift
+ * (превью) + rpc_shift_breeding_start (запись). Файл сохранён (HS-2), не удалён.
+ *
  * F22 — Сдвиг фаз (Cascade Preview)
  * Dok 6 Slice 4: /cabinet-legacy/plan/cascade/:phaseId
  * RPCs: fn_preview_cascade (RPC-36), fn_shift_phase_cascade (RPC-35)

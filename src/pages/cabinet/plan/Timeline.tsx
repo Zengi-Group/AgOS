@@ -107,9 +107,9 @@ export function Timeline() {
               const left = Math.max(0, ((phaseStart - planStart) / (planEnd - planStart)) * 100)
               const width = Math.max(2, ((phaseEnd - phaseStart) / (planEnd - planStart)) * 100)
 
+              // ARS-311: сдвиг фазы теперь только через Ферма 2.0 F8 (guarded RPC); клик по бару снят
               return (
-                <div key={phase.id} className="relative h-10 cursor-pointer group"
-                  onClick={() => navigate(`/cabinet-legacy/plan/cascade/${phase.id}`)}>
+                <div key={phase.id} className="relative h-10 group">
                   <div
                     className="absolute h-8 rounded-md flex items-center px-2 text-xs text-white font-medium overflow-hidden whitespace-nowrap transition-opacity group-hover:opacity-90"
                     style={{

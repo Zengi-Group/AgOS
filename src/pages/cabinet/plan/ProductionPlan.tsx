@@ -137,9 +137,9 @@ export function ProductionPlan() {
         <h3 className="font-medium">Фазы ({phases.length})</h3>
         {phases.map((phase) => {
           const phaseProgress = phase.tasks_total > 0 ? Math.round((phase.tasks_completed / phase.tasks_total) * 100) : 0
+          // ARS-311: сдвиг фазы теперь только через Ферма 2.0 F8 (guarded RPC); клик по карточке снят
           return (
-            <Card key={phase.id} className="cursor-pointer hover:border-primary/50 transition-colors"
-              onClick={() => navigate(`/cabinet-legacy/plan/cascade/${phase.id}`)}>
+            <Card key={phase.id} className="transition-colors">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div>

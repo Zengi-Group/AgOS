@@ -504,7 +504,7 @@ function BreedingShiftSheet({ open, onClose, orgId, farmId, phase, onShifted }: 
     setLoading(true)
     setErr(null)
     try {
-      setPreview(await previewBreedingShift(phase.id, date))
+      setPreview(await previewBreedingShift(orgId, phase.id, date))
       setStep('preview')
     } catch {
       setErr('Не удалось построить превью — попробуйте ещё')

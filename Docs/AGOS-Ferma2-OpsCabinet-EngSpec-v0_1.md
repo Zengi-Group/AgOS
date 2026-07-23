@@ -346,8 +346,11 @@ Idempotency-классы (D145): **NK** = natural key · **CID** = client_event_
 → `due_date += shift`, `window_start/window_end += shift` (пары целиком); `completed/skipped`
 не трогаются — прошлое неприкосновенно (§9.4); (5) эмит существующего `ops.farm_phase.rescheduled`
 (O-04, payload уже несёт `cascaded_phases[]`). Confirm-семантика: UI сначала зовёт
-`fn_preview_cascade` (RPC-36) → диалог «пересчитает все окна» → этот RPC. D104-канон:
-каскад НЕ двигает задачи — расширение только внутри обёртки, `fn_shift_phase_cascade` не меняется (P7).
+`rpc_preview_breeding_shift(p_organization_id, p_phase_id, p_new_start_date)` (ARS-311 guarded
+обёртка → делегирует `fn_preview_cascade` RPC-36 как owner) → диалог «пересчитает все окна» → этот
+RPC. D104-канон: каскад НЕ двигает задачи — расширение только внутри обёртки, `fn_shift_phase_cascade`
+не меняется (P7). **ARS-311 (SEC):** прямой клиентский EXECUTE на `fn_shift_phase_cascade`/
+`fn_preview_cascade` отозван (public/anon/authenticated) — оба зовутся ТОЛЬКО из guarded обёрток как owner.
 
 **2.10** `rpc_reschedule_farm_task(p_organization_id uuid, p_task_id uuid, p_new_due_date date, p_actor_id uuid default null) returns jsonb`
 «На сегодня» для просрочек. Guard: задача-окно (`window_start is not null`) →
@@ -397,6 +400,7 @@ insert into public.rpc_name_registry (sql_name, dok3_name, created_in, notes) va
   ('rpc_get_farm_overview',           null, 'd05_ops_edu.sql (ARS-279)','Ferma 2.0: агрегат Обзора'),
   ('rpc_get_tasks_horizon',           null, 'd05_ops_edu.sql (ARS-279)','Ferma 2.0: Неделя/Месяц/Год'),
   ('rpc_shift_breeding_start',        null, 'd05_ops_edu.sql (ARS-279)','Ferma 2.0: фермерская обёртка D104 (D144)'),
+  ('rpc_preview_breeding_shift',      null, 'd05_ops_edu.sql (ARS-311)','Ferma 2.0: guarded превью D104 (SEC); заменяет прямой fn_preview_cascade'),
   ('rpc_reschedule_farm_task',        null, 'd05_ops_edu.sql (ARS-279)','Ferma 2.0: перенос без сдвига окна'),
   ('rpc_activate_production_plan',    null, 'd05_ops_edu.sql (ARS-279)','Ferma 2.0: draft→active, retire FARM-02'),
   ('rpc_create_farm_task',            null, 'd05_ops_edu.sql (ARS-279)','Ferma 2.0: ручная задача / задача из отклонения, CID-идемпотентность'),
@@ -574,10 +578,13 @@ FSM — повтор complete/close/activate возвращает success с т�
 - **HS-2:** мастер (ARS-212), показ плана (ARS-215), HerdOverview/группы (ARS-171 скоуп) —
   сохраняются; Dok6 §1 фиксирует маршруты.
 - **DECISIONS_LOG:** противоречий с D1–D139 не найдено; D140–D148 добавляются.
-- **⚠️ Существующий долг (не создаём, фиксируем):** `fn_shift_phase_cascade` — SECURITY DEFINER
-  без org-guard и с PUBLIC execute (класс SEC-GRANT-PUBLIC-01, IMPL_DEBT). Фермерский путь —
-  только обёртка 2.9. Рекомендация F3: `revoke from public` на `fn_shift_phase_cascade`/
-  `fn_preview_cascade` после сверки вызывающих эксперт-консоли (отдельный точечный чек).
+- **✅ Долг закрыт (ARS-311, 2026-07-23):** `fn_shift_phase_cascade` (SECURITY DEFINER без
+  org-guard) и `fn_preview_cascade` (self-guard L-7, но raw) — прямой клиентский EXECUTE отозван
+  (`revoke from public, anon, authenticated`, инстанс SEC-GRANT-PUBLIC-01 для этой пары). Клиент
+  ходит через guarded обёртки: запись — 2.9 `rpc_shift_breeding_start`, превью — новая
+  `rpc_preview_breeding_shift` (P-AI-2, org в сигнатуре, делегирует `fn_preview_cascade` как owner).
+  Легаси-экран `/cabinet-legacy/plan/cascade` (`CascadePreview`, звал raw-fn напрямую) вытеснен F8 и
+  снят с роутинга (route + 2 nav-точки; файл сохранён, HS-2).
 
 ## 11. Verification (G3)
 

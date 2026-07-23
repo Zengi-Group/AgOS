@@ -198,13 +198,13 @@ export interface CascadePreviewItem {
   depth: number
 }
 
-// Превью каскада (slice §3.3, RPC-36) — read-only, ничего не пишет. fn_preview_cascade несёт
-// собственный access-check (L-7: org фермы через user_organization_roles) — вызывается напрямую,
-// без organization_id (не self-RPC). Остаточный долг: PUBLIC execute на fn_preview_cascade/
-// fn_shift_phase_cascade не отозван (SEC-GRANT-PUBLIC-01, Dok6 §10) — не эксплойт (guard внутри
-// защищает), точечный revoke — отдельный проход после сверки эксперт-консоли.
-export async function previewBreedingShift(phaseId: string, newStartDate: string): Promise<CascadePreviewItem[]> {
-  const { data, error } = await supabase.rpc('fn_preview_cascade', {
+// Превью каскада (slice §3.3, RPC-36) — read-only, ничего не пишет. ARS-311 (SEC): клиент ходит
+// через guarded обёртку rpc_preview_breeding_shift (ownership-guard org→farm→phase → делегирует
+// fn_preview_cascade как owner). Прямой EXECUTE на fn_preview_cascade/fn_shift_phase_cascade отозван
+// у public/anon/authenticated — SEC-GRANT-PUBLIC-01 закрыт. Форма возврата 1:1 с fn_preview_cascade.
+export async function previewBreedingShift(orgId: string, phaseId: string, newStartDate: string): Promise<CascadePreviewItem[]> {
+  const { data, error } = await supabase.rpc('rpc_preview_breeding_shift', {
+    p_organization_id: orgId,
     p_phase_id: phaseId,
     p_new_start_date: newStartDate,
   })
