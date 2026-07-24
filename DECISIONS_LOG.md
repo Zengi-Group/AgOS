@@ -3,6 +3,20 @@
 > Maintained by: Architect & Coordinator Agent
 > Format: WHAT was decided → WHY (alternatives considered) → CONSEQUENCES (what becomes easy/hard)
 
+### 2026-07-24: ARS-312 — re-revoke fn_preview_cascade from authenticated (ARS-311 deploy-ordering close-out)
+
+**What**: Applied migration `ars312_re_revoke_fn_preview_cascade_authenticated` on prod (`mwtbozflyldcadypherr`): `revoke execute on function public.fn_preview_cascade(uuid, date) from public, anon, authenticated;` — closes the temporary re-grant (`ars311_temp_regrant_fn_preview_cascade_pending_frontend`, 2026-07-24) that ARS-311's deploy-ordering incident required.
+
+**Why**: ARS-311's SQL revoke reached prod before the Vercel frontend build switching F8's breeding-shift preview to the guarded wrapper `rpc_preview_breeding_shift`, so `authenticated` was temporarily re-granted on `fn_preview_cascade` to avoid breaking the live preview. Precondition to close it: PR #142's frontend must actually be *live* (not just merged to `main`) — verified by fetching and grepping all 225 JS chunks served from `turanstandard.kz`: `rpc_preview_breeding_shift` present, `fn_preview_cascade`/`CascadePreview` absent from every chunk. No canonical file change needed — `d05_ops_edu.sql` (ARS-311 section) already carried the correct end-state; this closed only the live/deployed divergence.
+
+**Verify**: pre-check via `has_function_privilege` confirmed the temp grant was live (`authenticated_exec=true`); post-migration re-check: `fn_preview_cascade` → authenticated/anon/public all `false`, only `postgres`/`service_role` (matches ARS-311's target ACL). `fn_shift_phase_cascade` unaffected (already locked). `rpc_preview_breeding_shift` unaffected (`authenticated=true`, correct — the intended entry point). `get_advisors(security)` — no findings reference either function.
+
+**Consequences**: closes the ARS-311 deploy-ordering tail; the D104 cascade pair (`fn_shift_phase_cascade`/`fn_preview_cascade`) is execute-locked to owner-only in production with no open stopgaps.
+
+**Files**: none in this repo (prod-only ACL fix; `d05_ops_edu.sql` was already correct). Migration `ars312_re_revoke_fn_preview_cascade_authenticated` on Supabase project `mwtbozflyldcadypherr`. Linear ARS-312 → Done.
+
+---
+
 ### 2026-07-22: Fix pt.2 — тот же DEF-CONSULTING-AUTH-02 бил ещё в 4 файлах внутри проекта (Параметры/CAPEX/Персонал/Рационы + общий useProjectData)
 
 **What**: после деплоя предыдущей правки CEO создал проект живьём (admin-аккаунт, `/admin/consulting/:id/edit` — вкладка «Параметры») — модель не грузилась (тот же вечный скелетон). Тот же паттерн `orgId = organization?.id` нашёлся ещё в 4 местах: **(1)** `ProjectWizard.tsx` («Параметры») — эффект загрузки сохранённых params/results гасился на `!orgId` до `setParamsLoading(false)`; `handleCalculate` использовал орг зрителя вместо `project.organization_id`. **(2)** `usProjectData.ts` — общий хук для Сводки/Оборота стада/P&L/Cash Flow/Тех.карты/CAPEX (`rpc_get_consulting_project`+`rpc_get_consulting_version`) — тот же `if (!orgId) return` до `setLoading(false)`; один фикс здесь чинит загрузку сразу для 6 вкладок. **(3)** `CapexTab.tsx`/`StaffTab.tsx` — `handleSave`/`handleSaveAndRecalculate` брали орг зрителя для `rpc_save_project_infra_override`/`calculateProject`; теперь берут `project.organization_id` (эти RPC не имеют admin-обхода — сверяют org напрямую с проектом, DEF-CONSULTING-AUTH-01-паттерн, поэтому нужен именно РЕАЛЬНЫЙ org проекта, не null). **(4)** `RationTab.tsx` — единственная точечная правка (HS-1/HS-2: файл с историей инцидента «рерайт вместо точечной правки», трогать по минимуму) — источник `orgId` теперь `project?.organization_id ?? organization?.id`; все 8 использований ниже (rations RPC, recalc, `CalcDialog` prop) не тронуты, автоматически чинятся через одну переменную.
