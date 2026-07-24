@@ -90,7 +90,6 @@ const RationBudget = lazy(() => import('@/pages/cabinet/ration/tabs/Budget').the
 const ProductionPlan = lazy(() => import('@/pages/cabinet/plan/ProductionPlan').then(m => ({ default: m.ProductionPlan })))
 const TaskList = lazy(() => import('@/pages/cabinet/plan/TaskList').then(m => ({ default: m.TaskList })))
 const Timeline = lazy(() => import('@/pages/cabinet/plan/Timeline').then(m => ({ default: m.Timeline })))
-const CascadePreview = lazy(() => import('@/pages/cabinet/plan/CascadePreview').then(m => ({ default: m.CascadePreview })))
 const KpiDashboard = lazy(() => import('@/pages/cabinet/plan/KpiDashboard').then(m => ({ default: m.KpiDashboard })))
 const MarketDashboard = lazy(() => import('@/pages/cabinet/market/MarketDashboard').then(m => ({ default: m.MarketDashboard })))
 const CreateBatch = lazy(() => import('@/pages/cabinet/market/CreateBatch').then(m => ({ default: m.CreateBatch })))
@@ -262,7 +261,8 @@ function App() {
                   <Route path="plan" element={<ProductionPlan />} />
                   <Route path="plan/tasks" element={<TaskList />} />
                   <Route path="plan/timeline" element={<Timeline />} />
-                  <Route path="plan/cascade/:phaseId" element={<CascadePreview />} />
+                  {/* plan/cascade retired — ARS-311 (SEC): direct fn_shift_phase_cascade/fn_preview_cascade
+                      revoked; superseded by Ферма 2.0 F8 TasksScreen «Старт случки». */}
                   <Route path="plan/kpi" element={<KpiDashboard />} />
                   <Route path="market" element={<MarketDashboard />} />
                   <Route path="market/new" element={<CreateBatch />} />
