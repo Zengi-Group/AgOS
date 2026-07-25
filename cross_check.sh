@@ -22,6 +22,13 @@ SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d
 # NOTE (flagged, not fixed here): d10_public_site.sql is in cross_check but NOT in
 # deploy_sql.py; d11_norms.sql is in deploy_sql.py but NOT here — reconcile separately.
 
+# Convenience: `bash cross_check.sh --update-contracts` regenerates the CHECK 11
+# snapshot after an INTENTIONAL contract change (ship it with the doc sync in the same PR).
+if [ "${1:-}" = "--update-contracts" ]; then
+  python3 scripts/contract_snapshot.py update contracts/rpc_return_keys.txt "${SQL_FILES[@]}"
+  exit $?
+fi
+
 echo "========================================"
 echo "AgOS Cross-Check — $(date '+%Y-%m-%d %H:%M')"
 echo "========================================"
@@ -382,6 +389,35 @@ if [ -f "$DESIGN_CANON" ]; then
   fi
 else
   echo "  SKIP: $DESIGN_CANON not found"
+fi
+
+echo ""
+
+# ----------------------------------------------------------
+# CHECK 11: RPC return-contract snapshot (D-RPC-CONTRACT-SYNC-01)
+# Severity: SIGNIFICANT (a changed return shape must ship with its Dok/EngSpec
+# sync + DECISIONS_LOG line in the SAME PR — Slice8 §2.2 / ARS-279 lesson).
+# Snapshot = json[b]_build_object keys per rpc_*, later definition wins
+# (mirrors deploy order). Regenerate: bash cross_check.sh --update-contracts
+# ----------------------------------------------------------
+echo "--- CHECK 11: RPC return-contract snapshot (D-RPC-CONTRACT-SYNC-01) ---"
+if [ -f scripts/contract_snapshot.py ] && [ -f contracts/rpc_return_keys.txt ]; then
+  c11_out=$(python3 scripts/contract_snapshot.py check contracts/rpc_return_keys.txt "${SQL_FILES[@]}" 2>&1 || true)
+  echo "$c11_out" | sed 's/^/  /'
+  c11_changed=$(echo "$c11_out" | grep -c '^CHANGED' || true)
+  c11_removed=$(echo "$c11_out" | grep -c '^REMOVED' || true)
+  c11_new=$(echo "$c11_out" | grep -c '^NEW' || true)
+  if [ "$((c11_changed + c11_removed))" -gt 0 ]; then
+    echo "  SIGNIFICANT: ${c11_changed} changed / ${c11_removed} removed return-contract(s) — sync Dok/DECISIONS_LOG in THIS PR, then: bash cross_check.sh --update-contracts"
+    ((SIGNIFICANT += c11_changed + c11_removed))
+  fi
+  if [ "$c11_new" -gt 0 ]; then
+    echo "  MINOR: ${c11_new} new rpc contract(s) not in snapshot — snapshot them in this PR (--update-contracts)"
+    ((MINOR += c11_new))
+  fi
+else
+  echo "  MINOR: contract_snapshot.py or contracts/rpc_return_keys.txt missing — check skipped"
+  ((MINOR++))
 fi
 
 echo ""
