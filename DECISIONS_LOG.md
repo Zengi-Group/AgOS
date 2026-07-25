@@ -6,6 +6,18 @@
 > `Docs/archive/DECISIONS_LOG-2026-H1.md`; в начале квартала переносить туда прошлый квартал.
 > Новые записи — append в ХВОСТ этого файла (merge=union); середину не править.
 
+### 2026-07-25: fix(docs) — устаревшая строка-подсказка «базовые 4» в night-watch.yml
+
+**What**: `.github/workflows/night-watch.yml:40` — комментарий-бейзлайн Significant-счётчика в отчёте «Ночного дозора» правлен с «базовые 4 = 3 маркера Slice D + R-29» на «базовые 3 = маркеры Slice D, PGRST203».
+
+**Why**: дубль R-29 в реестре правил CEO уже переномерован в R-31 (`df5cf43`, #147, CHECK 10 → `OK: R-N ids unique`), так что «+ R-29» больше не даёт SIGNIFICANT-находку. Живой прогон `bash cross_check.sh` подтверждает текущий бейзлайн: `Significant: 3` (все три — PGRST203-overload из CHECK 9, retire в Slice D).
+
+**Consequences**: подсказка в отчёте night-watch снова соответствует реальному бейзлайну; когда 3 маркера Slice D будут закрыты, строку нужно будет поправить ещё раз (или удалить бейзлайн-комментарий совсем).
+
+**Files**: `.github/workflows/night-watch.yml`.
+
+---
+
 ### 2026-07-24: ARS-312 — re-revoke fn_preview_cascade from authenticated (ARS-311 deploy-ordering close-out)
 
 **What**: Applied migration `ars312_re_revoke_fn_preview_cascade_authenticated` on prod (`mwtbozflyldcadypherr`): `revoke execute on function public.fn_preview_cascade(uuid, date) from public, anon, authenticated;` — closes the temporary re-grant (`ars311_temp_regrant_fn_preview_cascade_pending_frontend`, 2026-07-24) that ARS-311's deploy-ordering incident required.
