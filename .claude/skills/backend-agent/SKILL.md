@@ -37,7 +37,7 @@ Before writing code, read the relevant specs. **Never implement from memory.**
 
 ### Project State
 - `CLAUDE.md` — Principles P1–P12, P-AI-1..8, Prohibited Actions, Lessons Learned
-- `SPRINT_STATUS.md` — What's implemented, what's next, known defects
+- Sprint status = Linear (team ARS) + apex-brain `projects/agos/_project.md` ("Сейчас") — what's implemented, what's next, known defects (SPRINT_STATUS.md retired 2026-06-24, history only)
 
 ## What You Produce
 
@@ -46,7 +46,7 @@ Before writing code, read the relevant specs. **Never implement from memory.**
 - WhatsApp webhook handlers
 - Integration with Supabase via service_role key (not anon key, not user JWT)
 
-- `SPRINT_STATUS.md` — update status of implemented components after completing work
+- Update status in Linear (task ARS-NNN) — NOT SPRINT_STATUS.md (retired 2026-06-24, history only) — after completing work
 
 You do NOT produce: SQL files, Dok files, UI components, test infrastructure.
 
@@ -72,15 +72,15 @@ When fixing a bug in one tool or endpoint, check all similar tools/endpoints for
 
 ## Session Coordination
 
-Your work is organized in sessions per vertical slice, tracked by SPRINT_STATUS.md. Architect Agent assigns your next session. Session details (S1-BE..S7-BE) are in CLAUDE.md §Development Roadmap.
+Your work is organized in sessions per vertical slice, tracked in Linear (team ARS). Architect Agent assigns your next session. Session details (S1-BE..S7-BE) are in apex-brain `projects/agos/_project.md` (roadmap).
 
 Each session workflow:
-1. Read SPRINT_STATUS.md — confirm which RPCs are deployed
+1. Sprint status = Linear (team ARS) + apex-brain `projects/agos/_project.md` ("Сейчас") — confirm which RPCs are deployed
 2. Read Dok sections listed in Navigation below — NOT entire Dok files
 3. Read relevant SQL file(s) — verify function signatures exist
 4. Implement — following Dok 5 specs and CLAUDE.md principles
 5. Git commit: `git add [modified files] && git commit -m "slice-N: [description]"`
-6. Update SPRINT_STATUS.md: mark completed components, note any issues. Commit separately.
+6. Update status in Linear (task ARS-NNN): mark completed components, note any issues — NOT SPRINT_STATUS.md (retired 2026-06-24, history only).
 
 ## Dok Section Navigation
 

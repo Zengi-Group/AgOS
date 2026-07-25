@@ -32,7 +32,7 @@ Before any SQL change, read the relevant files. **Never write SQL from memory �
 
 ### Project State — you CHECK these before starting
 - `CLAUDE.md` — Principles P1–P12, P-AI-1..8, Prohibited Actions, Lessons Learned
-- `SPRINT_STATUS.md` — What's implemented, what's next, known defects
+- Sprint status = Linear (team ARS) + apex-brain `projects/agos/_project.md` ("Сейчас") — what's implemented, what's next, known defects (SPRINT_STATUS.md retired 2026-06-24, history only)
 - `DECISIONS_LOG.md` — Architecture decisions that affect your work
 
 ## What You Produce
@@ -43,7 +43,7 @@ Before any SQL change, read the relevant files. **Never write SQL from memory �
 - RLS policies where specified by Dok 1 §4 Ownership Matrix
 - Trigger functions (`fn_*`) and trigger bindings when Dok 1 FSM or cross-domain patterns require them
 
-- `SPRINT_STATUS.md` — update status of implemented RPCs after completing work
+- Update status in Linear (task ARS-NNN) — NOT SPRINT_STATUS.md (retired 2026-06-24, history only) — after completing work
 
 You do NOT produce: new tables, new columns (schema is FINAL), patch files, Python, TypeScript, Dok updates.
 
@@ -145,7 +145,7 @@ After completing any SQL changes:
    - `SELECT count(*) FROM <new_table>` or `SELECT count(*) FROM consulting_reference_data WHERE category='<new_cat>'`
    - `SELECT column_name FROM information_schema.columns WHERE table_name='<table>' AND column_name='<new_col>'`
    - `SELECT 1 FROM rpc_name_registry WHERE sql_name='<new_rpc>'`
-5. Report results to Architect Agent for SPRINT_STATUS.md update.
+5. Report results to Architect Agent for Linear (ARS-NNN) status update.
 
 **Why step 3-4 exist:** "File touched, deploy forgotten" happened 3× in one week
 (DEF-SCHEMA-DRIFT-01 `needs_recalc`, DEF-SCHEMA-DRIFT-02 `role_was_overridden`,
@@ -171,14 +171,14 @@ Sessions follow the vertical slice roadmap. Each session implements RPCs for one
 **Already implemented (do NOT rewrite):** RPC-06, RPC-09, RPC-10, RPC-25, RPC-33..36; AI-01..AI-22 (all in d07).
 
 Each session workflow:
-1. Read SPRINT_STATUS.md — confirm which RPCs are needed
+1. Sprint status = Linear (team ARS) + apex-brain `projects/agos/_project.md` ("Сейчас") — confirm which RPCs are needed
 2. Read Dok sections listed in Navigation below — NOT entire Dok files
 3. Read the target SQL file — full file, count all function definitions
 4. Implement RPCs — one at a time, verifying no duplicates after each
 5. Add `rpc_name_registry` entries
 6. Run duplicate check + `cross_check.sh`
 7. Git commit: `git add [modified SQL file] && git commit -m "slice-N: implement RPC-XX..YY in dNN"`
-8. Update SPRINT_STATUS.md: mark completed RPCs as ✅, note any defects found. Commit separately.
+8. Update status in Linear (task ARS-NNN): mark completed RPCs as ✅, note any defects found — NOT SPRINT_STATUS.md (retired 2026-06-24, history only).
 
 ## Dok Section Navigation
 

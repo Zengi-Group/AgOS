@@ -1,0 +1,78 @@
+# CI-гейт (process-audit 2026-07-25): каждый PR проходит машинную проверку.
+# До этого 119 PR/месяц мёржились без единого чека — вся проверочная
+# инфраструктура (cross_check, vitest, pytest) существовала, но не запускалась.
+# Required checks (Settings → Branches → main): web + sql-checks (минимум).
+# routers/python — сделать required после 1-2 недель стабильной работы.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # tsc -b (ловит HS-4-класс: noUnusedLocals) + vite build + unit-тесты
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci # .npmrc (legacy-peer-deps) подхватывается автоматически
+      - run: npm run build
+      - run: npm run test:unit
+
+  # cross_check: L-1 дубли функций, L-7 UI↔SQL, CHECK 11 RPC-контракты, ст.171
+  sql-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash cross_check.sh
+      - run: bash qa/check_coverage.sh
+
+  # smoke v5-острова роутеров (vitest browser mode + playwright)
+  # ЭКСПЕРИМЕНТАЛЬНАЯ в CI (не блокирует): первый прогон 2026-07-25 — 6/8 тестов
+  # не находят элементы в срок на raw-ubuntu, локально те же тесты зелёные
+  # (2026-07-21). continue-on-error на ШАГЕ (job-level всё равно рисует красный
+  # крест в чеках PR — шум). Закалить (viewport/таймауты локаторов/шрифты)
+  # отдельной сессией, затем снять continue-on-error и добавить в required checks.
+  routers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chromium --with-deps
+      - id: routers
+        run: npm run test:routers
+        continue-on-error: true
+      - if: steps.routers.outcome == 'failure'
+        run: echo "::warning title=routers experimental::test:routers упал — известная нестабильность browser-mode на CI (закалка отдельной сессией, см. комментарий в ci.yml). Локально: npm run test:routers."
+
+  # consulting_engine: pytest (feeding model, NASEM, приоритетная цепочка)
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: consulting_engine/requirements.txt
+      - run: pip install -r requirements.txt
+        working-directory: consulting_engine
+      - run: python -m pytest
+        working-directory: consulting_engine
