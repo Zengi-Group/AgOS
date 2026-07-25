@@ -1824,6 +1824,20 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: `bash -n` OK; прогон в worktree без graphify-out → `WARN … запусти graphify update . или scripts/worktree-bootstrap.sh`, FAIL=0, exit 0 (до фикса — FAIL + exit 1); со стабом graph.json → `PASS graphify-out/graph.json есть (derived-индекс)`, стаб удалён.
 
 **Files**: `scripts/check-setup.sh`, `DECISIONS_LOG.md` (эта запись).
+
+---
+
+### 2026-07-25: Process-audit такт 2 — CI-гейт на PR + механизация мелких дыр аудита
+
+**What**: (1) `.github/workflows/ci.yml` — первый CI-гейт на PR: 4 джобы (web: `npm ci` + `npm run build` + `test:unit`; sql-checks: `cross_check.sh` + `qa/check_coverage.sh`; routers: playwright smoke v5-острова; python: pytest `consulting_engine/`). (2) CHECK 6 `cross_check.sh` переведён с `grep -oP` (GNU-only; на macOS BSD grep молча падал → проверка ВСЕГДА печатала «OK», защита L-7 была фиктивной локально) на портируемый `grep -oE | sed`. (3) `qa-run-all.js`: домены 09-farm/10-farm-ops добавлены в дефолтный список (раньше «полный» прогон молча пропускал 31 кейс), `runDate` обязателен (17 из 19 старых отчётов — `undated-*`), meta ~177→~209. (4) `qa/scenarios/10-farm-ops.md` закоммичен (жил untracked на одной машине — нарушение qa/README §5.1). (5) 5 агент-скиллов (`architect/db/backend/ui/qa`) вычищены от ретайрнутого SPRINT_STATUS.md (24 точечных правки: статус = Linear team ARS + apex-brain `_project.md`); у backend-agent починена ссылка на несуществующий «CLAUDE.md §Development Roadmap». (6) `scripts/sweep_worktrees.sh` — уборка влитых worktree/веток (только чистые и ahead=0; dirty/ahead/detached не трогает).
+
+**Why**: аудит процессов 2026-07-25 (11 агентов-аналитиков): 119 PR/месяц мёржились без единой машинной проверки при готовой проверочной инфраструктуре; hardening такт 1 (#145) закрыл ротацию лога/Stop-hook/CHECK 11, но PR-гейт остался открытым — это была рекомендация №1 аудита.
+
+**Verify**: `bash cross_check.sh` локально (macOS) после фикса CHECK 6 — цикл реально исполняется, 0 critical / 3 significant (известные Slice-D маркеры); `qa/check_coverage.sh` exit 0; `sweep_worktrees.sh --dry-run` — 7 кандидатов на удаление, 8 корректно пропущены (dirty/ahead). CI-джобы валидируются первым прогоном на этом же PR.
+
+**Consequences**: становится легко — required checks на main (Settings → Branches → main: web + sql-checks; после стабилизации + routers/python); L-1/L-7/HS-4/CHECK-11 ловятся на каждом PR, а не «когда вспомнят». Открытые хвосты аудита (вне этого PR): staging-Supabase, единый deploy.py + ops_deploy_log, prod-drift detector, README.md, CLAUDE-starter для zengi/dala-bot-admin/PIQPAY.
+
+**Files**: `.github/workflows/ci.yml` (новый), `cross_check.sh`, `.claude/workflows/qa-run-all.js`, `qa/scenarios/10-farm-ops.md` (новый в git), `.claude/skills/{architect,db-agent,backend-agent,ui-agent,qa-agent}/SKILL.md`, `scripts/sweep_worktrees.sh` (новый), `DECISIONS_LOG.md` (эта запись).
 ### 2026-07-25: Дубль записи «2026-07-03: A-GRADE — формула сорта МПК…» — вторая копия удалена
 
 **What**: запись `### 2026-07-03: A-GRADE — формула сорта МПК стала data-driven + редактируемой из админки` присутствовала в этом файле дважды — артефакт `merge=union` двух параллельных PR, аппендивших одну запись (НЕ следствие ротации 2026-07-25: в `Docs/archive/DECISIONS_LOG-2026-H1.md` упоминаний A-GRADE нет — проверено). Тела сверены diff'ом — байт-идентичны (расхождение только в хвостовом разделителе `---`). Удалена вторая копия — вклиненная без разделителей между записями 2026-07-07 и 2026-07-08, вне хронологии; первая (в корректном месте среди записей 2026-07-03) не тронута. Дисциплина «середину не править» нарушена осознанно и однократно: удаление byte-дубля, не правка смысла.

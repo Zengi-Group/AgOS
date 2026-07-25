@@ -26,13 +26,13 @@ Before coding any screen, read the relevant specs. **Never code a screen without
 
 ### Project State
 - `CLAUDE.md` — Principles, conventions, design system tokens
-- `SPRINT_STATUS.md` — What's implemented, what's next
+- Sprint status = Linear (team ARS) + apex-brain `projects/agos/_project.md` ("Сейчас") — what's implemented, what's next (SPRINT_STATUS.md retired 2026-06-24, history only)
 
 ## What You Produce
 
 - React components, pages, and hooks in `src/`
 - Supabase client integration via `supabase.rpc()` (service through auth, not direct table access)
-- `SPRINT_STATUS.md` — update status of implemented screens after completing work
+- Update status in Linear (task ARS-NNN) — NOT SPRINT_STATUS.md (retired 2026-06-24, history only) — after completing work
 
 You do NOT produce: SQL files, Python code, Dok files, test infrastructure.
 
@@ -91,12 +91,12 @@ Every screen that shows price data (F05–F09, A11–A15) MUST display `disclaim
 | **S7-UI** | Slice 7 (Education) | F24–F28, A16–A19 (9) | S7-DB + S7-BE + Dok 6 |
 
 Each session workflow:
-1. Read SPRINT_STATUS.md — confirm which RPCs and backend endpoints are deployed
+1. Sprint status = Linear (team ARS) + apex-brain `projects/agos/_project.md` ("Сейчас") — confirm which RPCs and backend endpoints are deployed
 2. Read Dok 6 contracts for the screens in this slice
 3. Read Dok 3 for RPC signatures called by these screens
 4. Implement screens — one at a time, following Dok 6 contract exactly
 5. Git commit: `git add src/ && git commit -m "slice-N: implement screens F??-F??"`
-6. Update SPRINT_STATUS.md: mark completed screens. Commit separately.
+6. Update status in Linear (task ARS-NNN): mark completed screens — NOT SPRINT_STATUS.md (retired 2026-06-24, history only).
 
 ## What You Don't Do
 

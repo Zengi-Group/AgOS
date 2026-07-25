@@ -1,7 +1,7 @@
 export const meta = {
   name: 'qa-run-all',
   description: 'Прогон всех тест-кейсов qa/scenarios/ агентами: backend-слой параллельно, UI волнами по портам, сводный отчёт',
-  whenToUse: 'Когда нужно прогнать весь QA-реестр (qa/scenarios/, ~177 кейсов) и получить сводку в qa/runs/. Требует staging DATABASE_URL для sql/rpc-слоя и .env для UI против реального бэкенда.',
+  whenToUse: 'Когда нужно прогнать весь QA-реестр (qa/scenarios/, ~209 кейсов) и получить сводку в qa/runs/. Требует staging DATABASE_URL для sql/rpc-слоя и .env для UI против реального бэкенда.',
   phases: [
     { title: 'Backend', detail: 'sql/rpc/e2e-кейсы, rollback-tx, все файлы параллельно' },
     { title: 'UI', detail: 'ui-кейсы через preview_start, волнами по 3 порта' },
@@ -13,8 +13,15 @@ export const meta = {
 const FILES = (args && args.files) || [
   '01-registration', '02-auth', '03-onboarding', '04-membership',
   '05-tsp-farmer', '06-tsp-mpk', '07-security-cross', '08-backend-e2e',
+  '09-farm', '10-farm-ops',
 ]
-const D = (args && args.runDate) || 'undated'
+// runDate обязателен: 17 из 19 старых отчётов назывались undated-* — динамику
+// качества между прогонами построить было невозможно.
+const D = args && args.runDate
+if (!D) {
+  log('runDate не передан — прогон остановлен')
+  throw new Error("Передай args: { runDate: 'YYYY-MM-DD' } (например $(date +%F)) — отчёты без даты не сравнимы между прогонами")
+}
 
 const RESULT = {
   type: 'object',
