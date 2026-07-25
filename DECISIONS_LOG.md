@@ -1825,6 +1825,15 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 
 **Files**: `scripts/check-setup.sh`, `DECISIONS_LOG.md` (эта запись).
 
+### 2026-07-25: CHECK 12 — дубли заголовков записей в DECISIONS_LOG и архивах (страховка merge=union)
+
+**What**: в `cross_check.sh` добавлен CHECK 12 (следующий свободный номер после CHECK 11, по образцу CHECK 10): `grep -E '^### ' | sort | uniq -d` по `DECISIONS_LOG.md` и `Docs/archive/DECISIONS_LOG-*.md`; непустой вывод = significant (не critical), один инкремент на файл. Попутно вычищен третий union-инцидент: в `Docs/archive/DECISIONS_LOG-2026-H1.md` запись «2026-04-25: DS v12 — bg-white sweep» лежала дважды, первая копия оборвана посреди предложения (`color-mix(in srgb, var(--fg) Y`) — оборванная удалена, полная сохранена. Дубль A-GRADE (2026-07-03) в текущем логе намеренно НЕ тронут — его удаляет открытый PR #150; до его мержа CHECK 12 честно репортит его (significant, PR не блокирует).
+
+**Why**: `merge=union` на append-only файлах уже дважды молча склеивал дубли из параллельных PR (дубль R-29 в каноне дизайна → фикс PR #147, страховка CHECK 10; дубль записи A-GRADE в DECISIONS_LOG → фикс PR #150) — теперь у журнала решений есть та же автоматическая страховка, что у канона. Архивы в охвате, потому что дубль, рождённый в живом файле, переживает ротацию незамеченным — доказано находкой bg-white в H1-архиве.
+
+**Verify**: `bash -n` OK; `bash cross_check.sh` — CHECK 12 ловит живой A-GRADE-дубль (significant 3 → 4 до мержа #150), архив после фикса чист; negative-test: временный дубль в архиве детектится и в архивной ветке, после отката снова только A-GRADE. 0 critical, exit 0; формат SUMMARY не менялся (night-watch парсит его как раньше).
+
+**Files**: `cross_check.sh` (блок CHECK 12), `Docs/archive/DECISIONS_LOG-2026-H1.md` (удалена оборванная union-копия), `DECISIONS_LOG.md` (эта запись).
 ---
 
 ### 2026-07-25: Process-audit такт 2 — CI-гейт на PR + механизация мелких дыр аудита

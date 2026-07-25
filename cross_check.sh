@@ -424,6 +424,33 @@ fi
 echo ""
 
 # ----------------------------------------------------------
+# CHECK 12: Duplicate entry headers in DECISIONS_LOG (+archives)
+# Severity: SIGNIFICANT (log integrity)
+# DECISIONS_LOG.md is append-only under `.gitattributes merge=union`: parallel
+# PRs cut from the same base can carry the SAME entry, and union keeps both
+# copies silently. Incidents: R-29 in the design canon (fixed PR #147, guarded
+# by CHECK 10) and the A-GRADE 2026-07-03 entry (fixed PR #150). Archives are
+# scanned too — a duplicate born in the live file survives rotation unnoticed
+# (bg-white 2026-04-25 truncated copy in the H1 archive, fixed with this check).
+# ----------------------------------------------------------
+echo "--- CHECK 12: Duplicate entry headers in DECISIONS_LOG (+archives) ---"
+c12_before=$SIGNIFICANT
+for log_f in DECISIONS_LOG.md Docs/archive/DECISIONS_LOG-*.md; do
+  [ -f "$log_f" ] || continue
+  dup_hdr=$(grep -E '^### ' "$log_f" | sort | uniq -d)
+  if [ -n "$dup_hdr" ]; then
+    echo "  SIGNIFICANT: duplicate entry header(s) in ${log_f} — drop the extra copy:"
+    echo "$dup_hdr" | sed 's/^### /    /'
+    ((SIGNIFICANT++))
+  fi
+done
+if [ "$SIGNIFICANT" -eq "$c12_before" ]; then
+  echo "  OK: entry headers unique across DECISIONS_LOG.md and archives"
+fi
+
+echo ""
+
+# ----------------------------------------------------------
 # SUMMARY
 # ----------------------------------------------------------
 echo "========================================"
