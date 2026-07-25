@@ -1,0 +1,74 @@
+# Ночной дозор (3c, feature-flow hardening 2026-07-25) — еженедельная сверка здоровья процесса.
+# Состав v1 (без staging-БД qa-слой невозможен — добавится с ARS по staging):
+#   1) cross_check.sh на main (вкл. CHECK 11 контракт-снапшот RPC) — дрейф ловится раз в неделю даже без PR.
+#   2) PR-гигиена: открытые PR без движения >7 дней.
+#   3) Linear-линт (если задан секрет LINEAR_API_KEY): задачи ARS в started/In Review без движения >7 дней.
+# Отчёт: workflow summary всегда; GitHub-issue — только при находках.
+name: night-watch
+
+on:
+  schedule:
+    - cron: '7 1 * * 1' # Пн 07:07 Алматы (UTC+6)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Дозор
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+        run: |
+          set -uo pipefail
+          R=report.md
+          FINDINGS=0
+          echo "# Ночной дозор — $(date -u '+%Y-%m-%d')" > "$R"
+
+          echo "## 1. cross_check (main)" >> "$R"
+          cc_out=$(bash cross_check.sh 2>&1); cc_code=$?
+          echo '```' >> "$R"; echo "$cc_out" | tail -15 >> "$R"; echo '```' >> "$R"
+          crit=$(echo "$cc_out" | sed -n 's/^  Critical:[[:space:]]*//p')
+          sig=$(echo "$cc_out" | sed -n 's/^  Significant:[[:space:]]*//p')
+          echo "Critical: ${crit:-?} · Significant: ${sig:-?} (базовые 4 = 3 маркера Slice D + R-29)" >> "$R"
+          [ "$cc_code" -ne 0 ] && FINDINGS=$((FINDINGS+1))
+
+          echo "## 2. PR-гигиена (>7 дней без движения)" >> "$R"
+          stale=$(gh pr list --state open --json number,title,updatedAt \
+            --jq '[.[] | select((now - (.updatedAt|fromdateiso8601)) > 604800)] | .[] | "- #\(.number) \(.title)"')
+          if [ -n "$stale" ]; then echo "$stale" >> "$R"; FINDINGS=$((FINDINGS+1)); else echo "чисто" >> "$R"; fi
+
+          echo "## 3. Linear-линт (ARS: started-статусы без движения >7 дней)" >> "$R"
+          if [ -n "${LINEAR_API_KEY:-}" ]; then
+            lin=$(curl -sf -X POST https://api.linear.app/graphql \
+              -H "Authorization: $LINEAR_API_KEY" -H "Content-Type: application/json" \
+              --data '{"query":"{ issues(filter:{team:{key:{eq:\"ARS\"}}, state:{type:{in:[\"started\"]}}}, first:50){ nodes{ identifier title updatedAt state{name} } } }"}' \
+              | jq -r '(.data.issues.nodes // [])[]
+                  | select((now - (.updatedAt|fromdateiso8601)) > 604800)
+                  | "- \(.identifier) [\(.state.name)] \(.title) — тишина \(((now - (.updatedAt|fromdateiso8601)) / 86400) | floor)д"') \
+              || lin="Linear API недоступен (ошибка запроса)"
+            if [ -n "$lin" ]; then echo "$lin" >> "$R"; FINDINGS=$((FINDINGS+1)); else echo "чисто" >> "$R"; fi
+          else
+            echo "секрет LINEAR_API_KEY не задан — линт пропущен (включить: gh secret set LINEAR_API_KEY)" >> "$R"
+          fi
+
+          echo "## Не в составе v1" >> "$R"
+          echo "- qa-run-all: нужен staging DATABASE_URL (staging-Supabase нет — см. память/DECISIONS)." >> "$R"
+          echo "- Сверка с мозгом (apex-brain): нужен cross-repo PAT — кандидат v2." >> "$R"
+
+          cat "$R" >> "$GITHUB_STEP_SUMMARY"
+          echo "FINDINGS=$FINDINGS" >> "$GITHUB_ENV"
+
+      - name: Issue при находках
+        if: env.FINDINGS != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --title "Ночной дозор $(date -u '+%Y-%m-%d'): есть находки" --body-file report.md

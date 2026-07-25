@@ -1793,3 +1793,13 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: полный `cross_check.sh` — CHECK 11 OK (159 match), 0 critical, 4 significant (3 известных маркера Slice D + дубль R-29 в дизайн-каноне — вне скоупа, зафлаган отдельной задачей); дрейф-симуляция ловится (CHANGED + exit 1); stop-hook протестирован на stdin (block при dirty, тишина при `stop_hook_active`); ротация: 136+101=237 записей, байты сходятся (+заголовки).
 
 **Files**: `cross_check.sh` (+CHECK 11, `--update-contracts`), `scripts/contract_snapshot.py` (новый), `contracts/rpc_return_keys.txt` (новый), `scripts/hooks/stop-checklist.sh` (новый), `.claude/settings.json` (+Stop hook), `DECISIONS_LOG.md` (ротация + шапка + эта запись), `Docs/archive/DECISIONS_LOG-2026-H1.md` (новый). Вне репо: `feature@zengi` 0.2.0, `apex-brain` (`patterns/feature-flow.md`, `projects/agos/_project.md`).
+
+### 2026-07-25: Ночной дозор v1 — еженедельный health-чек процесса (GitHub Actions)
+
+**What**: `.github/workflows/night-watch.yml` — пн 07:07 Алматы (`7 1 * * 1` UTC) + ручной `workflow_dispatch`: (1) `cross_check.sh` на main (вкл. CHECK 11 контракты), (2) PR-гигиена (>7 дней без движения), (3) Linear-линт started-статусов ARS (>7 дней тишины; требует секрет `LINEAR_API_KEY`, без него — скип с пометкой). Отчёт — в workflow summary; GitHub-issue — только при находках.
+
+**Why**: боли П1/П3 (CEO 2026-07-25) — дрейф контрактов и рассинхрон статусов копятся между фичами; еженедельный прогон ловит их без человека. Runtime = GitHub Actions, а НЕ сессия/Мак: cron Claude-сессии умирает вместе с ней, launchd зависит от «Мак не спит в пн 07:00». `qa-run-all` в составе НЕТ — нужен staging `DATABASE_URL` (staging-Supabase не существует); сверка с мозгом — кандидат v2 (нужен cross-repo PAT).
+
+**Verify**: YAML валиден; jq-выражения проверены через `gh --jq` на живых PR (тот же диалект, раннер несёт полноценный jq); первый полный прогон — после мержа PR #145 через `workflow_dispatch` (воркфлоу должен жить на default-ветке).
+
+**Files**: `.github/workflows/night-watch.yml` (новый), `DECISIONS_LOG.md` (эта запись).
