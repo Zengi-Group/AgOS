@@ -30,7 +30,7 @@ if [ -n "$REMOTE" ] && [ "$LOCAL" = "$REMOTE" ]; then ok "ветка на уро
 elif [ -z "$REMOTE" ]; then warn "нет upstream у ветки — проверь, что трекает origin/main"
 else warn "ветка отстаёт/разошлась с origin → сделай git pull"; fi
 
-for f in .claude/settings.json .mcp.json graphify-out/graph.json .env.example \
+for f in .claude/settings.json .mcp.json .env.example \
          .claude/skills/architect/SKILL.md .claude/skills/db-agent/SKILL.md \
          .claude/skills/backend-agent/SKILL.md .claude/skills/ui-agent/SKILL.md \
          .claude/skills/qa-agent/SKILL.md .claude/skills/feature/SKILL.md; do
@@ -91,6 +91,11 @@ PY
 # 5. uv/uvx — для MCP graphify и для `graphify update`
 command -v uvx >/dev/null 2>&1 && ok "uvx на PATH (нужен для MCP graphify + graphify update)" || bad "uvx не установлен → curl -LsSf https://astral.sh/uv/install.sh | sh"
 command -v graphify >/dev/null 2>&1 && ok "graphify CLI на PATH" || warn "graphify CLI не на PATH (ок, если зовёшь через uvx)"
+
+# граф — derived-индекс, с PR #35 НЕ едет через git: в свежем клоне/worktree его нет — это норма
+[ -f "$REPO/graphify-out/graph.json" ] \
+  && ok "graphify-out/graph.json есть (derived-индекс)" \
+  || warn "graphify-out/graph.json нет → запусти graphify update . или scripts/worktree-bootstrap.sh"
 
 # свежесть графа: код новее графа → пора graphify update (якорь 7)
 if [ -f "$REPO/graphify-out/graph.json" ]; then
