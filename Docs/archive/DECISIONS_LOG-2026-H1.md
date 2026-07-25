@@ -2645,18 +2645,6 @@ Added `consulting_engine/conftest.py` (sys.path) + `pytest.ini` (pythonpath=.). 
 
 **Why**: `bg-white` is a hardcoded white that breaks dark-theme. `var(--bg-c)` resolves to `#fbfaf6` in light theme (visually identical to `bg-white` on a beige page) and `#1d1c1a` in dark theme. Cards now follow the surface hierarchy correctly: page=`--bg`, card=`--bg-c`, hover=`--bg-m`. Subtle dividers also normalized to `--bd-s` (replaces alpha-tinted `rgba(43,24,10,0.06)` literal).
 
-**Open follow-up (Minor, not blocking)**: 25 `rgba(43,24,10,X)` literals remain inside `style={{ color: ... }}` for secondary/tertiary text in the same 3 files. They render correctly in light theme (alpha tints of an old brand-brown that visually matches v12 `--fg`), but break in dark theme. Replacing them with `color-mix(in srgb, var(--fg) Y
-
-### 2026-04-25: DS v12 — bg-white sweep in admin-detail screens
-**What**: Replaced 16 `bg-white` Tailwind utilities + 16 literal `rgba(43,24,10,0.06)` borderColors across 3 admin-detail files with v12 tokens (`var(--bg-c)` / `var(--bd-s)`).
-
-**Files**:
-- `src/pages/admin/membership/ApplicationDetail.tsx` (9 cards)
-- `src/pages/admin/startups/StartupDetail.tsx` (7 cards)
-- (BackfillCovers had 0 bg-white — already token-correct)
-
-**Why**: `bg-white` is a hardcoded white that breaks dark-theme. `var(--bg-c)` resolves to `#fbfaf6` in light theme (visually identical to `bg-white` on a beige page) and `#1d1c1a` in dark theme. Cards now follow the surface hierarchy correctly: page=`--bg`, card=`--bg-c`, hover=`--bg-m`. Subtle dividers also normalized to `--bd-s` (replaces alpha-tinted `rgba(43,24,10,0.06)` literal).
-
 **Open follow-up (Minor, not blocking)**: 25 `rgba(43,24,10,X)` literals remain inside `style={{ color: ... }}` for secondary/tertiary text in the same 3 files. They render correctly in light theme (alpha tints of an old brand-brown that visually matches v12 `--fg`), but break in dark theme. Replacing them with `color-mix(in srgb, var(--fg) Y%, transparent)` is a separate sweep — defer until full dark-theme audit happens.
 
 **Verification**: dev-server (port 5173) running clean, zero console errors. `grep bg-white src/pages/admin/{membership,startups,news}` returns 0 hits.
