@@ -71,3 +71,7 @@ jobs:
         working-directory: consulting_engine
       - run: python -m pytest
         working-directory: consulting_engine
+      # Деплой-инструменты в CI не исполняются (нет прод-кредов) — но синтаксис
+      # обязан быть валиден: сломанный deploy.py обнаруживается в момент деплоя,
+      # то есть в худший возможный момент.
+      - run: python -m py_compile scripts/agos_db.py scripts/deploy.py scripts/prod_diff.py scripts/contract_snapshot.py

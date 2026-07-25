@@ -13,14 +13,17 @@ set -uo pipefail
 CRITICAL=0
 SIGNIFICANT=0
 MINOR=0
-SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d12_messaging.sql d13_billing.sql d14_governance.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql)
+SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d11_norms.sql d12_messaging.sql d13_billing.sql d14_governance.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql)
 # TSP canonical trade layer = self-serve adapter migration (D-TSP-CANON-01, 2026-06-23).
 # Brought into cross_check scope per convergence Slice A. The adapter intentionally
 # redefines rpc_create_batch / rpc_get_org_batches (text-sig) over the d07 uuid-sig —
 # whitelisted in CHECK 1, guarded against PGRST203 in CHECK 9, and its self-serve
 # rpc_self_*/read RPCs are excepted in CHECK 5/7 until registered in Slice B.
-# NOTE (flagged, not fixed here): d10_public_site.sql is in cross_check but NOT in
-# deploy_sql.py; d11_norms.sql is in deploy_sql.py but NOT here — reconcile separately.
+# RECONCILED 2026-07-25 (process-audit): the old split (d10 here but not in the
+# deployer; d11 in the deployer but not here) is closed — d11_norms.sql added above
+# (QA-GATE-01) and d10 is in the canonical deploy list (scripts/agos_db.py
+# DOMAIN_FILES, DEPLOY-PIPE-01). Keep this list == DOMAIN_FILES + adapter migration:
+# a file outside cross_check is a file whose duplicates/contracts nobody checks.
 
 # Convenience: `bash cross_check.sh --update-contracts` regenerates the CHECK 11
 # snapshot after an INTENTIONAL contract change (ship it with the doc sync in the same PR).
@@ -189,6 +192,8 @@ rpc_upsert_consulting_reference|rpc_start_production_plan|\
 rpc_resolve_category|rpc_get_category_mappings|\
 rpc_add_animal_category|rpc_deprecate_animal_category|rpc_migrate_animal_category|\
 rpc_list_construction_materials|rpc_list_infrastructure_norms|\
+rpc_list_facility_norms|rpc_list_paddock_norms|rpc_list_calving_scenarios|\
+rpc_list_regional_pasture_norms|rpc_list_capex_coefficients|rpc_upsert_farm_norm|\
 rpc_upsert_construction_material|rpc_upsert_infrastructure_norm|\
 rpc_list_capex_surcharges|\
 rpc_list_livestock_prices|rpc_upsert_livestock_price|rpc_retire_livestock_price|\

@@ -136,14 +136,43 @@ create or replace function public.rpc_upsert_farm_norm(
 )
 returns void
 language plpgsql security definer
+set search_path = public, pg_temp
 as $$
 begin
+    -- SEC-NORMS-UPSERT-01 (2026-07-25): гейта не было — SECURITY DEFINER-запись в
+    -- ГЛОБАЛЬНЫЙ справочник (кормит CAPEX/консалтинг) была доступна любому, кому
+    -- Supabase выдал execute по умолчанию (Trap 2b). Комментарий функции всегда
+    -- заявлял «admin upsert» — здесь заявленное намерение стало исполняемым.
+    -- Образец: d09_consulting.sql rpc_upsert_infrastructure_norm.
+    if not public.fn_is_admin() then
+        raise exception 'ADMIN_REQUIRED' using errcode = 'P0001';
+    end if;
+
     insert into public.farm_norms_ref (category, code, data, valid_from)
     values (p_category, p_code, p_data, p_valid_from)
     on conflict (category, code, valid_from)
     do update set data = excluded.data, updated_at = now();
 end;
 $$;
+
+-- ACL (SEC-NORMS-UPSERT-01): у d11 не было НИ ОДНОГО grant/revoke — функции жили на
+-- default privileges Supabase (authenticated execute). Читающие справочники остаются
+-- доступны приложению (P8: стандарты = данные), запись — только admin через гейт выше.
+-- ВАЖНО: у upsert грант authenticated СОХРАНЯЕТСЯ — админ в Supabase ходит именно
+-- ролью authenticated, авторизацию даёт fn_is_admin() в теле. revoke от authenticated
+-- здесь убил бы админский путь (ровно инцидент ARS-311: revoke без сверки вызывающих).
+grant  execute on function public.rpc_upsert_farm_norm(text, text, jsonb, date) to authenticated;
+revoke execute on function public.rpc_upsert_farm_norm(text, text, jsonb, date) from public, anon;
+grant  execute on function public.rpc_list_facility_norms()         to authenticated;
+grant  execute on function public.rpc_list_paddock_norms()          to authenticated;
+grant  execute on function public.rpc_list_calving_scenarios()      to authenticated;
+grant  execute on function public.rpc_list_regional_pasture_norms() to authenticated;
+grant  execute on function public.rpc_list_capex_coefficients()     to authenticated;
+revoke execute on function public.rpc_list_facility_norms()         from public, anon;
+revoke execute on function public.rpc_list_paddock_norms()          from public, anon;
+revoke execute on function public.rpc_list_calving_scenarios()      from public, anon;
+revoke execute on function public.rpc_list_regional_pasture_norms() from public, anon;
+revoke execute on function public.rpc_list_capex_coefficients()     from public, anon;
 
 comment on function public.rpc_upsert_farm_norm(text, text, jsonb, date) is
     'RPC-NORMS-6: admin upsert норматива. P7: additive, не меняет существующие записи если valid_from отличается.';

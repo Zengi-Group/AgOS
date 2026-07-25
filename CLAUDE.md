@@ -229,7 +229,10 @@ TSP is coordination infrastructure of the association, NOT a marketplace. It doe
 - All timestamps: `timestamptz` (UTC)
 - Soft-delete: `is_active boolean` (not `deleted_at`)
 - All changes go into canonical domain files — separate patch files are FORBIDDEN
-- Apply order: d01 → d02 → d03 → d04 → d05 → d07 → d08 → d09 → d10 → d11
+- Apply order: d01 → d02 → d03 → d04 → d05 → d07 → d08 → d09 → d10 → d11 → d12 → d13 → d14 (d06 не существует; канонический список — `scripts/agos_db.py` `DOMAIN_FILES`)
+- Единственный канал деплоя на прод: `python3 scripts/deploy.py --files <файл>` (пароль только из `.db_password`/`AGOS_DB_PASSWORD`, никогда не argv — виден в `ps`/истории шелла)
+- После d-файлов применяются `supabase/migrations/` (TSP-ADAPTER-02: adapter обязан лечь ПОВЕРХ d-файлов, иначе воскресает uuid-overload)
+- Merge PR ≠ деплой на прод — после деплоя обязательна сверка `python3 scripts/prod_diff.py`; плейбук деплоя/верификации: `Docs/AGOS-Deploy-Verify-Playbook.md`
 
 ### RPC
 

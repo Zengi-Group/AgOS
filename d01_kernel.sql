@@ -6885,3 +6885,37 @@ insert into public.rpc_name_registry (sql_name, dok3_name, created_in, notes) va
   ('rpc_get_herd_board', null, 'd01_kernel.sql (ARS-278)', 'Ferma 2.0: агрегат таба Стадо/Обход'),
   ('rpc_get_animal_card', null, 'd01_kernel.sql (ARS-278)', 'Ferma 2.0: карточка животного + история событий')
 on conflict (sql_name) do update set notes = excluded.notes, created_in = excluded.created_in;
+
+-- ============================================================
+-- SECTION: ops_deploy_log — учётная книга деплоя (process-audit 2026-07-25)
+-- ============================================================
+-- Зачем: «merge ≠ deploy» без следа. SQL уходил на прод 4 каналами (deploy_sql.py,
+-- ad-hoc psycopg2, MCP apply_migration, SQL Editor руками) — ни один не оставлял
+-- записи, поэтому «что реально на проде» восстанавливалось археологией по
+-- DECISIONS_LOG и памяти агентов (ARS-266 «замержен, не задеплоен»;
+-- ARS-264 задеплоен частично; NOTE-ANON-EXEC-01 revoke не применён).
+-- Пишет scripts/deploy.py в той же транзакции, что и сам файл: строка появляется
+-- ТОЛЬКО если применение зафиксировано (commit), т.е. журнал не врёт при откате.
+-- Служебная таблица: приложение к ней не ходит — доступ только owner/service_role
+-- (Trap 2b: Supabase default privileges выдают authenticated, поэтому revoke явный).
+create table if not exists public.ops_deploy_log (
+    id           uuid primary key default gen_random_uuid(),
+    file_name    text        not null,                    -- d05_ops_edu.sql | supabase/migrations/2026...sql
+    kind         text        not null default 'domain'
+                 check (kind in ('domain', 'migration', 'adhoc')),
+    sha256       text        not null,                    -- хеш применённого текста: ловит «файл потроган после деплоя»
+    git_sha      text,                                    -- HEAD рабочей копии в момент применения
+    git_dirty    boolean     not null default false,      -- применяли из грязного дерева = git_sha неточен
+    applied_at   timestamptz not null default now(),
+    applied_by   text        not null default current_user,
+    host_user    text,                                    -- кто из людей запускал (os user)
+    note         text
+);
+create index if not exists idx_ops_deploy_log_file_time
+    on public.ops_deploy_log (file_name, applied_at desc);
+
+alter table public.ops_deploy_log enable row level security;
+-- Политик нет намеренно: RLS включена, ни одна роль кроме owner/service_role
+-- (BYPASSRLS) строк не увидит — служебный журнал вне периметра приложения.
+revoke all on table public.ops_deploy_log from public, anon, authenticated;
+grant all on table public.ops_deploy_log to service_role;
