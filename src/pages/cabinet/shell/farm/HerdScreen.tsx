@@ -441,7 +441,9 @@ function WalkView({ orgId, farmId, data, toast, onBack, onReload }: {
 
 // ── «+ Отклонение» — инлайн-визард ровно 2 шага (§4.4). initialTag: SHEET-AN пропускает шаг 1
 // (животное уже выбрано, §5). ──────────────────────────────────────────────────
-function DeviationForm({ orgId, farmId, animalsRecent, initialTag, onDone, onCancel }: {
+// export — переиспользуется диспетчером «Записать событие» (ARS-301/302, EventCaptureSheet):
+// то же тело «кто→что» и в «Обходе», и в глобальном захвате (P4, ноль дублирования логики).
+export function DeviationForm({ orgId, farmId, animalsRecent, initialTag, onDone, onCancel }: {
   orgId: string; farmId: string; animalsRecent: RecentAnimal[]; initialTag?: string
   onDone: (eventId: string, tagNumber: string) => void; onCancel: () => void
 }) {
