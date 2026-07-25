@@ -1,8 +1,12 @@
 name: graphify blast radius
 
 # On every PR, comment which graph nodes the changed code is connected to and
-# flag touched "god nodes" (high-degree hubs). Reads the committed graph — no
-# graphify install or rebuild needed. Pure-stdlib script, runs in seconds.
+# flag touched "god nodes" (high-degree hubs).
+#
+# graphify-out/ is gitignored (retro ARS-152: a committed graph.json conflicted
+# on every pair of parallel PRs), so there is nothing to read from the repo.
+# Instead this builds a fresh, ephemeral AST-only graph (code structure, no LLM,
+# no API key) directly in the runner on every invocation — nothing is committed.
 #
 # Note: PRs opened from forks get a read-only token, so the comment step is
 # skipped there. Branch-to-branch PRs inside the repo work normally.
@@ -27,6 +31,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Compute changed files
         run: |
           git diff --name-only \
@@ -34,11 +41,14 @@ jobs:
             > changed.txt
           echo "Changed files:"; cat changed.txt
 
+      - name: Build ephemeral AST graph (not committed)
+        run: uvx --from graphifyy graphify update . || echo "graphify build failed — impact comment will be skipped"
+
       - name: Build impact comment
         id: impact
         run: |
           if [ ! -f graphify-out/graph.json ]; then
-            echo "no graph.json committed — skipping"; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0
+            echo "graph build failed — skipping"; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0
           fi
           python3 .github/scripts/graphify_pr_impact.py changed.txt graphify-out/graph.json > impact.md
           cat impact.md
