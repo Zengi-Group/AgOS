@@ -59,7 +59,12 @@ jobs:
         run: npm run test:routers
         continue-on-error: true
       - if: steps.routers.outcome == 'failure'
-        run: echo "::warning title=routers experimental::test:routers упал — известная нестабильность browser-mode на CI (закалка отдельной сессией, см. комментарий в ci.yml). Локально: npm run test:routers."
+        # block-scalar: «Локально: npm» в plain-scalar ломал парсинг ВСЕГО workflow
+        # (mapping values are not allowed here) — ни одна джоба не стартовала.
+        run: >-
+          echo "::warning title=routers experimental::test:routers упал — известная
+          нестабильность browser-mode на CI (закалка отдельной сессией, см. комментарий
+          в ci.yml). Локально: npm run test:routers."
 
   # consulting_engine: pytest (feeding model, NASEM, приоритетная цепочка)
   python:
