@@ -30,12 +30,14 @@ if [ -n "$REMOTE" ] && [ "$LOCAL" = "$REMOTE" ]; then ok "ветка на уро
 elif [ -z "$REMOTE" ]; then warn "нет upstream у ветки — проверь, что трекает origin/main"
 else warn "ветка отстаёт/разошлась с origin → сделай git pull"; fi
 
-for f in .claude/settings.json .mcp.json graphify-out/graph.json .env.example \
+for f in .claude/settings.json .mcp.json .env.example \
          .claude/skills/architect/SKILL.md .claude/skills/db-agent/SKILL.md \
          .claude/skills/backend-agent/SKILL.md .claude/skills/ui-agent/SKILL.md \
          .claude/skills/qa-agent/SKILL.md; do
   [ -e "$REPO/$f" ] && ok "репо-файл: $f" || bad "репо-файл отсутствует: $f (git pull?)"
 done
+# graphify-out/graph.json НЕ репо-файл (gitignored, ретро ARS-152) — его свежесть
+# проверяется отдельно ниже (локальная регенерация, не git pull).
 # graphify-хуки реально включены в repo settings
 grep -q 'graphify' "$REPO/.claude/settings.json" 2>/dev/null \
   && ok "graphify always-on хуки в .claude/settings.json" \
@@ -99,11 +101,18 @@ PY
 command -v uvx >/dev/null 2>&1 && ok "uvx на PATH (нужен для MCP graphify + graphify update)" || bad "uvx не установлен → curl -LsSf https://astral.sh/uv/install.sh | sh"
 command -v graphify >/dev/null 2>&1 && ok "graphify CLI на PATH" || warn "graphify CLI не на PATH (ок, если зовёшь через uvx)"
 
+# граф — derived-индекс, с PR #35 НЕ едет через git: в свежем клоне/worktree его нет — это норма
+[ -f "$REPO/graphify-out/graph.json" ] \
+  && ok "graphify-out/graph.json есть (derived-индекс)" \
+  || warn "graphify-out/graph.json нет → запусти graphify update . или scripts/worktree-bootstrap.sh"
+
 # свежесть графа: код новее графа → пора graphify update (якорь 7)
 if [ -f "$REPO/graphify-out/graph.json" ]; then
   STALE=$(find "$REPO/src" "$REPO/ai_gateway" "$REPO/Docs" "$REPO/supabase" \
           -type f -newer "$REPO/graphify-out/graph.json" 2>/dev/null | head -1)
   [ -z "$STALE" ] && ok "граф свежий относительно кода" || warn "граф протух (код новее) → запусти graphify update перед якорем 7"
+else
+  warn "граф ещё не собран (graphify-out/ вне git, ретро ARS-152) → graphify update . (AST) или /graphify . (полная семантика)"
 fi
 
 hdr "C. Руками (скрипт это подтвердить не может)"

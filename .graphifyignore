@@ -1,9 +1,9 @@
 ﻿node_modules/
 graphify-out/
-Docs/
 public/
 Design_System/
 .claude/
+DECISIONS_LOG.md
 *.png
 *.jpg
 *.jpeg
@@ -25,7 +25,6 @@ Design_System/
 *.env
 *.csv
 *.xml
-*.md
 *.mdx
 *.tsbuildinfo
 *.example

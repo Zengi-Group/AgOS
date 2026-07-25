@@ -1803,3 +1803,21 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: YAML валиден; jq-выражения проверены через `gh --jq` на живых PR (тот же диалект, раннер несёт полноценный jq); первый полный прогон — после мержа PR #145 через `workflow_dispatch` (воркфлоу должен жить на default-ветке).
 
 **Files**: `.github/workflows/night-watch.yml` (новый), `DECISIONS_LOG.md` (эта запись).
+### 2026-07-25: Дубль R-29 в реестре правил CEO — вторая строка переномерована в R-31
+
+**What**: в «Реестре правил из правок CEO» (`Docs/AGOS-DesignRules-FarmerCabinet.md`) два параллельных PR взяли один номер R-29, `merge=union` склеил обе строки без конфликта — CHECK 10 репортил дубль. Вторая по порядку строка (2026-07-15, «клавиатуры/inputmode», P-серия аудита нативности) переномерована R-29 → **R-31** (следующий свободный: максимум по файлу был R-30, R-31 не занят по всему репо). Текст правил не менялся (HS-1/2). Первая строка (лоадер `BootScreen`) осталась R-29 — §7 канона уже ссылается на неё как «(R-29)», внутрифайловые ссылки целы. Алиас для истории: в записи 2026-07-15 «P-серия "клавиатуры/inputmode"» упоминания R-29 относятся к клавиатурной конвенции — читать как R-31 (старые записи не редактируем, лог append-only).
+
+**Why**: R-N — монотонный уникальный id, дубль ломает адресуемость правил канона; это ровно сценарий, для которого написан CHECK 10 (страховка `merge=union`).
+
+**Verify**: `bash cross_check.sh` — CHECK 10 «OK: R-N ids unique»; significant 4 → 3 (остались только преждевременные TSP-оверлоады CHECK 9), 0 critical.
+
+**Files**: `Docs/AGOS-DesignRules-FarmerCabinet.md` (одна строка реестра: id R-29→R-31), `DECISIONS_LOG.md` (эта запись).
+### 2026-07-25: check-setup.sh — стейл-проверка graphify-out/graph.json перенесена из секции A в секцию B
+
+**What**: в `scripts/check-setup.sh` проверка `graphify-out/graph.json` убрана из цикла репо-файлов секции A («Едет через git», `bad` + подсказка «git pull?») и добавлена в секцию B («Машинно-локальное») рядом с проверкой graphify CLI: уровень `warn`, ремедиация «запусти graphify update . или scripts/worktree-bootstrap.sh». Точечные Edit, сама проверка сохранена (HS-1/5).
+
+**Why**: стейл с PR #35 (ретро ARS-152, 2026-07-04) — graphify-out выведен из git как derived-индекс (`.gitignore:58`, apex-brain/patterns/feature-flow.md §Гигиена параллелизма). В свежем клоне/worktree — и фактически в основном чекауте, где graphify-out сейчас тоже нет — скрипт всегда давал ложный FAIL + exit 1 с неверной ремедиацией.
+
+**Verify**: `bash -n` OK; прогон в worktree без graphify-out → `WARN … запусти graphify update . или scripts/worktree-bootstrap.sh`, FAIL=0, exit 0 (до фикса — FAIL + exit 1); со стабом graph.json → `PASS graphify-out/graph.json есть (derived-индекс)`, стаб удалён.
+
+**Files**: `scripts/check-setup.sh`, `DECISIONS_LOG.md` (эта запись).
