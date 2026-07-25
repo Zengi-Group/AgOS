@@ -697,15 +697,6 @@ Why (root cause, доказано на проде mwtbozflyldcadypherr): фро�
 Verification: на проде через anon-клиент — до фикса rpc_get_my_context возвращал {user_id, organizations, farms, memberships, active_restrictions}, is_admin=undefined; fn_is_admin()=true. cross_check.sh: 0 critical. После деплоя (deploy_sql.py) ожидается is_admin=true в контексте → ADMIN_GROUPS; проверка в браузере после apply + перелогина.
 Деплой: GitHub push НЕ применяет SQL на прод (в .github/workflows только graphify — CI-деплоя миграций нет). После мержа PR прод обновляется вручную: `python3 deploy_sql.py <DB_PASSWORD>` (реплеит d01→…→d11). Аккаунт админа на проде уже создан.
 Files: d01_kernel.sql (rpc_get_my_context + comment).
-### 2026-07-03: A-GRADE — формула сорта МПК стала data-driven + редактируемой из админки
-
-**What**: Формула «упитанность → сорт МПК (Премиум/Высшая/Первая/Вторая) + защитная цена» вынесена из хардкода (был продублирован в 4 местах: `tsp-utils.ts deriveMpkGrade`, `mpk/types.ts MPK_CATS`, SQL `fn_tsp_grade_id_from_fatness`, `grade_standards`) в новую таблицу `livestock_grade_formula` (d02_tsp.sql SECTION 8b). Поля: `sort_key` (unique), `species`, `name_ru`, `fatness_match`, `grade_code` (FK→grade_standards.code), `floor_price`, `elite_only`, `min_weight_kg`, `elite_breeds text[]`, `sort_order`. Сид = **точные текущие значения** (6 строк: premium 1850/450кг/элитные породы, vysshaya 1650, pervaya 1500, vtoraya 1350, mrs_vyssh 950, mrs_perv 850) → поведение не меняется до правки админом. Два RPC: `rpc_get_grade_formula()` (публичное чтение для authenticated) и `rpc_admin_upsert_grade_formula(...)` (fn_is_admin-гейт, jsonb ok/error, правит только редактируемые поля — структура строки фиксирована). `fn_tsp_grade_id_from_fatness` переопределён читать из таблицы с той же нормализацией упитанности. Фронт: хук `useGradeFormula()` (React Query, staleTime 5м) подписывает синхронные функции через module-var override (`setGradeFormula`/`setMpkFormula`) с хардкод-фолбэком, если БД пуста/недоступна — мастер партии не ломается. Новый экран `/admin/grade-formula` (просмотр 6 сортов + диалог правки: название, упитанность, защ. цена, порог веса и элитные породы для Премиум, порядок).
-
-**Why**: CEO хотел видеть и менять формулу классификации скота прямо из админки без деплоя (P8: стандарт как данные, не код). Уточнение: речь о **существующих** сортах МПК (не о пустой таблице `livestock_categories` из A-CAT).
-
-**Consequences**: правка формулы = data update, деплой не нужен. Единый источник правды (P4) — таблица; хардкод остаётся только как фолбэк. Канон схемы — d02_tsp.sql SECTION 8b (не патч-файл). Additive — старые consts (`MPK_SORT_FLOOR`, `MPK_CATS`) сохранены как фолбэк, ничего не удалено (HS-5).
-
-**Files**: `d02_tsp.sql` (SECTION 8b), `src/pages/cabinet/shell/tsp/data/tsp-utils.ts`, `src/pages/cabinet/shell/mpk/types.ts`, `src/hooks/useGradeFormula.ts` (new), `src/pages/cabinet/shell/tsp/wizard/WizStep3Category.tsx`, `WizStep4Price.tsx`, `src/pages/cabinet/shell/mpk/modals/CreatePoolModal.tsx`, `PoolMonitorModal.tsx`, `src/pages/cabinet/shell/mpk/data/pools-load.ts`, `src/pages/admin/grade-formula/GradeFormulaAdmin.tsx` (new), `src/App.tsx`, `src/components/layout/Sidebar.tsx`.
 
 ### 2026-07-08: ARS-169 — карта покрытия модуля «Ферма» (reconciliation audit, zero-code)
 
@@ -1831,3 +1822,12 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: `bash -n` OK; `bash cross_check.sh` — CHECK 12 ловит живой A-GRADE-дубль (significant 3 → 4 до мержа #150), архив после фикса чист; negative-test: временный дубль в архиве детектится и в архивной ветке, после отката снова только A-GRADE. 0 critical, exit 0; формат SUMMARY не менялся (night-watch парсит его как раньше).
 
 **Files**: `cross_check.sh` (блок CHECK 12), `Docs/archive/DECISIONS_LOG-2026-H1.md` (удалена оборванная union-копия), `DECISIONS_LOG.md` (эта запись).
+### 2026-07-25: Дубль записи «2026-07-03: A-GRADE — формула сорта МПК…» — вторая копия удалена
+
+**What**: запись `### 2026-07-03: A-GRADE — формула сорта МПК стала data-driven + редактируемой из админки` присутствовала в этом файле дважды — артефакт `merge=union` двух параллельных PR, аппендивших одну запись (НЕ следствие ротации 2026-07-25: в `Docs/archive/DECISIONS_LOG-2026-H1.md` упоминаний A-GRADE нет — проверено). Тела сверены diff'ом — байт-идентичны (расхождение только в хвостовом разделителе `---`). Удалена вторая копия — вклиненная без разделителей между записями 2026-07-07 и 2026-07-08, вне хронологии; первая (в корректном месте среди записей 2026-07-03) не тронута. Дисциплина «середину не править» нарушена осознанно и однократно: удаление byte-дубля, не правка смысла.
+
+**Why**: P4 — факт живёт в одном месте; дублированный заголовок ломает адресуемость записей лога (grep по заголовку → 2 попадания) и создаёт риск расхождения копий при будущих правках.
+
+**Verify**: `grep -E "^### " DECISIONS_LOG.md | sort | uniq -d` → пусто (до фикса — 1 дубль); `grep -c '^### 2026-07-03: A-GRADE' DECISIONS_LOG.md` → 1 (grep по подстроке без якоря даёт 4 — эта запись сама упоминает строку); в архиве H1 упоминаний A-GRADE — 0.
+
+**Files**: `DECISIONS_LOG.md` (−9 строк дубля + эта запись).
