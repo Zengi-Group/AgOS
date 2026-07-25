@@ -1,8 +1,8 @@
 # CI-гейт (process-audit 2026-07-25): каждый PR проходит машинную проверку.
 # До этого 119 PR/месяц мёржились без единого чека — вся проверочная
 # инфраструктура (cross_check, vitest, pytest) существовала, но не запускалась.
-# Required checks (Settings → Branches → main): web + sql-checks (минимум).
-# routers/python — сделать required после 1-2 недель стабильной работы.
+# Required checks (Settings → Branches → main): web + sql-checks + routers.
+# python — сделать required после 1-2 недель стабильной работы.
 name: ci
 
 on:
@@ -38,12 +38,11 @@ jobs:
       - run: bash cross_check.sh
       - run: bash qa/check_coverage.sh
 
-  # smoke v5-острова роутеров (vitest browser mode + playwright)
-  # ЭКСПЕРИМЕНТАЛЬНАЯ в CI (не блокирует): первый прогон 2026-07-25 — 6/8 тестов
-  # не находят элементы в срок на raw-ubuntu, локально те же тесты зелёные
-  # (2026-07-21). continue-on-error на ШАГЕ (job-level всё равно рисует красный
-  # крест в чеках PR — шум). Закалить (viewport/таймауты локаторов/шрифты)
-  # отдельной сессией, затем снять continue-on-error и добавить в required checks.
+  # smoke v5-острова роутеров (vitest browser mode + playwright chromium) —
+  # регрессионная защита DEBT-NATIVE-ROUTER-01/ARS-152. Блокирующая: «6/8 падений
+  # на raw-ubuntu» 2026-07-25 оказались не средой, а дрейфом моков после ARS-269
+  # (supabase.channel не замокан → крэш CabinetApp); починено в тестах, 3 зелёных
+  # прогона подряд 2026-07-26 (run 30172137395, attempts 1-3).
   routers:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -55,16 +54,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install chromium --with-deps
-      - id: routers
-        run: npm run test:routers
-        continue-on-error: true
-      - if: steps.routers.outcome == 'failure'
-        # block-scalar: «Локально: npm» в plain-scalar ломал парсинг ВСЕГО workflow
-        # (mapping values are not allowed here) — ни одна джоба не стартовала.
-        run: >-
-          echo "::warning title=routers experimental::test:routers упал — известная
-          нестабильность browser-mode на CI (закалка отдельной сессией, см. комментарий
-          в ci.yml). Локально: npm run test:routers."
+      - run: npm run test:routers
 
   # consulting_engine: pytest (feeding model, NASEM, приоритетная цепочка)
   python:
