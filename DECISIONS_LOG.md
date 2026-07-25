@@ -4784,3 +4784,13 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Consequences**: CAP-4 (ARS-304, doc-sync токена `vet.vet_case.opened`) НЕ выполнен — при разборе Dok4 найдено, что `vet.case.opened` (стр.77/431/473) — намеренное решение (стр.163 «убран дубль entity»), а по конвенции `domain.entity.action` именно `vet.case.opened` корректнее задеплоенного `vet.vet_case.opened` (дублирует домен). Это КОНФЛИКТ дизайн-интента ↔ реальности, а не опечатка → по CLAUDE.md «не резолвить молча» — вынесено на решение CEO/architect (доку→реальность vs код→конвенцию+миграция слушателей). Живой захват (CAP-3) уже потребляет реальный токен, так что сегодня всё работает; переименование — отдельное решение.
 
 **Files**: `src/pages/cabinet/shell/farm/EventCaptureSheet.tsx` (новый), `src/pages/cabinet/shell/farm/HerdScreen.tsx` (± export DeviationForm), `src/pages/cabinet/shell/screens/FarmScreen.tsx` (± import + footer captureFooter), `src/pages/cabinet/shell/components/icons/PhIcon.tsx` (+ firstAid/scales/syringe/skull), `src/pages/cabinet/shell/cabinet.css` (+ секция .fm-cap-* + scoped .sh-foot фикс), `DECISIONS_LOG.md` (эта запись).
+
+### 2026-07-25: check-setup.sh — стейл-проверка graphify-out/graph.json перенесена из секции A в секцию B
+
+**What**: в `scripts/check-setup.sh` проверка `graphify-out/graph.json` убрана из цикла репо-файлов секции A («Едет через git», `bad` + подсказка «git pull?») и добавлена в секцию B («Машинно-локальное») рядом с проверкой graphify CLI: уровень `warn`, ремедиация «запусти graphify update . или scripts/worktree-bootstrap.sh». Точечные Edit, сама проверка сохранена (HS-1/5).
+
+**Why**: стейл с PR #35 (ретро ARS-152, 2026-07-04) — graphify-out выведен из git как derived-индекс (`.gitignore:58`, apex-brain/patterns/feature-flow.md §Гигиена параллелизма). В свежем клоне/worktree — и фактически в основном чекауте, где graphify-out сейчас тоже нет — скрипт всегда давал ложный FAIL + exit 1 с неверной ремедиацией.
+
+**Verify**: `bash -n` OK; прогон в worktree без graphify-out → `WARN … запусти graphify update . или scripts/worktree-bootstrap.sh`, FAIL=0, exit 0 (до фикса — FAIL + exit 1); со стабом graph.json → `PASS graphify-out/graph.json есть (derived-индекс)`, стаб удалён.
+
+**Files**: `scripts/check-setup.sh`, `DECISIONS_LOG.md` (эта запись).
