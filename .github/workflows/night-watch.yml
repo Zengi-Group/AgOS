@@ -37,7 +37,7 @@ jobs:
           echo '```' >> "$R"; echo "$cc_out" | tail -15 >> "$R"; echo '```' >> "$R"
           crit=$(echo "$cc_out" | sed -n 's/^  Critical:[[:space:]]*//p')
           sig=$(echo "$cc_out" | sed -n 's/^  Significant:[[:space:]]*//p')
-          echo "Critical: ${crit:-?} · Significant: ${sig:-?} (базовые 4 = 3 маркера Slice D + R-29)" >> "$R"
+          echo "Critical: ${crit:-?} · Significant: ${sig:-?} (базовые 3 = маркеры Slice D, PGRST203)" >> "$R"
           [ "$cc_code" -ne 0 ] && FINDINGS=$((FINDINGS+1))
 
           echo "## 2. PR-гигиена (>7 дней без движения)" >> "$R"
