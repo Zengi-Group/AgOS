@@ -33,7 +33,7 @@ else warn "ветка отстаёт/разошлась с origin → сдела
 for f in .claude/settings.json .mcp.json graphify-out/graph.json .env.example \
          .claude/skills/architect/SKILL.md .claude/skills/db-agent/SKILL.md \
          .claude/skills/backend-agent/SKILL.md .claude/skills/ui-agent/SKILL.md \
-         .claude/skills/qa-agent/SKILL.md .claude/skills/feature/SKILL.md; do
+         .claude/skills/qa-agent/SKILL.md; do
   [ -e "$REPO/$f" ] && ok "репо-файл: $f" || bad "репо-файл отсутствует: $f (git pull?)"
 done
 # graphify-хуки реально включены в repo settings
@@ -47,6 +47,13 @@ hdr "B. Машинно-локальное — главное, что надо с
 # 1+4. глобальный CLAUDE.md и graphify-скилл
 [ -f "$CLAUDE_HOME/CLAUDE.md" ] && ok "~/.claude/CLAUDE.md есть" || bad "~/.claude/CLAUDE.md отсутствует (глобальные правила мозга + /graphify)"
 [ -f "$CLAUDE_HOME/skills/graphify/SKILL.md" ] && ok "глобальный скилл graphify установлен" || bad "нет ~/.claude/skills/graphify/SKILL.md"
+# /feature — с 2026-07-25 глобальный (не в репо): плагин feature@zengi или симлинк в ~/.claude/skills
+if [ -e "$CLAUDE_HOME/skills/feature/SKILL.md" ] \
+   || grep -q '"feature@zengi"' "$CLAUDE_HOME/settings.json" 2>/dev/null; then
+  ok "глобальный скилл /feature установлен (feature@zengi / ~/.claude/skills/feature)"
+else
+  bad "нет глобального /feature → /plugin marketplace add Zengi-Group/claude-plugins && /plugin install feature@zengi"
+fi
 
 # 2. мозг apex-brain: найти путь (из additionalDirectories, иначе из CLAUDE.md, иначе соседняя папка)
 BRAIN=$(python3 - "$CLAUDE_HOME" <<'PY' 2>/dev/null
