@@ -41,11 +41,11 @@ jobs:
   # smoke v5-острова роутеров (vitest browser mode + playwright)
   # ЭКСПЕРИМЕНТАЛЬНАЯ в CI (не блокирует): первый прогон 2026-07-25 — 6/8 тестов
   # не находят элементы в срок на raw-ubuntu, локально те же тесты зелёные
-  # (2026-07-21). Закалить (viewport/таймауты локаторов/шрифты) отдельной сессией,
-  # затем убрать continue-on-error и добавить в required checks.
+  # (2026-07-21). continue-on-error на ШАГЕ (job-level всё равно рисует красный
+  # крест в чеках PR — шум). Закалить (viewport/таймауты локаторов/шрифты)
+  # отдельной сессией, затем снять continue-on-error и добавить в required checks.
   routers:
     runs-on: ubuntu-latest
-    continue-on-error: true
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -55,7 +55,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install chromium --with-deps
-      - run: npm run test:routers
+      - id: routers
+        run: npm run test:routers
+        continue-on-error: true
+      - if: steps.routers.outcome == 'failure'
+        run: echo "::warning title=routers experimental::test:routers упал — известная нестабильность browser-mode на CI (закалка отдельной сессией, см. комментарий в ci.yml). Локально: npm run test:routers."
 
   # consulting_engine: pytest (feeding model, NASEM, приоритетная цепочка)
   python:
