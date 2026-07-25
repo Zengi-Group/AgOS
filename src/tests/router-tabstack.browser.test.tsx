@@ -30,6 +30,13 @@ vi.mock('@/lib/supabase', () => {
       },
       rpc: async () => ({ data: null, error: noBackend }),
       from: () => chain(),
+      // Realtime-заглушка (см. router-smoke): ARS-269 зовёт channel() при mount CabinetApp.
+      channel: () => {
+        const ch: Record<string, () => unknown> = {}
+        for (const m of ['on', 'subscribe', 'unsubscribe']) ch[m] = () => ch
+        return ch
+      },
+      removeChannel: async () => 'ok',
     },
   }
 })
