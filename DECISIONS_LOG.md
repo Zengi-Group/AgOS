@@ -4784,3 +4784,13 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Consequences**: CAP-4 (ARS-304, doc-sync токена `vet.vet_case.opened`) НЕ выполнен — при разборе Dok4 найдено, что `vet.case.opened` (стр.77/431/473) — намеренное решение (стр.163 «убран дубль entity»), а по конвенции `domain.entity.action` именно `vet.case.opened` корректнее задеплоенного `vet.vet_case.opened` (дублирует домен). Это КОНФЛИКТ дизайн-интента ↔ реальности, а не опечатка → по CLAUDE.md «не резолвить молча» — вынесено на решение CEO/architect (доку→реальность vs код→конвенцию+миграция слушателей). Живой захват (CAP-3) уже потребляет реальный токен, так что сегодня всё работает; переименование — отдельное решение.
 
 **Files**: `src/pages/cabinet/shell/farm/EventCaptureSheet.tsx` (новый), `src/pages/cabinet/shell/farm/HerdScreen.tsx` (± export DeviationForm), `src/pages/cabinet/shell/screens/FarmScreen.tsx` (± import + footer captureFooter), `src/pages/cabinet/shell/components/icons/PhIcon.tsx` (+ firstAid/scales/syringe/skull), `src/pages/cabinet/shell/cabinet.css` (+ секция .fm-cap-* + scoped .sh-foot фикс), `DECISIONS_LOG.md` (эта запись).
+
+### 2026-07-25: Дубль R-29 в реестре правил CEO — вторая строка переномерована в R-31
+
+**What**: в «Реестре правил из правок CEO» (`Docs/AGOS-DesignRules-FarmerCabinet.md`) два параллельных PR взяли один номер R-29, `merge=union` склеил обе строки без конфликта — CHECK 10 репортил дубль. Вторая по порядку строка (2026-07-15, «клавиатуры/inputmode», P-серия аудита нативности) переномерована R-29 → **R-31** (следующий свободный: максимум по файлу был R-30, R-31 не занят по всему репо). Текст правил не менялся (HS-1/2). Первая строка (лоадер `BootScreen`) осталась R-29 — §7 канона уже ссылается на неё как «(R-29)», внутрифайловые ссылки целы. Алиас для истории: в записи 2026-07-15 «P-серия "клавиатуры/inputmode"» упоминания R-29 относятся к клавиатурной конвенции — читать как R-31 (старые записи не редактируем, лог append-only).
+
+**Why**: R-N — монотонный уникальный id, дубль ломает адресуемость правил канона; это ровно сценарий, для которого написан CHECK 10 (страховка `merge=union`).
+
+**Verify**: `bash cross_check.sh` — CHECK 10 «OK: R-N ids unique»; significant 4 → 3 (остались только преждевременные TSP-оверлоады CHECK 9), 0 critical.
+
+**Files**: `Docs/AGOS-DesignRules-FarmerCabinet.md` (одна строка реестра: id R-29→R-31), `DECISIONS_LOG.md` (эта запись).
