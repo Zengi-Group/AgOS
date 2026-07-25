@@ -36,6 +36,15 @@ vi.mock('@/lib/supabase', () => {
       },
       rpc: async () => ({ data: null, error: noBackend }),
       from: () => chain(),
+      // Realtime — та же сетевая граница: чейн-заглушка .channel().on().subscribe(),
+      // событий не доставляет. Без неё useEntitlementsRealtimeSync (ARS-269, mount
+      // в CabinetApp) роняет всё дерево: «supabase.channel is not a function».
+      channel: () => {
+        const ch: Record<string, () => unknown> = {}
+        for (const m of ['on', 'subscribe', 'unsubscribe']) ch[m] = () => ch
+        return ch
+      },
+      removeChannel: async () => 'ok',
     },
   }
 })
