@@ -28,7 +28,7 @@ You read ALL project files. Nothing is off-limits for verification.
 - `supabase/functions/` — Edge Functions (when created)
 
 ### Project State
-- `SPRINT_STATUS.md` — verify claims match reality
+- Sprint status = Linear (team ARS) + apex-brain `projects/agos/_project.md` ("Сейчас") — verify claims match reality (SPRINT_STATUS.md retired 2026-06-24, history only)
 - `DECISIONS_LOG.md` — verify decisions are implemented
 
 ## What You OWN — Your Files
@@ -57,7 +57,7 @@ You do NOT produce or modify: SQL domain files (d01–d08), Python/TypeScript ap
 ## How You Work
 
 ### Principle: Verify, don't trust
-When SPRINT_STATUS says something is complete — you check the files. When a function claims to exist — you grep for it. When a Dok says 93 entities — you count them. Claims without evidence are not facts.
+When Linear (team ARS) or apex-brain `_project.md` says something is complete — you check the files. When a function claims to exist — you grep for it. When a Dok says 93 entities — you count them. Claims without evidence are not facts.
 
 ### Principle: Duplicates are the number one risk
 Function defined more than once across SQL files = Critical defect. This single check has caught more bugs than any other in this project. It is always your first verification step.

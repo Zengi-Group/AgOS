@@ -256,7 +256,8 @@ echo "--- CHECK 6: UI values match SQL CHECK constraints ---"
 UI_ERRORS=0
 
 # shelter_type
-for val in $(grep -oP "value: '\K[^']*" src/pages/cabinet/FarmProfile.tsx 2>/dev/null | head -4); do
+# BSD/GNU-portable: macOS grep has no -P (silently emptied this loop → check always "OK")
+for val in $(grep -oE "value: '[^']*'" src/pages/cabinet/FarmProfile.tsx 2>/dev/null | sed -E "s/^value: '//; s/'$//" | head -4); do
   if ! grep -q "'$val'" d01_kernel.sql 2>/dev/null; then
     echo "  CRITICAL: UI shelter_type '$val' not in SQL"
     UI_ERRORS=$((UI_ERRORS + 1))
@@ -264,7 +265,7 @@ for val in $(grep -oP "value: '\K[^']*" src/pages/cabinet/FarmProfile.tsx 2>/dev
 done
 
 # animal_category codes
-for val in $(grep -oP "code: '\K[A-Z_]*" src/pages/cabinet/FarmProfile.tsx 2>/dev/null); do
+for val in $(grep -oE "code: '[A-Z_]*'" src/pages/cabinet/FarmProfile.tsx 2>/dev/null | sed -E "s/^code: '//; s/'$//"); do
   if ! grep -q "'$val'" d01_kernel.sql 2>/dev/null; then
     echo "  CRITICAL: UI animal_category '$val' not in SQL"
     UI_ERRORS=$((UI_ERRORS + 1))
