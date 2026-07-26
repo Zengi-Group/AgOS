@@ -160,9 +160,9 @@ comment on function public.fn_tsp_grade_id_from_fatness(text) is
 
 grant execute on function public.rpc_get_grade_formula()        to authenticated;
 grant execute on function public.rpc_admin_upsert_grade_formula(text, text, text, int, int, text[], int) to authenticated;
-revoke execute on function public.rpc_get_grade_formula()        from anon;
-revoke execute on function public.rpc_admin_upsert_grade_formula(text, text, text, int, int, text[], int) from anon;
-revoke execute on function public.fn_tsp_grade_id_from_fatness(text) from anon;
+revoke execute on function public.rpc_get_grade_formula()        from public, anon;
+revoke execute on function public.rpc_admin_upsert_grade_formula(text, text, text, int, int, text[], int) from public, anon;
+revoke execute on function public.fn_tsp_grade_id_from_fatness(text) from public, anon;
 
 insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
     ('rpc_get_grade_formula',          'A-GRADE AG-R1', null, 'd02_tsp.sql (Section 8b / A-GRADE)', 'Публичное чтение формулы сорта МПК для фронта'),

@@ -81,9 +81,9 @@ as $$
     end;
 $$;
 
-revoke execute on function public.fn_tsp_norm_breed(text) from anon;
-revoke execute on function public.fn_tsp_breed_match(text, text) from anon;
-revoke execute on function public.fn_tsp_region_match(uuid[], uuid, uuid) from anon;
+revoke execute on function public.fn_tsp_norm_breed(text) from public, anon;
+revoke execute on function public.fn_tsp_breed_match(text, text) from public, anon;
+revoke execute on function public.fn_tsp_region_match(uuid[], uuid, uuid) from public, anon;
 
 
 -- ── 3. rpc_self_create_pool_request — +p_region_ids (мультивыбор) ─────────────
@@ -132,7 +132,7 @@ comment on function public.rpc_self_create_pool_request(uuid, int, date, uuid, j
      мультивыбор областей (NULL/пусто = все); region_id хранит первую для легаси.
      accepted_categories хранит [{code,price,maxHeads,breed}] (round-trip UI; матч
      резолвит сорт по code, породу по breed). Гейт fn_my_org_ids.';
-revoke execute on function public.rpc_self_create_pool_request(uuid, int, date, uuid, jsonb, text, uuid[]) from anon;
+revoke execute on function public.rpc_self_create_pool_request(uuid, int, date, uuid, jsonb, text, uuid[]) from public, anon;
 grant  execute on function public.rpc_self_create_pool_request(uuid, int, date, uuid, jsonb, text, uuid[]) to authenticated;
 
 
@@ -332,7 +332,7 @@ comment on function public.rpc_self_activate_pool_request(uuid) is
      accepted_categories breed; все region_ids → pool_regions. Свип published-партий:
      жёсткий фильтр сорт+цена+окно+ёмкость+РЕГИОН(мультивыбор)+ПОРОДА → matched, иначе
      broadcast-оффер. Гейт fn_my_org_ids через pool_requests.';
-revoke execute on function public.rpc_self_activate_pool_request(uuid) from anon;
+revoke execute on function public.rpc_self_activate_pool_request(uuid) from public, anon;
 grant  execute on function public.rpc_self_activate_pool_request(uuid) to authenticated;
 
 
@@ -490,7 +490,7 @@ comment on function public.rpc_self_auto_match_batch(uuid) is
     'КАНОН d02 +аддитив | Авто-матч при публикации: высший бид >= ask → matched;
      иначе broadcast. Жёсткий фильтр: сорт+цена+окно+ёмкость+РЕГИОН(мультивыбор)+ПОРОДА.
      Контакты НЕ раскрываются (D40).';
-revoke execute on function public.rpc_self_auto_match_batch(uuid) from anon;
+revoke execute on function public.rpc_self_auto_match_batch(uuid) from public, anon;
 grant  execute on function public.rpc_self_auto_match_batch(uuid) to authenticated;
 
 
@@ -594,7 +594,7 @@ comment on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) is
     'КАНОН d02 +аддитив | Ручной матч МПК: published|offering-партию → matched при
      p_price_per_kg (>= ask). Строка пула резолвится по сорту И ПОРОДЕ партии.
      auto-close по головам → confirmed. Гейт pools.organization_id.';
-revoke execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) from anon;
+revoke execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) from public, anon;
 grant  execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) to authenticated;
 
 
@@ -709,5 +709,5 @@ comment on function public.rpc_self_accept_offer(uuid) is
     'КАНОН d02 +аддитив | МПК принимает broadcast-оффер (FCFS): offering → matched.
      Строка пула: бид >= offered ask, сорт+окно+РЕГИОН(мультивыбор)+ПОРОДА+ёмкость.
      Гейт offer.mpk_org_id ∈ fn_my_org_ids().';
-revoke execute on function public.rpc_self_accept_offer(uuid) from anon;
+revoke execute on function public.rpc_self_accept_offer(uuid) from public, anon;
 grant  execute on function public.rpc_self_accept_offer(uuid) to authenticated;

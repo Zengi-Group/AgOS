@@ -4192,9 +4192,9 @@ comment on function public.rpc_generate_plan_from_profile(uuid, uuid, int, uuid)
      ниже порога профиль и Payoff-1 сохраняются. Вызывают: опросник ARS-212, AI Gateway.';
 
 grant execute on function public.rpc_generate_plan_from_profile(uuid, uuid, int, uuid) to authenticated;
-revoke execute on function public.rpc_generate_plan_from_profile(uuid, uuid, int, uuid) from anon;
-revoke execute on function public.fn_derive_farm_archetype(uuid) from anon;
-revoke execute on function public.fn_activity_to_farm_type(text) from anon;
+revoke execute on function public.rpc_generate_plan_from_profile(uuid, uuid, int, uuid) from public, anon;
+revoke execute on function public.fn_derive_farm_archetype(uuid) from public, anon;
+revoke execute on function public.fn_activity_to_farm_type(text) from public, anon;
 
 insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes)
 values ('rpc_generate_plan_from_profile', 'RPC-33a', null, 'd05_ops_edu.sql (ARS-213)',

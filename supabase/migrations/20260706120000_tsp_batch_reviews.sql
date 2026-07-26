@@ -187,7 +187,7 @@ comment on function public.rpc_self_submit_mpk_review(uuid, int, int, text) is
     'GAP-REVIEW-MOCK-01 | МПК оценивает фермера → batches.notes.mpk_review (тот же паттерн,
      что rpc_submit_review для фермерской стороны — без отдельной колонки/таблицы, без
      double-blind). Гейт: caller владеет пулом delivered-куска этого батча.';
-revoke execute on function public.rpc_self_submit_mpk_review(uuid, int, int, text) from anon;
+revoke execute on function public.rpc_self_submit_mpk_review(uuid, int, int, text) from public, anon;
 grant  execute on function public.rpc_self_submit_mpk_review(uuid, int, int, text) to authenticated;
 
 -- ── 3. rpc_get_pool_matches += myRating (читает notes.mpk_review обратно МПК) ──
@@ -252,5 +252,5 @@ comment on function public.rpc_get_pool_matches(uuid) is
      matchId=allocation.id, heads/price с куска, status из статуса куска. +grade/breed/даты
      этапов + myRating (notes.mpk_review, персистит отзыв МПК о фермере). Контакты фермы
      после mpk_contact_revealed_at (D40). Сигнатура не меняется (P7).';
-revoke execute on function public.rpc_get_pool_matches(uuid) from anon;
+revoke execute on function public.rpc_get_pool_matches(uuid) from public, anon;
 grant  execute on function public.rpc_get_pool_matches(uuid) to authenticated;

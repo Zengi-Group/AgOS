@@ -93,7 +93,7 @@ comment on function public.rpc_lower_price(uuid, numeric) is
     'КАНОН d02 | Слайс C B4 | Фермер понижает ask: clamp вниз на (current − price_step_down_amount)
      и >0; партия → published (published_at=now() — рестарт таймера ценового решения) для
      ре-broadcast (фронт затем зовёт rpc_self_auto_match_batch). Гейт fn_my_org_ids().';
-revoke execute on function public.rpc_lower_price(uuid, numeric) from anon;
+revoke execute on function public.rpc_lower_price(uuid, numeric) from public, anon;
 grant  execute on function public.rpc_lower_price(uuid, numeric) to authenticated;
 
 
@@ -158,5 +158,5 @@ comment on function public.rpc_self_review_due_batches() is
      партии на рынке (published|offering, matched_heads=0) старше N минут
      (tsp_config.price_decision_after_minutes, дефолт 1) → офферы expired, партия →
      awaiting_price_decision (экран снижения). Цикл: снизил цену → рестарт таймера. Гейт fn_my_org_ids().';
-revoke execute on function public.rpc_self_review_due_batches() from anon;
+revoke execute on function public.rpc_self_review_due_batches() from public, anon;
 grant  execute on function public.rpc_self_review_due_batches() to authenticated;

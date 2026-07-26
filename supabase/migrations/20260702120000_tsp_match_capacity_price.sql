@@ -225,7 +225,7 @@ comment on function public.rpc_self_activate_pool_request(uuid) is
     'КАНОН d02 +аддитив Слайс 8 | Заявка(draft)→Pool(filling). Свип published-партий:
      жёсткий фильтр сорт+цена+окно+ёмкость+ПОТОЛОК ГОЛОВ+РЕГИОН+РАЙОН+ПОРОДА → matched,
      иначе broadcast (тоже с цена-гейтом bid>=ask и потолком голов).';
-revoke execute on function public.rpc_self_activate_pool_request(uuid) from anon;
+revoke execute on function public.rpc_self_activate_pool_request(uuid) from public, anon;
 grant  execute on function public.rpc_self_activate_pool_request(uuid) to authenticated;
 
 
@@ -388,7 +388,7 @@ comment on function public.rpc_self_auto_match_batch(uuid) is
     'КАНОН d02 +аддитив Слайс 8 | Авто-матч при публикации: высший бид >= ask → matched;
      иначе broadcast (цена-гейт bid>=ask). Жёсткий фильтр: сорт+цена+окно+ёмкость+
      ПОТОЛОК ГОЛОВ+РЕГИОН+РАЙОН+ПОРОДА.';
-revoke execute on function public.rpc_self_auto_match_batch(uuid) from anon;
+revoke execute on function public.rpc_self_auto_match_batch(uuid) from public, anon;
 grant  execute on function public.rpc_self_auto_match_batch(uuid) to authenticated;
 
 
@@ -504,7 +504,7 @@ $$;
 comment on function public.rpc_self_accept_offer(uuid) is
     'КАНОН d02 +аддитив Слайс 8 | МПК принимает broadcast-оффер (FCFS): offering → matched.
      Строка пула: бид >= offered ask, сорт+окно+ёмкость+ПОТОЛОК ГОЛОВ+РЕГИОН+РАЙОН+ПОРОДА.';
-revoke execute on function public.rpc_self_accept_offer(uuid) from anon;
+revoke execute on function public.rpc_self_accept_offer(uuid) from public, anon;
 grant  execute on function public.rpc_self_accept_offer(uuid) to authenticated;
 
 
@@ -616,5 +616,5 @@ comment on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) is
     'КАНОН d02 +аддитив Слайс 8 | Ручной матч МПК: published|offering-партию → matched
      при p_price_per_kg (>= ask). Строка по сорту И ПОРОДЕ. +ПОТОЛОК ГОЛОВ (не перелить
      target_heads). auto-close по головам → confirmed. Гейт pools.organization_id.';
-revoke execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) from anon;
+revoke execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) from public, anon;
 grant  execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) to authenticated;

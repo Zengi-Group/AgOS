@@ -1454,21 +1454,21 @@ comment on function public.rpc_publish_batch(uuid, uuid, uuid, jsonb) is
 -- Supabase: public schema functions auto-granted to authenticated/service_role
 -- Explicit grants for anon-blocking:
 -- ============================================================
-revoke execute on function public.rpc_get_ai_farm_context(uuid,uuid) from anon;
+revoke execute on function public.rpc_get_ai_farm_context(uuid,uuid) from public, anon;
 -- rpc_upsert_herd_group: revoke перенесён после переопределения функции ниже
 -- (сигнатура расширена ARS-212 — здесь старая сигнатура ещё/уже не существует).
-revoke execute on function public.rpc_get_feeding_plan(uuid,uuid,uuid) from anon;
-revoke execute on function public.rpc_get_farm_tasks(uuid,uuid,int,text) from anon;
-revoke execute on function public.rpc_complete_farm_task(uuid,uuid,text,jsonb,uuid,jsonb) from anon;
-revoke execute on function public.rpc_get_production_plan(uuid,uuid,text) from anon;
-revoke execute on function public.rpc_create_vet_case(uuid,uuid,text,text,uuid,int,text,uuid,jsonb) from anon;
-revoke execute on function public.rpc_add_vet_symptoms(uuid,uuid,jsonb,uuid,jsonb) from anon;
-revoke execute on function public.rpc_get_vet_diagnosis(uuid,uuid,int) from anon;
-revoke execute on function public.rpc_get_treatment_protocols(uuid,uuid,text) from anon;
-revoke execute on function public.rpc_get_vaccination_schedule(uuid,uuid,int) from anon;
-revoke execute on function public.rpc_complete_vaccination_item(uuid,uuid,uuid,int,text,text,uuid,jsonb) from anon;
-revoke execute on function public.rpc_create_consultation_request(uuid,text,text,text,uuid,text,uuid,jsonb) from anon;
-revoke execute on function public.rpc_search_knowledge_chunks(uuid,text,vector,text,text,int) from anon;
+revoke execute on function public.rpc_get_feeding_plan(uuid,uuid,uuid) from public, anon;
+revoke execute on function public.rpc_get_farm_tasks(uuid,uuid,int,text) from public, anon;
+revoke execute on function public.rpc_complete_farm_task(uuid,uuid,text,jsonb,uuid,jsonb) from public, anon;
+revoke execute on function public.rpc_get_production_plan(uuid,uuid,text) from public, anon;
+revoke execute on function public.rpc_create_vet_case(uuid,uuid,text,text,uuid,int,text,uuid,jsonb) from public, anon;
+revoke execute on function public.rpc_add_vet_symptoms(uuid,uuid,jsonb,uuid,jsonb) from public, anon;
+revoke execute on function public.rpc_get_vet_diagnosis(uuid,uuid,int) from public, anon;
+revoke execute on function public.rpc_get_treatment_protocols(uuid,uuid,text) from public, anon;
+revoke execute on function public.rpc_get_vaccination_schedule(uuid,uuid,int) from public, anon;
+revoke execute on function public.rpc_complete_vaccination_item(uuid,uuid,uuid,int,text,text,uuid,jsonb) from public, anon;
+revoke execute on function public.rpc_create_consultation_request(uuid,text,text,text,uuid,text,uuid,jsonb) from public, anon;
+revoke execute on function public.rpc_search_knowledge_chunks(uuid,text,vector,text,text,int) from public, anon;
 -- SEC-RPC-ORGTRUST-01 + SEC-GRANT-PUBLIC-01 (ARS-259): AI-gateway-only tool (AI-15,
 -- P-AI-6 → service_role). `revoke ... from anon` alone left the default PUBLIC execute
 -- grant intact (anon/authenticated still executable on prod). Revoke from PUBLIC and
@@ -1476,22 +1476,22 @@ revoke execute on function public.rpc_search_knowledge_chunks(uuid,text,vector,t
 revoke execute on function public.rpc_get_membership_status(uuid) from public;
 revoke execute on function public.rpc_get_membership_status(uuid) from authenticated;
 grant  execute on function public.rpc_get_membership_status(uuid) to service_role;
-revoke execute on function public.rpc_get_price_grid(uuid,uuid,date) from anon;
-revoke execute on function public.rpc_get_aggregated_supply(uuid,date,uuid,int) from anon;
-revoke execute on function public.rpc_get_aggregated_demand(uuid,date,uuid,int) from anon;
-revoke execute on function public.rpc_get_org_batches(uuid,text) from anon;
-revoke execute on function public.rpc_create_batch(uuid,uuid,uuid,int,numeric,date,uuid,uuid,text,uuid,jsonb) from anon;
-revoke execute on function public.rpc_publish_batch(uuid,uuid,uuid,jsonb) from anon;
+revoke execute on function public.rpc_get_price_grid(uuid,uuid,date) from public, anon;
+revoke execute on function public.rpc_get_aggregated_supply(uuid,date,uuid,int) from public, anon;
+revoke execute on function public.rpc_get_aggregated_demand(uuid,date,uuid,int) from public, anon;
+revoke execute on function public.rpc_get_org_batches(uuid,text) from public, anon;
+revoke execute on function public.rpc_create_batch(uuid,uuid,uuid,int,numeric,date,uuid,uuid,text,uuid,jsonb) from public, anon;
+revoke execute on function public.rpc_publish_batch(uuid,uuid,uuid,jsonb) from public, anon;
 -- SEC-RPC-ORGTRUST-01: эти 3 сигнатуры предназначены только для AI Gateway (P-AI-6,
 -- service_role); `revoke ... from anon` не закрывал доступ для authenticated JWT
 -- (PostgreSQL default PUBLIC execute). Body-guard выше уже блокирует чужую org,
 -- но AI-gateway-сигнатуры не имеют живого self-serve вызывающего (проверено:
 -- BatchWizard.tsx зовёт другую перегрузку rpc_create_batch без p_organization_id;
 -- легаси /cabinet-legacy/market — orphan, никуда не подключён) — второй слой защиты.
-revoke execute on function public.rpc_get_org_batches(uuid,text) from authenticated;
-revoke execute on function public.rpc_create_batch(uuid,uuid,uuid,int,numeric,date,uuid,uuid,text,uuid,jsonb) from authenticated;
-revoke execute on function public.rpc_publish_batch(uuid,uuid,uuid,jsonb) from authenticated;
-revoke execute on function public.rpc_update_conversation_language(uuid,text,uuid) from anon;
+revoke execute on function public.rpc_get_org_batches(uuid,text) from public, authenticated;
+revoke execute on function public.rpc_create_batch(uuid,uuid,uuid,int,numeric,date,uuid,uuid,text,uuid,jsonb) from public, authenticated;
+revoke execute on function public.rpc_publish_batch(uuid,uuid,uuid,jsonb) from public, authenticated;
+revoke execute on function public.rpc_update_conversation_language(uuid,text,uuid) from public, anon;
 
 -- ============================================================
 -- END Migration 011
@@ -2060,7 +2060,7 @@ $$;
 
 -- Anon-блок: перевешивается здесь же при каждом переопределении сигнатуры
 -- (старый revoke в блоке GRANTS выше удалён — сигнатура расширена ARS-212).
-revoke execute on function public.rpc_upsert_herd_group(uuid,uuid,text,int,numeric,uuid,uuid,uuid,jsonb,text) from anon;
+revoke execute on function public.rpc_upsert_herd_group(uuid,uuid,text,int,numeric,uuid,uuid,uuid,jsonb,text) from public, anon;
 
 comment on function public.rpc_upsert_herd_group(uuid,uuid,text,int,numeric,uuid,uuid,uuid,jsonb,text) is
     'L-AUDIT-5 FIX: UPDATE path теперь использует GREATEST(existing_confidence, new).
@@ -2166,7 +2166,7 @@ grant execute on function public.fn_auth_custom_claims(jsonb)
     to supabase_auth_admin;
 
 revoke execute on function public.fn_auth_custom_claims(jsonb)
-    from anon, authenticated;
+    from public, anon, authenticated;
 
 
 -- ============================================================
@@ -2488,7 +2488,7 @@ grant execute on function public.publish_platform_event(text, uuid, uuid, jsonb)
     to service_role;
 
 revoke execute on function public.publish_platform_event(text, uuid, uuid, jsonb)
-    from anon, authenticated;
+    from public, anon, authenticated;
 -- ============================================================
 -- D-NEW-3: embedding_queue — структура + три воркер-функции + триггер
 -- ============================================================
@@ -2929,7 +2929,7 @@ comment on function public.rpc_clear_confirmation(uuid, uuid) is
      Replaces direct .table("ai_conversations").update() in nodes._clear_confirmation().';
 
 grant execute on function public.rpc_clear_confirmation(uuid, uuid) to service_role;
-revoke execute on function public.rpc_clear_confirmation(uuid, uuid) from anon, authenticated;
+revoke execute on function public.rpc_clear_confirmation(uuid, uuid) from public, anon, authenticated;
 
 
 -- ============================================================
@@ -2978,7 +2978,7 @@ comment on function public.rpc_sync_conversation_role(uuid, uuid, text) is
      Replaces direct .table("ai_conversations").update({"current_role": ...}) in nodes.save_response_node().';
 
 grant execute on function public.rpc_sync_conversation_role(uuid, uuid, text) to service_role;
-revoke execute on function public.rpc_sync_conversation_role(uuid, uuid, text) from anon, authenticated;
+revoke execute on function public.rpc_sync_conversation_role(uuid, uuid, text) from public, anon, authenticated;
 
 
 -- ============================================================
@@ -3026,7 +3026,7 @@ comment on function public.rpc_get_conversation_state(uuid, uuid) is
      Replaces direct .table("ai_conversations").select(...) in nodes.load_context_node().';
 
 grant execute on function public.rpc_get_conversation_state(uuid, uuid) to service_role;
-revoke execute on function public.rpc_get_conversation_state(uuid, uuid) from anon, authenticated;
+revoke execute on function public.rpc_get_conversation_state(uuid, uuid) from public, anon, authenticated;
 
 
 -- ============================================================
@@ -3068,7 +3068,7 @@ comment on function public.rpc_get_user_phone(uuid, uuid) is
      Replaces direct .table("users").select("phone") in notification_worker._get_user_phone().';
 
 grant execute on function public.rpc_get_user_phone(uuid, uuid) to service_role;
-revoke execute on function public.rpc_get_user_phone(uuid, uuid) from anon, authenticated;
+revoke execute on function public.rpc_get_user_phone(uuid, uuid) from public, anon, authenticated;
 
 
 -- ── RPC registry entries for DEF-013 ─────────────────────────────────────────
