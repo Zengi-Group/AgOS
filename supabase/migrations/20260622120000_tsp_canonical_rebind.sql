@@ -365,7 +365,7 @@ comment on function public.rpc_create_batch(text, text, int, numeric, int, text,
      поля визарда дублируются в notes(JSON) для совместимости UI. published|draft.
      deal = высший бид МПК ≥ ask; price_grids остаётся индикативным ориентиром.';
 
-revoke execute on function public.rpc_create_batch(text, text, int, numeric, int, text, text, numeric, date, date, boolean) from anon;
+revoke execute on function public.rpc_create_batch(text, text, int, numeric, int, text, text, numeric, date, date, boolean) from public, anon;
 grant  execute on function public.rpc_create_batch(text, text, int, numeric, int, text, text, numeric, date, date, boolean) to authenticated;
 
 
@@ -471,7 +471,7 @@ $$;
 comment on function public.rpc_get_org_batches() is
     'КАНОН d02 | Слайс 6 | Партии своих org в форме Batch[] (адаптер). Гейт fn_my_org_ids().';
 
-revoke execute on function public.rpc_get_org_batches() from anon;
+revoke execute on function public.rpc_get_org_batches() from public, anon;
 grant  execute on function public.rpc_get_org_batches() to authenticated;
 
 
@@ -505,7 +505,7 @@ $$;
 comment on function public.rpc_cancel_batch(uuid) is
     'КАНОН d02 | Слайс 6 | Снятие своей партии → status=cancelled. Гейт fn_my_org_ids().';
 
-revoke execute on function public.rpc_cancel_batch(uuid) from anon;
+revoke execute on function public.rpc_cancel_batch(uuid) from public, anon;
 grant  execute on function public.rpc_cancel_batch(uuid) to authenticated;
 
 
@@ -551,7 +551,7 @@ comment on function public.rpc_dispatch_batch(uuid) is
     'КАНОН d02 | Слайс C | Фермер: confirmed→dispatched (BT-16, D-M6-10) + dispatched_at;
      dispatchedAt в notes для UI. Гейт fn_my_org_ids().';
 
-revoke execute on function public.rpc_dispatch_batch(uuid) from anon;
+revoke execute on function public.rpc_dispatch_batch(uuid) from public, anon;
 grant  execute on function public.rpc_dispatch_batch(uuid) to authenticated;
 
 
@@ -623,7 +623,7 @@ comment on function public.rpc_lower_price(uuid, numeric) is
     'КАНОН d02 | Слайс C B4 | Фермер понижает ask (D-TSP-MATCH-01): clamp вниз на
      (current − price_step_down_amount, D-M6-3) и >0; партия → published для ре-broadcast
      (фронт затем зовёт rpc_self_auto_match_batch). Гейт fn_my_org_ids().';
-revoke execute on function public.rpc_lower_price(uuid, numeric) from anon;
+revoke execute on function public.rpc_lower_price(uuid, numeric) from public, anon;
 grant  execute on function public.rpc_lower_price(uuid, numeric) to authenticated;
 
 create or replace function public.rpc_update_price(p_batch_id uuid, p_new_price numeric)
@@ -646,7 +646,7 @@ $$;
 comment on function public.rpc_update_price(uuid, numeric) is
     'КАНОН d02 | Слайс 6 | Цена фермера упразднена (ст.171). No-op-success (touch).
      Сохранён для совместимости с фронтом.';
-revoke execute on function public.rpc_update_price(uuid, numeric) from anon;
+revoke execute on function public.rpc_update_price(uuid, numeric) from public, anon;
 grant  execute on function public.rpc_update_price(uuid, numeric) to authenticated;
 
 
@@ -679,7 +679,7 @@ $$;
 comment on function public.rpc_submit_review(uuid, int, int, text) is
     'КАНОН d02 | Слайс 6 | Отзыв фермера о покупателе → batches.notes.review
      (в d02 нет отдельной колонки review). Гейт fn_my_org_ids().';
-revoke execute on function public.rpc_submit_review(uuid, int, int, text) from anon;
+revoke execute on function public.rpc_submit_review(uuid, int, int, text) from public, anon;
 grant  execute on function public.rpc_submit_review(uuid, int, int, text) to authenticated;
 
 
@@ -740,7 +740,7 @@ comment on function public.rpc_self_review_due_batches() is
     'КАНОН d02 | Слайс C | Продюсер истечения 24ч-офферов (нет pg_cron): свои
      offering-партии без живых pending-офферов → офферы expired, партия →
      awaiting_price_decision (BT-09). Self-serve sweep. Гейт fn_my_org_ids().';
-revoke execute on function public.rpc_self_review_due_batches() from anon;
+revoke execute on function public.rpc_self_review_due_batches() from public, anon;
 grant  execute on function public.rpc_self_review_due_batches() to authenticated;
 
 
@@ -910,7 +910,7 @@ comment on function public.rpc_self_auto_match_batch(uuid) is
      бид МПК >= ask → партия matched, deal=бид (D-M6-DEALPRICE), pool_line_id; auto-close
      по головам → confirmed. Иначе broadcast офферов (offered_price=ask; сорт+регион+окно)
      → offering. Иначе NO_POOL (остаётся published). Контакты НЕ раскрываются (D40).';
-revoke execute on function public.rpc_self_auto_match_batch(uuid) from anon;
+revoke execute on function public.rpc_self_auto_match_batch(uuid) from public, anon;
 grant  execute on function public.rpc_self_auto_match_batch(uuid) to authenticated;
 
 
@@ -954,7 +954,7 @@ $$;
 comment on function public.rpc_get_market_batches(text) is
     'КАНОН d02 | Слайс 6 | Обезличенный маркет-борд: published-партии всех ферм.
      Без organization_id/контактов (D40). minPrice = справочная цена. Любой authenticated.';
-revoke execute on function public.rpc_get_market_batches(text) from anon;
+revoke execute on function public.rpc_get_market_batches(text) from public, anon;
 grant  execute on function public.rpc_get_market_batches(text) to authenticated;
 
 
@@ -997,7 +997,7 @@ $$;
 comment on function public.rpc_self_create_pool_request(uuid, int, date, uuid, jsonb, text) is
     'КАНОН d02 | Слайс 6 | МПК создаёт заявку. accepted_categories хранит фронтовые
      [{code,price,maxHeads}] (round-trip для UI; матч резолвит сорт по code). Гейт fn_my_org_ids.';
-revoke execute on function public.rpc_self_create_pool_request(uuid, int, date, uuid, jsonb, text) from anon;
+revoke execute on function public.rpc_self_create_pool_request(uuid, int, date, uuid, jsonb, text) from public, anon;
 grant  execute on function public.rpc_self_create_pool_request(uuid, int, date, uuid, jsonb, text) to authenticated;
 
 
@@ -1217,7 +1217,7 @@ comment on function public.rpc_self_activate_pool_request(uuid) is
      ёмкость) → matched/confirmed, иначе broadcast-оффер → offering. Зеркало
      rpc_self_auto_match_batch, но pool-initiated (не гейтит владельца партии).
      Гейт fn_my_org_ids через pool_requests.';
-revoke execute on function public.rpc_self_activate_pool_request(uuid) from anon;
+revoke execute on function public.rpc_self_activate_pool_request(uuid) from public, anon;
 grant  execute on function public.rpc_self_activate_pool_request(uuid) to authenticated;
 
 
@@ -1331,7 +1331,7 @@ comment on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) is
     'КАНОН d02 | Конвергенция B3 | Ручной матч МПК: published|offering-партию → matched
      в свой пул при p_price_per_kg (бид МПК, >= ask). deal=бид (D-M6-DEALPRICE), pool_line_id;
      висящие офферы снимаются (FCFS); auto-close по головам → confirmed. Гейт pools.organization_id.';
-revoke execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) from anon;
+revoke execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) from public, anon;
 grant  execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) to authenticated;
 
 
@@ -1384,7 +1384,7 @@ comment on function public.rpc_self_advance_pool_status(uuid, text) is
     'КАНОН d02 | Слайс 6 | МПК двигает статус пула. executing → раскрытие контактов (D40).
      Гейт «пул моей org» (через pool_request). Партии остаются matched (в d02 у них нет
      состояний confirmed/delivered — фермеру это показывается по статусу пула).';
-revoke execute on function public.rpc_self_advance_pool_status(uuid, text) from anon;
+revoke execute on function public.rpc_self_advance_pool_status(uuid, text) from public, anon;
 grant  execute on function public.rpc_self_advance_pool_status(uuid, text) to authenticated;
 
 
@@ -1444,7 +1444,7 @@ comment on function public.rpc_get_pool_matches(uuid) is
     'КАНОН d02 | Слайс 6 | Матчи пула (RawMatch[]). Контакты фермы только после
      mpk_contact_revealed_at (D40). status выводится из статуса пула (нет колонки status
      в pool_matches). Гейт «пул моей org» (через pool_request).';
-revoke execute on function public.rpc_get_pool_matches(uuid) from anon;
+revoke execute on function public.rpc_get_pool_matches(uuid) from public, anon;
 grant  execute on function public.rpc_get_pool_matches(uuid) to authenticated;
 
 
@@ -1491,7 +1491,7 @@ $$;
 comment on function public.rpc_get_my_pools() is
     'КАНОН d02 | Слайс 6 | Пулы своего МПК (RawPool[]). Гейт через pool_request.organization_id
      (pools без organization_id). lines = accepted_categories.';
-revoke execute on function public.rpc_get_my_pools() from anon;
+revoke execute on function public.rpc_get_my_pools() from public, anon;
 grant  execute on function public.rpc_get_my_pools() to authenticated;
 
 
@@ -1544,7 +1544,7 @@ $$;
 comment on function public.rpc_self_close_due_pools() is
     'КАНОН d02 | Слайс 6 | Авто-закрытие просроченных пулов своих org (гейт через
      pool_request). filling + месяц истёк → filled (>=30%) | closed (<30%). Без pg_cron.';
-revoke execute on function public.rpc_self_close_due_pools() from anon;
+revoke execute on function public.rpc_self_close_due_pools() from public, anon;
 grant  execute on function public.rpc_self_close_due_pools() to authenticated;
 
 
@@ -1665,7 +1665,7 @@ comment on function public.rpc_self_accept_offer(uuid) is
     'КАНОН d02 | Конвергенция B3 | МПК принимает broadcast-оффер (FCFS): партия offering →
      matched, deal=бид строки >= offered ask (D-M6-DEALPRICE); сиблинг-офферы withdrawn;
      auto-close по головам → confirmed. Гейт offer.mpk_org_id ∈ fn_my_org_ids().';
-revoke execute on function public.rpc_self_accept_offer(uuid) from anon;
+revoke execute on function public.rpc_self_accept_offer(uuid) from public, anon;
 grant  execute on function public.rpc_self_accept_offer(uuid) to authenticated;
 
 
@@ -1718,7 +1718,7 @@ $$;
 comment on function public.rpc_get_incoming_offers() is
     'КАНОН d02 | Слайс C | Входящие broadcast-офферы моего МПК (pending, не истёкшие):
      характеристики партии БЕЗ личности фермера (D-M6-12). Гейт fn_my_org_ids().';
-revoke execute on function public.rpc_get_incoming_offers() from anon;
+revoke execute on function public.rpc_get_incoming_offers() from public, anon;
 grant  execute on function public.rpc_get_incoming_offers() to authenticated;
 
 
@@ -1755,7 +1755,7 @@ $$;
 comment on function public.rpc_self_reject_offer(uuid) is
     'КАНОН d02 | Слайс C | МПК отклоняет broadcast-оффер: pending→rejected.
      rpc_self_* избегает PGRST203-перегрузки с d02 rpc_reject_offer(uuid,uuid). Гейт fn_my_org_ids().';
-revoke execute on function public.rpc_self_reject_offer(uuid) from anon;
+revoke execute on function public.rpc_self_reject_offer(uuid) from public, anon;
 grant  execute on function public.rpc_self_reject_offer(uuid) to authenticated;
 
 
@@ -1826,5 +1826,5 @@ comment on function public.rpc_self_confirm_delivery(uuid) is
     'КАНОН d02 | Слайс C | МПК подтверждает приёмку партии (BT-18, D-M6-10):
      dispatched→delivered + delivered_at; все партии пула delivered → пул completed.
      Гейт «пул моей org» (через pool_line→pool). rpc_self_* избегает PGRST203.';
-revoke execute on function public.rpc_self_confirm_delivery(uuid) from anon;
+revoke execute on function public.rpc_self_confirm_delivery(uuid) from public, anon;
 grant  execute on function public.rpc_self_confirm_delivery(uuid) to authenticated;

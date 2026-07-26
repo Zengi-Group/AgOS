@@ -5145,9 +5145,9 @@ comment on function public.fn_tsp_grade_id_from_fatness(text) is
 
 grant execute on function public.rpc_get_grade_formula()        to authenticated;
 grant execute on function public.rpc_admin_upsert_grade_formula(text, text, text, int, int, text[], int, int) to authenticated;
-revoke execute on function public.rpc_get_grade_formula()        from anon;
-revoke execute on function public.rpc_admin_upsert_grade_formula(text, text, text, int, int, text[], int, int) from anon;
-revoke execute on function public.fn_tsp_grade_id_from_fatness(text) from anon;
+revoke execute on function public.rpc_get_grade_formula()        from public, anon;
+revoke execute on function public.rpc_admin_upsert_grade_formula(text, text, text, int, int, text[], int, int) from public, anon;
+revoke execute on function public.fn_tsp_grade_id_from_fatness(text) from public, anon;
 
 insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, created_in, notes) values
     ('rpc_get_grade_formula',          'A-GRADE AG-R1', null, 'd02_tsp.sql (Section 8b / A-GRADE)', 'Публичное чтение формулы сорта МПК для фронта'),
@@ -6301,13 +6301,13 @@ grant execute on function public.rpc_admin_edit_pool(uuid, date, date, jsonb) to
 grant execute on function public.rpc_admin_match_batch_to_pool(uuid, uuid, int) to authenticated;
 grant execute on function public.rpc_admin_unmatch(uuid, uuid, text)         to authenticated;
 grant execute on function public.rpc_admin_advance_pool_status(uuid, text)   to authenticated;
-revoke execute on function public.rpc_admin_cancel_batch(uuid, text)          from anon;
-revoke execute on function public.rpc_admin_set_batch_terms(uuid, int, date, date) from anon;
-revoke execute on function public.rpc_admin_cancel_pool(uuid, text)           from anon;
-revoke execute on function public.rpc_admin_edit_pool(uuid, date, date, jsonb) from anon;
-revoke execute on function public.rpc_admin_match_batch_to_pool(uuid, uuid, int) from anon;
-revoke execute on function public.rpc_admin_unmatch(uuid, uuid, text)         from anon;
-revoke execute on function public.rpc_admin_advance_pool_status(uuid, text)   from anon;
+revoke execute on function public.rpc_admin_cancel_batch(uuid, text)          from public, anon;
+revoke execute on function public.rpc_admin_set_batch_terms(uuid, int, date, date) from public, anon;
+revoke execute on function public.rpc_admin_cancel_pool(uuid, text)           from public, anon;
+revoke execute on function public.rpc_admin_edit_pool(uuid, date, date, jsonb) from public, anon;
+revoke execute on function public.rpc_admin_match_batch_to_pool(uuid, uuid, int) from public, anon;
+revoke execute on function public.rpc_admin_unmatch(uuid, uuid, text)         from public, anon;
+revoke execute on function public.rpc_admin_advance_pool_status(uuid, text)   from public, anon;
 
 -- ============================================================
 -- END SECTION 11 (ADMIN TSP WRITE RPCs)
@@ -6439,8 +6439,8 @@ on conflict (sql_name) do update
 
 grant execute on function public.rpc_add_batch_media(uuid, uuid, text, text, int) to authenticated;
 grant execute on function public.rpc_remove_batch_media(uuid, uuid)               to authenticated;
-revoke execute on function public.rpc_add_batch_media(uuid, uuid, text, text, int) from anon;
-revoke execute on function public.rpc_remove_batch_media(uuid, uuid)               from anon;
+revoke execute on function public.rpc_add_batch_media(uuid, uuid, text, text, int) from public, anon;
+revoke execute on function public.rpc_remove_batch_media(uuid, uuid)               from public, anon;
 
 -- ============================================================
 -- END SECTION 12 (BATCH MEDIA — ARS-227)
@@ -6633,9 +6633,9 @@ on conflict (sql_name) do update
 grant execute on function public.rpc_add_batch_animal(uuid, uuid, text, numeric, text, int, text, int) to authenticated;
 grant execute on function public.rpc_update_batch_animal(uuid, uuid, text, numeric, text, int, text)    to authenticated;
 grant execute on function public.rpc_remove_batch_animal(uuid, uuid)                                     to authenticated;
-revoke execute on function public.rpc_add_batch_animal(uuid, uuid, text, numeric, text, int, text, int) from anon;
-revoke execute on function public.rpc_update_batch_animal(uuid, uuid, text, numeric, text, int, text)    from anon;
-revoke execute on function public.rpc_remove_batch_animal(uuid, uuid)                                     from anon;
+revoke execute on function public.rpc_add_batch_animal(uuid, uuid, text, numeric, text, int, text, int) from public, anon;
+revoke execute on function public.rpc_update_batch_animal(uuid, uuid, text, numeric, text, int, text)    from public, anon;
+revoke execute on function public.rpc_remove_batch_animal(uuid, uuid)                                     from public, anon;
 
 -- ============================================================
 -- END SECTION 13 (BATCH ANIMALS — ARS-228)
@@ -6750,7 +6750,7 @@ on conflict (sql_name) do update
     set dok3_name = excluded.dok3_name, notes = excluded.notes, created_in = excluded.created_in;
 
 grant execute on function public.rpc_get_demand_board(uuid, uuid) to authenticated;
-revoke execute on function public.rpc_get_demand_board(uuid, uuid) from anon;
+revoke execute on function public.rpc_get_demand_board(uuid, uuid) from public, anon;
 
 -- ============================================================
 -- END SECTION 14 (MARKET BOARD — DEMAND — ARS-229)

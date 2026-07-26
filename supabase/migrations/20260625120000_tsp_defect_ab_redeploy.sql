@@ -131,7 +131,7 @@ comment on function public.rpc_create_batch(text, text, int, numeric, int, text,
      поля визарда дублируются в notes(JSON) для совместимости UI. published|draft.
      deal = высший бид МПК ≥ ask; price_grids остаётся индикативным ориентиром.';
 
-revoke execute on function public.rpc_create_batch(text, text, int, numeric, int, text, text, numeric, date, date, boolean) from anon;
+revoke execute on function public.rpc_create_batch(text, text, int, numeric, int, text, text, numeric, date, date, boolean) from public, anon;
 grant  execute on function public.rpc_create_batch(text, text, int, numeric, int, text, text, numeric, date, date, boolean) to authenticated;
 
 -- == 3/4 fn_tsp_batch_json (поле grade — показ сорта фермеру) ==
@@ -424,6 +424,6 @@ comment on function public.rpc_self_activate_pool_request(uuid) is
      ёмкость) → matched/confirmed, иначе broadcast-оффер → offering. Зеркало
      rpc_self_auto_match_batch, но pool-initiated (не гейтит владельца партии).
      Гейт fn_my_org_ids через pool_requests.';
-revoke execute on function public.rpc_self_activate_pool_request(uuid) from anon;
+revoke execute on function public.rpc_self_activate_pool_request(uuid) from public, anon;
 grant  execute on function public.rpc_self_activate_pool_request(uuid) to authenticated;
 

@@ -414,7 +414,7 @@ comment on function public.rpc_self_activate_pool_request(uuid) is
     'КАНОН d02 +Слайс 9 | Заявка(draft)→Pool(filling). Свип с ДРОБЛЕНИЕМ: батч (published|
      partially_matched) раскладывается кусками по строкам пула (цена+сорт+порода+регион+
      район+окно+ёмкость), остаток → broadcast. Дробление уважает tsp_config.min_split_heads.';
-revoke execute on function public.rpc_self_activate_pool_request(uuid) from anon;
+revoke execute on function public.rpc_self_activate_pool_request(uuid) from public, anon;
 grant  execute on function public.rpc_self_activate_pool_request(uuid) to authenticated;
 
 
@@ -546,7 +546,7 @@ comment on function public.rpc_self_auto_match_batch(uuid) is
     'КАНОН d02 +Слайс 9 | Авто-матч при публикации с ДРОБЛЕНИЕМ: батч раскладывается кусками
      по строкам всех filling-пулов (бид>=ask, сорт+порода+регион+район+окно+ёмкость), остаток
      → broadcast. Дробление уважает tsp_config.min_split_heads.';
-revoke execute on function public.rpc_self_auto_match_batch(uuid) from anon;
+revoke execute on function public.rpc_self_auto_match_batch(uuid) from public, anon;
 grant  execute on function public.rpc_self_auto_match_batch(uuid) to authenticated;
 
 
@@ -653,7 +653,7 @@ comment on function public.rpc_self_accept_offer(uuid) is
     'КАНОН d02 +Слайс 9 | МПК принимает broadcast-оффер (FCFS) с ДРОБЛЕНИЕМ: берёт кусок(и)
      в свои строки (бид>=offered ask, сорт+порода+регион+район+окно+ёмкость). Остаток остаётся
      доступен другим МПК; sibling-офферы снимаются только при полном матче батча.';
-revoke execute on function public.rpc_self_accept_offer(uuid) from anon;
+revoke execute on function public.rpc_self_accept_offer(uuid) from public, anon;
 grant  execute on function public.rpc_self_accept_offer(uuid) to authenticated;
 
 
@@ -727,5 +727,5 @@ $$;
 comment on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) is
     'КАНОН d02 +Слайс 9 | Ручной матч МПК: берёт КУСОК p_matched_heads (кап = остаток батча)
      в строку по сорту+породе+месту, цена p_price_per_kg (>= ask). Возвращает pool_line_id.';
-revoke execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) from anon;
+revoke execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) from public, anon;
 grant  execute on function public.rpc_self_match_batch_to_pool(uuid, uuid, int, int) to authenticated;

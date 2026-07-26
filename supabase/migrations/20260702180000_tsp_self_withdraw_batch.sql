@@ -293,7 +293,7 @@ comment on function public.rpc_self_withdraw_batch(uuid, boolean) is
      (отзыв pending-офферов, батч выходит из matchable). matched-куски — только при
      p_include_matched=true и ЗА ШТРАФ (реверс счётчиков + cancelled_after_match, D-TSP-14).
      confirmed-куски залочены; confirmed/dispatched/delivered батч снять нельзя. Гейт fn_my_org_ids().';
-revoke execute on function public.rpc_self_withdraw_batch(uuid, boolean) from anon;
+revoke execute on function public.rpc_self_withdraw_batch(uuid, boolean) from public, anon;
 grant  execute on function public.rpc_self_withdraw_batch(uuid, boolean) to authenticated;
 
 
@@ -346,5 +346,5 @@ comment on function public.rpc_cancel_batch(uuid) is
     'КАНОН d02 | Слайс 6 (+S1b) | Снятие своей партии БЕЗ проданных кусков → cancelled
      (отзыв pending-офферов + cancelled_before_match). При matched_heads>0 отсылает на
      rpc_self_withdraw_batch. confirmed/dispatched/delivered залочены. Гейт fn_my_org_ids().';
-revoke execute on function public.rpc_cancel_batch(uuid) from anon;
+revoke execute on function public.rpc_cancel_batch(uuid) from public, anon;
 grant  execute on function public.rpc_cancel_batch(uuid) to authenticated;

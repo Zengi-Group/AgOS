@@ -172,7 +172,7 @@ comment on function public.rpc_self_dispatch_ready(uuid) is
     'Слайс 9 (S3) | Фермер отгружает готовые куски: все confirmed batch_allocations → dispatched
      (+ событие per-кусок) + rollup статуса батча. Легаси-фолбэк: цельный батч без кусков
      (confirmed→dispatched). Гейт fn_my_org_ids(). Заменяет batch-level dispatch для дроблёных.';
-revoke execute on function public.rpc_self_dispatch_ready(uuid) from anon;
+revoke execute on function public.rpc_self_dispatch_ready(uuid) from public, anon;
 grant  execute on function public.rpc_self_dispatch_ready(uuid) to authenticated;
 
 
@@ -240,7 +240,7 @@ comment on function public.rpc_self_confirm_delivery_alloc(uuid) is
     'Слайс 9 (S3) | МПК подтверждает приёмку КУСКА: batch_allocations dispatched→delivered
      (+ событие) + rollup статуса батча. Пул→completed, когда все куски delivered/cancelled.
      Гейт «пул моей org» через pool_request. Заменяет batch-level rpc_self_confirm_delivery.';
-revoke execute on function public.rpc_self_confirm_delivery_alloc(uuid) from anon;
+revoke execute on function public.rpc_self_confirm_delivery_alloc(uuid) from public, anon;
 grant  execute on function public.rpc_self_confirm_delivery_alloc(uuid) to authenticated;
 
 
@@ -501,7 +501,7 @@ comment on function public.rpc_self_withdraw_batch(uuid, boolean) is
      matched-куски — только p_include_matched=true и ЗА ШТРАФ (реверс + cancelled_after_match).
      Итоговый статус: v_active=0→cancelled, иначе rollup (батч = отстающий активный кусок).
      confirmed/dispatched/delivered батч снять нельзя. Гейт fn_my_org_ids().';
-revoke execute on function public.rpc_self_withdraw_batch(uuid, boolean) from anon;
+revoke execute on function public.rpc_self_withdraw_batch(uuid, boolean) from public, anon;
 grant  execute on function public.rpc_self_withdraw_batch(uuid, boolean) to authenticated;
 
 
@@ -561,5 +561,5 @@ comment on function public.rpc_get_pool_matches(uuid) is
     'КАНОН d02 +Слайс 9 (S3) | Матчи пула по КУСКАМ (batch_allocations, а не b.pool_line_id) —
      МПК видит все куски. matchId=allocation.id (для rpc_self_confirm_delivery_alloc), heads/
      price с куска, status из статуса куска. Контакты фермы после mpk_contact_revealed_at (D40).';
-revoke execute on function public.rpc_get_pool_matches(uuid) from anon;
+revoke execute on function public.rpc_get_pool_matches(uuid) from public, anon;
 grant  execute on function public.rpc_get_pool_matches(uuid) to authenticated;

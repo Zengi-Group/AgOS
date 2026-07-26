@@ -181,5 +181,5 @@ comment on function public.rpc_get_pool_matches(uuid) is
     'КАНОН d02 +Слайс 9 (S3+S4) | Матчи пула по КУСКАМ (batch_allocations). matchId=allocation.id,
      heads/price с куска, status из статуса куска. +grade/breed/даты этапов — для документа сделки.
      Контакты фермы после mpk_contact_revealed_at (D40). Сигнатура не меняется (P7).';
-revoke execute on function public.rpc_get_pool_matches(uuid) from anon;
+revoke execute on function public.rpc_get_pool_matches(uuid) from public, anon;
 grant  execute on function public.rpc_get_pool_matches(uuid) to authenticated;

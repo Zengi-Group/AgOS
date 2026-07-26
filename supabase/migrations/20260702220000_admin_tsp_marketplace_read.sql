@@ -60,7 +60,7 @@ $$;
 comment on function public.rpc_admin_tsp_batches() is
     'Админ-обзор ТСП | Все батчи ферм (read-only). Гейт fn_is_admin(). Контакты фермы видны
      всегда (админ — оператор платформы). Сигнатура read-only, схему не меняет.';
-revoke execute on function public.rpc_admin_tsp_batches() from anon;
+revoke execute on function public.rpc_admin_tsp_batches() from public, anon;
 grant  execute on function public.rpc_admin_tsp_batches() to authenticated;
 
 
@@ -110,7 +110,7 @@ $$;
 comment on function public.rpc_admin_tsp_pools() is
     'Админ-обзор ТСП | Все пулы (read-only) с реквизитами МПК (через pool_request.organization_id),
      строками и прогрессом. Гейт fn_is_admin(). Схему не меняет.';
-revoke execute on function public.rpc_admin_tsp_pools() from anon;
+revoke execute on function public.rpc_admin_tsp_pools() from public, anon;
 grant  execute on function public.rpc_admin_tsp_pools() to authenticated;
 
 
@@ -168,7 +168,7 @@ $$;
 comment on function public.rpc_admin_tsp_deals() is
     'Админ-обзор ТСП | Все сделки-куски (batch_allocations, read-only): обе стороны раскрыты,
      голов/цена/сумма/статус/даты этапов. Гейт fn_is_admin(). Схему не меняет.';
-revoke execute on function public.rpc_admin_tsp_deals() from anon;
+revoke execute on function public.rpc_admin_tsp_deals() from public, anon;
 grant  execute on function public.rpc_admin_tsp_deals() to authenticated;
 
 
