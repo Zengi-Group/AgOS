@@ -50,7 +50,8 @@
 - **B1 (частично):** privacy-страница `public/privacy/index.html` (RU/KK) создана → задеплоится на `https://<домен>/privacy` с фронтом. ⚠️ Осталось: убедиться, что ящик `support@turanstandard.kz` существует (или заменить контакт); в тексте — удаление аккаунта по email (в приложении добавить, когда сделаем B6).
 - **B5 portrait-lock:** iOS `Info.plist` (обе идиомы) + Android `screenOrientation="portrait"` — залочено на портрет.
 - **B2 (scaffold):** `android/app/build.gradle` — `signingConfigs.release` из `AGOS_UPLOAD_*` (guard `hasProperty`, keystore/пароли НЕ в git; без свойств поведение как раньше). Осталось: создать keystore на build-машине + прописать свойства.
-- Остаётся владельцу/build-машине: B3 (iOS Team), B4 (Team ID/SHA256), B6 (удаление аккаунта), финальная иконка, деплой privacy-страницы, сборка/подпись.
+- **B5 (иконка, финал):** финальная бренд-иконка ARS-109 передана и вкручена — `assets/icon-only.png` + `icon-foreground.png` + `icon-background.png` (Custom Mode `@capacitor/assets`, заменили `logo.png` для иконки), `npm run cap:assets` перегенерирован → `ios/App/App/Assets.xcassets/AppIcon.appiconset` + Android legacy/adaptive mipmap-иконки. Play-листинг `icon-play-512.png` → `Docs/store-assets/`. Сплэш вне скоупа (см. `assets/README.md`) — остаётся апскейл-заглушка.
+- Остаётся владельцу/build-машине: B3 (iOS Team), B4 (Team ID/SHA256), B6 (удаление аккаунта), деплой privacy-страницы, сборка/подпись.
 
 ---
 
@@ -127,7 +128,7 @@ npm run cap:ios                    # + cap open ios (Xcode)
 | Android keystore + signingConfig (B2) | правку gradle | хранение ключа | сборка | |
 | iOS Team/capabilities (B3) | | Apple-аккаунт Zengi | Xcode | |
 | Team ID / SHA256 → мне | подстановка (B4) | прислать значения | | |
-| Иконка/portrait (B5) | portrait-lock | иконка (ARS-109) | | |
+| Иконка/portrait (B5) | portrait-lock ✅ + иконка вкручена ✅ | иконка (ARS-109) ✅ передана | | |
 | Скриншоты | шот-лист + размеры | | захват на устройстве | |
 | Push (S5 / APNs / google-services) | | ключи | | клиент+бэкенд |
 | Создание записей в консолях + сабмит | подготовка данных | **кнопки, оплата, сабмит** | | |
@@ -146,5 +147,5 @@ npm run cap:ios                    # + cap open ios (Xcode)
 
 ## §8. Долги, снимаемые этим релизом
 - **DEBT-NATIVE-STORE-01** — юрлицо определено (Zengi), аккаунты есть; остаток = B1–B6.
-- **DEBT-NATIVE-ASSETS-01** — финальная иконка (B5).
+- **DEBT-NATIVE-ASSETS-01** — иконка (B5) ✅ закрыта 2026-07-27 (ARS-109); сплэш остаётся открытым (см. `assets/README.md`).
 - **DEBT-NATIVE-VERIFY-01** — device smoke-тест на реальной сборке (§2 + тест-матрица S4-дока).

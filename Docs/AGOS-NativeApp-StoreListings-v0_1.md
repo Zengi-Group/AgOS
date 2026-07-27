@@ -174,7 +174,7 @@ Data **Used to Track You:** нет. **Third-party advertising:** нет.
 **Размеры:**
 - **iOS:** 6.7″ `1290×2796` — обязательно. 5.5″ `1242×2208` — опц. (легаси). **Рекомендация: сделать приложение iPhone-only** (`TARGETED_DEVICE_FAMILY=1`) — снимает требование iPad-скриншотов и iPad-скрутинг ревью. 🚩 решение владельца.
 - **Android:** ≥2 телефонных, `1080×1920` (9:16). **Feature graphic `1024×500`** — обязательна для Play, `cap:assets` её НЕ делает → дизайн отдельно.
-- **Иконка листинга:** Apple 1024×1024 (без alpha); Play 512×512. Сейчас — апскейл-заглушка (DEBT-NATIVE-ASSETS-01), финал — ARS-109.
+- **Иконка листинга:** Apple 1024×1024 (без alpha); Play 512×512. ✅ **Финал ARS-109 на месте (2026-07-27):** Apple берётся из сборки (`ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`, 1024², альфа-канала нет — проверено); **Play 512² грузится в консоль вручную → `Docs/store-assets/icon-play-512.png`**. Источники — `assets/icon-only.png` / `icon-foreground.png` / `icon-background.png`.
 
 ---
 
