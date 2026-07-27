@@ -51,6 +51,7 @@ export type SheetKind =
   | 'dispatch'     // DispatchSheet
   | 'batchprice'   // BatchPriceSheet
   | 'limit'        // LimitSheet
+  | 'deleteAccount' // DeleteAccountSheet (B6, ARS-110)
 
 export interface SheetState {
   kind: SheetKind

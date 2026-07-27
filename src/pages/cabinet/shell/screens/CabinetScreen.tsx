@@ -47,10 +47,11 @@ interface Props {
   onBack: () => void
   onTuran: () => void
   onLogout: () => void
+  onDeleteAccount: () => void
   profile?: AccountProfile | null
 }
 
-export function CabinetScreen({ membership, profileIncomplete, newsOn, onNewsToggle, memberAct, onBack, onTuran, onLogout, profile }: Props) {
+export function CabinetScreen({ membership, profileIncomplete, newsOn, onNewsToggle, memberAct, onBack, onTuran, onLogout, onDeleteAccount, profile }: Props) {
   // ARS-263: реальные даты подписки (profile.currentPeriodEnd/nextBillingAt) вместо хардкода.
   const m = membershipEntry(membership, profile
     ? { currentPeriodEnd: profile.currentPeriodEnd, nextBillingAt: profile.nextBillingAt }
@@ -123,6 +124,8 @@ export function CabinetScreen({ membership, profileIncomplete, newsOn, onNewsTog
             </div>
             {/* Выход из аккаунта — заметная кнопка (разлогин → signOut) */}
             <button className="cab-logout" onClick={onLogout}>Выход</button>
+            {/* B6 (ARS-110): удаление аккаунта — Apple 5.1.1(v) / Google Play data-deletion */}
+            <button className="cab-logout cab-delete" onClick={onDeleteAccount}>Удалить аккаунт</button>
           </div>
         </div>
       </div>

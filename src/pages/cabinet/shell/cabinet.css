@@ -593,6 +593,15 @@
 }
 .agos-cabinet-stage .cab-logout:active { background: color-mix(in srgb, var(--red) 12%, transparent); }
 
+/* Удаление аккаунта (B6, ARS-110) — намеренно приглушённая, не border-кнопка:
+   редкое необратимое действие не должно визуально спорить с обычным «Выход». */
+.agos-cabinet-stage .cab-logout.cab-delete {
+  margin-top: 6px; min-height: 36px; border: none; background: transparent;
+  color: var(--ink-3); font-weight: 500; font-size: 12.5px; text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.agos-cabinet-stage .cab-logout.cab-delete:active { background: color-mix(in srgb, var(--red) 8%, transparent); color: var(--red); }
+
 /* ===================================================================== */
 /* TSP-1 · Визард «Новая партия» (SCR-02) + Результат публикации (SCR-03) */
 /* Источник истины — prototypes/Sell Flow Prototype.html. Только добавление. */
