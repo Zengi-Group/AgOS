@@ -149,5 +149,5 @@ npm run cap:ios                    # + cap open ios (Xcode)
 
 ## §8. Долги, снимаемые этим релизом
 - **DEBT-NATIVE-STORE-01** — юрлицо определено (Zengi), аккаунты есть, B5 + B6 закрыты; остаток = **B1–B4**.
-- **DEBT-NATIVE-ASSETS-01** — ✅ закрыт полностью 2026-07-27: иконка (B5, ARS-109) + сплэш из вектора (см. `assets/README.md`). Остаток вне долга = `feature graphic 1024×500` для Play-листинга (тул её не генерирует, нужна композиция от дизайна — **ТЗ: `Docs/AGOS-NativeApp-StoreListings-v0_1.md` §8.1**).
+- **DEBT-NATIVE-ASSETS-01** — ✅ закрыт полностью 2026-07-27: иконка (B5, ARS-109) + сплэш из вектора (см. `assets/README.md`). ✅ **Ассеты релиза закрыты полностью 2026-07-27:** `feature graphic 1024×500` передана дизайном и принята — `Docs/store-assets/feature-graphic-1024x500.png` (ТЗ + замеры приёмки: `Docs/AGOS-NativeApp-StoreListings-v0_1.md` §8.1). ⚠️ Перед загрузкой в Play — решение владельца по клейму «Сбыт» → «Координация сбыта» (ст.171).
 - **DEBT-NATIVE-VERIFY-01** — device smoke-тест на реальной сборке (§2 + тест-матрица S4-дока).
