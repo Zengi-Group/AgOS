@@ -27,6 +27,11 @@ const config: CapacitorConfig = {
       backgroundColor: '#fdf6ee',
       androidSplashResourceName: 'splash',
       showSpinner: false,
+      // Дефолт плагина — FIT_XY: он РАСТЯГИВАЕТ drawable под пропорции экрана. Сплэш-drawable
+      // генерируются 2:3 (960×1600 и т.п.), а современные телефоны 9:20 → марка сплющивалась
+      // (замер: 39.3×53.0 dp вместо 53×53, соотношение 0.74). CENTER_CROP масштабирует без
+      // искажения, фон однотонный `#fdf6ee` — обрезка краёв не видна.
+      androidScaleType: 'CENTER_CROP',
     },
     // Статус-бар (§8 «цвет статус-бара»): тёплый фон кабинета, тёмные иконки.
     // Стиль/цвет также форсируется рантаймом в CapacitorHost (переживает тему WebView).

@@ -12,7 +12,7 @@
     "cap:sync:android": "npm run build:native && cap sync android",
     "cap:ios": "npm run cap:sync:ios && cap open ios",
     "cap:android": "npm run cap:sync:android && cap open android",
-    "cap:assets": "capacitor-assets generate --ios --android --iconBackgroundColor '#fdf6ee' --splashBackgroundColor '#fdf6ee' && node scripts/fix-android-adaptive-icon-sizes.mjs",
+    "cap:assets": "node scripts/build-splash-assets.mjs && capacitor-assets generate --ios --android --iconBackgroundColor '#fdf6ee' --splashBackgroundColor '#fdf6ee' --splashBackgroundColorDark '#fdf6ee' && node scripts/fix-android-adaptive-icon-sizes.mjs",
     "preview": "vite preview",
     "test:unit": "vitest run --project unit",
     "test:routers": "vitest run --project routers",
