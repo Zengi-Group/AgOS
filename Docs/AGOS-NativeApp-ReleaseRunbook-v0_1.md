@@ -30,27 +30,27 @@
 
 ## §1. Блокеры до сборки (что закрыть ПЕРВЫМ)
 
-Аккаунты есть → критический путь короткий. Остались 6 пунктов; **B1 и B6 — жёсткие гейты
-ревью обоих сторов**, без них отклонят.
+Аккаунты есть → критический путь короткий. B6 закрыт (2026-07-27); остались 5 пунктов; **B1 —
+жёсткий гейт ревью обоих сторов**, без него отклонят.
 
 | # | Блокер | Почему гейт | Владелец | Правит |
 |---|---|---|---|---|
 | **B1** 🔴 | **Публичный URL политики конфиденциальности** | App Store и Play **требуют** валидный privacy-URL до сабмита | я готовлю текст → Zengi/Аршидин хостят | текст в листингах §Privacy → хост `app.turanstandard.kz/privacy` |
-| **B6** 🔴 | **Удаление аккаунта в приложении** | Apple 5.1.1(v) + Google Play (data-deletion) — обязательно для приложений с регистрацией; частая причина отклонения | нужен код (новый слайс) | кабинет → «Профиль/О приложении» + RPC мягкого удаления |
+| **B6** ✅ | **Удаление аккаунта в приложении** | Apple 5.1.1(v) + Google Play (data-deletion) — обязательно для приложений с регистрацией; частая причина отклонения | код готов (2026-07-27) | кабинет → «О приложении» кнопка + confirm-шторка → `rpc_delete_account` |
 | **B2** 🟡 | **Android release signing** (сейчас `buildTypes.release` без `signingConfig`) | без подписи AAB не собрать/не загрузить | Mac/build-машина | `android/app/build.gradle` + upload-keystore + Play App Signing |
 | **B3** 🟡 | **iOS Team + capabilities** (`DEVELOPMENT_TEAM` пуст; Associated Domains/Push не привязаны) | без Team ID нет подписи и universal links | Mac + Xcode (Zengi Apple-аккаунт) | Xcode Signing & Capabilities |
 | **B4** 🟢 | **Deep-link плейсхолдеры** `TEAMID` / `REPLACE_WITH_SIGNING_CERT_SHA256` | universal/app links не заработают | я подставлю по значениям от Zengi | `public/.well-known/{apple-app-site-association,assetlinks.json}` |
 | **B5** 🟢 | **Финальная бренд-иконка + portrait-lock** | иконка = апскейл-заглушка (DEBT-NATIVE-ASSETS-01); iOS Info.plist разрешает landscape | иконка — дизайн ARS-109; lock — я | `assets/logo.png`, `Info.plist`/`AndroidManifest` |
 
-> **B1/B6 — решение владельца:** можно ли релизить v1.0 **без** B6 (риск отклонения Apple ~высокий)
-> или заводим короткий слайс «удаление аккаунта» в кабинет ПЕРЕД сабмитом? Рекомендую — завести
-> (1–2 экрана + RPC, ~полдня). B1 обязателен всегда.
+> **B1/B6 — решение владельца:** ~~можно ли релизить v1.0 **без** B6~~ — **РЕШЕНО CEO 2026-07-27:
+> строим.** B6 закрыт (см. ниже). B1 обязателен всегда.
 
 ### ✅ Сделано в релиз-сессии 2026-07-27 (аддитивно)
-- **B1 (частично):** privacy-страница `public/privacy/index.html` (RU/KK) создана → задеплоится на `https://<домен>/privacy` с фронтом. ⚠️ Осталось: убедиться, что ящик `support@turanstandard.kz` существует (или заменить контакт); в тексте — удаление аккаунта по email (в приложении добавить, когда сделаем B6).
+- **B1 (частично):** privacy-страница `public/privacy/index.html` (RU/KK) создана → задеплоится на `https://<домен>/privacy` с фронтом. ⚠️ Осталось: убедиться, что ящик `support@turanstandard.kz` существует (или заменить контакт).
 - **B5 portrait-lock:** iOS `Info.plist` (обе идиомы) + Android `screenOrientation="portrait"` — залочено на портрет.
 - **B2 (scaffold):** `android/app/build.gradle` — `signingConfigs.release` из `AGOS_UPLOAD_*` (guard `hasProperty`, keystore/пароли НЕ в git; без свойств поведение как раньше). Осталось: создать keystore на build-машине + прописать свойства.
-- Остаётся владельцу/build-машине: B3 (iOS Team), B4 (Team ID/SHA256), B6 (удаление аккаунта), финальная иконка, деплой privacy-страницы, сборка/подпись.
+- **B6 (закрыт, 2026-07-27):** self-service удаление аккаунта. `rpc_delete_account()` (`d01_kernel.sql`, RPC-46, Dok3 §2) — soft-delete (`users.is_active=false` + `auth.users.encrypted_password` обнулён, блокирует вход), блокирует `ACCOUNT_HAS_ACTIVE_DEALS` при незавершённых TSP-сделках, организация/аудит-история не трогается (ст.171). UI: кнопка «Удалить аккаунт» в кабинете → «О приложении» + confirm-шторка `DeleteAccountSheet`. `cross_check.sh`/`tsc -b` зелёные. ⚠️ **Не прогнано на реальном auth-схеме** (нет прод-доступа в этой сессии) — перед сабмитом прогнать вживую (`rpc_delete_account` на тестовом аккаунте, не на общем QA-сиде) и обновить privacy-страницу (сделано, см. §Privacy ниже).
+- Остаётся владельцу/build-машине: B3 (iOS Team), B4 (Team ID/SHA256), финальная иконка, деплой privacy-страницы, сборка/подпись, live-прогон B6 на устройстве.
 
 ---
 
@@ -123,7 +123,7 @@ npm run cap:ios                    # + cap open ios (Xcode)
 |---|---|---|---|---|
 | Runbook + листинги + privacy-текст | ✅ | ревью | | |
 | Хостинг privacy URL (B1) | подготовлю страницу | деплой/подтвердить | | |
-| Удаление аккаунта (B6) | код (если решим делать) | решение делать/нет | | |
+| Удаление аккаунта (B6) | код ✅ (2026-07-27) | ревью + live-прогон перед сабмитом | | |
 | Android keystore + signingConfig (B2) | правку gradle | хранение ключа | сборка | |
 | iOS Team/capabilities (B3) | | Apple-аккаунт Zengi | Xcode | |
 | Team ID / SHA256 → мне | подстановка (B4) | прислать значения | | |
@@ -145,6 +145,6 @@ npm run cap:ios                    # + cap open ios (Xcode)
 ---
 
 ## §8. Долги, снимаемые этим релизом
-- **DEBT-NATIVE-STORE-01** — юрлицо определено (Zengi), аккаунты есть; остаток = B1–B6.
+- **DEBT-NATIVE-STORE-01** — юрлицо определено (Zengi), аккаунты есть, B6 закрыт; остаток = B1, B2–B5.
 - **DEBT-NATIVE-ASSETS-01** — финальная иконка (B5).
 - **DEBT-NATIVE-VERIFY-01** — device smoke-тест на реальной сборке (§2 + тест-матрица S4-дока).

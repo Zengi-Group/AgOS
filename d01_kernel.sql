@@ -6919,3 +6919,89 @@ alter table public.ops_deploy_log enable row level security;
 -- (BYPASSRLS) строк не увидит — служебный журнал вне периметра приложения.
 revoke all on table public.ops_deploy_log from public, anon, authenticated;
 grant all on table public.ops_deploy_log to service_role;
+
+-- ============================================================
+-- SLICE: rpc_delete_account — B6 (ARS-110, native release trek)
+-- Apple 5.1.1(v) / Google Play data-deletion: self-service удаление аккаунта
+-- обязательно для сабмита приложений с регистрацией. Действует ТОЛЬКО на
+-- своего пользователя (fn_current_user_id()/auth.uid()) — клиентский user_id
+-- не принимается, некому подделать чужое удаление (SEC-RPC-ORGTRUST-01).
+-- Soft-delete (P4/HS-2, канон CLAUDE.md § SQL): организация и её TSP-история
+-- (ст.171 аудит) не трогаются — удаляется только доступ и вход самого
+-- пользователя. Прецедент прямой записи в auth.users уже есть в
+-- rpc_admin_create_user/rpc_admin_delete_user (supabase/migrations
+-- 20260629130000) — тот же приём, без каскадного hard-delete.
+-- ============================================================
+create or replace function public.rpc_delete_account()
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_user_id       uuid := public.fn_current_user_id();
+    v_auth_id       uuid := auth.uid();
+    v_owned_org_ids uuid[];
+begin
+    if v_user_id is null then
+        raise exception 'NOT_AUTHENTICATED' using errcode = 'P0001';
+    end if;
+
+    -- Только организации, где пользователь — owner, блокируют удаление живыми
+    -- сделками: manager/employee/viewer не завязаны на непрерывность своей
+    -- организации (ей продолжает управлять владелец).
+    select coalesce(array_agg(organization_id), array[]::uuid[])
+    into v_owned_org_ids
+    from public.user_organization_roles
+    where user_id = v_user_id and role = 'owner';
+
+    if exists (
+        select 1 from public.batches
+        where organization_id = any(v_owned_org_ids)
+          and status not in ('delivered', 'cancelled', 'failed', 'expired')
+    ) or exists (
+        select 1 from public.pools
+        where organization_id = any(v_owned_org_ids)
+          and status not in (
+              'closed_unfilled', 'completed', 'cancelled', 'expired_empty',
+              'filled', 'dispatched', 'delivered'  -- legacy терминальные (backward compat)
+          )
+    ) then
+        raise exception 'ACCOUNT_HAS_ACTIVE_DEALS: завершите активные партии/пулы ТСП перед удалением аккаунта'
+            using errcode = 'P0001';
+    end if;
+
+    -- Пользователь — soft-delete (история/аудит остаются валидны по FK).
+    update public.users set is_active = false, updated_at = now() where id = v_user_id;
+
+    -- Роли в организациях — это грант доступа, не факт истории; снимаются целиком.
+    delete from public.user_organization_roles where user_id = v_user_id;
+
+    -- Блокировка входа: encrypted_password обнулён — signInWithPassword (телефон+PIN)
+    -- больше не матчится ни при каком вводе.
+    update auth.users set encrypted_password = null, updated_at = now() where id = v_auth_id;
+
+    insert into public.platform_events (
+        event_type, entity_type, entity_id, organization_id,
+        actor_type, actor_id, payload, is_audit
+    ) values (
+        'identity.user.self_deleted', 'users', v_user_id, null,
+        'farmer', v_user_id, jsonb_build_object('owned_org_ids', v_owned_org_ids), true
+    );
+end;
+$$;
+
+comment on function public.rpc_delete_account() is
+    'RPC-46 | Dok 3 §2 (Identity) | B6 (ARS-110 native release)
+     Self-service удаление аккаунта — Apple 5.1.1(v) / Google Play data-deletion.
+     Soft-delete: users.is_active=false + auth.users.encrypted_password обнулён
+     (блокирует вход). Блокирует ACCOUNT_HAS_ACTIVE_DEALS, если у организаций,
+     где пользователь owner, есть batches/pools не в терминальном статусе.
+     Организация и её TSP/аудит-данные НЕ удаляются (ст.171).';
+
+grant execute on function public.rpc_delete_account() to authenticated;
+revoke execute on function public.rpc_delete_account() from public, anon;
+
+insert into public.rpc_name_registry (sql_name, dok3_name, created_in, notes)
+values ('rpc_delete_account', 'rpc_delete_account', 'd01_kernel.sql (B6/ARS-110)', 'Self-service account soft-delete (Apple 5.1.1v / Google data-deletion)')
+on conflict (sql_name) do update set notes = excluded.notes, created_in = excluded.created_in;

@@ -53,6 +53,7 @@ import { ThreadScreen } from './screens/ThreadScreen'
 import { ConsultantScreen } from './screens/ConsultantScreen'
 import { aiReply, type ThreadEnv, type ThreadH, type ThreadId } from './data/threads'
 import { LimitSheet } from './components/sheets/LimitSheet'
+import { DeleteAccountSheet } from './components/sheets/DeleteAccountSheet'
 import { BatchWizard } from './tsp/wizard/BatchWizard'
 import { PubResult } from './tsp/wizard/PubResult'
 import type { PubVariant } from './tsp/types/batch'
@@ -511,6 +512,26 @@ export function CabinetApp() {
     navigate('/login', { replace: true })
   }
 
+  // B6 (ARS-110): удаление аккаунта — Apple 5.1.1(v) / Google Play data-deletion.
+  // Офлайн честно блокируем (S4=A): без сети нет смысла открывать сеть-зависимый
+  // confirm — rpc_delete_account должен реально дойти до сервера, иначе аккаунт
+  // «удалён» только на экране, а на бэке жив.
+  const handleDeleteAccount = async () => {
+    if (offline) { offlineToast(); return }
+    const { error } = await supabase.rpc('rpc_delete_account')
+    if (error) {
+      showToast(
+        error.message.includes('ACCOUNT_HAS_ACTIVE_DEALS')
+          ? 'Завершите активные партии/пулы ТСП, прежде чем удалить аккаунт'
+          : 'Не удалось удалить аккаунт. Попробуйте позже'
+      )
+      return
+    }
+    setSheet(null)
+    await signOut()
+    navigate('/login', { replace: true })
+  }
+
   // ---------- бейджи ----------
   const marketDot = batches.some((b) => b.state === 'decision')
   const unread = notifs.filter((n) => n.unread).length
@@ -845,6 +866,7 @@ export function CabinetApp() {
       onBack={() => goBackTo({ name: 'home' })}
       onTuran={() => go({ name: 'turan', back: { name: 'cabinet' } })}
       onLogout={handleLogout}
+      onDeleteAccount={() => setSheet({ kind: 'deleteAccount' })}
       profile={profile}
     />
   )
@@ -1102,6 +1124,11 @@ export function CabinetApp() {
               open={sheet?.kind === 'limit'}
               onClose={() => closeSheet('limit')}
               onToList={() => { setSheet(null); go({ name: 'p1list' }) }}
+            />
+            <DeleteAccountSheet
+              open={sheet?.kind === 'deleteAccount'}
+              onClose={() => closeSheet('deleteAccount')}
+              onConfirm={handleDeleteAccount}
             />
           </IonApp>
         </div>
