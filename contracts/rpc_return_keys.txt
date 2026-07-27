@@ -52,6 +52,7 @@ rpc_create_pool_request: request_id,target_month,total_heads
 rpc_create_vaccination_plan: farm_id,plan_id,protocol_id,year
 rpc_create_vet_case: ai_context,farm_id,severity,status,vet_case_id
 rpc_create_vet_case_from_event: already_linked,animal_event_id,farm_id,ok,reason,severity,vet_case_id
+rpc_delete_account: owned_org_ids
 rpc_deprecate_animal_category: action,code,replaced_by,status,valid_to
 rpc_dispatch_batch: dispatchedAt,via
 rpc_generate_plan_from_profile: archetype,code,cycle_start_date,error,farm_type,generated,has_breeding_stock,has_calving_answer,message,plan_id,reason,template_code

@@ -321,6 +321,23 @@
 
 *Используется при загрузке кабинета и инициализации AI-сессии.*
 
+### RPC-46 `rpc_delete_account` [WEB] ✅ Implemented
+
+Self-service удаление аккаунта (B6, ARS-110 — Apple 5.1.1(v) / Google Play data-deletion) → void
+
+Без параметров: действует только на вызывающего (`auth.uid()`/`fn_current_user_id()`) — намеренное
+исключение из P-AI-2 (клиентский `organization_id`/`user_id` здесь означал бы возможность удалить
+чужой аккаунт, см. `cross_check.sh` CHECK 5 exceptions). Soft-delete: `users.is_active=false` +
+`auth.users.encrypted_password` обнулён (блокирует вход по телефон+PIN). Организация и её TSP-история
+не удаляются (ст.171 аудит).
+
+**Исключения:** `NOT_AUTHENTICATED` | `ACCOUNT_HAS_ACTIVE_DEALS` (у организации, где пользователь —
+owner, есть batches/pools не в терминальном статусе — сначала завершить сделки)
+
+**Публикует:** `identity.user.self_deleted`
+
+*Не вызывается AI Gateway (P-AI-1) — только self-service из кабинета.*
+
 ---
 
 ## 3. Farm — Управление фермой
