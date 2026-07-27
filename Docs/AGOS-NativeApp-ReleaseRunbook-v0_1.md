@@ -30,7 +30,7 @@
 
 ## §1. Блокеры до сборки (что закрыть ПЕРВЫМ)
 
-Аккаунты есть → критический путь короткий. B6 закрыт (2026-07-27); остались 5 пунктов; **B1 —
+Аккаунты есть → критический путь короткий. B5 и B6 закрыты (2026-07-27); остались 4 пункта; **B1 —
 жёсткий гейт ревью обоих сторов**, без него отклонят.
 
 | # | Блокер | Почему гейт | Владелец | Правит |
@@ -40,7 +40,7 @@
 | **B2** 🟡 | **Android release signing** (сейчас `buildTypes.release` без `signingConfig`) | без подписи AAB не собрать/не загрузить | Mac/build-машина | `android/app/build.gradle` + upload-keystore + Play App Signing |
 | **B3** 🟡 | **iOS Team + capabilities** (`DEVELOPMENT_TEAM` пуст; Associated Domains/Push не привязаны) | без Team ID нет подписи и universal links | Mac + Xcode (Zengi Apple-аккаунт) | Xcode Signing & Capabilities |
 | **B4** 🟢 | **Deep-link плейсхолдеры** `TEAMID` / `REPLACE_WITH_SIGNING_CERT_SHA256` | universal/app links не заработают | я подставлю по значениям от Zengi | `public/.well-known/{apple-app-site-association,assetlinks.json}` |
-| **B5** 🟢 | **Финальная бренд-иконка + portrait-lock** | иконка = апскейл-заглушка (DEBT-NATIVE-ASSETS-01); iOS Info.plist разрешает landscape | иконка — дизайн ARS-109; lock — я | `assets/logo.png`, `Info.plist`/`AndroidManifest` |
+| **B5** ✅ | **Финальная бренд-иконка + portrait-lock** | иконка была апскейл-заглушкой; iOS Info.plist разрешал landscape | обе части закрыты 2026-07-27 (иконка = ассеты ARS-109) | `assets/icon-only.png` + `icon-foreground/background.png`, `Info.plist`/`AndroidManifest` |
 
 > **B1/B6 — решение владельца:** ~~можно ли релизить v1.0 **без** B6~~ — **РЕШЕНО CEO 2026-07-27:
 > строим.** B6 закрыт (см. ниже). B1 обязателен всегда.
@@ -49,8 +49,9 @@
 - **B1 (частично):** privacy-страница `public/privacy/index.html` (RU/KK) создана → задеплоится на `https://<домен>/privacy` с фронтом. ⚠️ Осталось: убедиться, что ящик `support@turanstandard.kz` существует (или заменить контакт).
 - **B5 portrait-lock:** iOS `Info.plist` (обе идиомы) + Android `screenOrientation="portrait"` — залочено на портрет.
 - **B2 (scaffold):** `android/app/build.gradle` — `signingConfigs.release` из `AGOS_UPLOAD_*` (guard `hasProperty`, keystore/пароли НЕ в git; без свойств поведение как раньше). Осталось: создать keystore на build-машине + прописать свойства.
+- **B5 (иконка, финал, 2026-07-27):** финальная бренд-иконка ARS-109 передана и вкручена — `assets/icon-only.png` + `icon-foreground.png` + `icon-background.png` (Custom Mode `@capacitor/assets` переопределяет `logo.png` для иконок), `npm run cap:assets` перегенерирован → `ios/App/App/Assets.xcassets/AppIcon.appiconset` + Android legacy/adaptive mipmap-иконки. Play-листинг `icon-play-512.png` → `Docs/store-assets/`. Проверено: iOS без альфы и без запечённых скруглений, Android под маской лаунчера 1:1 с iOS (Δ2.1%). Сплэш вне скоупа (см. `assets/README.md`) — остаётся апскейл-заглушка.
 - **B6 (закрыт, 2026-07-27):** self-service удаление аккаунта. `rpc_delete_account()` (`d01_kernel.sql`, RPC-46, Dok3 §2) — soft-delete (`users.is_active=false` + `auth.users.encrypted_password` обнулён, блокирует вход), блокирует `ACCOUNT_HAS_ACTIVE_DEALS` при незавершённых TSP-сделках, организация/аудит-история не трогается (ст.171). UI: кнопка «Удалить аккаунт» в кабинете → «О приложении» + confirm-шторка `DeleteAccountSheet`. `cross_check.sh`/`tsc -b` зелёные. ⚠️ **Не прогнано на реальном auth-схеме** (нет прод-доступа в этой сессии) — перед сабмитом прогнать вживую (`rpc_delete_account` на тестовом аккаунте, не на общем QA-сиде) и обновить privacy-страницу (сделано, см. §Privacy ниже).
-- Остаётся владельцу/build-машине: B3 (iOS Team), B4 (Team ID/SHA256), финальная иконка, деплой privacy-страницы, сборка/подпись, live-прогон B6 на устройстве.
+- Остаётся владельцу/build-машине: B3 (iOS Team), B4 (Team ID/SHA256), деплой privacy-страницы, сборка/подпись, live-прогон B6 на устройстве.
 
 ---
 
@@ -127,7 +128,7 @@ npm run cap:ios                    # + cap open ios (Xcode)
 | Android keystore + signingConfig (B2) | правку gradle | хранение ключа | сборка | |
 | iOS Team/capabilities (B3) | | Apple-аккаунт Zengi | Xcode | |
 | Team ID / SHA256 → мне | подстановка (B4) | прислать значения | | |
-| Иконка/portrait (B5) | portrait-lock | иконка (ARS-109) | | |
+| Иконка/portrait (B5) | portrait-lock ✅ + иконка вкручена ✅ | иконка (ARS-109) ✅ передана | | |
 | Скриншоты | шот-лист + размеры | | захват на устройстве | |
 | Push (S5 / APNs / google-services) | | ключи | | клиент+бэкенд |
 | Создание записей в консолях + сабмит | подготовка данных | **кнопки, оплата, сабмит** | | |
@@ -145,6 +146,6 @@ npm run cap:ios                    # + cap open ios (Xcode)
 ---
 
 ## §8. Долги, снимаемые этим релизом
-- **DEBT-NATIVE-STORE-01** — юрлицо определено (Zengi), аккаунты есть, B6 закрыт; остаток = B1, B2–B5.
-- **DEBT-NATIVE-ASSETS-01** — финальная иконка (B5).
+- **DEBT-NATIVE-STORE-01** — юрлицо определено (Zengi), аккаунты есть, B5 + B6 закрыты; остаток = **B1–B4**.
+- **DEBT-NATIVE-ASSETS-01** — иконка (B5) ✅ закрыта 2026-07-27 (ARS-109); сплэш остаётся открытым (см. `assets/README.md`).
 - **DEBT-NATIVE-VERIFY-01** — device smoke-тест на реальной сборке (§2 + тест-матрица S4-дока).
