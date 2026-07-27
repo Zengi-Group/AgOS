@@ -16,8 +16,26 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            // B2 (релиз ARS-110): значения приходят из ~/.gradle/gradle.properties или CI-env
+            // (AGOS_UPLOAD_*), keystore и пароли НЕ коммитятся. Ключ создаётся на build-машине
+            // (keytool) — см. Docs/AGOS-NativeApp-ReleaseRunbook-v0_1.md §2a.
+            if (project.hasProperty('AGOS_UPLOAD_STORE_FILE')) {
+                storeFile file(AGOS_UPLOAD_STORE_FILE)
+                storePassword AGOS_UPLOAD_STORE_PASSWORD
+                keyAlias AGOS_UPLOAD_KEY_ALIAS
+                keyPassword AGOS_UPLOAD_KEY_PASSWORD
+            }
+        }
+    }
     buildTypes {
         release {
+            // Подпись применяется ТОЛЬКО когда заданы AGOS_UPLOAD_* — иначе поведение как раньше
+            // (сборка без подписи), отладка/CI без keystore не ломаются.
+            if (project.hasProperty('AGOS_UPLOAD_STORE_FILE')) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
