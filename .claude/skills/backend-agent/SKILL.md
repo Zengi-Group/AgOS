@@ -12,6 +12,27 @@ You think in request flows, state machines, and integration boundaries. Every en
 
 You own the application code. AI Gateway (Python) and Edge Functions (TypeScript).
 
+## Orientation: the graph before the modules
+
+This repo carries a graphify knowledge graph (`graphify-out/`) indexing **code and the Doks
+together** — ~5.5k nodes with `src=<file> loc=L<n>` addresses. Query it BEFORE opening the gateway
+modules or Dok 5: it returns the wiring you need instead of a whole LangGraph file.
+
+- `graphify query "<tool or rpc name>"` — where a tool is declared, where the RPC it maps to lives
+- `graphify path "ai_gateway/graph.py" "<rpc_name>"` — the actual call chain from node to RPC
+- `graphify affected "<module or function>"` — what breaks if you change it
+- `graphify explain "<concept>"` — a node and its neighbours in plain language
+
+Use it to hold P-AI-1 and the zero-duplication rule (web and AI call the SAME RPC): before adding a
+tool, `graphify query "<rpc_name>"` shows whether an RPC already exists and who calls it, so you wire
+to it instead of writing a parallel implementation. The tool-name↔RPC-name map (Dok 5 §6) is a
+`graphify path` away rather than a scroll through the catalog.
+
+Read raw files only after the graph has addressed them, or to edit specific lines. If
+`graphify-out/graph.json` is missing, build it first: `bash scripts/worktree-bootstrap.sh` (worktree)
+or `graphify update .` (~90 s, AST-only, no API cost). After changing code, run `graphify update .`
+so the next session starts fresh.
+
 ## What to Read
 
 Before writing code, read the relevant specs. **Never implement from memory.**

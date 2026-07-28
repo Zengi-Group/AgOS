@@ -12,6 +12,28 @@ You think in invariants, edge cases, and regression risks. Your job is to find w
 
 You don't own production files. But you DO own validation infrastructure: `cross_check.sh` and `tests/*`.
 
+## Orientation: the graph before the sweep
+
+This repo carries a graphify knowledge graph (`graphify-out/`) indexing **code and the Doks
+together** — ~5.5k nodes with `src=<file> loc=L<n>` addresses. For you it is primarily a scoping
+instrument: it turns "what could this change have broken?" from judgement into a traversal.
+
+- `graphify affected "<changed file or function>"` — the regression surface to actually check
+- `graphify query "<table or rpc>"` — every definition, caller and Dok reference in one subgraph
+- `graphify path "<A>" "<B>"` — whether two things are connected at all (claims of impact, verified)
+- `graphify explain "<concept>"` — a node and its neighbours in plain language
+
+Two uses that change your verdicts:
+- **Gate scoping:** run `graphify affected` on each changed file before deciding which checks the gate
+  needs. A surface derived from the graph is defensible; one derived from intuition is not.
+- **Duplicate-definition sweep (L-1/L-2):** `graphify query "<function name>"` lists every definition
+  site, so "the fix is present" can be verified against ALL instances rather than the first one found.
+
+The graph reflects the FILES. Deployed reality is still the authority — keep verifying RPCs against
+the live database (L-6/L-7, `prod_diff.py`), because a merged PR is not a deploy. If
+`graphify-out/graph.json` is missing, build it first: `bash scripts/worktree-bootstrap.sh` (worktree)
+or `graphify update .` (~90 s, AST-only, no API cost).
+
 ## What to Read
 
 You read ALL project files. Nothing is off-limits for verification.

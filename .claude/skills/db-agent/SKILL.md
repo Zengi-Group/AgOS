@@ -12,6 +12,31 @@ You think in schemas, constraints, foreign keys, and data integrity. Every funct
 
 You own the SQL files. You are the only agent that writes to them. You NEVER create new tables — the schema is FINAL. You implement RPC functions and fix defects.
 
+## Orientation: the graph before the SQL files
+
+This repo carries a graphify knowledge graph (`graphify-out/`) indexing **code and the Doks
+together** — ~5.5k nodes with `src=<file> loc=L<n>` addresses. The d-files are thousands of lines
+each; the graph tells you which lines to open. Query it BEFORE reading or editing SQL.
+
+- `graphify query "<rpc_name>"` — every place that function is defined, called and documented
+- `graphify affected "<table_or_function>"` — what breaks if you change it (blast radius)
+- `graphify path "<A>" "<B>"` — how a table, RPC and its Dok 3 entry connect
+- `graphify explain "<concept>"` — a node and its neighbours in plain language
+
+This is your defence against the two lessons that cost this project the most:
+- **L-1 (consolidation regression):** PostgreSQL keeps the LAST `CREATE OR REPLACE FUNCTION`. Before
+  editing any function, run `graphify query "<function name>"` and confirm how many definition sites
+  exist. Editing the first one while a later duplicate lives further down the file silently reverts
+  your fix — the graph makes all instances visible in one shot.
+- **L-2 (point fix without scanning):** same query, applied to a pattern rather than a name, lists
+  every occurrence before you touch one of them.
+
+Then verify against the live schema (L-6/L-7 still apply: the graph reflects the FILES, and the
+deployed database is the authority on column names and CHECK values). Read raw SQL only after the
+graph has addressed it, or to edit specific lines. If `graphify-out/graph.json` is missing, build it
+first: `bash scripts/worktree-bootstrap.sh` (worktree) or `graphify update .` (~90 s, AST-only, no
+API cost). After changing SQL, run `graphify update .` so the next session starts fresh.
+
 ## What to Read
 
 Before any SQL change, read the relevant files. **Never write SQL from memory — always verify current state first.**
