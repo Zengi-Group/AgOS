@@ -1461,6 +1461,12 @@ create index if not exists idx_org_invitations_org_status
     on public.org_invitations (organization_id, status, created_at desc);
 create index if not exists idx_org_invitations_email_status
     on public.org_invitations (lower(email), status);
+create index if not exists idx_org_invitations_accepted_by_user
+    on public.org_invitations (accepted_by_user_id)
+    where accepted_by_user_id is not null;
+create index if not exists idx_org_invitations_created_by_user
+    on public.org_invitations (created_by_user_id)
+    where created_by_user_id is not null;
 
 -- memberships
 create index if not exists idx_memberships_org      on public.memberships (organization_id);
@@ -1661,6 +1667,7 @@ alter table public.user_organization_roles      enable row level security;
 alter table public.organization_permissions     enable row level security;
 alter table public.organization_role_permissions enable row level security;
 alter table public.org_invitations               enable row level security;
+alter table public.user_notification_preferences enable row level security;
 alter table public.memberships                  enable row level security;
 alter table public.membership_applications      enable row level security;
 alter table public.verification_records         enable row level security;
@@ -2085,6 +2092,43 @@ drop policy if exists "notifications_update_own" on public.notifications;
 create policy "notifications_update_own"
     on public.notifications for update
     using (user_id = public.fn_current_user_id());  -- allow marking as read
+
+-- user_notification_preferences is a direct own-user settings surface. Supabase
+-- default table grants are broad, so keep the Data API surface explicit and let RLS
+-- enforce row ownership through the canonical public.users bridge.
+drop policy if exists "notification_preferences_read_own"
+    on public.user_notification_preferences;
+create policy "notification_preferences_read_own"
+    on public.user_notification_preferences for select
+    to authenticated
+    using (user_id = (select public.fn_current_user_id()));
+
+drop policy if exists "notification_preferences_insert_own"
+    on public.user_notification_preferences;
+create policy "notification_preferences_insert_own"
+    on public.user_notification_preferences for insert
+    to authenticated
+    with check (user_id = (select public.fn_current_user_id()));
+
+drop policy if exists "notification_preferences_update_own"
+    on public.user_notification_preferences;
+create policy "notification_preferences_update_own"
+    on public.user_notification_preferences for update
+    to authenticated
+    using (user_id = (select public.fn_current_user_id()))
+    with check (user_id = (select public.fn_current_user_id()));
+
+drop policy if exists "notification_preferences_delete_own"
+    on public.user_notification_preferences;
+create policy "notification_preferences_delete_own"
+    on public.user_notification_preferences for delete
+    to authenticated
+    using (user_id = (select public.fn_current_user_id()));
+
+revoke all on table public.user_notification_preferences
+    from public, anon, authenticated, service_role;
+grant select, insert, update, delete on table public.user_notification_preferences
+    to authenticated, service_role;
 
 drop policy if exists "audit_log_admin_only" on public.audit_log;
 create policy "audit_log_admin_only"
