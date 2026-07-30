@@ -2133,7 +2133,10 @@ revoke/expiry FSM и concurrency invariants (`FOR UPDATE` + partial unique index
 Канон дополнен RLS, четырьмя own-user policies (SELECT/INSERT/UPDATE/DELETE), явным
 revoke для `PUBLIC`/`anon` и least-privilege grants для `authenticated`/`service_role`.
 Для `org_invitations.accepted_by_user_id` и `created_by_user_id` добавлены partial FK
-indexes по advisor findings.
+indexes по advisor findings. Финальный `prod_diff.py` также показал, что replay `d01`
+откатывает `fn_my_org_ids`/`fn_is_admin`/`fn_is_expert` с JWT-fast-path тел `d07` на
+bootstrap-тела. Bootstrap определения в `d01` синхронизированы с финальным каноном
+`d07`, чтобы точечный повторный replay не создавал L-1 drift.
 
 **Why**: `user_notification_preferences` — user-private settings surface; application-
 level filtering не является tenant boundary. Полный d-файл обязан быть повторно
