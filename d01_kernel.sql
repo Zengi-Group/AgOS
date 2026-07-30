@@ -1571,12 +1571,39 @@ $$;
 
 -- Returns all organization_ids the current user belongs to
 create or replace function public.fn_my_org_ids()
-returns uuid[] language sql security definer stable
-set search_path = public, pg_temp as $$
+returns uuid[]
+language plpgsql
+security definer
+stable
+set search_path = public, pg_temp
+as $$
+declare
+    v_jwt_claim jsonb;
+    v_org_ids   uuid[];
+begin
+    -- D-NEW-1 FAST PATH: read from JWT app_metadata.org_ids (set by fn_auth_custom_claims)
+    -- Zero DB hits when hook is enabled. Token refreshes propagate membership changes.
+    v_jwt_claim := auth.jwt() -> 'app_metadata' -> 'org_ids';
+
+    if v_jwt_claim is not null and jsonb_typeof(v_jwt_claim) = 'array' then
+        select array_agg(elem::uuid)
+        into   v_org_ids
+        from   jsonb_array_elements_text(v_jwt_claim) as elem;
+
+        return coalesce(v_org_ids, array[]::uuid[]);
+    end if;
+
+    -- SLOW PATH (fallback): DB query
+    -- Used when: hook not yet configured, service_role call (no JWT),
+    --            old token issued before hook was enabled.
     select coalesce(array_agg(uor.organization_id), array[]::uuid[])
+    into   v_org_ids
     from public.user_organization_roles uor
     join public.users u on u.id = uor.user_id
     where u.auth_id = auth.uid();
+
+    return coalesce(v_org_ids, array[]::uuid[]);
+end;
 $$;
 
 -- ARS-356 / D-MPK-ROLES-04: canonical permission check for the current caller.
@@ -1617,23 +1644,41 @@ grant execute on function public.fn_org_has_permission(uuid, text) to authentica
 
 -- Is current user an admin?
 create or replace function public.fn_is_admin()
-returns boolean language sql security definer stable
-set search_path = public, pg_temp as $$
-    select exists (
-        select 1 from public.admin_roles ar
-        join public.users u on u.id = ar.user_id
-        where u.auth_id = auth.uid() and ar.is_active = true
+returns boolean
+language sql
+security definer
+stable
+set search_path = public, pg_temp
+as $$
+    select coalesce(
+        -- JWT fast path
+        (auth.jwt() -> 'app_metadata' ->> 'is_admin')::boolean,
+        -- DB fallback
+        exists (
+            select 1 from public.admin_roles ar
+            join public.users u on u.id = ar.user_id
+            where u.auth_id = auth.uid() and ar.is_active = true
+        )
     );
 $$;
 
 -- Is current user an expert?
 create or replace function public.fn_is_expert()
-returns boolean language sql security definer stable
-set search_path = public, pg_temp as $$
-    select exists (
-        select 1 from public.expert_profiles ep
-        join public.users u on u.id = ep.user_id
-        where u.auth_id = auth.uid() and ep.is_active = true
+returns boolean
+language sql
+security definer
+stable
+set search_path = public, pg_temp
+as $$
+    select coalesce(
+        -- JWT fast path
+        (auth.jwt() -> 'app_metadata' ->> 'is_expert')::boolean,
+        -- DB fallback
+        exists (
+            select 1 from public.expert_profiles ep
+            join public.users u on u.id = ep.user_id
+            where u.auth_id = auth.uid() and ep.is_active = true
+        )
     );
 $$;
 
