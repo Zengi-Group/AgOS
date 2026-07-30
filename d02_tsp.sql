@@ -1764,9 +1764,12 @@ alter table public.deal_reviews enable row level security;
 drop policy if exists deal_reviews_read on public.deal_reviews;
 create policy deal_reviews_read
     on public.deal_reviews for select
+    to authenticated
     using (
         -- reviewer sees own review always
-        reviewer_org_id = any(fn_my_org_ids())
+        reviewer_org_id = any(
+            coalesce((select public.fn_my_org_ids()), array[]::uuid[])
+        )
         -- all see after double-blind reveal
         or (visible_at is not null and visible_at <= now())
     );
@@ -1794,6 +1797,38 @@ comment on table public.deal_review_dimension_scores is
 
 create index if not exists idx_review_dim_scores_review    on public.deal_review_dimension_scores (deal_review_id);
 create index if not exists idx_review_dim_scores_dimension on public.deal_review_dimension_scores (dimension_id);
+
+-- ARS-352: dimension scores inherit the parent review's double-blind visibility.
+-- This table used to be exposed with RLS disabled (ARS-274), which let Data API
+-- roles bypass the parent review policy entirely.
+alter table public.deal_review_dimension_scores enable row level security;
+
+drop policy if exists deal_review_dimension_scores_read on public.deal_review_dimension_scores;
+create policy deal_review_dimension_scores_read
+    on public.deal_review_dimension_scores for select
+    to authenticated
+    using (
+        exists (
+            select 1
+            from public.deal_reviews dr
+            where dr.id = deal_review_id
+              and (
+                  dr.reviewer_org_id = any(
+                      coalesce((select public.fn_my_org_ids()), array[]::uuid[])
+                  )
+                  or (dr.visible_at is not null and dr.visible_at <= now())
+              )
+        )
+    );
+
+-- Explicit Data API surface (Supabase 2026 opt-in model): clients read through
+-- RLS; all writes stay behind guarded SECURITY DEFINER RPCs.
+revoke all on table public.deal_reviews from public, anon, authenticated, service_role;
+revoke all on table public.deal_review_dimension_scores from public, anon, authenticated, service_role;
+grant select on table public.deal_reviews to authenticated;
+grant select on table public.deal_review_dimension_scores to authenticated;
+grant select, insert, update, delete on table public.deal_reviews to service_role;
+grant select, insert, update, delete on table public.deal_review_dimension_scores to service_role;
 
 -- ------------------------------------------------------------
 -- 7.16: NEW TABLE — tsp_sku_category_map
@@ -3768,6 +3803,14 @@ declare
     v_review_id     uuid;
     v_other_exists  boolean;
 begin
+    if public.fn_current_user_id() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+    if not coalesce(p_organization_id = any(public.fn_my_org_ids()), false) then
+        raise exception 'FORBIDDEN: caller is not a member of organization %', p_organization_id
+            using errcode = '42501';
+    end if;
+
     if not (p_overall_score between 1 and 5) then
         raise exception 'INVALID_SCORE: overall_score must be between 1 and 5'
             using errcode = 'P0001';
@@ -3867,6 +3910,11 @@ comment on function public.rpc_submit_deal_review(uuid, uuid, int, uuid, int, te
      Role derived from p_organization_id: farmer = batch.organization_id,
      mpk = pool_line -> pools -> pool_requests.organization_id.
      visible_at set on BOTH reviews when both sides submitted.';
+
+revoke execute on function public.rpc_submit_deal_review(uuid, uuid, int, uuid, int, text)
+    from public, anon;
+grant execute on function public.rpc_submit_deal_review(uuid, uuid, int, uuid, int, text)
+    to authenticated, service_role;
 
 
 -- ------------------------------------------------------------

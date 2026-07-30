@@ -590,6 +590,43 @@ comment on function public.rpc_archive_channel(uuid) is
 
 
 -- ============================================================
+-- SECTION 4.1: DATA API ACL (ARS-352 / SEC-GRANT-PUBLIC-01)
+-- ============================================================
+-- PostgreSQL grants EXECUTE to PUBLIC on new functions by default. Every client-facing
+-- messaging RPC is authenticated; the fan-out helper is internal/service-only.
+revoke execute on function public.rpc_get_or_create_support_channel(uuid)
+    from public, anon;
+revoke execute on function public.rpc_send_message(uuid, text, jsonb)
+    from public, anon;
+revoke execute on function public.rpc_list_channels()
+    from public, anon;
+revoke execute on function public.rpc_list_messages(uuid, timestamptz, int)
+    from public, anon;
+revoke execute on function public.rpc_mark_channel_read(uuid)
+    from public, anon;
+revoke execute on function public.rpc_archive_channel(uuid)
+    from public, anon;
+
+grant execute on function public.rpc_get_or_create_support_channel(uuid)
+    to authenticated, service_role;
+grant execute on function public.rpc_send_message(uuid, text, jsonb)
+    to authenticated, service_role;
+grant execute on function public.rpc_list_channels()
+    to authenticated, service_role;
+grant execute on function public.rpc_list_messages(uuid, timestamptz, int)
+    to authenticated, service_role;
+grant execute on function public.rpc_mark_channel_read(uuid)
+    to authenticated, service_role;
+grant execute on function public.rpc_archive_channel(uuid)
+    to authenticated, service_role;
+
+revoke execute on function public.fn_fanout_comm_notifications(uuid)
+    from public, anon, authenticated;
+grant execute on function public.fn_fanout_comm_notifications(uuid)
+    to service_role;
+
+
+-- ============================================================
 -- SECTION 5: rpc_name_registry entries
 -- ============================================================
 

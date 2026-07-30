@@ -2013,3 +2013,77 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Consequences**: Ассетная часть релиза закрыта (`DEBT-NATIVE-ASSETS-01` — все пункты). ⚠️ **Открыт один пункт перед загрузкой в Play, не блокирующий приёмку файла:** клейм «Стадо · План работ · **Сбыт**». Запрещённого лексикона §4 в нём нет, но во всём листинге формулировка — «**координация** сбыта» (§2, §3 «Рынок (TSP)», §5, promotional text), а голое «Сбыт» на публичной витрине читается ближе к «занимаемся продажей скота» — то есть к рамке продавца, которую ст.171 запрещает (TSP = координационная инфраструктура). Рекомендация: «Стадо · План работ · Координация сбыта» (ритм триады и лимит ≤5 слов сохранены, правка = одна строка в макете). Если владелец решает оставить «Сбыт» — решение вписывается в §4 ТЗ как явное разрешение, иначе следующая сессия начнёт спорить с тем же словом. Остаток релиза — операционка: B1 (хостинг privacy-URL), B2 (keystore), B3 (iOS Team), B4 (Team ID/SHA256), скриншоты на устройстве, device smoke (`DEBT-NATIVE-VERIFY-01`).
 
 **Files**: `Docs/store-assets/feature-graphic-1024x500.png` (новый), `Docs/AGOS-NativeApp-StoreListings-v0_1.md` (§8 строка ассетов + §8.1 шапка «принято» + п.11 замеры), `Docs/AGOS-NativeApp-ReleaseRunbook-v0_1.md` (§8 долги), `IMPL_DEBT.md` (остаток (а) закрыт), `DECISIONS_LOG.md` (эта запись). Код/SQL не тронуты.
+
+---
+
+### 2026-07-30: ARS-354 — MPK Profile · G2 sign-off архитектуры
+
+**What**: G2 архитектуры MPK Profile закрыт как **APPROVE-WITH-BOUNDARIES**. Нормативный контракт — `Docs/AGOS-MPK-Profile-EngSpec-v0_1.md`, evidence — `Docs/AGOS-MPK-Profile-Live-Drift-Audit-ARS-352.md`. Зафиксированы шесть решений:
+
+1. **D-MPK-DESKTOP-01 — отдельная desktop-console.** Выбор: `/mpk/profile/:tab` — sibling-поверхность внутри существующего authenticated MPK app, с sidebar 272 px и шестью deep-link вкладками; `/mpk`, `/mpk/tsp`, `/mpk/offers` и Ionic-shell не заменяются. Почему: эталон 1440×900 информационно плотный, но auth/org/data boundary общий. Отклонены: глобальный redesign `/mpk/*`, iframe/второе приложение, modal-profile. Последствия: два layout-shell под `/mpk`, строгая route/CSS ownership. Migration: аддитивно расширить `MpkRoute`/URL-map/router и добавить cold-link/back tests. Rollback: снять новые route registrations и entry; старые route keys/paths не менялись.
+2. **D-MPK-THEME-02 — scoped dark/max.** Выбор: тема живёт только под `[data-mpk-profile-theme="dark-max"]`, токены — `--mpk-profile-*`; никаких правок `:root`/`body`/Ionic variables и toggle в v0.1. Почему: исключить утечку в persistent Ionic/farmer surfaces. Отклонены global `.dark`, runtime theme switcher и «примерно похожие» пересчитанные токены. Последствия: portal/modal обязан явно нести scope; точные значения не выдумываются без отсутствующих token/prototype assets. Migration: отдельный stylesheet/token module + leak regression. Rollback: удалить wrapper/styles без compensating changes другим кабинетам.
+3. **D-MPK-CRIT-03 — legal name/address сразу, BIN после approve.** Выбор: `legal_name`/`address_text` атомарно применяются в `organizations` и создают append-only pending review; `bin_iin` остаётся прежним до атомарного TURAN approve proposal. Почему: обычные реквизиты полезны сразу, регулируемый BIN не должен попасть в сделку неподтверждённым. Отклонены hold-all, apply-then-revert BIN и общий pending JSON. Последствия: reject name/address запрашивает коррекцию, но не делает тихий auto-revert; deal identity snapshot immutable. Migration: `org_field_reviews`, один pending/org+field, permission/RPC tests. Rollback: выключить writers, сохранить историю; восстановление — новая audited edit/compensating BIN change, не delete history.
+4. **D-MPK-ROLES-04 — четыре MPK-роли с DB enforcement.** Выбор: `mpk_admin`, `procurement`, `receiver`, `accountant` добавляются в существующий `user_organization_roles`; legacy `owner/manager/employee/viewer` сохраняются; новые RPC проверяют org ownership + permission helper внутри DB. Почему: четыре job-to-be-done различаются, но assignment truth должен быть один. Отклонены frontend-only gates, `org_member_roles`, force-fit на legacy keys. Последствия: новые consumers зависят от permission, не raw role string; нужен explicit legacy mapping без угадывающего bulk relabel. Migration: расширить CHECK, затем permission catalog/helper, затем invitations/RPC; матрица role×permission+tenant. Rollback: прекратить выдачу новых ролей и выключить dependent entry points; CHECK не сужать, пока строки существуют.
+5. **D-MPK-CANON-05 — composed canonical read model.** Выбор: identity=`organizations`; membership=`membership_subscription`+`fn_org_membership_active`; verification=`verification_records` (type assignment — только классификация); reviews=`deal_reviews`+scores; appeals=`comm_messages`+case metadata поверх постоянного support channel; RBAC=`user_organization_roles`; `mpk_profiles` создаётся только как узкий extension (`organization_id`, editorial description/logo), не как слепок вкладок. Sites/bank/docs/field-review получают свои domain entities. Почему: один authority на факт при сохранении места для MPK-only editorial metadata. Отклонены wide `mpk_profiles`, отсутствие extension вообще, live/handwritten TS как authoring canon. Последствия: direct `.from('mpk_profiles' as any)` deprecated; preview+farmer card используют один server-derived pre/post read model; пустые subscription/verification — честные empty states. Migration: детали/adapter retirement фиксирует ARS-353; порядок additive security→entities→compat/backfill→typed RPC→UI→retire. Rollback: flag off→старые adapters/readers→stop writers; derived facts не копируются во второй store.
+6. **D-MPK-NARROW-06 — desktop ≥1024, Ionic bridge ниже.** Выбор: full console поддерживается от 1024 px; ниже тот же deep link рендерит read-only Ionic bridge с org/action summary, requested-tab label, «назад в МПК» и копированием ссылки. На `/mpk` появляется first-class entry «Профиль предприятия» → `/mpk/profile/overview`. Почему: сохранить discoverability/status на mobile без сжатой editable desktop-формы. Отклонены CSS-scale/horizontal scroll, mobile 404/hidden feature и второй editable mobile UI в v0.1. Последствия: route не меняется при resize/UA, mutations на bridge отсутствуют. Migration: entry+bridge+media host и router tests 375/768/1024/1440. Rollback: убрать entry/host; при feature-off deep link получает controlled unavailable, не silent home fallback.
+
+**Why**: ARS-352 доказал, что live/repo уже имеют canonical organization, membership, verification, review, messaging, Storage и RBAC primitives, а `mpk_profiles` отсутствует. Строить новый вертикальный стек означало бы второй источник истины. Одновременно UI-канон, объявленный ARS-351 (`Slice10`, `DESIGN-TOKENS.md`, `prototype/mpk-cabinet-v4.dc.html`), отсутствует — поэтому архитектура может быть подписана, но exact visual fidelity не может быть честно объявлена принятой.
+
+**Consequences**: ARS-354 больше не блокирует MP-1 архитектурными вопросами, однако schema/RPC implementation остаётся gated на ARS-353 convergence ADR. Visual shell может строить route/isolation geometry, но точные цвета/типографика/spacing/motion/copy не проходят acceptance до восстановления UI assets. Этот sign-off не разрешает production migration/deploy (G3 отдельно). Review ACL/RLS defect из ARS-352 должен быть закрыт до reputation convergence.
+
+**Verify**: EngSpec содержит для каждого D-MPK-* choice/reason/rejected alternatives/consequences/migration/rollback; source map сверена с live drift audit; narrow entry сверена с текущими `src/pages/cabinet/shell/mpk/{types.ts,nav.ts,MpkApp.tsx}` и существующими `/mpk`, `/mpk/tsp`, `/mpk/offers` route keys. Doc checks: unique D-MPK ids and references; repository still explicitly reports the three missing UI artifacts.
+
+**Files**: `Docs/AGOS-MPK-Profile-EngSpec-v0_1.md` (new), `Docs/README.md`, `DECISIONS_LOG.md` (this entry). No SQL/frontend/live changes in ARS-354.
+
+### 2026-07-30: ADR-MPK-CONVERGENCE-01 — один authority на membership, verification, RBAC, reviews, appeals и MPK editorial profile (ARS-353)
+
+**What**: Принят детальный convergence ADR для MPK Profile:
+`Docs/AGOS-MPK-Profile-Convergence-ADR-ARS-353.md`. Зафиксирована composed-модель без
+второго вертикального стека: membership lifecycle/dates =
+`membership_subscription`, access = `fn_org_membership_active`; type assignment остаётся
+в `organization_type_assignments`, evidence timeline — append-only
+`verification_records`; единственный assignment-store RBAC =
+`user_organization_roles` с permission catalog/helper поверх; отзывы канонизируются в
+`deal_reviews`/`deal_review_dimension_scores`; тела обращений остаются в
+`comm_messages`, а `org_appeal_cases` + message-link хранят только case/topic/ref/status;
+`mpk_profiles` создаётся sparse и узким (`organization_id`, public description, logo
+path, timestamps), не копирует реквизиты, capacity, membership, verification, роли,
+репутацию или обращения.
+
+**Why**: ARS-352 доказал, что все доменные authorities, кроме узкого MPK editorial
+extension и appeal-case metadata, уже есть в repo/live. Wide profile, `org_member_roles`,
+`memberships.expires_at`, verification status на assignment, notes-only reviews и
+`answer` в appeal case создали бы параллельные истины. G2 D-MPK-CANON-05 уже принял
+composed read model; ARS-353 фиксирует исполнимый порядок и границы.
+
+**Compatibility/migration**: обязательный порядок —
+read-only preflight → review ACL/RLS fix ARS-352 → explicit grants/RLS/index foundation
+→ расширение role CHECK + permission mapping → narrow `mpk_profiles` и appeal case/link
+→ idempotent review/profile backfill с reconciliation report → rebind старых signatures
+на canonical-only writes → typed RPC/TS/Zod → staged feature flag/G3 → retirement.
+Открытого dual-write периода нет: после cutover старые review RPC сохраняют signatures,
+но пишут только в canonical tables; legacy JSON reads временно делают canonical-first
+с notes fallback. Rollback consumer-first, additive history не удаляется.
+
+**Retirement**: `useMpkProfile`/handwritten shape — не раньше 2026-09-30 после zero
+imports и typed contracts; membership fallback и review RPC/read adapters — не раньше
+2026-10-31 после двух production releases и 30 дней zero-call/fallback telemetry;
+legacy note keys/incompatible non-prod profile columns — не раньше 2026-11-30 после
+reconciliation, backup, zero dependents и отдельного destructive-migration approval.
+Support-channel RPC не legacy и не удаляется.
+
+**Security**: каждый exposed table получает RLS + explicit least-privilege grants;
+UPDATE — SELECT/USING/WITH CHECK; `SECURITY DEFINER` только с body authn/org/permission/
+relationship checks, fixed `search_path`, revoke `PUBLIC`+`anon`, exact signature
+grants. Индексируются FK, tenant/RLS, status/order/expiry predicates. До G3 обязательны
+role/tenant/anon/service contract matrix, advisors, query plans и pre-disclosure
+payload/DOM absence.
+
+**Consequences**: ARS-353 снимает design-gate для ARS-356/357/359/360/361/358, но не
+разрешает DDL/RPC production deploy. ARS-360 остаётся заблокирован до проверки review
+ACL/RLS fix; G3 отдельно. Review notes backfill не угадывает ambiguous split-batch MPK
+counterparty; такие строки попадают в reconciliation report.
+
+**Files**: `Docs/AGOS-MPK-Profile-Convergence-ADR-ARS-353.md` (new),
+`Docs/AGOS-MPK-Profile-EngSpec-v0_1.md`, `Docs/README.md`, `DECISIONS_LOG.md`. SQL,
+frontend и live DB не менялись.
