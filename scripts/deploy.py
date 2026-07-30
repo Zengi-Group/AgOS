@@ -81,6 +81,7 @@ def verify_bodies(conn, logical_name: str, sql_text: str) -> list:
     with conn.cursor() as cur:
         cur.execute("""
             select p.proname, pg_get_function_identity_arguments(p.oid), p.prosrc
+            from pg_proc p
             join pg_namespace n on n.oid = p.pronamespace
             where n.nspname = 'public' and p.proname = any(%s)
         """, (sorted({name for name, _types in canonical}),))
