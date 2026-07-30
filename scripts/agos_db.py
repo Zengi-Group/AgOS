@@ -52,6 +52,29 @@ FUNC_RE = re.compile(
     r"create\s+or\s+replace\s+function\s+(?:public\.)?(\w+)\s*\(", re.IGNORECASE
 )
 
+TYPE_ALIASES = {
+    "bool": "boolean",
+    "decimal": "numeric",
+    "float4": "real",
+    "float8": "double precision",
+    "int": "integer",
+    "int2": "smallint",
+    "int4": "integer",
+    "int8": "bigint",
+    "serial2": "smallint",
+    "serial4": "integer",
+    "serial8": "bigint",
+    "time": "time without time zone",
+    "timetz": "time with time zone",
+    "timestamp": "timestamp without time zone",
+    "timestamptz": "timestamp with time zone",
+    "varchar": "character varying",
+}
+
+DROP_FUNC_RE = re.compile(
+    r"drop\s+function\s+(?:if\s+exists\s+)?(?:public\.)?(\w+)\s*\(", re.IGNORECASE
+)
+
 
 def read_password() -> str:
     """.db_password (gitignored) → AGOS_DB_PASSWORD. Никогда не argv:
@@ -111,6 +134,178 @@ def normalize_body(body: str) -> str:
     return re.sub(r"\s+", " ", body).strip().lower()
 
 
+def _split_sql_args(args: str) -> list:
+    """Splits a function argument list without breaking defaults like ARRAY[1,2]."""
+    out, start = [], 0
+    parens = brackets = 0
+    quote = None
+    line_comment = block_comment = False
+    i = 0
+    while i < len(args):
+        ch = args[i]
+        nxt = args[i + 1] if i + 1 < len(args) else ""
+        if line_comment:
+            if ch == "\n":
+                line_comment = False
+        elif block_comment:
+            if ch == "*" and nxt == "/":
+                block_comment = False
+                i += 1
+        elif quote:
+            if ch == quote:
+                if i + 1 < len(args) and args[i + 1] == quote:
+                    i += 2
+                    continue
+                quote = None
+        elif ch == "-" and nxt == "-":
+            line_comment = True
+            i += 1
+        elif ch == "/" and nxt == "*":
+            block_comment = True
+            i += 1
+        elif ch in ("'", '"'):
+            quote = ch
+        elif ch == "(":
+            parens += 1
+        elif ch == ")":
+            parens -= 1
+        elif ch == "[":
+            brackets += 1
+        elif ch == "]":
+            brackets -= 1
+        elif ch == "," and parens == 0 and brackets == 0:
+            out.append(args[start:i].strip())
+            start = i + 1
+        i += 1
+    tail = args[start:].strip()
+    if tail:
+        out.append(tail)
+    return out
+
+
+def _normalize_type(type_name: str) -> str:
+    value = re.sub(r"\s+", " ", type_name.strip().lower())
+    suffix = ""
+    while value.endswith("[]"):
+        suffix += "[]"
+        value = value[:-2].rstrip()
+    # PostgreSQL function identity ignores type modifiers: numeric(3,1) and
+    # vector(1536) resolve as numeric and vector in pg_proc.
+    value = re.sub(r"\(\s*\d+(?:\s*,\s*\d+)*\s*\)$", "", value).rstrip()
+    return TYPE_ALIASES.get(value, value) + suffix
+
+
+def identity_arg_types(args: str, declarations: bool = True) -> tuple:
+    """Returns the PostgreSQL identity argument types for DDL or pg_proc text.
+
+    ``declarations=True`` accepts ``p_id uuid default ...``.  ACL signatures use
+    only types and therefore pass ``False``. OUT-only arguments are not part of
+    a function identity and are skipped.
+    """
+    types = []
+    for raw in _split_sql_args(args):
+        value = re.sub(r"/\*.*?\*/", " ", raw, flags=re.S)
+        value = re.sub(r"--[^\n]*", " ", value).strip()
+        if not value:
+            continue
+        value = re.split(r"\bdefault\b|(?<![<>:])=(?!=)", value, maxsplit=1,
+                         flags=re.I)[0].strip()
+        mode = ""
+        mode_match = re.match(r"^(inout|in|out|variadic)\s+", value, re.I)
+        if mode_match:
+            mode = mode_match.group(1).lower()
+            value = value[mode_match.end():].strip()
+        if mode == "out":
+            continue
+        if declarations:
+            match = re.match(r'^(?:"(?:[^"]|"")+"|[A-Za-z_][\w$]*)\s+(.+)$',
+                             value, re.S)
+            if match:
+                value = match.group(1).strip()
+        types.append(_normalize_type(value))
+    return tuple(types)
+
+
+def _closing_paren(text: str, opening: int) -> int:
+    depth = 0
+    quote = None
+    line_comment = block_comment = False
+    i = opening
+    while i < len(text):
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < len(text) else ""
+        if line_comment:
+            if ch == "\n":
+                line_comment = False
+        elif block_comment:
+            if ch == "*" and nxt == "/":
+                block_comment = False
+                i += 1
+        elif quote:
+            if ch == quote:
+                if i + 1 < len(text) and text[i + 1] == quote:
+                    i += 2
+                    continue
+                quote = None
+        elif ch == "-" and nxt == "-":
+            line_comment = True
+            i += 1
+        elif ch == "/" and nxt == "*":
+            block_comment = True
+            i += 1
+        elif ch in ("'", '"'):
+            quote = ch
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
+
+
+def _extract_definition(sql_text: str, match) -> tuple:
+    name = match.group(1).lower()
+    opening = match.end() - 1
+    closing = _closing_paren(sql_text, opening)
+    if closing == -1:
+        return None
+    types = identity_arg_types(sql_text[opening + 1:closing])
+    dollar = re.search(r"\$(\w*)\$", sql_text[closing + 1:closing + 5000])
+    if not dollar:
+        return None
+    tag = f"${dollar.group(1)}$"
+    start = closing + 1 + dollar.end()
+    end = sql_text.find(tag, start)
+    if end == -1:
+        return None
+    return name, types, normalize_body(sql_text[start:end])
+
+
+def extract_function_definitions(sql_text: str) -> list:
+    """Returns ``[(name, identity_types, normalized_body), ...]`` in DDL order."""
+    return [definition for match in FUNC_RE.finditer(sql_text)
+            if (definition := _extract_definition(sql_text, match)) is not None]
+
+
+def extract_function_operations(sql_text: str) -> list:
+    """Returns ordered CREATE/DROP operations with overload-safe identities."""
+    operations = []
+    for match in FUNC_RE.finditer(sql_text):
+        definition = _extract_definition(sql_text, match)
+        if definition is not None:
+            operations.append((match.start(), ("create",) + definition))
+    for match in DROP_FUNC_RE.finditer(sql_text):
+        opening = match.end() - 1
+        closing = _closing_paren(sql_text, opening)
+        if closing == -1:
+            continue
+        types = identity_arg_types(sql_text[opening + 1:closing], declarations=True)
+        operations.append((match.start(), ("drop", match.group(1).lower(), types, None)))
+    return [operation for _start, operation in sorted(operations)]
+
+
 def extract_functions(sql_text: str) -> dict:
     """{имя: [нормализованное тело, ...]} в порядке появления.
 
@@ -119,17 +314,8 @@ def extract_functions(sql_text: str) -> dict:
     Порядок важен: при нескольких определениях одного имени выигрывает ПОСЛЕДНЕЕ
     (семантика L-1 и порядка применения PostgreSQL)."""
     out = {}
-    for m in FUNC_RE.finditer(sql_text):
-        name = m.group(1).lower()
-        dq = re.search(r"\$(\w*)\$", sql_text[m.end():m.end() + 4000])
-        if not dq:
-            continue
-        tag = f"${dq.group(1)}$"
-        start = m.end() + dq.end()
-        end = sql_text.find(tag, start)
-        if end == -1:
-            continue
-        out.setdefault(name, []).append(normalize_body(sql_text[start:end]))
+    for name, _types, body in extract_function_definitions(sql_text):
+        out.setdefault(name, []).append(body)
     return out
 
 
@@ -150,6 +336,23 @@ def extract_acl(sql_text: str) -> dict:
         for role in (r.strip().lower() for r in roles.split(",")):
             if role in ("public", "anon", "authenticated", "service_role"):
                 out.setdefault(name, {})[role] = (action == "grant")
+    return out
+
+
+def extract_acl_definitions(sql_text: str) -> dict:
+    """{(name, identity_types): {role: bool}} with overload-safe ACL keys."""
+    out = {}
+    for match in GRANT_RE.finditer(sql_text):
+        action, name, roles = match.group(1).lower(), match.group(2).lower(), match.group(3)
+        opening = sql_text.find("(", match.start())
+        closing = _closing_paren(sql_text, opening)
+        if opening == -1 or closing == -1:
+            continue
+        types = identity_arg_types(sql_text[opening + 1:closing], declarations=False)
+        key = (name, types)
+        for role in (role.strip().lower() for role in roles.split(",")):
+            if role in ("public", "anon", "authenticated", "service_role"):
+                out.setdefault(key, {})[role] = (action == "grant")
     return out
 
 

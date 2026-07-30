@@ -58,8 +58,7 @@ revoke execute on function public.rpc_admin_tsp_deals() from public, anon;
 revoke execute on function public.rpc_admin_tsp_pools() from public, anon;
 revoke execute on function public.rpc_admin_unmatch(uuid,uuid,text) from public, anon;
 revoke execute on function public.rpc_admin_upsert_grade_formula(text,text,text,integer,integer,text[],integer,integer) from public, anon;
--- легаси overload (см. header) — containment, не полный фикс класса overload
-revoke execute on function public.rpc_admin_create_user(text,text,text,text,text) from public, anon;
+-- legacy 5-arg rpc_admin_create_user is dropped by the owning 20260629150000 migration.
 revoke execute on function public.rpc_cancel_batch(uuid) from public, anon;
 revoke execute on function public.rpc_cancel_batch(uuid,uuid,text) from public, anon;
 revoke execute on function public.rpc_clear_confirmation(uuid,uuid) from public, anon, authenticated;

@@ -40,19 +40,21 @@ SYSTEM_PREFIXES = (
 
 
 def git_functions() -> tuple:
-    """({имя: (каноническое_тело, источник, кол-во_определений)}, {имя: {роль: bool}})."""
+    """({(name, types): (canonical body, source)}, {(name, types): ACL})."""
     canon, acl = {}, {}
     for logical, path in db.canonical_sources():
         try:
             text = open(path, encoding="utf-8").read()
         except OSError:
             continue
-        for name, bodies in db.extract_functions(text).items():
-            prev = canon.get(name)
-            count = (prev[2] if prev else 0) + len(bodies)
-            canon[name] = (bodies[-1], logical, count)
-        for name, roles in db.extract_acl(text).items():
-            acl.setdefault(name, {}).update(roles)
+        for action, name, types, body in db.extract_function_operations(text):
+            key = (name, types)
+            if action == "drop":
+                canon.pop(key, None)
+            else:
+                canon[key] = (body, logical)
+        for key, roles in db.extract_acl_definitions(text).items():
+            acl.setdefault(key, {}).update(roles)
     return canon, acl
 
 
@@ -62,18 +64,20 @@ def acl_divergence(conn, expected: dict) -> list:
     Класс NOTE-ANON-EXEC-01 / ARS-311: `revoke ... from anon` лежит в git,
     но на БД никогда не применён — тела совпадают, дыра открыта."""
     out = []
-    names = list(expected.keys())
+    names = sorted({name for name, _types in expected})
     if not names:
         return out
     with conn.cursor() as cur:
         cur.execute("""
-            select p.proname, p.oid::regprocedure::text, p.oid
+            select p.proname, pg_get_function_identity_arguments(p.oid),
+                   p.oid::regprocedure::text, p.oid
             from pg_proc p join pg_namespace n on n.oid = p.pronamespace
             where n.nspname = 'public' and p.proname = any(%s)
         """, (names,))
         rows = cur.fetchall()
-        for proname, sig, oid in rows:
-            for role, should_have in expected.get(proname.lower(), {}).items():
+        for proname, args, sig, oid in rows:
+            key = (proname.lower(), db.identity_arg_types(args))
+            for role, should_have in expected.get(key, {}).items():
                 try:
                     cur.execute("select has_function_privilege(%s, %s, 'execute')",
                                 (role, oid))
@@ -91,7 +95,7 @@ def acl_divergence(conn, expected: dict) -> list:
 
 
 def prod_functions(conn) -> dict:
-    """{имя: [(нормализованное_тело, аргументы), ...]}."""
+    """{(name, identity_types): (normalized body, displayed arguments)}."""
     with conn.cursor() as cur:
         cur.execute("""
             select p.proname, p.prosrc, pg_get_function_identity_arguments(p.oid)
@@ -103,7 +107,9 @@ def prod_functions(conn) -> dict:
         """)
         out = {}
         for name, src, args in cur.fetchall():
-            out.setdefault(name.lower(), []).append((db.normalize_body(src or ""), args))
+            out[(name.lower(), db.identity_arg_types(args))] = (
+                db.normalize_body(src or ""), args
+            )
         return out
 
 
@@ -140,28 +146,48 @@ def main():
     finally:
         conn.close()
 
-    missing, divergent, overloads = [], [], []
-    for name, (body, source, defs) in sorted(canon.items()):
-        got = prod.get(name)
+    missing, divergent = [], []
+    for (name, types), (body, source) in sorted(canon.items()):
+        got = prod.get((name, types))
+        signature = ",".join(types)
         if not got:
-            missing.append({"function": name, "source": source})
+            missing.append({"function": name, "signature": signature, "source": source})
             continue
-        if body not in [b for b, _ in got]:
+        if body != got[0]:
             divergent.append({"function": name, "source": source,
-                              "prod_signatures": [a for _, a in got]})
-        if len(got) > 1 and len(got) > defs:
-            overloads.append({"function": name, "prod": len(got), "git_defs": defs,
-                              "signatures": [a for _, a in got]})
+                              "signature": signature,
+                              "prod_signatures": [got[1]]})
+
+    canon_names = {name for name, _types in canon}
+    prod_names = {name for name, _types in prod}
+    overloads = []
+    for name in sorted(canon_names & prod_names):
+        expected_types = {types for fn, types in canon if fn == name}
+        actual = [(types, displayed) for (fn, types), (_body, displayed) in prod.items()
+                  if fn == name]
+        extras = [displayed for types, displayed in actual if types not in expected_types]
+        if extras:
+            overloads.append({
+                "function": name,
+                "prod": len(actual),
+                "git_defs": len(expected_types),
+                "signatures": [displayed for _types, displayed in actual],
+                "extra_signatures": extras,
+            })
 
     prod_only = sorted(
-        n for n in prod
-        if n not in canon and not n.startswith(SYSTEM_PREFIXES)
+        name for name in prod_names
+        if name not in canon_names and not name.startswith(SYSTEM_PREFIXES)
     )
 
     report = {
         "merged_not_deployed": missing,
         "body_divergent": divergent,
-        "prod_only": [{"function": n, "signatures": [a for _, a in prod[n]]} for n in prod_only],
+        "prod_only": [{
+            "function": name,
+            "signatures": [displayed for (fn, _types), (_body, displayed) in prod.items()
+                           if fn == name],
+        } for name in prod_only],
         "extra_overloads": overloads,
         "acl_divergent": acl,
         "infra": inf,

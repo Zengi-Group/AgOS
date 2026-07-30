@@ -40,6 +40,8 @@ $$;
 -- 1. rpc_admin_create_user — нормализация телефона + активация членства
 --    (та же сигнатура, что в 140000 → create or replace без drop).
 -- ------------------------------------------------------------
+drop function if exists public.rpc_admin_create_user(text, text, text, text, text);
+
 create or replace function public.rpc_admin_create_user(
     p_phone           text,
     p_pin             text,
