@@ -40,7 +40,11 @@ $$;
 -- 1. rpc_admin_create_user — нормализация телефона + активация членства
 --    (та же сигнатура, что в 140000 → create or replace без drop).
 -- ------------------------------------------------------------
+-- Retire both historical overloads before creating the organization-bound API.
+-- The 7×text variant is recreated by 130000 on a full replay; replaying 140000
+-- only to drop it is unsafe because its older RETURNS TABLE contracts drifted.
 drop function if exists public.rpc_admin_create_user(text, text, text, text, text);
+drop function if exists public.rpc_admin_create_user(text, text, text, text, text, text, text);
 
 create or replace function public.rpc_admin_create_user(
     p_phone           text,
