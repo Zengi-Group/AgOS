@@ -227,9 +227,10 @@ approval, or progress. MPK preview and the real farmer-facing card use one read-
 including the same pre/post anonymity policy.
 
 **Migration impact.** Detailed entity ownership, adapter retirement, backfill logic,
-and deployment order belong to ARS-353. Required order is additive: security defect
-fixes/permission base → narrow entities → compatibility/backfill → typed RPCs → UI →
-adapter retirement after observed zero legacy callers.
+and deployment order are locked by
+`Docs/AGOS-MPK-Profile-Convergence-ADR-ARS-353.md`. Required order is additive:
+security defect fixes/permission base → narrow entities → compatibility/backfill →
+typed RPCs → UI → adapter retirement after observed zero legacy callers.
 
 **Rollback.** Preserve old adapters while the new read model rolls out behind a feature
 flag. Disable new writers/readers before removing new objects. Never roll back by
@@ -306,8 +307,8 @@ Before any MPK Profile object is production-ready:
 ## 10. Migration, rollout, and rollback sequence
 
 1. Merge ARS-352 audit evidence and this sign-off.
-2. Accept ARS-353 convergence ADR with entity ownership, compatibility adapters,
-   retirement conditions, and exact apply order.
+2. Apply the accepted ARS-353 convergence ADR with entity ownership, compatibility
+   adapters, retirement conditions, and exact apply order.
 3. Close prerequisite review ACL/RLS defect locally/preview before review convergence.
 4. Apply additive schema changes and permission catalog; no destructive rename/drop.
 5. Add typed RPC contracts and generated TypeScript/Zod consumers; remove profile
@@ -333,7 +334,7 @@ and rollback impact. This file satisfies the engineering side of that contract.
 
 Remaining gates are explicit and owned elsewhere:
 
-- ARS-353: detailed convergence ADR before schema/RPC implementation;
+- ARS-353: accepted convergence ADR; downstream schema/RPC work must follow it;
 - missing `AGOS-Dok6-Slice10-MPK-Profile.md`, `DESIGN-TOKENS.md`, and
   `prototype/mpk-cabinet-v4.dc.html`: restore or correct canonical paths before visual
   fidelity sign-off;

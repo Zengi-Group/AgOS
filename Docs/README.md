@@ -133,16 +133,18 @@ Dok 6 is authored and maintained as individual slice files (no single consolidat
 
 There is no consolidated Dok6 master file; slices are canonical.
 
-### MPK Profile (ARS-351/352/354)
+### MPK Profile (ARS-351/352/353/354)
 
 - Live schema/drift evidence and the source-of-truth map are recorded in
   **AGOS-MPK-Profile-Live-Drift-Audit-ARS-352.md**.
 - Architecture G2 and the normative profile contract are recorded in
   **AGOS-MPK-Profile-EngSpec-v0_1.md**.
+- Canonical entity ownership, convergence order, compatibility adapters, retirement
+  gates, and the database security checklist are recorded in
+  **AGOS-MPK-Profile-Convergence-ADR-ARS-353.md**.
 - The Slice10, design-token and prototype files named as canon by ARS-351 are still
-  absent as of 2026-07-30. Schema/RPC work also requires the ARS-353 convergence ADR;
-  exact visual-fidelity acceptance requires those UI artifacts to be restored or their
-  canonical paths corrected.
+  absent as of 2026-07-30. Exact visual-fidelity acceptance requires those UI artifacts
+  to be restored or their canonical paths corrected.
 
 ---
 

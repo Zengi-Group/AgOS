@@ -2034,3 +2034,56 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: EngSpec содержит для каждого D-MPK-* choice/reason/rejected alternatives/consequences/migration/rollback; source map сверена с live drift audit; narrow entry сверена с текущими `src/pages/cabinet/shell/mpk/{types.ts,nav.ts,MpkApp.tsx}` и существующими `/mpk`, `/mpk/tsp`, `/mpk/offers` route keys. Doc checks: unique D-MPK ids and references; repository still explicitly reports the three missing UI artifacts.
 
 **Files**: `Docs/AGOS-MPK-Profile-EngSpec-v0_1.md` (new), `Docs/README.md`, `DECISIONS_LOG.md` (this entry). No SQL/frontend/live changes in ARS-354.
+
+### 2026-07-30: ADR-MPK-CONVERGENCE-01 — один authority на membership, verification, RBAC, reviews, appeals и MPK editorial profile (ARS-353)
+
+**What**: Принят детальный convergence ADR для MPK Profile:
+`Docs/AGOS-MPK-Profile-Convergence-ADR-ARS-353.md`. Зафиксирована composed-модель без
+второго вертикального стека: membership lifecycle/dates =
+`membership_subscription`, access = `fn_org_membership_active`; type assignment остаётся
+в `organization_type_assignments`, evidence timeline — append-only
+`verification_records`; единственный assignment-store RBAC =
+`user_organization_roles` с permission catalog/helper поверх; отзывы канонизируются в
+`deal_reviews`/`deal_review_dimension_scores`; тела обращений остаются в
+`comm_messages`, а `org_appeal_cases` + message-link хранят только case/topic/ref/status;
+`mpk_profiles` создаётся sparse и узким (`organization_id`, public description, logo
+path, timestamps), не копирует реквизиты, capacity, membership, verification, роли,
+репутацию или обращения.
+
+**Why**: ARS-352 доказал, что все доменные authorities, кроме узкого MPK editorial
+extension и appeal-case metadata, уже есть в repo/live. Wide profile, `org_member_roles`,
+`memberships.expires_at`, verification status на assignment, notes-only reviews и
+`answer` в appeal case создали бы параллельные истины. G2 D-MPK-CANON-05 уже принял
+composed read model; ARS-353 фиксирует исполнимый порядок и границы.
+
+**Compatibility/migration**: обязательный порядок —
+read-only preflight → review ACL/RLS fix ARS-352 → explicit grants/RLS/index foundation
+→ расширение role CHECK + permission mapping → narrow `mpk_profiles` и appeal case/link
+→ idempotent review/profile backfill с reconciliation report → rebind старых signatures
+на canonical-only writes → typed RPC/TS/Zod → staged feature flag/G3 → retirement.
+Открытого dual-write периода нет: после cutover старые review RPC сохраняют signatures,
+но пишут только в canonical tables; legacy JSON reads временно делают canonical-first
+с notes fallback. Rollback consumer-first, additive history не удаляется.
+
+**Retirement**: `useMpkProfile`/handwritten shape — не раньше 2026-09-30 после zero
+imports и typed contracts; membership fallback и review RPC/read adapters — не раньше
+2026-10-31 после двух production releases и 30 дней zero-call/fallback telemetry;
+legacy note keys/incompatible non-prod profile columns — не раньше 2026-11-30 после
+reconciliation, backup, zero dependents и отдельного destructive-migration approval.
+Support-channel RPC не legacy и не удаляется.
+
+**Security**: каждый exposed table получает RLS + explicit least-privilege grants;
+UPDATE — SELECT/USING/WITH CHECK; `SECURITY DEFINER` только с body authn/org/permission/
+relationship checks, fixed `search_path`, revoke `PUBLIC`+`anon`, exact signature
+grants. Индексируются FK, tenant/RLS, status/order/expiry predicates. До G3 обязательны
+role/tenant/anon/service contract matrix, advisors, query plans и pre-disclosure
+payload/DOM absence.
+
+**Consequences**: ARS-353 снимает design-gate для ARS-356/357/359/360/361/358, но не
+разрешает DDL/RPC production deploy. ARS-360 остаётся заблокирован до проверки review
+ACL/RLS fix; G3 отдельно. Review notes backfill не угадывает ambiguous split-batch MPK
+counterparty; такие строки попадают в reconciliation report.
+
+**Files**: `Docs/AGOS-MPK-Profile-Convergence-ADR-ARS-353.md` (new),
+`Docs/AGOS-MPK-Profile-EngSpec-v0_1.md`, `Docs/README.md`, `DECISIONS_LOG.md`. SQL,
+frontend и live DB не менялись.
