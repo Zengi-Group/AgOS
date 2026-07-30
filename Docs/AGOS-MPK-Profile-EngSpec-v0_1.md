@@ -179,6 +179,47 @@ receiver and accountant permissions are not a safe synonym for employee/viewer.
 keys during transition. Permissions, not raw role-string comparisons, become the stable
 contract for new profile RPCs.
 
+**ARS-356 permission matrix.** `organization_permissions` is the stable code catalog;
+`organization_role_permissions` is definition data only and contains no user or
+organization assignment. `fn_org_has_permission(organization_id, permission_code)`
+derives the current caller and resolves the following explicit mapping:
+
+| Role | Permissions |
+|---|---|
+| `owner`, `manager`, `mpk_admin` | all nine permissions below |
+| `employee` | `mpk.purchase`, `mpk.receive`, `mpk.review.submit`, `mpk.deal_documents.read` |
+| `viewer` | `mpk.deal_documents.read` |
+| `procurement` | `mpk.purchase`, `mpk.review.submit`, `mpk.deal_documents.read`, `mpk.deal_documents.manage` |
+| `receiver` | `mpk.receive`, `mpk.deal_documents.read`, `mpk.deal_documents.manage` |
+| `accountant` | `mpk.bank.manage`, `mpk.deal_documents.read`, `mpk.deal_documents.manage` |
+
+The nine catalog codes are `mpk.profile.edit`, `mpk.documents.manage`,
+`mpk.team.manage`, `mpk.purchase`, `mpk.receive`, `mpk.review.submit`,
+`mpk.deal_documents.read`, `mpk.deal_documents.manage`, and `mpk.bank.manage`.
+In particular, `procurement` and `accountant` do not receive profile, organization-
+document, or team-management authority.
+
+**ARS-356 invitation contract.** `org_invitations` is a temporal FSM, not a role
+assignment store. It allows `sent→accepted|revoked|expired`; terminal states cannot
+reopen. A partial unique index permits one `sent` row per
+`(organization_id, lower(email))`. Tokens are 32 random bytes represented as hex;
+only SHA-256 is stored. Create/resend return the raw token once for the delivery layer,
+and no table/RPC read returns `token_hash`. Resend rotates the token, extends expiry to
+72 hours, and has a 60-second minimum interval.
+
+| RPC | Required authority | Exact result contract |
+|---|---|---|
+| `rpc_create_org_invitation(org_id,email,role)` | `mpk.team.manage` | JSON `{ok,id,organization_id,email,role,status,token,expires_at,resend_count}` |
+| `rpc_resend_org_invitation(org_id,invitation_id)` | `mpk.team.manage` | same JSON on success; `{ok,id,status}` when terminal/expired |
+| `rpc_revoke_org_invitation(org_id,invitation_id)` | `mpk.team.manage` | JSON `{ok,id,status,idempotent?}` |
+| `rpc_accept_org_invitation(token)` | authenticated user with matching verified email | JSON `{ok,id,organization_id?,role?,status,idempotent?}` |
+| `rpc_list_org_invitations(org_id)` | `mpk.team.manage` | rows `{id,email,role,status,sent_at,last_sent_at,expires_at,accepted_at,revoked_at,expired_at,resend_count,created_at,updated_at}` |
+
+Acceptance locks the invitation row, binds the verified Auth email, and atomically
+inserts into `user_organization_roles`. A same-user retry is idempotent; a competing
+user cannot consume an accepted token. The token itself carries the organization
+binding, so acceptance deliberately does not trust a client-supplied organization ID.
+
 **Migration impact.** Add CHECK values without rewriting rows; deploy the permission
 helper before RPCs that depend on it; then add invitations. Contract tests cover every
 role/permission pair, cross-tenant denial, and legacy compatibility.

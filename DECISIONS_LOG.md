@@ -2087,3 +2087,39 @@ counterparty; такие строки попадают в reconciliation report.
 **Files**: `Docs/AGOS-MPK-Profile-Convergence-ADR-ARS-353.md` (new),
 `Docs/AGOS-MPK-Profile-EngSpec-v0_1.md`, `Docs/README.md`, `DECISIONS_LOG.md`. SQL,
 frontend и live DB не менялись.
+
+### 2026-07-30: ARS-356 — MPK RBAC + hashed organization invitations
+
+**What**: `user_organization_roles.role` additive CHECK расширен ролями `mpk_admin`,
+`procurement`, `receiver`, `accountant` без relabel legacy-строк. Добавлены definition-
+таблицы `organization_permissions`/`organization_role_permissions` и canonical helper
+`fn_org_has_permission`; user↔org assignment остался только в
+`user_organization_roles`. Зафиксирована explicit compatibility matrix для
+`owner/manager/employee/viewer`. Добавлен temporal `org_invitations` FSM
+`sent→accepted|revoked|expired`: SHA-256 stored token, unique open invite на
+`organization_id+lower(email)`, 72h TTL, resend token rotation с 60s rate limit,
+verified-email acceptance с `FOR UPDATE` и атомарным materialize в UOR. Пять RPC
+create/resend/revoke/accept/list имеют explicit ACL; direct Data API table access закрыт.
+
+**Why**: D-MPK-ROLES-04 требует четыре разных job roles с DB enforcement, но запрещает
+второй assignment store и frontend-only authorization. Invitation — temporal intent,
+поэтому хранится отдельно до acceptance; raw token нужен только delivery layer один раз,
+а persistent secret представлен digest. `rpc_accept_org_invitation` не принимает
+`organization_id`: пользователь ещё не член org, а tenant binding уже находится в
+server-side token row; client org_id создал бы spoofable input.
+
+**Consequences**: новые MPK/profile RPC обязаны проверять permission code, не role string.
+`procurement`/`accountant` не получают profile/doc/team-admin permissions. Terminal invite
+не переоткрывается; same-user double accept идемпотентен, competing accept сериализован.
+Rollback: выключить пять invitation entry points и прекратить выдачу новых ролей; CHECK
+не сужать при наличии строк, invitation history не удалять.
+
+**Verify**: `tests/ars_356_rbac_invitations_test.sql` покрывает 8×9 role/permission matrix,
+cross-tenant denial, procurement/accountant team-admin denial, token hashing/no table
+bypass, one-open uniqueness, resend rate/rotation, accept idempotency, competing user,
+revoke/expiry FSM и concurrency invariants (`FOR UPDATE` + partial unique index).
+
+**Files**: `d01_kernel.sql`, `cross_check.sh`,
+`tests/ars_356_rbac_invitations_test.sql`,
+`Docs/AGOS-MPK-Profile-EngSpec-v0_1.md`,
+`Docs/AGOS-Dok3-RPC-Catalog-v1_5.md`, `DECISIONS_LOG.md`.

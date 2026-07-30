@@ -160,7 +160,7 @@ comment on table public.breeds is
      P8: catalogue is admin-managed and grows over time.';
 
 -- ============================================================
--- SECTION 1: IDENTITY DOMAIN (17 entities)
+-- SECTION 1: IDENTITY DOMAIN (20 entities)
 -- Decisions: D1–D11, D58
 -- Ownership Matrix: Section 4.1
 -- Legal: D7 (privacy), Section 5.9 (three-tier)
@@ -274,7 +274,11 @@ create table if not exists public.user_organization_roles (
                                     'owner',        -- full control (org creator)
                                     'manager',      -- can manage most things
                                     'employee',     -- limited write
-                                    'viewer'        -- read-only
+                                    'viewer',       -- read-only
+                                    'mpk_admin',    -- MPK profile/team administrator
+                                    'procurement',  -- MPK purchasing operator
+                                    'receiver',     -- MPK receiving operator
+                                    'accountant'    -- MPK finance/deal documents
                                 )),
     is_primary      boolean not null default false,  -- user's primary org for UI context
     created_at      timestamptz not null default now(),
@@ -285,6 +289,169 @@ comment on table public.user_organization_roles is
     'Links users to organizations. is_primary=true = default org loaded in UI.
      A user may belong to multiple orgs (e.g. employee working for two farms).
      Owner role created automatically when user creates the org.';
+
+-- ARS-356 / D-MPK-ROLES-04: expand the live legacy CHECK without relabelling rows.
+-- Fresh installs already have the expanded inline CHECK above; deployed databases are
+-- upgraded in place, then validated before any new role can be assigned.
+do $$
+begin
+    if exists (
+        select 1
+        from pg_constraint
+        where conrelid = 'public.user_organization_roles'::regclass
+          and conname = 'user_organization_roles_role_check'
+          and position('mpk_admin' in pg_get_constraintdef(oid)) = 0
+    ) then
+        alter table public.user_organization_roles
+            drop constraint user_organization_roles_role_check;
+    end if;
+
+    if not exists (
+        select 1
+        from pg_constraint
+        where conrelid = 'public.user_organization_roles'::regclass
+          and conname = 'user_organization_roles_role_check'
+    ) then
+        alter table public.user_organization_roles
+            add constraint user_organization_roles_role_check
+            check (role in (
+                'owner', 'manager', 'employee', 'viewer',
+                'mpk_admin', 'procurement', 'receiver', 'accountant'
+            )) not valid;
+    end if;
+end;
+$$;
+alter table public.user_organization_roles
+    validate constraint user_organization_roles_role_check;
+
+-- -------------------------------------------------------
+-- organization_permissions + organization_role_permissions
+-- D-MPK-ROLES-04: permission definitions are data; user↔org assignment remains
+-- exclusively in user_organization_roles (this is not a second RBAC store).
+-- -------------------------------------------------------
+create table if not exists public.organization_permissions (
+    code        text primary key
+                check (code ~ '^mpk\.[a-z_]+(\.[a-z_]+)*$'),
+    description text not null,
+    is_active   boolean not null default true,
+    created_at  timestamptz not null default now()
+);
+
+create table if not exists public.organization_role_permissions (
+    role            text not null
+                    check (role in (
+                        'owner', 'manager', 'employee', 'viewer',
+                        'mpk_admin', 'procurement', 'receiver', 'accountant'
+                    )),
+    permission_code text not null
+                    references public.organization_permissions(code) on delete restrict,
+    created_at      timestamptz not null default now(),
+    primary key (role, permission_code)
+);
+
+comment on table public.organization_permissions is
+    'ARS-356 / D-MPK-ROLES-04: stable MPK permission-code catalog. Definitions only;
+     user assignments remain exclusively in user_organization_roles.';
+comment on table public.organization_role_permissions is
+    'ARS-356: explicit compatibility mapping from legacy/new organization roles to
+     permission codes. This table contains no user_id or organization_id assignments.';
+
+insert into public.organization_permissions (code, description) values
+    ('mpk.profile.edit',          'Edit own MPK organization profile'),
+    ('mpk.documents.manage',      'Manage MPK organization documents'),
+    ('mpk.team.manage',           'Invite, revoke, and manage MPK team members'),
+    ('mpk.purchase',              'Perform MPK purchasing operations'),
+    ('mpk.receive',               'Perform MPK receiving and acceptance operations'),
+    ('mpk.review.submit',         'Submit MPK counterparty/deal reviews'),
+    ('mpk.deal_documents.read',   'Read permitted MPK deal documents'),
+    ('mpk.deal_documents.manage', 'Create or update permitted MPK deal documents'),
+    ('mpk.bank.manage',           'Manage MPK banking details')
+on conflict (code) do update
+set description = excluded.description,
+    is_active = true;
+
+-- Legacy compatibility is explicit and conservative: owner/manager retain broad
+-- control, employee keeps operational work, and viewer remains read-only.
+insert into public.organization_role_permissions (role, permission_code)
+select r.role, p.code
+from (values ('owner'), ('manager'), ('mpk_admin')) as r(role)
+cross join public.organization_permissions p
+where p.is_active
+on conflict (role, permission_code) do nothing;
+
+insert into public.organization_role_permissions (role, permission_code) values
+    ('employee',    'mpk.purchase'),
+    ('employee',    'mpk.receive'),
+    ('employee',    'mpk.review.submit'),
+    ('employee',    'mpk.deal_documents.read'),
+    ('viewer',      'mpk.deal_documents.read'),
+    ('procurement', 'mpk.purchase'),
+    ('procurement', 'mpk.review.submit'),
+    ('procurement', 'mpk.deal_documents.read'),
+    ('procurement', 'mpk.deal_documents.manage'),
+    ('receiver',    'mpk.receive'),
+    ('receiver',    'mpk.deal_documents.read'),
+    ('receiver',    'mpk.deal_documents.manage'),
+    ('accountant',  'mpk.bank.manage'),
+    ('accountant',  'mpk.deal_documents.read'),
+    ('accountant',  'mpk.deal_documents.manage')
+on conflict (role, permission_code) do nothing;
+
+-- -------------------------------------------------------
+-- org_invitations
+-- Temporal invitation lifecycle only. Accepted membership materializes atomically
+-- into the existing user_organization_roles authority.
+-- -------------------------------------------------------
+create table if not exists public.org_invitations (
+    id                  uuid primary key default gen_random_uuid(),
+    organization_id     uuid not null references public.organizations(id) on delete cascade,
+    email               text not null
+                        check (
+                            email = lower(btrim(email))
+                            and length(email) between 3 and 320
+                            and position('@' in email) > 1
+                        ),
+    role                text not null
+                        check (role in (
+                            'manager', 'employee', 'viewer', 'mpk_admin',
+                            'procurement', 'receiver', 'accountant'
+                        )),
+    token_hash          bytea not null unique
+                        check (octet_length(token_hash) = 32),
+    status              text not null default 'sent'
+                        check (status in ('sent', 'accepted', 'revoked', 'expired')),
+    sent_at             timestamptz not null default now(),
+    last_sent_at        timestamptz not null default now(),
+    expires_at          timestamptz not null,
+    accepted_at         timestamptz,
+    accepted_by_user_id uuid references public.users(id) on delete set null,
+    revoked_at          timestamptz,
+    expired_at          timestamptz,
+    resend_count        int not null default 0 check (resend_count >= 0),
+    created_by_user_id  uuid references public.users(id) on delete set null,
+    created_at          timestamptz not null default now(),
+    updated_at          timestamptz not null default now(),
+    check (expires_at > last_sent_at),
+    check (
+        (status = 'sent'
+            and accepted_at is null and accepted_by_user_id is null
+            and revoked_at is null and expired_at is null)
+        or (status = 'accepted'
+            and accepted_at is not null
+            and revoked_at is null and expired_at is null)
+        or (status = 'revoked'
+            and accepted_at is null and accepted_by_user_id is null
+            and revoked_at is not null and expired_at is null)
+        or (status = 'expired'
+            and accepted_at is null and accepted_by_user_id is null
+            and revoked_at is null and expired_at is not null)
+    )
+);
+
+comment on table public.org_invitations is
+    'ARS-356: hashed-token MPK invitation FSM (sent→accepted|revoked|expired).
+     One open invite per organization + lower(email); accepted membership is written
+     atomically to user_organization_roles. Raw tokens are never stored.';
 
 -- -------------------------------------------------------
 -- memberships
@@ -1284,6 +1451,17 @@ create index if not exists idx_org_type_type on public.organization_type_assignm
 create index if not exists idx_uor_user  on public.user_organization_roles (user_id);
 create index if not exists idx_uor_org   on public.user_organization_roles (organization_id);
 
+-- ARS-356 permission/invitation lookups
+create index if not exists idx_org_role_permissions_permission
+    on public.organization_role_permissions (permission_code, role);
+create unique index if not exists uq_org_invitations_open_email
+    on public.org_invitations (organization_id, lower(email))
+    where status = 'sent';
+create index if not exists idx_org_invitations_org_status
+    on public.org_invitations (organization_id, status, created_at desc);
+create index if not exists idx_org_invitations_email_status
+    on public.org_invitations (lower(email), status);
+
 -- memberships
 create index if not exists idx_memberships_org      on public.memberships (organization_id);
 create index if not exists idx_memberships_type_lvl on public.memberships (org_type, level);
@@ -1395,6 +1573,42 @@ set search_path = public, pg_temp as $$
     where u.auth_id = auth.uid();
 $$;
 
+-- ARS-356 / D-MPK-ROLES-04: canonical permission check for the current caller.
+-- Consumers depend on permission codes, never on raw role-string comparisons.
+create or replace function public.fn_org_has_permission(
+    p_organization_id uuid,
+    p_permission_code text
+)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public, pg_temp
+as $$
+    select (select auth.uid()) is not null
+       and exists (
+            select 1
+            from public.users u
+            join public.user_organization_roles uor
+              on uor.user_id = u.id
+            join public.organization_role_permissions rp
+              on rp.role = uor.role
+            join public.organization_permissions p
+              on p.code = rp.permission_code
+             and p.is_active = true
+            where u.auth_id = (select auth.uid())
+              and u.is_active = true
+              and uor.organization_id = p_organization_id
+              and rp.permission_code = p_permission_code
+       );
+$$;
+
+comment on function public.fn_org_has_permission(uuid, text) is
+    'ARS-356 / D-MPK-ROLES-04. Returns whether the authenticated current user has
+     the stable permission code in the given organization. Mapping is data-backed.';
+revoke execute on function public.fn_org_has_permission(uuid, text) from public, anon;
+grant execute on function public.fn_org_has_permission(uuid, text) to authenticated, service_role;
+
 -- Is current user an admin?
 create or replace function public.fn_is_admin()
 returns boolean language sql security definer stable
@@ -1444,6 +1658,9 @@ alter table public.users                        enable row level security;
 alter table public.organizations                enable row level security;
 alter table public.organization_type_assignments enable row level security;
 alter table public.user_organization_roles      enable row level security;
+alter table public.organization_permissions     enable row level security;
+alter table public.organization_role_permissions enable row level security;
+alter table public.org_invitations               enable row level security;
 alter table public.memberships                  enable row level security;
 alter table public.membership_applications      enable row level security;
 alter table public.verification_records         enable row level security;
@@ -1903,6 +2120,57 @@ begin
     return new;
 end;
 $$;
+
+-- ARS-356: terminal invitation states cannot be reopened. Resend is
+-- the only sent→sent transition and is further rate-limited inside its RPC.
+create or replace function public.fn_validate_org_invitation_transition()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+    if tg_op = 'INSERT' then
+        if new.status <> 'sent' then
+            raise exception 'INVALID_INVITATION_INITIAL_STATUS: %', new.status
+                using errcode = 'P0001';
+        end if;
+        if new.created_by_user_id is null then
+            raise exception 'INVITATION_CREATOR_REQUIRED' using errcode = 'P0001';
+        end if;
+        return new;
+    end if;
+
+    if new.organization_id is distinct from old.organization_id
+       or new.email is distinct from old.email
+       or new.role is distinct from old.role
+       or new.created_at is distinct from old.created_at then
+        raise exception 'INVITATION_IDENTITY_IMMUTABLE'
+            using errcode = 'P0001';
+    end if;
+
+    if old.status <> 'sent' and new.status is distinct from old.status then
+        raise exception 'INVALID_INVITATION_TRANSITION: % -> %', old.status, new.status
+            using errcode = 'P0001';
+    end if;
+    if old.status = 'sent'
+       and new.status not in ('sent', 'accepted', 'revoked', 'expired') then
+        raise exception 'INVALID_INVITATION_TRANSITION: % -> %', old.status, new.status
+            using errcode = 'P0001';
+    end if;
+
+    new.updated_at := now();
+    return new;
+end;
+$$;
+
+revoke execute on function public.fn_validate_org_invitation_transition()
+    from public, anon, authenticated;
+
+drop trigger if exists trg_org_invitations_transition on public.org_invitations;
+create trigger trg_org_invitations_transition
+    before insert or update on public.org_invitations
+    for each row execute function public.fn_validate_org_invitation_transition();
 
 drop trigger if exists trg_users_updated_at on public.users;
 create trigger trg_users_updated_at
@@ -7005,3 +7273,459 @@ revoke execute on function public.rpc_delete_account() from public, anon;
 insert into public.rpc_name_registry (sql_name, dok3_name, created_in, notes)
 values ('rpc_delete_account', 'rpc_delete_account', 'd01_kernel.sql (B6/ARS-110)', 'Self-service account soft-delete (Apple 5.1.1v / Google data-deletion)')
 on conflict (sql_name) do update set notes = excluded.notes, created_in = excluded.created_in;
+
+-- ============================================================
+-- ARS-356 · MPK RBAC + organization invitations
+-- Canon: EngSpec §5 D-MPK-ROLES-04 / ARS-353 §5.3.
+-- The tables above are not a direct client write surface. Every mutation below
+-- derives the caller from auth.uid() and checks the stable team permission.
+-- ============================================================
+
+revoke all on table public.organization_permissions
+    from public, anon, authenticated;
+revoke all on table public.organization_role_permissions
+    from public, anon, authenticated;
+revoke all on table public.org_invitations
+    from public, anon, authenticated;
+grant select on table public.organization_permissions
+    to service_role;
+grant select on table public.organization_role_permissions
+    to service_role;
+grant select, insert, update, delete on table public.org_invitations
+    to service_role;
+
+-- Team managers receive the raw token exactly once so the delivery layer can send
+-- it. Only its SHA-256 digest is stored; token_hash is absent from every RPC result.
+create or replace function public.rpc_create_org_invitation(
+    p_organization_id uuid,
+    p_email           text,
+    p_role            text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_actor_id     uuid := public.fn_current_user_id();
+    v_email        text := lower(btrim(p_email));
+    v_token        text;
+    v_invitation_id uuid;
+    v_expires_at   timestamptz := now() + interval '72 hours';
+begin
+    if v_actor_id is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+    if not public.fn_org_has_permission(p_organization_id, 'mpk.team.manage') then
+        raise exception 'FORBIDDEN: mpk.team.manage required'
+            using errcode = '42501';
+    end if;
+    if v_email is null or length(v_email) < 3 or length(v_email) > 320
+       or position('@' in v_email) <= 1 then
+        raise exception 'INVALID_EMAIL' using errcode = 'P0001';
+    end if;
+    if p_role is null or p_role not in (
+        'manager', 'employee', 'viewer', 'mpk_admin',
+        'procurement', 'receiver', 'accountant'
+    ) then
+        raise exception 'INVALID_INVITATION_ROLE: %', p_role using errcode = 'P0001';
+    end if;
+    if not exists (
+        select 1
+        from public.organizations o
+        join public.organization_type_assignments ota
+          on ota.organization_id = o.id and ota.org_type = 'mpk'
+        where o.id = p_organization_id and o.is_active = true
+    ) then
+        raise exception 'ORG_NOT_ACTIVE_MPK' using errcode = 'P0001';
+    end if;
+
+    -- Lazy expiry keeps the partial unique key truthful without a scheduler.
+    update public.org_invitations
+       set status = 'expired', expired_at = now()
+     where organization_id = p_organization_id
+       and email = v_email
+       and status = 'sent'
+       and expires_at <= now();
+
+    if exists (
+        select 1
+        from public.user_organization_roles uor
+        join public.users u on u.id = uor.user_id
+        left join auth.users au on au.id = u.auth_id
+        where uor.organization_id = p_organization_id
+          and lower(btrim(coalesce(au.email, u.email, ''))) = v_email
+    ) then
+        raise exception 'ALREADY_ORGANIZATION_MEMBER' using errcode = 'P0001';
+    end if;
+
+    v_token := encode(extensions.gen_random_bytes(32), 'hex');
+    begin
+        insert into public.org_invitations (
+            organization_id, email, role, token_hash, expires_at, created_by_user_id
+        ) values (
+            p_organization_id, v_email, p_role,
+            extensions.digest(v_token, 'sha256'), v_expires_at, v_actor_id
+        )
+        returning id into v_invitation_id;
+    exception
+        when unique_violation then
+            raise exception 'INVITATION_ALREADY_OPEN' using errcode = 'P0001';
+    end;
+
+    return jsonb_build_object(
+        'ok', true,
+        'id', v_invitation_id,
+        'organization_id', p_organization_id,
+        'email', v_email,
+        'role', p_role,
+        'status', 'sent',
+        'token', v_token,
+        'expires_at', v_expires_at,
+        'resend_count', 0
+    );
+end;
+$$;
+
+comment on function public.rpc_create_org_invitation(uuid, text, text) is
+    'ARS-356. Creates one open MPK invitation per organization+lower(email).
+     Requires mpk.team.manage. Returns a one-time raw token; stores only SHA-256.';
+
+create or replace function public.rpc_resend_org_invitation(
+    p_organization_id uuid,
+    p_invitation_id   uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_invitation public.org_invitations%rowtype;
+    v_token      text;
+    v_now        timestamptz := now();
+begin
+    if public.fn_current_user_id() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+    if not public.fn_org_has_permission(p_organization_id, 'mpk.team.manage') then
+        raise exception 'FORBIDDEN: mpk.team.manage required'
+            using errcode = '42501';
+    end if;
+
+    select * into v_invitation
+    from public.org_invitations
+    where id = p_invitation_id and organization_id = p_organization_id
+    for update;
+    if not found then
+        raise exception 'INVITATION_NOT_FOUND' using errcode = 'P0001';
+    end if;
+    if v_invitation.status <> 'sent' then
+        return jsonb_build_object(
+            'ok', false, 'id', v_invitation.id, 'status', v_invitation.status
+        );
+    end if;
+    if v_invitation.expires_at <= v_now then
+        update public.org_invitations
+           set status = 'expired', expired_at = v_now
+         where id = v_invitation.id;
+        return jsonb_build_object(
+            'ok', false, 'id', v_invitation.id, 'status', 'expired'
+        );
+    end if;
+    if v_invitation.last_sent_at > v_now - interval '60 seconds' then
+        raise exception 'INVITATION_RESEND_RATE_LIMIT: retry after 60 seconds'
+            using errcode = 'P0001';
+    end if;
+
+    v_token := encode(extensions.gen_random_bytes(32), 'hex');
+    update public.org_invitations
+       set token_hash = extensions.digest(v_token, 'sha256'),
+           last_sent_at = v_now,
+           expires_at = v_now + interval '72 hours',
+           resend_count = resend_count + 1
+     where id = v_invitation.id
+     returning * into v_invitation;
+
+    return jsonb_build_object(
+        'ok', true,
+        'id', v_invitation.id,
+        'organization_id', v_invitation.organization_id,
+        'email', v_invitation.email,
+        'role', v_invitation.role,
+        'status', v_invitation.status,
+        'token', v_token,
+        'expires_at', v_invitation.expires_at,
+        'resend_count', v_invitation.resend_count
+    );
+end;
+$$;
+
+comment on function public.rpc_resend_org_invitation(uuid, uuid) is
+    'ARS-356. Rotates the raw token, extends expiry by 72h, and enforces a 60s
+     resend limit. Requires mpk.team.manage; token_hash never leaves the function.';
+
+create or replace function public.rpc_revoke_org_invitation(
+    p_organization_id uuid,
+    p_invitation_id   uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_invitation public.org_invitations%rowtype;
+    v_now        timestamptz := now();
+begin
+    if public.fn_current_user_id() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+    if not public.fn_org_has_permission(p_organization_id, 'mpk.team.manage') then
+        raise exception 'FORBIDDEN: mpk.team.manage required'
+            using errcode = '42501';
+    end if;
+
+    select * into v_invitation
+    from public.org_invitations
+    where id = p_invitation_id and organization_id = p_organization_id
+    for update;
+    if not found then
+        raise exception 'INVITATION_NOT_FOUND' using errcode = 'P0001';
+    end if;
+    if v_invitation.status = 'revoked' then
+        return jsonb_build_object(
+            'ok', true, 'id', v_invitation.id, 'status', 'revoked', 'idempotent', true
+        );
+    end if;
+    if v_invitation.status <> 'sent' then
+        return jsonb_build_object(
+            'ok', false, 'id', v_invitation.id, 'status', v_invitation.status
+        );
+    end if;
+    if v_invitation.expires_at <= v_now then
+        update public.org_invitations
+           set status = 'expired', expired_at = v_now
+         where id = v_invitation.id;
+        return jsonb_build_object(
+            'ok', false, 'id', v_invitation.id, 'status', 'expired'
+        );
+    end if;
+
+    update public.org_invitations
+       set status = 'revoked', revoked_at = v_now
+     where id = v_invitation.id;
+    return jsonb_build_object(
+        'ok', true, 'id', v_invitation.id, 'status', 'revoked', 'idempotent', false
+    );
+end;
+$$;
+
+comment on function public.rpc_revoke_org_invitation(uuid, uuid) is
+    'ARS-356. Idempotently transitions sent→revoked. Requires mpk.team.manage.';
+
+create or replace function public.rpc_accept_org_invitation(p_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_auth_id       uuid := (select auth.uid());
+    v_auth_email    text;
+    v_email_verified timestamptz;
+    v_user_id       uuid;
+    v_invitation    public.org_invitations%rowtype;
+    v_now           timestamptz := now();
+begin
+    if v_auth_id is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+    if p_token is null or length(p_token) < 32 then
+        raise exception 'INVALID_INVITATION_TOKEN' using errcode = 'P0001';
+    end if;
+
+    select lower(btrim(au.email)), au.email_confirmed_at
+      into v_auth_email, v_email_verified
+    from auth.users au
+    where au.id = v_auth_id;
+    if v_auth_email is null or v_email_verified is null then
+        raise exception 'VERIFIED_EMAIL_REQUIRED' using errcode = '42501';
+    end if;
+
+    v_user_id := public.fn_current_user_id();
+    if v_user_id is null then
+        -- Defensive bridge for auth identities created before the signup trigger was
+        -- installed. Normal new users already arrive through fn_handle_new_auth_user.
+        insert into public.users (auth_id, email)
+        values (v_auth_id, v_auth_email)
+        on conflict (auth_id) do update
+            set email = coalesce(public.users.email, excluded.email),
+                updated_at = now()
+        returning id into v_user_id;
+    end if;
+
+    select * into v_invitation
+    from public.org_invitations
+    where token_hash = extensions.digest(p_token, 'sha256')
+    for update;
+    if not found then
+        raise exception 'INVALID_INVITATION_TOKEN' using errcode = 'P0001';
+    end if;
+
+    if v_invitation.status = 'accepted' then
+        if v_invitation.accepted_by_user_id = v_user_id then
+            return jsonb_build_object(
+                'ok', true,
+                'id', v_invitation.id,
+                'organization_id', v_invitation.organization_id,
+                'role', v_invitation.role,
+                'status', 'accepted',
+                'idempotent', true
+            );
+        end if;
+        raise exception 'INVITATION_ALREADY_ACCEPTED' using errcode = 'P0001';
+    end if;
+    if v_invitation.status <> 'sent' then
+        return jsonb_build_object(
+            'ok', false, 'id', v_invitation.id, 'status', v_invitation.status
+        );
+    end if;
+    if v_invitation.expires_at <= v_now then
+        update public.org_invitations
+           set status = 'expired', expired_at = v_now
+         where id = v_invitation.id;
+        return jsonb_build_object(
+            'ok', false, 'id', v_invitation.id, 'status', 'expired'
+        );
+    end if;
+    if v_invitation.email <> v_auth_email then
+        raise exception 'INVITATION_EMAIL_MISMATCH' using errcode = '42501';
+    end if;
+    if not exists (
+        select 1
+        from public.organizations o
+        where o.id = v_invitation.organization_id and o.is_active = true
+    ) then
+        return jsonb_build_object(
+            'ok', false, 'id', v_invitation.id, 'status', 'organization_inactive'
+        );
+    end if;
+
+    insert into public.user_organization_roles (
+        user_id, organization_id, role, is_primary
+    ) values (
+        v_user_id,
+        v_invitation.organization_id,
+        v_invitation.role,
+        not exists (
+            select 1
+            from public.user_organization_roles
+            where user_id = v_user_id and is_primary = true
+        )
+    )
+    on conflict (user_id, organization_id) do nothing;
+
+    update public.org_invitations
+       set status = 'accepted',
+           accepted_at = v_now,
+           accepted_by_user_id = v_user_id
+     where id = v_invitation.id;
+
+    return jsonb_build_object(
+        'ok', true,
+        'id', v_invitation.id,
+        'organization_id', v_invitation.organization_id,
+        'role', v_invitation.role,
+        'status', 'accepted',
+        'idempotent', false
+    );
+end;
+$$;
+
+comment on function public.rpc_accept_org_invitation(text) is
+    'ARS-356. Authenticated, verified-email acceptance. SELECT FOR UPDATE makes
+     double acceptance race-safe; same-user retries are idempotent. Membership is
+     materialized atomically in user_organization_roles.';
+
+create or replace function public.rpc_list_org_invitations(p_organization_id uuid)
+returns table (
+    id            uuid,
+    email         text,
+    role          text,
+    status        text,
+    sent_at       timestamptz,
+    last_sent_at  timestamptz,
+    expires_at    timestamptz,
+    accepted_at   timestamptz,
+    revoked_at    timestamptz,
+    expired_at    timestamptz,
+    resend_count  int,
+    created_at    timestamptz,
+    updated_at    timestamptz
+)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+    if public.fn_current_user_id() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+    if not public.fn_org_has_permission(p_organization_id, 'mpk.team.manage') then
+        raise exception 'FORBIDDEN: mpk.team.manage required'
+            using errcode = '42501';
+    end if;
+
+    update public.org_invitations oi
+       set status = 'expired', expired_at = now()
+     where oi.organization_id = p_organization_id
+       and oi.status = 'sent'
+       and oi.expires_at <= now();
+
+    return query
+    select oi.id, oi.email, oi.role, oi.status, oi.sent_at, oi.last_sent_at,
+           oi.expires_at, oi.accepted_at, oi.revoked_at, oi.expired_at,
+           oi.resend_count, oi.created_at, oi.updated_at
+    from public.org_invitations oi
+    where oi.organization_id = p_organization_id
+    order by oi.created_at desc;
+end;
+$$;
+
+comment on function public.rpc_list_org_invitations(uuid) is
+    'ARS-356. Lists own MPK organization invitations without token_hash. Requires
+     mpk.team.manage and lazily persists sent→expired transitions.';
+
+revoke execute on function public.rpc_create_org_invitation(uuid, text, text)
+    from public, anon;
+revoke execute on function public.rpc_resend_org_invitation(uuid, uuid)
+    from public, anon;
+revoke execute on function public.rpc_revoke_org_invitation(uuid, uuid)
+    from public, anon;
+revoke execute on function public.rpc_accept_org_invitation(text)
+    from public, anon;
+revoke execute on function public.rpc_list_org_invitations(uuid)
+    from public, anon;
+
+grant execute on function public.rpc_create_org_invitation(uuid, text, text)
+    to authenticated, service_role;
+grant execute on function public.rpc_resend_org_invitation(uuid, uuid)
+    to authenticated, service_role;
+grant execute on function public.rpc_revoke_org_invitation(uuid, uuid)
+    to authenticated, service_role;
+grant execute on function public.rpc_accept_org_invitation(text)
+    to authenticated, service_role;
+grant execute on function public.rpc_list_org_invitations(uuid)
+    to authenticated, service_role;
+
+insert into public.rpc_name_registry (sql_name, dok3_name, created_in, notes) values
+    ('rpc_create_org_invitation', 'rpc_create_org_invitation', 'd01_kernel.sql (ARS-356)', 'Create hashed-token MPK organization invitation'),
+    ('rpc_resend_org_invitation', 'rpc_resend_org_invitation', 'd01_kernel.sql (ARS-356)', 'Rate-limited invitation token rotation'),
+    ('rpc_revoke_org_invitation', 'rpc_revoke_org_invitation', 'd01_kernel.sql (ARS-356)', 'Idempotent sent-to-revoked transition'),
+    ('rpc_accept_org_invitation', 'rpc_accept_org_invitation', 'd01_kernel.sql (ARS-356)', 'Race-safe verified-email invitation acceptance'),
+    ('rpc_list_org_invitations', 'rpc_list_org_invitations', 'd01_kernel.sql (ARS-356)', 'Team-manager invitation list without token hashes')
+on conflict (sql_name) do update
+set notes = excluded.notes,
+    created_in = excluded.created_in,
+    status = 'active';

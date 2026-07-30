@@ -65,7 +65,7 @@
 
 ## 1. Сводный каталог
 
-**~92 функций:** 45 базовых бизнес-RPCs + 14 M4/M6 (§4a) + 11 A-CAT (§4b) + 22 AI Gateway RPCs (d07; из них 9 задокументированы как AI-23..AI-31). Статус отдельно для каждой.
+**~97 функций:** 50 базовых бизнес-RPCs + 14 M4/M6 (§4a) + 11 A-CAT (§4b) + 22 AI Gateway RPCs (d07; из них 9 задокументированы как AI-23..AI-31). Статус отдельно для каждой.
 
 > 📌 **v1.5 (2026-06-22):** статусы RPC-21..24, 26..29, 31, 32, 37, 44 обновлены на ✅ Implemented; исправлены return-shapes RPC-21, RPC-24, RPC-36, rpc_save_consulting_ration; параметры RPC-33 синхронизированы с SQL; добавлены vet READ-RPCs и 9 AI инструментов.
 
@@ -77,6 +77,12 @@
 | RPC-02 | `rpc_submit_membership_application` | Identity | web, ai | 📋 Planned | uuid (application_id) |
 | RPC-03 | `rpc_process_membership_application` | Identity | admin | 📋 Planned | uuid (membership_id) |
 | RPC-04 | `rpc_get_my_context` | Identity | web, ai | 📋 Planned | jsonb |
+| RPC-46 | `rpc_delete_account` | Identity | web | ✅ Implemented | void |
+| RPC-47 | `rpc_create_org_invitation` | Identity/RBAC | web | ✅ Implemented (ARS-356) | jsonb + one-time token |
+| RPC-48 | `rpc_resend_org_invitation` | Identity/RBAC | web | ✅ Implemented (ARS-356) | jsonb + rotated token |
+| RPC-49 | `rpc_revoke_org_invitation` | Identity/RBAC | web | ✅ Implemented (ARS-356) | jsonb |
+| RPC-50 | `rpc_accept_org_invitation` | Identity/RBAC | web | ✅ Implemented (ARS-356) | jsonb |
+| RPC-51 | `rpc_list_org_invitations` | Identity/RBAC | web | ✅ Implemented (ARS-356) | setof invitation summary |
 | RPC-05 | `rpc_upsert_farm` | Farm | web, ai | 📋 Planned | uuid (farm_id) |
 | RPC-05b | `rpc_set_farm_activity_types` | Farm | web, ai | 📋 Planned | jsonb { inserted, removed } |
 | RPC-06 | `rpc_upsert_herd_group` | Farm | web, ai | ✅ Implemented | uuid (group_id) |
@@ -337,6 +343,34 @@ owner, есть batches/pools не в терминальном статусе �
 **Публикует:** `identity.user.self_deleted`
 
 *Не вызывается AI Gateway (P-AI-1) — только self-service из кабинета.*
+
+### RPC-47..51 `org_invitations` [WEB] ✅ Implemented (ARS-356)
+
+RBAC МПК использует только `user_organization_roles`. Permission helper
+`fn_org_has_permission(org_id, code)` разрешает операции по data-backed mapping;
+`procurement`/`accountant` не имеют `mpk.team.manage`.
+
+| RPC | Параметры | Возвращает |
+|---|---|---|
+| `rpc_create_org_invitation` | `p_organization_id uuid, p_email text, p_role text` | `{ok,id,organization_id,email,role,status,token,expires_at,resend_count}` |
+| `rpc_resend_org_invitation` | `p_organization_id uuid, p_invitation_id uuid` | success-shape как create; terminal `{ok,id,status}` |
+| `rpc_revoke_org_invitation` | `p_organization_id uuid, p_invitation_id uuid` | `{ok,id,status,idempotent?}` |
+| `rpc_accept_org_invitation` | `p_token text` | `{ok,id,organization_id?,role?,status,idempotent?}` |
+| `rpc_list_org_invitations` | `p_organization_id uuid` | rows без `token_hash` |
+
+Create/resend/revoke/list требуют `mpk.team.manage`. Token — 32 random bytes в hex;
+в таблице хранится только SHA-256. Один открытый invite на
+`(organization_id, lower(email))`, resend не чаще 60 секунд, TTL после send/resend —
+72 часа. Acceptance требует authenticated + verified matching email, блокирует строку
+`FOR UPDATE`, атомарно пишет роль в `user_organization_roles`; повтор того же user
+идемпотентен. `p_organization_id` у accept намеренно отсутствует: org bound к server-side
+token hash row, а пользователь до acceptance ещё не член org.
+
+**Исключения:** `AUTH_REQUIRED` | `FORBIDDEN: mpk.team.manage required` |
+`INVALID_EMAIL` | `INVALID_INVITATION_ROLE` | `INVITATION_ALREADY_OPEN` |
+`INVITATION_RESEND_RATE_LIMIT` | `INVALID_INVITATION_TOKEN` |
+`VERIFIED_EMAIL_REQUIRED` | `INVITATION_EMAIL_MISMATCH` |
+`INVITATION_ALREADY_ACCEPTED`
 
 ---
 
