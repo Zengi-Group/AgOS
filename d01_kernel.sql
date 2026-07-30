@@ -1435,8 +1435,8 @@ create index if not exists idx_users_phone   on public.users (phone)  where phon
 create index if not exists idx_users_email   on public.users (email)  where email is not null;
 
 -- push_token (ARS-139)
-create index idx_push_token_user   on public.push_token (user_id);
-create index idx_push_token_active  on public.push_token (user_id) where is_active;
+create index if not exists idx_push_token_user   on public.push_token (user_id);
+create index if not exists idx_push_token_active  on public.push_token (user_id) where is_active;
 
 -- organizations
 create index if not exists idx_orgs_bin_iin  on public.organizations (bin_iin)   where bin_iin is not null;
