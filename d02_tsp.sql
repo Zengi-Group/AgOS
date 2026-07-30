@@ -1767,7 +1767,9 @@ create policy deal_reviews_read
     to authenticated
     using (
         -- reviewer sees own review always
-        reviewer_org_id = any((select public.fn_my_org_ids()))
+        reviewer_org_id = any(
+            coalesce((select public.fn_my_org_ids()), array[]::uuid[])
+        )
         -- all see after double-blind reveal
         or (visible_at is not null and visible_at <= now())
     );
@@ -1811,7 +1813,9 @@ create policy deal_review_dimension_scores_read
             from public.deal_reviews dr
             where dr.id = deal_review_id
               and (
-                  dr.reviewer_org_id = any((select public.fn_my_org_ids()))
+                  dr.reviewer_org_id = any(
+                      coalesce((select public.fn_my_org_ids()), array[]::uuid[])
+                  )
                   or (dr.visible_at is not null and dr.visible_at <= now())
               )
         )
