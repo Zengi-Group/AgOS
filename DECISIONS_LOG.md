@@ -2123,3 +2123,26 @@ revoke/expiry FSM и concurrency invariants (`FOR UPDATE` + partial unique index
 `tests/ars_356_rbac_invitations_test.sql`,
 `Docs/AGOS-MPK-Profile-EngSpec-v0_1.md`,
 `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md`, `DECISIONS_LOG.md`.
+
+### 2026-07-30: D01 production replay — push-index idempotency и notification-preference RLS
+
+**What**: полный production replay `d01_kernel.sql` для ARS-356 сначала транзакционно
+откатился на уже существующем `idx_push_token_user`; оба push-token индекса получили
+`IF NOT EXISTS` (PR #167). После успешного replay post-deploy advisors обнаружили, что
+`user_notification_preferences` унаследовала broad Supabase grants при выключенном RLS.
+Канон дополнен RLS, четырьмя own-user policies (SELECT/INSERT/UPDATE/DELETE), явным
+revoke для `PUBLIC`/`anon` и least-privilege grants для `authenticated`/`service_role`.
+Для `org_invitations.accepted_by_user_id` и `created_by_user_id` добавлены partial FK
+indexes по advisor findings.
+
+**Why**: `user_notification_preferences` — user-private settings surface; application-
+level filtering не является tenant boundary. Полный d-файл обязан быть повторно
+применим, а FK lookup/cascade paths не должны сканировать invitation history целиком.
+
+**Verify**: полный исправленный `d01` проходит production rollback-only replay;
+`tests/d01_notification_preferences_security_test.sql` фиксирует RLS/ACL/policy/index
+контракт; после persistent deploy обязательны ARS-352/356 regression contracts,
+advisor delta и `scripts/prod_diff.py`.
+
+**Files**: `d01_kernel.sql`, `tests/d01_notification_preferences_security_test.sql`,
+`DECISIONS_LOG.md`.
