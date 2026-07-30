@@ -44,13 +44,10 @@
 -- ============================================================================
 
 
--- ── 0. Снос старых сигнатур (освобождаем имена под канон-адаптер) ────────────
--- Канонический rpc_create_batch(uuid,...) из d07 мог быть задеплоен — дропаем,
--- чтобы единственным был text-адаптер визарда.
-drop function if exists public.rpc_create_batch(
-    uuid, uuid, uuid, int, numeric, date, uuid, uuid, text, uuid, jsonb
-) cascade;
-drop function if exists public.rpc_get_org_batches(uuid, text) cascade;
+-- ── 0. Сигнатуры AI Gateway и self-serve сосуществуют намеренно ─────────────
+-- d07 overloads принимают organization/farm/SKU и вызываются service_role из
+-- ai_gateway/tools/market.py. Адаптеры ниже имеют другие сигнатуры и обслуживают
+-- web-JWT визард. Удаление d07 overloads ломает живой AI Gateway.
 
 
 -- ============================================================

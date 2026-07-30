@@ -703,7 +703,8 @@ comment on table public.treatment_logs is
 -- -------------------------------------------------------
 -- health_restrictions
 -- D98: TSP safety gate (от Gemini, реализует D63).
--- is_active — GENERATED COLUMN: вычисляется из ends_at.
+-- is_active materialized by a trigger: now() is not immutable and therefore
+-- cannot be used in a PostgreSQL stored generated column.
 -- TSP RPC create_batch проверяет эту таблицу перед созданием Batch.
 -- -------------------------------------------------------
 create table if not exists public.health_restrictions (
@@ -724,9 +725,8 @@ create table if not exists public.health_restrictions (
     starts_at           timestamptz not null,
     ends_at             timestamptz not null,
     check (ends_at > starts_at),
-    -- D98: GENERATED COLUMN — TSP RPC проверяет этот флаг
-    -- Производительность: STORED = вычислен один раз при INSERT/UPDATE
-    is_active           boolean generated always as (now() < ends_at) stored,
+    -- D98: trigger-maintained snapshot; live gates also compare ends_at > now().
+    is_active           boolean not null default true,
     reason_text         text,
     created_by          uuid    references public.users(id),
     created_at          timestamptz not null default now()
@@ -734,7 +734,7 @@ create table if not exists public.health_restrictions (
 );
 comment on table public.health_restrictions is
     'D98: TSP Safety Gate. Реализует D63 (withdrawal_period_days).
-     GENERATED COLUMN is_active: TSP RPC запрос:
+     Trigger-maintained is_active snapshot: TSP RPC запрос:
        SELECT 1 FROM health_restrictions
        WHERE herd_group_id = $1 AND is_active = true LIMIT 1
      Если найдено → RPC create_batch возвращает ошибку с restriction_type и ends_at.
@@ -742,6 +742,25 @@ comment on table public.health_restrictions is
      Источник: vet_recommendation (medication) → withdrawal_period_days → ends_at.
      Карантин: EpidemicSignal.confirmed + is_quarantine_required → quarantine restriction.
      Фермер видит в UI: "Группа заблокирована для продажи до {ends_at}. Причина: {reason}."';
+
+create or replace function public.fn_health_restrictions_is_active()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+    new.is_active := (now() < new.ends_at);
+    return new;
+end;
+$$;
+
+drop trigger if exists trg_health_restrictions_is_active on public.health_restrictions;
+create trigger trg_health_restrictions_is_active
+    before insert or update of ends_at on public.health_restrictions
+    for each row execute function public.fn_health_restrictions_is_active();
+
+revoke execute on function public.fn_health_restrictions_is_active()
+    from public, anon, authenticated, service_role;
 
 -- -------------------------------------------------------
 -- vaccination_plans
@@ -2995,4 +3014,3 @@ revoke execute on function public.rpc_create_vet_case_from_event(uuid, uuid, uui
 insert into public.rpc_name_registry (sql_name, dok3_name, created_in, notes) values
   ('rpc_create_vet_case_from_event', null, 'd04_vet.sql (ARS-278)', 'Ferma 2.0: эскалация Ветврачу из события обхода (D147); эмит vet.vet_case.opened +animal_event_id')
 on conflict (sql_name) do update set notes = excluded.notes, created_in = excluded.created_in;
-

@@ -9,12 +9,15 @@ deploy_vet_isolation_fix.py), ни один из которых не остав�
   python3 scripts/deploy.py --migrations            # только новые миграции
   python3 scripts/deploy.py --all                   # d-файлы + миграции (полный реплей)
   python3 scripts/deploy.py --files d05 --dry-run   # план без применения
+  python3 scripts/deploy.py --files d05 --rollback-only  # выполнить и откатить
 
 Гарантии:
   * файл применяется в ОДНОЙ транзакции вместе со строкой ops_deploy_log —
     журнал не может разойтись с реальностью (нет коммита = нет строки);
   * после коммита тела функций из файла сверяются с pg_proc (ловит L-1: более
-    позднее определение того же имени молча перетирает фикс);
+    позднее определение той же сигнатуры молча перетирает фикс);
+  * --rollback-only исполняет весь выбранный набор в одной транзакции, чтобы
+    проверить межфайловый apply-order, и затем полностью откатывает её;
   * порядок --all = d01..d14, затем миграции по timestamp (TSP-ADAPTER-02:
     adapter обязан лечь ПОВЕРХ d-файлов, иначе воскресает uuid-overload);
   * пароль только из .db_password / AGOS_DB_PASSWORD, никогда не из argv.
@@ -64,26 +67,33 @@ def verify_bodies(conn, logical_name: str, sql_text: str) -> list:
 
     Расхождение = каноническое (последнее в файле) тело не найдено ни в одном
     прод-определении этого имени. Это ровно сигнатура L-1 «тихого отката»."""
-    funcs = db.extract_functions(sql_text)
-    if not funcs:
+    operations = db.extract_function_operations(sql_text)
+    canonical = {}
+    for action, name, types, body in operations:
+        key = (name, types)
+        if action == "drop":
+            canonical.pop(key, None)
+        else:
+            canonical[key] = body
+    if not canonical:
         return []
     problems = []
     with conn.cursor() as cur:
         cur.execute("""
-            select p.proname, p.prosrc from pg_proc p
+            select p.proname, pg_get_function_identity_arguments(p.oid), p.prosrc
             join pg_namespace n on n.oid = p.pronamespace
             where n.nspname = 'public' and p.proname = any(%s)
-        """, (list(funcs.keys()),))
+        """, (sorted({name for name, _types in canonical}),))
         prod = {}
-        for name, src in cur.fetchall():
-            prod.setdefault(name.lower(), []).append(db.normalize_body(src))
-    for name, bodies in funcs.items():
-        canonical = bodies[-1]
-        if name not in prod:
-            problems.append(f"{name}: НЕТ на проде после применения {logical_name}")
-        elif canonical not in prod[name]:
+        for name, args, src in cur.fetchall():
+            prod[(name.lower(), db.identity_arg_types(args))] = db.normalize_body(src)
+    for (name, types), body in canonical.items():
+        signature = ",".join(types)
+        if (name, types) not in prod:
+            problems.append(f"{name}({signature}): НЕТ на проде после применения {logical_name}")
+        elif body != prod[(name, types)]:
             problems.append(
-                f"{name}: тело на проде ≠ каноническому из {logical_name} "
+                f"{name}({signature}): тело на проде ≠ каноническому из {logical_name} "
                 f"(перетёрто более поздним определением? L-1)"
             )
     return problems
@@ -122,6 +132,27 @@ def apply_one(conn, logical_name: str, path: str, kind: str, note: str,
     return True
 
 
+def rollback_replay(conn, targets: list) -> bool:
+    """Executes the complete ordered target set in one transaction, then rolls back."""
+    print("Rollback-only replay: изменения не будут сохранены.")
+    try:
+        with conn.cursor() as cur:
+            for logical_name, path in targets:
+                sql_text = open(path, encoding="utf-8").read()
+                kb = len(sql_text.encode()) // 1024
+                print(f"  {logical_name} ({kb}KB) ...", end=" ", flush=True)
+                cur.execute(sql_text)
+                print("OK")
+        conn.rollback()
+        print("Rollback-only replay: OK, транзакция полностью откачена.")
+        return True
+    except Exception as error:
+        conn.rollback()
+        print(f"FAILED\n    {error}")
+        print("Rollback-only replay: транзакция полностью откачена.")
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser(description="Единый деплоер AgOS SQL на прод")
     g = ap.add_mutually_exclusive_group(required=True)
@@ -130,10 +161,14 @@ def main():
     g.add_argument("--migrations", action="store_true", help="только непримененные миграции")
     g.add_argument("--list", action="store_true", help="что применено / что pending")
     ap.add_argument("--dry-run", action="store_true", help="показать план, ничего не применять")
+    ap.add_argument("--rollback-only", action="store_true",
+                    help="выполнить весь набор в одной транзакции и откатить")
     ap.add_argument("--note", default="", help="комментарий в журнал (ARS-NNN, PR #N)")
     ap.add_argument("--force", action="store_true",
                     help="применить даже если sha уже в журнале (обычно не нужно)")
     args = ap.parse_args()
+    if args.dry_run and args.rollback_only:
+        ap.error("--dry-run и --rollback-only взаимоисключающие")
 
     git_sha, git_dirty = db.git_state()
     conn = db.connect()
@@ -210,6 +245,13 @@ def main():
     if git_dirty and not args.dry_run:
         print("⚠ Рабочее дерево грязное — git_sha в журнале не описывает применённый текст точно.")
     print(f"К применению: {len(targets)}\n")
+
+    if args.rollback_only:
+        ok = rollback_replay(conn, targets)
+        conn.close()
+        if not ok:
+            sys.exit(1)
+        return
 
     ok = 0
     for name, path in targets:

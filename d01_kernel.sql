@@ -1562,6 +1562,34 @@ create index if not exists idx_kc_review_due on public.knowledge_chunks (next_re
 -- SECTION 5: HELPER FUNCTIONS FOR RLS
 -- ============================================================
 
+-- Service-only bridge used by bird-otp. These helpers deliberately expose the
+-- auth UUID only to trusted backend code; Data API clients must not enumerate
+-- auth.users by email or phone.
+create or replace function public.get_auth_user_id_by_email(p_email text)
+returns uuid
+language sql
+security definer
+stable
+set search_path = auth, pg_temp
+as $$
+    select id from auth.users where email = p_email limit 1;
+$$;
+
+create or replace function public.get_auth_user_id_by_phone(p_phone text)
+returns uuid
+language sql
+security definer
+stable
+set search_path = auth, pg_temp
+as $$
+    select id from auth.users where phone = p_phone limit 1;
+$$;
+
+revoke execute on function public.get_auth_user_id_by_email(text) from public, anon, authenticated;
+revoke execute on function public.get_auth_user_id_by_phone(text) from public, anon, authenticated;
+grant execute on function public.get_auth_user_id_by_email(text) to service_role;
+grant execute on function public.get_auth_user_id_by_phone(text) to service_role;
+
 -- Returns current user's UUID (from our users table, not auth.uid())
 create or replace function public.fn_current_user_id()
 returns uuid language sql security definer stable
@@ -4513,11 +4541,14 @@ comment on function public.rpc_set_farm_activity_types(uuid, uuid, text[]) is
 -- Creates AIConversation record for a farm
 -- This function is in d01 (platform domain), NOT d07
 -- ============================================================
+drop function if exists public.rpc_start_ai_conversation(uuid, uuid, text, text);
+
 create or replace function public.rpc_start_ai_conversation(
     p_organization_id   uuid,
     p_farm_id           uuid        default null,
     p_phone             text        default null,
-    p_language          text        default 'ru'
+    p_language          text        default 'ru',
+    p_force_new         boolean     default false
 )
 returns jsonb
 language plpgsql
@@ -4528,6 +4559,7 @@ declare
     v_user_id       uuid;
     v_conv_id       uuid;
     v_context       jsonb;
+    v_reused        boolean := false;
 begin
     -- Resolve user: from JWT or by phone
     v_user_id := public.fn_current_user_id();
@@ -4559,15 +4591,19 @@ begin
         p_language := 'ru';
     end if;
 
-    -- Check for existing active conversation (reuse if within 24h window)
-    select id into v_conv_id
-    from   public.ai_conversations
-    where  organization_id = p_organization_id
-      and  user_id = v_user_id
-      and  is_active = true
-      and  session_expires_at > now()
-    order by created_at desc
-    limit 1;
+    -- Check for an existing active conversation unless the caller explicitly
+    -- starts a separate case/session.
+    if not p_force_new then
+        select id into v_conv_id
+        from   public.ai_conversations
+        where  organization_id = p_organization_id
+          and  user_id = v_user_id
+          and  is_active = true
+          and  session_expires_at > now()
+        order by created_at desc
+        limit 1;
+        v_reused := v_conv_id is not null;
+    end if;
 
     if v_conv_id is not null then
         -- Reuse existing active conversation
@@ -4650,7 +4686,7 @@ begin
         jsonb_build_object(
             'farm_id', p_farm_id,
             'language', p_language,
-            'reused', v_conv_id is not null
+            'reused', v_reused
         ),
         false
     );
@@ -4662,7 +4698,7 @@ begin
 end;
 $$;
 
-comment on function public.rpc_start_ai_conversation(uuid, uuid, text, text) is
+comment on function public.rpc_start_ai_conversation(uuid, uuid, text, text, boolean) is
     'RPC-40 | Dok 3 §9.1 | Slice 1
      Initialize AI conversation session (24h window per D64).
      Reuses existing active conversation if within 24h window.
@@ -4670,7 +4706,13 @@ comment on function public.rpc_start_ai_conversation(uuid, uuid, text, text) is
      Called by AI Gateway at start of WhatsApp interaction.
      p_phone: used when caller is service_role (AI Gateway) to resolve user.
      p_language: detected language (ru/kk). Default ru.
+     p_force_new: starts a separate conversation instead of reusing a 24h session.
      Event: platform.ai_conversation.started.';
+
+revoke execute on function public.rpc_start_ai_conversation(uuid, uuid, text, text, boolean)
+    from public, anon, authenticated;
+grant execute on function public.rpc_start_ai_conversation(uuid, uuid, text, text, boolean)
+    to service_role;
 
 
 -- ============================================================

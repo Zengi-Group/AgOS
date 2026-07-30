@@ -185,14 +185,14 @@ def _get_aggregated_demand(params: dict, org_id: str, sb: Client, _: Any) -> dic
 def _get_org_batches(params: dict, org_id: str, sb: Client, _: Any) -> dict:
     rpc_params: dict[str, Any] = {"p_organization_id": org_id}
     if params.get("status_filter") and params["status_filter"] != "all":
-        rpc_params["p_status_filter"] = params["status_filter"]
+        rpc_params["p_status"] = params["status_filter"]
     r = sb.rpc("rpc_get_org_batches", rpc_params).execute()
     return r.data or {}
 
 def _create_batch(params: dict, org_id: str, sb: Client, actor_id: Any) -> dict:
     r = sb.rpc("rpc_create_batch", {
         "p_organization_id": org_id, "p_farm_id": params.get("farm_id"),
-        "p_sku_id": params["sku_id"], "p_heads": params["heads"],
+        "p_tsp_sku_id": params["sku_id"], "p_heads": params["heads"],
         "p_target_month": params["target_month"],
         "p_avg_weight_kg": params.get("avg_weight_kg"),
         "p_actor_id": actor_id,
