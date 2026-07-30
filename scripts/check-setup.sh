@@ -38,10 +38,28 @@ for f in .claude/settings.json .mcp.json .env.example \
 done
 # graphify-out/graph.json НЕ репо-файл (gitignored, ретро ARS-152) — его свежесть
 # проверяется отдельно ниже (локальная регенерация, не git pull).
-# graphify-хуки реально включены в repo settings
-grep -q 'graphify' "$REPO/.claude/settings.json" 2>/dev/null \
-  && ok "graphify always-on хуки в .claude/settings.json" \
-  || bad "в .claude/settings.json нет graphify-хуков"
+# graphify-хуки реально включены в repo settings (D-GRAPH-FIRST-01).
+# Проверяем предметно, а не по слову «graphify»: 2026-07-28 хуки были на месте, но
+# заглушались собственным guard'ом `[ -f graph.json ]`, а MCP-сервер вообще не стартовал —
+# «упоминание есть» ничего не доказывает.
+grep -q 'graphify-guard.sh' "$REPO/.claude/settings.json" 2>/dev/null \
+  && ok "PreToolUse graph-guard подключён в .claude/settings.json" \
+  || bad "в .claude/settings.json нет graphify-guard.sh (PreToolUse)"
+grep -q 'graphify-session-start.sh' "$REPO/.claude/settings.json" 2>/dev/null \
+  && ok "SessionStart graph-status подключён в .claude/settings.json" \
+  || bad "в .claude/settings.json нет graphify-session-start.sh (SessionStart)"
+for h in graphify-guard.sh graphify-session-start.sh; do
+  [ -x "$REPO/scripts/hooks/$h" ] \
+    && ok "хук исполняемый: scripts/hooks/$h" \
+    || bad "scripts/hooks/$h отсутствует или не +x (хук молча не сработает)"
+done
+# MCP graphify: extra [mcp] обязателен — с bare graphifyy сервер падает на старте
+# (ModuleNotFoundError: No module named 'mcp'), и 10 graph-инструментов недоступны.
+if grep -q 'graphifyy\[mcp\]' "$REPO/.mcp.json" 2>/dev/null; then
+  ok "MCP graphify объявлен как graphifyy[mcp]"
+else
+  bad "в .mcp.json graphify без extra [mcp] → сервер не поднимется (ModuleNotFoundError: mcp)"
+fi
 [ -f "$REPO/.env" ] && ok ".env создан локально" || warn ".env отсутствует → cp .env.example .env и заполнить"
 
 hdr "B. Машинно-локальное — главное, что надо ставить руками"

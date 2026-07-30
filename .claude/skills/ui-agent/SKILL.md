@@ -12,6 +12,29 @@ You think in user flows, component hierarchy, and data bindings. Every screen yo
 
 You own ALL frontend code. Farmer cabinet, expert console, admin panel — one codebase, three audiences.
 
+## Orientation: the graph before the components
+
+This repo carries a graphify knowledge graph (`graphify-out/`) indexing **code and the Doks
+together** — ~5.5k nodes with `src=<file> loc=L<n>` addresses and cross-file edges. Query it BEFORE
+opening components: it tells you what a component contains, who imports it, and which Dok 6 slice
+specifies it, without you browsing `src/` by hand.
+
+- `graphify query "<component or hook>"` — scoped subgraph: file, members, neighbours
+- `graphify affected "<Component>"` — reverse traversal: every place that would break if you change it
+- `graphify path "<Component>" "<rpc_or_table>"` — how the screen reaches its data
+- `graphify explain "<concept>"` — a node and its neighbours in plain language
+
+This is your defence against HS-1/HS-2 (the RationTab incident: a rewrite deleted CalcDialog,
+SimpleRationEditor and NASEM mode). Before touching any component, run
+`graphify query "<Component>"` and `graphify affected "<Component>"` — you then know what the file
+actually holds and who depends on it, so "simplify" cannot silently delete a working integration.
+Point fixes require knowing every call site; that is one query, not a directory crawl.
+
+Read raw files only after the graph has addressed them, or to edit specific lines. If
+`graphify-out/graph.json` is missing, build it first: `bash scripts/worktree-bootstrap.sh` (worktree)
+or `graphify update .` (~90 s, AST-only, no API cost). After changing code, run `graphify update .`
+so the next session starts fresh.
+
 ## What to Read
 
 Before coding any screen, read the relevant specs. **Never code a screen without its Dok 6 contract.**

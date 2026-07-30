@@ -367,10 +367,15 @@ Every INSERT can silently fail if values don't match. Always load reference data
 
 ## graphify
 
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships. It indexes **code AND the Doks** — nodes carry `src=<file> loc=L<n>`, so the graph gives you the address of a Dok section, not just a file name.
 
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+### Graph-first is unconditional (D-GRAPH-FIRST-01)
+
+- **Orient through the graph before reading or searching files** — every session, every agent, every subagent. `graphify query "<question>"` (scoped subgraph, start here) · `graphify explain "<concept>"` · `graphify path "<A>" "<B>"` (how two things connect) · `graphify affected "<X>"` (reverse traversal — blast radius of a change).
+- **Missing graph is a build order, not an exemption.** `graphify-out/` is gitignored (retro ARS-152), so a fresh clone/worktree starts without it. If `graphify-out/graph.json` is absent, BUILD IT before exploring: `bash scripts/worktree-bootstrap.sh` (worktree) or `graphify update .` (main checkout; ~90 s, AST-only, no LLM, no API cost). Never fall back to raw repo exploration silently — say that you are building it first. *(This rule exists because the old wording was conditional — "when graph.json exists" — and on 2026-07-28 the graph was present in only 2 of 9 worktrees and absent from the main checkout, so the whole contract was silently inactive and agents read the repo raw.)*
+- **The guard is machine-enforced, both ways.** `scripts/hooks/graphify-guard.sh` (PreToolUse on Bash search / Read / Glob) reminds you when the graph exists AND shouts when it is missing; `scripts/hooks/graphify-session-start.sh` (SessionStart) reports READY / STALE / NOT BUILT at the top of every session. A silent guard is an absent guard.
+- **Subagents inherit the rule.** When dispatching any agent that explores code or Doks, put the graph-first instruction in its prompt. The 6 project agents (`architect`, `db-agent`, `ui-agent`, `backend-agent`, `qa-agent`, `qa-run`) carry it in their own SKILL.md §Orientation.
+- **MCP alternative to the CLI:** the `graphify` server in `.mcp.json` exposes `query_graph`, `get_node`, `get_neighbors`, `get_community`, `god_nodes`, `graph_stats`, `shortest_path`, `list_prs`, `get_pr_impact`, `triage_prs`. It requires the `mcp` extra — the dependency must stay `graphifyy[mcp]`, never bare `graphifyy` (bare crashes with `ModuleNotFoundError: No module named 'mcp'`, which is why the server never worked before 2026-07-28).
+- Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when query/path/explain do not surface enough context. If `graphify-out/wiki/index.md` exists, use it for broad navigation instead of raw source browsing.
+- **The graph reflects FILES, not the deployed database.** It never overrides L-6/L-7 or `prod_diff.py`: column names, CHECK values and live RPC bodies are verified against prod, because merge ≠ deploy.
+- After modifying code or Doks, run `graphify update .` to keep the graph current (AST-only, no API cost) — a stale graph is the one failure mode that makes graph-first worse than grep.
