@@ -1092,6 +1092,10 @@ export function CabinetApp() {
               orgId={profile?.orgId}
               onClose={() => closeSheet('subscribe')}
               onSubscribed={subscribeDone}
+              onSupport={() => {
+                closeSheet('subscribe')
+                go({ name: 'turan', back: routeRef.current })
+              }}
               toast={showToast}
             />
             {/* DEPRECATED (ARS-207): разовый взнос заменён подпиской. Смонтирован, но

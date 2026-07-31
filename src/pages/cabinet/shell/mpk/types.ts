@@ -1,7 +1,18 @@
 // AgOS · TSP-3 · Типы МПК (мясокомбинат). Мок-оболочка, аналог фермерской.
 
 export type MpkTypeStatus = 'under_review' | 'approved' | 'rejected'
-export type MpkMembership = 'none' | 'submitted' | 'grace' | 'active'
+// ARS-361: статусы повторяют серверный lifecycle, а не клиентскую имитацию вступления.
+// `trialing` и `grace` могут давать доступ только когда серверный is_active=true.
+export type MpkMembership =
+  | 'none'
+  | 'submitted'
+  | 'trialing'
+  | 'active'
+  | 'grace'
+  | 'past_due'
+  | 'expired'
+  | 'canceled'
+  | 'revoked'
 
 export type PoolStatus =
   | 'filling'    // набирается

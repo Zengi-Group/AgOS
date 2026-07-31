@@ -267,9 +267,21 @@ begin
     ) then
         raise exception 'ARS-356: partial unique open-invite index missing';
     end if;
-    if has_table_privilege('authenticated', 'public.org_invitations', 'select')
-       or has_table_privilege('authenticated', 'public.org_invitations', 'insert')
-       or has_table_privilege('anon', 'public.org_invitations', 'select') then
+    -- Use the relation ACL directly rather than has_table_privilege(): on the
+    -- current managed Postgres build the latter can fail internally while
+    -- resolving relacl. PUBLIC grants are included because they would also
+    -- expose the table to anon/authenticated callers.
+    if exists (
+        select 1
+        from pg_class c
+        cross join lateral aclexplode(
+            coalesce(c.relacl, acldefault('r', c.relowner))
+        ) as acl
+        left join pg_roles grantee on grantee.oid = acl.grantee
+        where c.oid = 'public.org_invitations'::regclass
+          and (acl.grantee = 0 or grantee.rolname in ('authenticated', 'anon'))
+          and acl.privilege_type in ('SELECT', 'INSERT')
+    ) then
         raise exception 'ARS-356: invitation table bypass privilege exists';
     end if;
     if has_function_privilege(

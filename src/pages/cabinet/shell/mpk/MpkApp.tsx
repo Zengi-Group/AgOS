@@ -18,7 +18,11 @@ import '../cabinet.css'
 import '../ionic.css'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { loadAccountProfile } from '@/lib/account'
+import {
+  loadAccountProfile,
+  type CanonicalMembershipReadModel,
+  type CanonicalVerificationStatus,
+} from '@/lib/account'
 // S2.1-паттерн (ARS-157): тактильный отклик на ключевых действиях через Host Bridge.
 // В web — no-op; CapacitorHost даёт вибрацию. НЕ звать @capacitor/* напрямую.
 import { useHost } from '@/platform/host/HostContext'
@@ -45,15 +49,60 @@ interface MpkAppProps {
   initialState?: Partial<MpkState>
 }
 
-// Гейты МПК из БД. Тип МПК назначается при регистрации (organization_type_assignments)
-// → наличие 'mpk' = подтверждён. Членство: registered → нужен self-join; observer/active_buyer = активно.
-function deriveMpkType(orgTypes: string[]): MpkTypeStatus {
-  return orgTypes.includes('mpk') ? 'approved' : 'under_review'
+// ARS-361: assignment типа при регистрации — только классификация, не доказательство.
+// Единственный UI-сигнал подтверждения МПК — агрегированный verification.status из RPC.
+function deriveMpkType(status: CanonicalVerificationStatus | null | undefined): MpkTypeStatus {
+  if (status === 'approved') return 'approved'
+  if (status === 'rejected') return 'rejected'
+  return 'under_review'
 }
-function deriveMpkMembership(level: string | null): MpkMembership {
+
+function deriveLegacyMpkMembership(level: string | null): MpkMembership {
   if (level === 'observer' || level === 'active_buyer') return 'active'
-  if (level) return 'submitted'   // 'registered' — членство на рассмотрении (нужен self-join)
+  if (level) return 'submitted'
   return 'none'
+}
+
+function deriveMpkMembership(
+  readModel: CanonicalMembershipReadModel | null,
+  subscriptionState: string | null,
+  legacyLevel: string | null,
+): MpkMembership {
+  if (readModel) {
+    // `is_active` — access truth. Не поднимаем активный state без серверного доступа.
+    if (readModel.isActive) {
+      if (readModel.state === 'trialing') return 'trialing'
+      if (readModel.state === 'grace') return 'grace'
+      return 'active'
+    }
+    switch (readModel.state) {
+      case 'past_due': return 'past_due'
+      case 'expired': return 'expired'
+      case 'canceled': return 'canceled'
+      case 'revoked': return 'revoked'
+      case 'trialing':
+      case 'active':
+      case 'grace': return 'submitted'
+      default: return readModel.source === 'none' ? 'none' : 'submitted'
+    }
+  }
+
+  // Совместимость с текущим rpc_get_org_subscription, если новый read-model ещё не
+  // задеплоен. Он не даёт `is_active`, поэтому используется лишь как fallback.
+  switch (subscriptionState) {
+    case 'trialing': return 'trialing'
+    case 'active': return 'active'
+    case 'grace': return 'grace'
+    case 'past_due': return 'past_due'
+    case 'expired': return 'expired'
+    case 'canceled': return 'canceled'
+    case 'revoked': return 'revoked'
+    default: return deriveLegacyMpkMembership(legacyLevel)
+  }
+}
+
+function membershipHasAccess(membership: MpkMembership): boolean {
+  return membership === 'trialing' || membership === 'active' || membership === 'grace'
 }
 
 // iOS-режим для всей оболочки (S-1 архитект-ревью ARS-152): МПК не полагается на
@@ -114,7 +163,9 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
   const [orgName, setOrgName] = useState(initialState?.orgName ?? 'ТОО «АгроМит»')
   const [region, setRegion] = useState(initialState?.region ?? 'ЮКО')
   const [bin, setBin] = useState(initialState?.bin ?? '123456789012')
-  const [orgId, setOrgId] = useState<string | null>(null)  // org реального МПК — для self-serve RPC
+  const [orgId, setOrgId] = useState<string | null>(null)
+  const [membershipPeriodEnd, setMembershipPeriodEnd] = useState<string | null>(null)
+  const [membershipNextBillingAt, setMembershipNextBillingAt] = useState<string | null>(null)
   // Маркет-борд: реальные партии ферм через RPC; seed — демо-фолбэк (аноним/нет backend).
   const [marketBatches, setMarketBatches] = useState<MarketBatch[]>(seedMarketBatches())
   // Входящие broadcast-офферы (Слайс C): партии без прямого матча, разосланные мне (FCFS).
@@ -144,9 +195,16 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
       if (p.bin) setBin(p.bin)
       if (p.orgId) {
         setOrgId(p.orgId)
-        // Реальный аккаунт МПК — гейты типа/членства из БД (вместо демо-дефолтов).
-        setTypeStatus(deriveMpkType(p.orgTypes))
-        setMembership(deriveMpkMembership(p.membershipLevel))
+        // Реальный аккаунт: никогда не выводим approval из organization_type_assignments.
+        // При недоступном новом RPC deriveMpkType безопасно оставляет under_review.
+        setTypeStatus(deriveMpkType(p.membershipVerification?.verification?.status))
+        setMembership(deriveMpkMembership(
+          p.membershipVerification?.membership ?? null,
+          p.subscriptionState,
+          p.membershipLevel,
+        ))
+        setMembershipPeriodEnd(p.membershipVerification?.membership.currentPeriodEnd ?? p.currentPeriodEnd)
+        setMembershipNextBillingAt(p.membershipVerification?.membership.nextBillingAt ?? p.nextBillingAt)
       }
     })
     loadMarketBatches().then((list) => {
@@ -242,16 +300,7 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     await refetchMarket()
   }
 
-  // Реальное self-serve вступление в членство (registered → observer). Бросает при ошибке.
-  const joinMembership = async () => {
-    if (!orgId) return
-    const { error } = await supabase.rpc('rpc_self_join_membership', { p_organization_id: orgId })
-    if (error) throw new Error(error.message)
-    const p = await loadAccountProfile('mpk')
-    if (p) setMembership(deriveMpkMembership(p.membershipLevel))
-  }
-
-  const tspOpen = typeStatus === 'approved' && (membership === 'grace' || membership === 'active')
+  const tspOpen = typeStatus === 'approved' && membershipHasAccess(membership)
 
   const showToast = (text: string) => {
     const t = { id: Date.now(), text }
@@ -291,6 +340,8 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     <MpkHomeScreen
       typeStatus={typeStatus}
       membership={membership}
+      membershipPeriodEnd={membershipPeriodEnd}
+      membershipNextBillingAt={membershipNextBillingAt}
       pools={pools}
       tspOpen={tspOpen}
       orgName={orgName}
@@ -304,13 +355,10 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
       realAccount={orgId !== null}
       onSimulateApprove={() => { setTypeStatus('approved'); showToast('Тип МПК подтверждён (демо)') }}
       onSimulateMember={() => {
-        if (orgId) {
-          joinMembership()
-            .then(() => showToast('Членство активировано'))
-            .catch((e) => showToast('Не удалось: ' + (e instanceof Error ? e.message : '')))
-        } else {
-          setMembership('grace'); showToast('Членство активировано (демо)')
-        }
+        // Для реальных организаций CTA ведёт в TURAN; UI не создаёт/не подтверждает
+        // членство сам. Демо сохраняет свой изолированный сценарий.
+        if (orgId) { openSheet('Членство TURAN'); return }
+        setMembership('grace'); showToast('Членство активировано (демо)')
       }}
       onRefresh={pullAll}
     />

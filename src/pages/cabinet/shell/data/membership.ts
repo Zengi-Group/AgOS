@@ -11,7 +11,6 @@ import type { Batch, MembershipStatus } from '../types'
 // ARS-261 (B10): payApproved убран — approved-плашка перешла на язык подписки без
 // штрафной даты «оплатите до» (в подписочной модели первый период бесплатный).
 export const MEMB_DATES = {
-  payGrace: fmtDGen(addDays(TODAY, 13)),
   expiringTill: fmtDGen(addDays(TODAY, 11)),
 }
 
@@ -52,9 +51,10 @@ export function buildDecisions({ batches, membership, h }: BuildArgs): DecisionC
     actions: [{ t: 'Продлить', kind: 'primary', fn: h.pay }, { t: 'Кабинет', kind: 'ghost', fn: h.cabinet }],
   })
   if (membership === 'grace') cards.push({
-    id: 'm-grace', pri: 0, src: 'ЧЛЕНСТВО TURAN', due: 'до ' + MEMB_DATES.payGrace,
-    t: 'Продлите членство — иначе доступ закроется',
-    actions: [{ t: 'Оплатить', kind: 'primary', fn: h.pay }, { t: 'Кабинет', kind: 'ghost', fn: h.cabinet }],
+    id: 'm-grace', pri: 0, src: 'ЧЛЕНСТВО TURAN',
+    t: 'Проверьте статус членства',
+    m: 'Оплату и дальнейшее продление подтверждает TURAN вручную.',
+    actions: [{ t: 'Уточнить оплату', kind: 'primary', fn: h.pay }, { t: 'Кабинет', kind: 'ghost', fn: h.cabinet }],
   })
   if (membership === 'expired') cards.push({
     id: 'm-exp', pri: 1, src: 'ЧЛЕНСТВО TURAN',

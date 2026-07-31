@@ -60,12 +60,13 @@
 | `[WEB]` | React/Vite (кабинет) | Аутентифицирован через Supabase Auth JWT. RLS применяется автоматически |
 | `[AI]` | Python AI Gateway | Использует service_role key + явную проверку org_id. Никогда не обходит RLS без явного reason |
 | `[ADMIN]` | Административная консоль | Только пользователи с активной записью в admin_roles. fn_is_admin() = true |
+| `[PUBLIC]` | Публичный read endpoint | Доступен без JWT только для явно обезличенных агрегатов; персональные и batch-level данные исключены. |
 
 ---
 
 ## 1. Сводный каталог
 
-**~103 функции:** 56 базовых бизнес-RPCs + 14 M4/M6 (§4a) + 11 A-CAT (§4b) + 22 AI Gateway RPCs (d07; из них 9 задокументированы как AI-23..AI-31). Статус отдельно для каждой.
+**~104 функции:** 56 базовых бизнес-RPCs + 15 M4/M6 (§4a) + 11 A-CAT (§4b) + 22 AI Gateway RPCs (d07; из них 9 задокументированы как AI-23..AI-31). Статус отдельно для каждой.
 
 > 📌 **v1.5 (2026-06-22):** статусы RPC-21..24, 26..29, 31, 32, 37, 44 обновлены на ✅ Implemented; исправлены return-shapes RPC-21, RPC-24, RPC-36, rpc_save_consulting_ration; параметры RPC-33 синхронизированы с SQL; добавлены vet READ-RPCs и 9 AI инструментов.
 
@@ -89,6 +90,10 @@
 | RPC-55 | `rpc_append_org_bank_account` | Identity/MPK | web | ✅ Implemented (ARS-359) | uuid (account version id) |
 | RPC-56 | `rpc_propose_org_field_change` | Identity/MPK | web | ✅ Implemented (ARS-359) | uuid (review_id) |
 | RPC-57 | `rpc_review_org_field_change` | Identity/MPK | admin | ✅ Implemented (ARS-359) | jsonb |
+| RPC-58 | `rpc_create_org_document_upload_intent` | Identity/MPK | web | ✅ Implemented (ARS-355) | jsonb upload intent |
+| RPC-59 | `rpc_finalize_org_document_upload` | Identity/MPK | web | ✅ Implemented (ARS-355) | jsonb finalized summary |
+| RPC-60 | `rpc_abandon_org_document_upload` | Identity/MPK | web | ✅ Implemented (ARS-355) | jsonb abandon summary |
+| RPC-61 | `rpc_get_org_membership_verification` | Membership/MPK | web | ✅ Implemented (ARS-361) | jsonb canonical read model |
 | RPC-05 | `rpc_upsert_farm` | Farm | web, ai | 📋 Planned | uuid (farm_id) |
 | RPC-05b | `rpc_set_farm_activity_types` | Farm | web, ai | 📋 Planned | jsonb { inserted, removed } |
 | RPC-06 | `rpc_upsert_herd_group` | Farm | web, ai | ✅ Implemented | uuid (group_id) |
@@ -111,6 +116,7 @@
 | RPC-18 | `rpc_get_market_summary` | Market/TSP | web, ai | 📋 Planned | jsonb |
 | RPC-19 | `rpc_set_price_grid` | Market/TSP | admin | 📋 Planned | uuid (price_grid_id) |
 | RPC-20 | `rpc_publish_price_index_value` | Market/TSP | admin | 📋 Planned | uuid (value_id) |
+| RPC-62 | `rpc_get_mpk_reputation` | Market/TSP | public | ✅ Implemented (ARS-360; G3 deploy pending) | jsonb aggregate only |
 
 ### 1.3. Feed & Nutrition
 
@@ -399,6 +405,50 @@ must not re-read the current primary bank account.
 `INVALID_IBAN` | `FIELD_REVIEW_ALREADY_PENDING` | `FIELD_BASELINE_CHANGED` |
 `BIN_IIN_ALREADY_EXISTS`
 
+### RPC-58..60 `MPK organization documents` [WEB] ✅ Implemented (ARS-355)
+
+| RPC | Параметры | Возвращает / правило |
+|---|---|---|
+| `rpc_create_org_document_upload_intent` | `organization_id, kind, title, original_file_name, issued_on?, expires_on?` | `{id,storage_path,upload_expires_at}`; active MPK + `mpk.documents.manage`; server-derived exact path, 15 min intent |
+| `rpc_finalize_org_document_upload` | `organization_id, document_id` | `{id,review_state,finalized_at,idempotent}`; locks registry/object and validates PDF/JPEG/PNG + ≤10 MiB |
+| `rpc_abandon_org_document_upload` | `organization_id, document_id` | `{id,idempotent}`; marks an open intent abandoned for service cleanup |
+
+`storage_path` из RPC-58 — узкая, краткоживущая upload-capability для непосредственного
+Storage upsert; он не должен сохраняться клиентом, попадать в list/read payload или
+логи. После finalize прямые Storage list/read/update запрещены. Загрузка идёт в private
+`org-documents`; download выдаёт только Edge Function `org-document-download` после JWT
+authorization как signed URL с TTL 60 секунд. Service-only cleanup/path-resolver helpers
+не являются public RPC и в каталог не включаются.
+
+**Исключения:** `AUTH_REQUIRED` | `FORBIDDEN: mpk.documents.manage required` |
+`ORG_NOT_ACTIVE_MPK` | `ORG_DOCUMENT_NOT_FOUND` |
+`ORG_DOCUMENT_UPLOAD_NOT_OPEN` | `ORG_DOCUMENT_UPLOAD_OBJECT_NOT_FOUND` |
+`ORG_DOCUMENT_UNSUPPORTED_MIME_TYPE` | `ORG_DOCUMENT_INVALID_OBJECT_SIZE` |
+`ORG_DOCUMENT_FILE_SIZE_LIMIT_EXCEEDED` | `ORG_DOCUMENT_UPLOAD_ALREADY_FINALIZED`
+
+### RPC-61 `Canonical membership + MPK verification read model` [WEB] ✅ Implemented (ARS-361)
+
+| RPC | Параметры | Возвращает / правило |
+|---|---|---|
+| `rpc_get_org_membership_verification` | `organization_id` | Canonical JSON projection; organization member, TURAN admin, or trusted service role |
+
+`membership` combines the access predicate with the subscription lifecycle:
+`is_active` comes from `fn_org_membership_active`; subscription `state` and period
+dates come only from `membership_subscription`. A legacy-only member has
+`source=legacy_membership` and all subscription lifecycle fields are JSON null—no
+expiry is synthesized. `renewal_mode=manual_assistance` and the returned CTA never
+promise that an automatic charge/renewal job is armed.
+
+`verification.type_assignment` is classification metadata only. It can never create
+approval by itself; a recorded assigner is provenance, not operator confirmation.
+`verification.timeline` preserves append-only evidence, while
+`latest_by_type` selects the newest row per verification type; each entry retains raw
+`result` plus `effective_status` (including expiry). Aggregate
+`verification.status` summarizes evidence and is not a write or entitlement policy.
+`association_number` is JSON null because no canonical source column exists.
+
+**Исключения:** `FORBIDDEN: not a member of organization …`
+
 ---
 
 ## 3. Farm — Управление фермой
@@ -545,11 +595,11 @@ must not re-read the current primary bank account.
 
 ## 4a. Market / TSP — M4 + M6 Extension (canonical, 2026-06-15)
 
-> **Источник:** [d02_tsp.sql SECTION 8](../d02_tsp.sql) (Section 8 + addendum).
+> **Источник:** [d02_tsp.sql SECTIONS 7–9](../d02_tsp.sql) (Section 8 + ARS-360 canonical convergence).
 > **Покрытие:** Microstep 4 (Batch/Pool/Offer FSM) + Microstep 6 (TSP UX flow).
-> **Статус:** все 14 функций ✅ Implemented + deployed на prod (2026-06-15) + registered в `rpc_name_registry`.
+> **Статус:** 14 базовых функций ✅ deployed на prod (2026-06-15); ARS-360 добавляет 15-ю функцию и конвергенцию отзывов в source/migration, prod-deploy ожидает G3.
 >
-> **Конвенции (все 14):** `SECURITY DEFINER` + `set search_path = public, pg_temp`; `p_organization_id` первый параметр (P-AI-2); idempotent state checks; `batch_events` + `platform_events` на каждом FSM-переходе батча.
+> **Конвенции (org-scoped M4/M6):** `SECURITY DEFINER` + `set search_path = public, pg_temp`; `p_organization_id` первый параметр (P-AI-2); idempotent state checks; `batch_events` + `platform_events` на каждом FSM-переходе батча. `rpc_get_mpk_reputation` — явное aggregate-only исключение с `p_mpk_org_id`.
 >
 > **Backward compat:** RPC-12..16, 19, 20 выше (старая Slice 5b модель PoolRequest) **не модифицированы** (P7). Они остаются callable для legacy-данных, но в новых M4/M6 потоках использовать не следует — будущий deprecation ADR.
 
@@ -659,20 +709,20 @@ Caller вычисляется через `batch.pool_line_id → pools.organizat
 
 → `boolean`. Идемпотентна. Emits `batch_events('delivered')`.
 
-### RPC-M4-09 `rpc_submit_deal_review` [WEB] [AI] ✅ Implemented (Section 8)
+### RPC-M4-09 `rpc_submit_deal_review` [WEB] [AI] ✅ Implemented (ARS-360; G3 deploy pending)
 
-Создание/обновление взаимного отзыва. D-M6-11 + D-M6-12.
+Создание неизменяемого взаимного отзыва. D-M6-11 + D-M6-12.
 
 | Параметр | Тип | Обяз. | Описание |
 |----------|-----|-------|----------|
-| `p_organization_id` | uuid | ✓ | Reviewer (роль выводится: `=batch.org` → 'farmer'; `=pool.org` → 'mpk'; иначе `FORBIDDEN`). |
+| `p_organization_id` | uuid | ✓ | Batch обязан резолвиться в ровно одного delivered MPK для обеих ролей. Затем `=batch.organization_id` → farmer, `=resolved MPK` → mpk; несколько MPK → `AMBIGUOUS_MPK_COUNTERPARTY`, ноль → `NO_DELIVERED_MPK_COUNTERPARTY`, иначе `FORBIDDEN`. |
 | `p_batch_id` | uuid | ✓ | Должен быть `delivered` (S3 fix). |
 | `p_overall_score` | int | ✓ | 1–5. |
-| `p_dimension_id` | uuid | ✓ | `review_dimensions.id` (пилот: is_pilot_primary для роли). |
+| `p_dimension_id` | uuid | ✓ | Активный `review_dimensions.id`, применимый к роли reviewer. |
 | `p_dimension_score` | int | ✓ | 1–5. |
 | `p_comment` | text | — | — |
 
-→ `uuid` (deal_review_id). При повторном вызове — UPDATE. Triggers double-blind reveal: если оба отзыва submitted — set `visible_at=now()` на обоих. Иначе оставляет `visible_at=NULL` до истечения review_window.
+→ `uuid` (deal_review_id). Повторный вызов → `REVIEW_ALREADY_SUBMITTED`, UPDATE отсутствует. Батч блокируется; вторая отправка точной пары farmer/MPK атомарно выставляет `visible_at` на обоих. Timeout reveal и любые изменения после reveal отсутствуют.
 
 ### RPC-M4-10 `rpc_pool_return_batches` [WEB] [AI] ✅ Implemented (Section 8)
 
@@ -733,6 +783,16 @@ Floor цена + **обязательный disclaimer** (Art.171 ПК РК + D-
 | `p_region_id` | uuid | — |
 
 → `jsonb { price_per_kg, region_id, valid_from, valid_to, source: 'national'|'regional', legal_disclaimer_text }`. Используется UI для soft-warn при публикации батча и валидации pool_lines.mpk_price_per_kg.
+
+### RPC-M4-15 `rpc_get_mpk_reputation` [WEB] [PUBLIC] ✅ Implemented (ARS-360; G3 deploy pending)
+
+Обезличенный публичный агрегат репутации МПК из взаимно раскрытых canonical farmer→MPK отзывов.
+
+| Параметр | Тип | Обяз. | Описание |
+|----------|-----|-------|----------|
+| `p_mpk_org_id` | uuid | ✓ | Организация МПК для агрегата. |
+
+→ `jsonb { mpk_org_id, review_count, average_score, weight_accuracy_average, distribution }`. Не возвращает reviewer/counterparty, batch ID, комментарии или отдельные отзывы; split-batch с неоднозначным MPK исключаются.
 
 ### Адверсариальный code review (13 findings, 11 fixed)
 

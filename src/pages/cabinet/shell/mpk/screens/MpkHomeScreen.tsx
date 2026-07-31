@@ -20,6 +20,8 @@ interface BannerRow {
 interface Props {
   typeStatus: MpkTypeStatus
   membership: MpkMembership
+  membershipPeriodEnd: string | null
+  membershipNextBillingAt: string | null
   pools: Pool[]
   tspOpen: boolean
   orgName: string
@@ -53,8 +55,9 @@ function chipClass(s: PoolStatus): string {
   return ''
 }
 
-function MpkTypeBanner({ typeStatus, onSimulateApprove, onOpenContactTuran }: {
+function MpkTypeBanner({ typeStatus, realAccount, onSimulateApprove, onOpenContactTuran }: {
   typeStatus: MpkTypeStatus
+  realAccount?: boolean
   onSimulateApprove: () => void
   onOpenContactTuran: (topic?: string) => void
 }) {
@@ -69,38 +72,109 @@ function MpkTypeBanner({ typeStatus, onSimulateApprove, onOpenContactTuran }: {
     return (
       <div className="mpk-banner bad">
         <div className="mpk-banner-t">✗ Тип организации не подтверждён</div>
-        <div className="mpk-banner-s">Причина: не соответствует требованиям</div>
+        <div className="mpk-banner-s">Уточните документы и следующий шаг у TURAN.</div>
         <Cta variant="ghost" onClick={() => onOpenContactTuran('Отклонение типа МПК')}>Обратиться в TURAN</Cta>
       </div>
     )
   }
   return (
     <div className="mpk-banner neutral">
-      <div className="mpk-banner-t">Проверяем тип организации</div>
-      <div className="mpk-banner-s">Подтверждаем: вы — мясокомбинат. 2–5 рабочих дней.</div>
-      <Cta variant="ghost" onClick={onSimulateApprove}>демо: Подтвердить</Cta>
+      <div className="mpk-banner-t">Статус типа МПК ещё не подтверждён</div>
+      <div className="mpk-banner-s">TURAN проверяет сведения и документы организации.</div>
+      <Cta
+        variant="ghost"
+        onClick={realAccount ? () => onOpenContactTuran('Верификация типа МПК') : onSimulateApprove}
+      >
+        {realAccount ? 'Уточнить статус в TURAN' : 'демо: Подтвердить'}
+      </Cta>
     </div>
   )
 }
 
-function MpkMemberBanner({ membership, realAccount, onSimulateMember }: {
+function fmtMpkDate(iso: string | null): string | null {
+  if (!iso) return null
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime())
+    ? null
+    : date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+function MpkMemberBanner({
+  membership,
+  membershipPeriodEnd,
+  membershipNextBillingAt,
+  realAccount,
+  onSimulateMember,
+  onOpenContactTuran,
+}: {
   membership: MpkMembership
+  membershipPeriodEnd: string | null
+  membershipNextBillingAt: string | null
   realAccount?: boolean
   onSimulateMember: () => void
+  onOpenContactTuran: (topic?: string) => void
 }) {
-  if (membership === 'grace' || membership === 'active') {
+  const periodEnd = fmtMpkDate(membershipPeriodEnd)
+  const nextBillingAt = fmtMpkDate(membershipNextBillingAt)
+
+  if (membership === 'trialing' || membership === 'active') {
     return (
       <div className="mpk-banner ok">
         <div className="mpk-banner-t">✓ Членство TURAN активно</div>
+        {membership === 'trialing' && <div className="mpk-banner-s">Пробный период{periodEnd ? ` до ${periodEnd}` : ''}.</div>}
+        {membership === 'active' && periodEnd && <div className="mpk-banner-s">Действует до {periodEnd}.</div>}
       </div>
     )
   }
+
+  if (membership === 'grace') {
+    return (
+      <div className="mpk-banner neutral">
+        <div className="mpk-banner-t">Членство временно активно</div>
+        <div className="mpk-banner-s">
+          {periodEnd ? `Доступ сохранён до ${periodEnd}. ` : ''}
+          Оплату и продление подтверждает TURAN вручную.
+        </div>
+        <Cta variant="ghost" onClick={() => onOpenContactTuran('Проверка оплаты членства')}>Уточнить оплату в TURAN</Cta>
+      </div>
+    )
+  }
+
+  if (membership === 'past_due') {
+    return (
+      <div className="mpk-banner bad">
+        <div className="mpk-banner-t">Членство ожидает проверки оплаты</div>
+        <div className="mpk-banner-s">
+          {nextBillingAt ? `Дата расчёта: ${nextBillingAt}. ` : ''}
+          Для ручной проверки обратитесь в TURAN.
+        </div>
+        <Cta variant="ghost" onClick={() => onOpenContactTuran('Проверка оплаты членства')}>Связаться с TURAN</Cta>
+      </div>
+    )
+  }
+
+  if (membership === 'expired' || membership === 'canceled' || membership === 'revoked') {
+    const title = membership === 'revoked'
+      ? 'Доступ к членству приостановлен'
+      : membership === 'canceled' ? 'Членство отменено' : 'Срок членства завершён'
+    return (
+      <div className="mpk-banner bad">
+        <div className="mpk-banner-t">{title}</div>
+        <div className="mpk-banner-s">Условия дальнейшего оформления уточните у TURAN.</div>
+        <Cta variant="ghost" onClick={() => onOpenContactTuran('Статус членства TURAN')}>Связаться с TURAN</Cta>
+      </div>
+    )
+  }
+
+  const isSubmitted = membership === 'submitted'
   return (
     <div className="mpk-banner neutral">
-      <div className="mpk-banner-t">Членство в TURAN на рассмотрении</div>
-      <div className="mpk-banner-s">1–3 рабочих дня.</div>
-      <Cta variant="ghost" onClick={onSimulateMember}>
-        {realAccount ? 'Активировать членство' : 'демо: Активировать членство'}
+      <div className="mpk-banner-t">{isSubmitted ? 'Членство TURAN ожидает решения' : 'Членство TURAN не оформлено'}</div>
+      <div className="mpk-banner-s">
+        {isSubmitted ? 'Статус и дальнейшие действия подтверждает TURAN.' : 'Оформление членства выполняется через TURAN.'}
+      </div>
+      <Cta variant="ghost" onClick={realAccount ? () => onOpenContactTuran('Членство TURAN') : onSimulateMember}>
+        {realAccount ? 'Уточнить в TURAN' : 'демо: Активировать членство'}
       </Cta>
     </div>
   )
@@ -146,7 +220,7 @@ function MpkPromoBanner({ onOpenTsp, onOpenOffers, onOpenContactTuran }: {
 }
 
 export function MpkHomeScreen({
-  typeStatus, membership, pools, tspOpen, orgName, region, bin,
+  typeStatus, membership, membershipPeriodEnd, membershipNextBillingAt, pools, tspOpen, orgName, region, bin,
   onOpenTsp, onOpenOffers, offersCount, onOpenPool, onOpenContactTuran, realAccount, onSimulateApprove, onSimulateMember,
   onRefresh,
 }: Props) {
@@ -183,12 +257,20 @@ export function MpkHomeScreen({
       {/* 4.2 — Баннер типа */}
       <MpkTypeBanner
         typeStatus={typeStatus}
+        realAccount={realAccount}
         onSimulateApprove={onSimulateApprove}
         onOpenContactTuran={onOpenContactTuran}
       />
 
       {/* 4.3 — Баннер членства */}
-      <MpkMemberBanner membership={membership} realAccount={realAccount} onSimulateMember={onSimulateMember} />
+      <MpkMemberBanner
+        membership={membership}
+        membershipPeriodEnd={membershipPeriodEnd}
+        membershipNextBillingAt={membershipNextBillingAt}
+        realAccount={realAccount}
+        onSimulateMember={onSimulateMember}
+        onOpenContactTuran={onOpenContactTuran}
+      />
 
       {/* 4.3b — Промо-плейсмент (управляемый из админки) */}
       <MpkPromoBanner onOpenTsp={onOpenTsp} onOpenOffers={onOpenOffers} onOpenContactTuran={onOpenContactTuran} />

@@ -57,7 +57,7 @@ export const MEMBERSHIP_DICT: Record<MembershipStatus, MembershipEntry> = {
   },
   grace: {
     cab: 'Членство не продлено',
-    plate: { tone: 'amber', t: 'Членство не продлено. Оплатите до ' + MEMB_DATES.payGrace + ', чтобы не потерять доступ', cta: 'Оплатить', act: 'pay' },
+    plate: { tone: 'amber', t: 'Членство ожидает подтверждения оплаты. Уточните статус в TURAN.', cta: 'Уточнить оплату', act: 'pay' },
   },
   expired: {
     cab: 'Членство истекло',
@@ -72,7 +72,7 @@ export const MEMBERSHIP_DICT: Record<MembershipStatus, MembershipEntry> = {
 // ---------- маппинг членства БД → UI-кабинета ----------
 // Источник истины (ARS-263, D-BILL-TRUTH-01): подписка. Зеркалит SQL-предикат
 // fn_org_membership_active — живая подписка (trialing|active|grace) ИЛИ legacy level.
-// Приоритет: подписка → legacy level → терминальная подписка (промпт продления) → заявка.
+// Приоритет: активная подписка → legacy level → терминальная подписка → заявка.
 // subscriptionState опционален: null/недоступен → падаем на старую level+заявка-логику
 // (легаси-члены и демо не ломаются).
 export function deriveMembership(
@@ -83,11 +83,14 @@ export function deriveMembership(
   // 1) живая подписка = канонический член (доступ ON)
   if (subscriptionState === 'trialing' || subscriptionState === 'active') return 'active'
   if (subscriptionState === 'grace') return 'grace'  // доступ ещё ON, но нужен платёж
-  // 2) legacy level-stack член (старый флоу) — тоже активный член по предикату
+  // 2) legacy level-stack член (старый флоу) — тоже активный член по предикату.
+  // ARS-361 намеренно отдаёт source=legacy_membership и null lifecycle-поля, если
+  // доступ даёт legacy level даже при существующей исторической terminal subscription.
   if (level && level !== 'registered') return 'active'
-  // 3) нет активного членства: промпт из терминального состояния подписки (доступ OFF)
-  if (subscriptionState === 'past_due' || subscriptionState === 'expired') return 'expired'
-  // 4) иначе — по последней заявке (canceled без legacy/заявки → 'none')
+  // 3) нет активного членства: промпт из терминального состояния подписки (доступ OFF).
+  if (subscriptionState === 'past_due' || subscriptionState === 'expired' || subscriptionState === 'canceled') return 'expired'
+  if (subscriptionState === 'revoked') return 'terminated'
+  // 4) иначе — по последней заявке.
   if (applicationStatus === 'approved') return 'approved'
   if (applicationStatus === 'submitted' || applicationStatus === 'under_review') return 'pending'
   if (applicationStatus === 'rejected') return 'rejected'
@@ -111,7 +114,7 @@ export function membershipEntry(
   if (membership === 'grace' && base.plate) {
     const deadline = fmtDGenYear(sub.nextBillingAt ?? sub.currentPeriodEnd)
     return deadline
-      ? { ...base, plate: { ...base.plate, t: 'Членство не продлено. Оплатите до ' + deadline + ', чтобы не потерять доступ' } }
+      ? { ...base, plate: { ...base.plate, t: 'Доступ сохранён до ' + deadline + '. Оплату и продление подтверждает TURAN вручную.' } }
       : base
   }
   return base

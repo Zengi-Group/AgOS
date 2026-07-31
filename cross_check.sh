@@ -176,9 +176,11 @@ echo ""
 # ----------------------------------------------------------
 echo "--- CHECK 5: organization_id in rpc_* signatures (P-AI-2) ---"
 
-# Intentional exceptions: global catalog functions (no org_id by design) and
-# admin-guarded functions (fn_is_admin() enforces access, no org scoping needed).
+# Intentional exceptions: global catalog/aggregate functions (no org_id by design)
+# and admin-guarded functions (fn_is_admin() enforces access, no org scoping needed).
 # rpc_start_production_plan uses p_farm_id for isolation (recognized pattern).
+# rpc_get_mpk_reputation (ARS-360) is intentional public aggregate-only output:
+# p_mpk_org_id selects the target; it returns no reviewer, batch, or comment data.
 exceptions="get_active_prompt|rpc_name_registry|\
 rpc_list_home_banners|\
 rpc_list_animal_categories|rpc_list_feed_items|rpc_list_feed_categories|\
@@ -198,6 +200,7 @@ rpc_upsert_construction_material|rpc_upsert_infrastructure_norm|\
 rpc_list_capex_surcharges|\
 rpc_list_livestock_prices|rpc_upsert_livestock_price|rpc_retire_livestock_price|\
 rpc_get_grade_formula|rpc_admin_upsert_grade_formula|\
+rpc_get_mpk_reputation|\
 rpc_admin_upsert_livestock_category|rpc_admin_deactivate_livestock_category|\
 rpc_admin_set_category_rule|rpc_admin_activate_rule_version|\
 rpc_admin_map_sku_to_category|\
