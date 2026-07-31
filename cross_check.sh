@@ -215,7 +215,7 @@ rpc_self_match_batch_to_pool|rpc_self_advance_pool_status|rpc_get_pool_matches|\
 rpc_get_my_pools|rpc_self_close_due_pools|rpc_self_accept_offer|\
 rpc_get_incoming_offers|rpc_self_reject_offer|rpc_self_confirm_delivery|\
 rpc_send_message|rpc_list_channels|rpc_list_messages|rpc_mark_channel_read|rpc_archive_channel|\
-rpc_delete_account|rpc_accept_org_invitation"
+rpc_delete_account|rpc_accept_org_invitation|rpc_review_org_field_change"
 # rpc_delete_account (B6/ARS-110): deliberately zero-arg — self-service account
 # deletion derives the actor from auth.uid()/fn_current_user_id() only. Accepting
 # a client-supplied organization_id (or user_id) here would be the exact bug P-AI-2
@@ -223,6 +223,9 @@ rpc_delete_account|rpc_accept_org_invitation"
 # rpc_accept_org_invitation (ARS-356): the caller is not an organization member yet;
 # organization_id and invited email are bound to the server-side token hash row. Taking
 # a client-supplied organization_id would weaken, not strengthen, tenant isolation.
+# rpc_review_org_field_change (ARS-359): TURAN-admin-only; organization_id is derived
+# from the SELECT FOR UPDATE review row. Accepting a second client org id would create
+# a mismatch/spoofing surface instead of strengthening authorization.
 # Messaging (d12): channel-scoped RPCs derive organization_id from the channel row and
 # enforce isolation via fn_my_org_ids()/comm_participants membership (web-JWT access
 # class), not via an organization_id parameter. rpc_get_or_create_support_channel DOES

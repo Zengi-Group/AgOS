@@ -65,7 +65,7 @@
 
 ## 1. Сводный каталог
 
-**~97 функций:** 50 базовых бизнес-RPCs + 14 M4/M6 (§4a) + 11 A-CAT (§4b) + 22 AI Gateway RPCs (d07; из них 9 задокументированы как AI-23..AI-31). Статус отдельно для каждой.
+**~103 функции:** 56 базовых бизнес-RPCs + 14 M4/M6 (§4a) + 11 A-CAT (§4b) + 22 AI Gateway RPCs (d07; из них 9 задокументированы как AI-23..AI-31). Статус отдельно для каждой.
 
 > 📌 **v1.5 (2026-06-22):** статусы RPC-21..24, 26..29, 31, 32, 37, 44 обновлены на ✅ Implemented; исправлены return-shapes RPC-21, RPC-24, RPC-36, rpc_save_consulting_ration; параметры RPC-33 синхронизированы с SQL; добавлены vet READ-RPCs и 9 AI инструментов.
 
@@ -83,6 +83,12 @@
 | RPC-49 | `rpc_revoke_org_invitation` | Identity/RBAC | web | ✅ Implemented (ARS-356) | jsonb |
 | RPC-50 | `rpc_accept_org_invitation` | Identity/RBAC | web | ✅ Implemented (ARS-356) | jsonb |
 | RPC-51 | `rpc_list_org_invitations` | Identity/RBAC | web | ✅ Implemented (ARS-356) | setof invitation summary |
+| RPC-52 | `rpc_upsert_mpk_profile` | Identity/MPK | web | ✅ Implemented (ARS-359) | uuid (organization_id) |
+| RPC-53 | `rpc_update_mpk_org_details` | Identity/MPK | web | ✅ Implemented (ARS-359) | void |
+| RPC-54 | `rpc_save_mpk_primary_site` | Identity/MPK | web | ✅ Implemented (ARS-359) | uuid (site_id) |
+| RPC-55 | `rpc_append_org_bank_account` | Identity/MPK | web | ✅ Implemented (ARS-359) | uuid (account version id) |
+| RPC-56 | `rpc_propose_org_field_change` | Identity/MPK | web | ✅ Implemented (ARS-359) | uuid (review_id) |
+| RPC-57 | `rpc_review_org_field_change` | Identity/MPK | admin | ✅ Implemented (ARS-359) | jsonb |
 | RPC-05 | `rpc_upsert_farm` | Farm | web, ai | 📋 Planned | uuid (farm_id) |
 | RPC-05b | `rpc_set_farm_activity_types` | Farm | web, ai | 📋 Planned | jsonb { inserted, removed } |
 | RPC-06 | `rpc_upsert_herd_group` | Farm | web, ai | ✅ Implemented | uuid (group_id) |
@@ -371,6 +377,27 @@ token hash row, а пользователь до acceptance ещё не член
 `INVITATION_RESEND_RATE_LIMIT` | `INVALID_INVITATION_TOKEN` |
 `VERIFIED_EMAIL_REQUIRED` | `INVITATION_EMAIL_MISMATCH` |
 `INVITATION_ALREADY_ACCEPTED`
+
+### RPC-52..57 `MPK profile data model` [WEB] [ADMIN] ✅ Implemented (ARS-359)
+
+| RPC | Параметры | Возвращает / правило |
+|---|---|---|
+| `rpc_upsert_mpk_profile` | `organization_id, public_description, logo_path` | sparse narrow profile; `mpk.profile.edit` |
+| `rpc_update_mpk_org_details` | `organization_id, region_id, head_full_name, head_title, phone, email, website` | canonical organization fields; `mpk.profile.edit` |
+| `rpc_save_mpk_primary_site` | `organization_id, site_name, address_text, capacity, region_id?, phone?, email?, site_id?` | one active primary site; positive capacity; `mpk.profile.edit` |
+| `rpc_append_org_bank_account` | `organization_id, bank_name, bik, iban, holder, currency?, is_primary?, previous_account_id?` | append-new immutable bank version; `mpk.bank.manage` |
+| `rpc_propose_org_field_change` | `organization_id, field_name, proposed_value` | review id; name/address apply immediately, BIN does not |
+| `rpc_review_org_field_change` | `review_id, approved\|rejected, note?` | TURAN-only locked decision; BIN apply-on-approve |
+
+`fn_org_bank_account_snapshot(account_id)` is service-only and returns the immutable
+JSON bank snapshot that a deal-document transaction must persist. Historical documents
+must not re-read the current primary bank account.
+
+**Исключения:** `AUTH_REQUIRED` | `FORBIDDEN: mpk.profile.edit required` |
+`FORBIDDEN: mpk.bank.manage required` | `FORBIDDEN: TURAN admin required` |
+`ORG_NOT_ACTIVE_MPK` | `CAPACITY_MUST_BE_POSITIVE` | `INVALID_BIK` |
+`INVALID_IBAN` | `FIELD_REVIEW_ALREADY_PENDING` | `FIELD_BASELINE_CHANGED` |
+`BIN_IIN_ALREADY_EXISTS`
 
 ---
 

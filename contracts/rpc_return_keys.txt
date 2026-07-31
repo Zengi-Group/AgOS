@@ -127,6 +127,7 @@ rpc_reject_offer: batch_id,mpk_org_id,offer_id
 rpc_report_epidemic_signal: case_count,disease_id,region_id,severity,signal_id
 rpc_reschedule_farm_task: due_date,ok,reason,task_id
 rpc_resend_org_invitation: email,expires_at,id,ok,organization_id,resend_count,role,status,token
+rpc_review_org_field_change: field_name,id,idempotent,ok,organization_id,production_value_applied_at,status
 rpc_restrict_organization: ends_at,herd_group_id,restriction_id,restriction_type
 rpc_resume_org_membership: was_scheduled_for_cancellation
 rpc_retry_match_pool: batch_id,batches_matched_count,expires_at,mpk_org_id,offer_id,offered_price_per_kg,offers_created,pool_id,skipped_reason,trigger
