@@ -1856,6 +1856,7 @@ Files: `Docs/AGOS-Farm-Module-FunctionalSpec-v0_1.md` (Узел 1 v2.1, F-D14, F
 **Verify**: `grep -E "^### " DECISIONS_LOG.md | sort | uniq -d` → пусто (до фикса — 1 дубль); `grep -c '^### 2026-07-03: A-GRADE' DECISIONS_LOG.md` → 1 (grep по подстроке без якоря даёт 4 — эта запись сама упоминает строку); в архиве H1 упоминаний A-GRADE — 0.
 
 **Files**: `DECISIONS_LOG.md` (−9 строк дубля + эта запись).
+
 ### 2026-07-28: D-GRAPH-FIRST-01 — graph-first стал безусловным; graphify был выключен по умолчанию во всех свежих сессиях
 
 **What**: закрыт разрыв между «инструмент установлен» и «инструмент работает». Диагноз (замер, не оценка): граф был лишь в **2 из 9** worktrees и **отсутствовал в основном чекауте** — top-level `graphify-out/graph.json` там не было вовсе, уцелели только архивные копии в датированных подпапках, последний полный прогон 2026-07-04 (≈120 PR назад). Причина цепочкой: `graphify-out/` целиком вне git (ретро ARS-152, PR #35) → каждый свежий worktree рождается без графа → регенерацию делает `scripts/worktree-bootstrap.sh`, который **никто не вызывал автоматически** (ни хука, ни CI — только руками). Усилитель: оба PreToolUse-хука были обёрнуты в `[ -f graphify-out/graph.json ] && echo '…MANDATORY…' || true`, а CLAUDE.md §graphify формулировал правило условно («first run `graphify query` **when** graph.json exists») → нет файла = нет напоминания, нет ошибки, нет следа, и агент **по действующим правилам обязан** был читать репозиторий сырьём. Третий, независимый дефект: MCP-сервер graphify не работал НИКОГДА — `.mcp.json` объявлял `uvx --from graphifyy`, а `mcp` в graphifyy — опциональный extra, сервер падал на старте с `ModuleNotFoundError: No module named 'mcp'`, т.е. 10 graph-инструментов были недоступны с момента настройки.
@@ -2148,4 +2149,191 @@ level filtering не является tenant boundary. Полный d-файл �
 advisor delta и `scripts/prod_diff.py`.
 
 **Files**: `d01_kernel.sql`, `tests/d01_notification_preferences_security_test.sql`,
+### 2026-07-31: ARS-355 — отдельный registry-backed private bucket для документов MPK
+
+**What**: Добавлены `public.org_documents`, private Storage bucket `org-documents`,
+точный ключ `{organization_id}/{document_id}/upload`, двухфазный intent→upload→finalize
+контракт, immutable upload/review FSM, TTL cleanup lease и три guarded RPC. Bucket
+ограничен PDF/JPEG/PNG и 10 MiB; Storage RLS разрешает `INSERT`/`SELECT`/`UPDATE` только
+для exact active intent и только до finalize. Finalized files напрямую не list/read/update;
+`org-document-download` выдаёт JWT-authorized signed URL на 60 секунд. Legacy
+`membership-documents` и его callers не менялись. `organization_id` в registry имеет
+`ON DELETE RESTRICT`, пока cleanup не завершён.
+
+**Why**: Linear ARS-355 явно требует новый `org-documents` layout и проверяемый
+intent-path workflow. EngSpec разрешает, но не обязывает reuse `membership-documents`;
+его текущие direct-Storage callers и менее строгие policies сделали reuse небезопасным
+без несвязанного compatibility cutover. Один registry остаётся authority для lifecycle;
+raw `storage.objects` сам по себе документом не является.
+
+**Contract boundary**: ARS-355 владеет persistence, lifecycle, bucket/RLS, mutation и
+signed-download primitive. ARS-363 потребляет их для upload UX и derived admission/read
+projection; он не создаёт второй bucket/registry/FSM и не возвращает raw Storage path.
+`storage_path` в create-intent — узкая ephemeral capability из явного ticket wording
+«intent/path → upload», только для authorized uploader; он запрещён в read models и
+логах. Если правило EngSpec «path never leaves server» станет literal, заменить его на
+Edge signed-upload capability отдельным контрактным изменением.
+
+**Consequences**: review FSM заложен (`pending→accepted|rejected`), но TURAN
+approve/reject endpoint остаётся MP-11.1; UI status/days/meter derived, не columns.
+Cleanup worker удаляет объекты только Storage API и подтверждает только свой lease token;
+finalizer lock-ит Storage row, чтобы concurrent upsert не подменил проверенный object.
+Rollback consumer-first: отключить writers/readers, сохранить registry/object audit;
+destructive bucket/table deletion только после zero callers, inventory, cleanup/backup и
+отдельного production approval.
+
+**Verify**: `tests/ars_355_org_documents_storage_test.sql` покрывает bucket config,
+RLS/ACL, tenant A/B, role denial, Storage upsert, MIME/size/finalize/abandon FSM,
+cleanup lease, derived expiry и parent delete restriction. Перед G3 обязателен staging
+Storage API smoke (`upsert`, cross-tenant denial, real signed URL TTL=60) и advisors.
+
+**Files**: `d01_kernel.sql`, `d10_public_site.sql`,
+`supabase/migrations/20260731065903_ars_355_org_documents_registry.sql`,
+`supabase/functions/org-document-download/index.ts`,
+`supabase/functions/cleanup-org-document-uploads/index.ts`,
+`tests/ars_355_org_documents_storage_test.sql`,
+`Docs/AGOS-MPK-Profile-Documents-ARS-355.md`,
+`Docs/AGOS-Dok3-RPC-Catalog-v1_5.md`, `Docs/README.md`, `DECISIONS_LOG.md`.
+
+### 2026-07-31: ARS-361 — canonical membership + MPK verification read model
+
+**What**: Добавлен read-only RPC
+`rpc_get_org_membership_verification(organization_id)` в d13 и аддитивная миграция.
+Он собирает lifecycle/dates из `membership_subscription`, effective access из
+`fn_org_membership_active`, MPK classification date/provenance из
+`organization_type_assignments`, а append-only verification timeline — только из
+`verification_records` соответствующей current MPK classification membership. Добавлен
+composite index для latest-by-type/timeline read. RPC guarded organization member,
+TURAN admin or trusted service role, SECURITY DEFINER с fixed search_path, PUBLIC/anon
+execute revoked and authenticated/service_role explicitly granted.
+
+**Why**: MPK client трактовал само наличие типа `mpk` как approved, хотя регистрация
+создаёт classification assignment самостоятельно. Старый `rpc_get_org_subscription`
+также отбрасывает terminal subscription history и не сообщает effective legacy access.
+Новая проекция не создаёт вторую membership/verification truth: legacy-only access
+явно возвращает `source=legacy_membership` и JSON-null lifecycle fields; association
+number возвращается только JSON null, поскольку source column не существует. При
+отсутствии live subscription newest terminal row выбирается по timestamp, а не по
+названию terminal state.
+
+**Contract boundary**: type assignment является только classification metadata и не
+может дать approved; recorded assigner — provenance, не operator confirmation. Evidence
+не возвращается для stale MPK membership без current type assignment. Aggregate
+verification status — evidence summary; latest row per type сохраняет raw result и
+effective expiry status. Новая read model не даёт
+entitlement/write approval и не добавляет requirement policy для purchase gate.
+Renewal mode явно manual_assistance: ARS-361 не включает staging-only cron и не создаёт
+второй renewal/payment engine.
+
+**Consequences**: UI может показывать реальные subscription dates после reload и
+fail-closed оставлять MPK type under review, когда canonical RPC ещё недоступен.
+Trialing/active/grace получают access только через server predicate; past_due и terminal
+states не получают его. Правила о том, какие verification types required для отдельной
+admission policy, остаются отдельным product decision.
+
+**Verify**: `bash cross_check.sh` = 0 critical (3 pre-existing TSP-overload
+significant); return-contract snapshot clean; `git diff --check` clean. SQL regression
+`tests/ars_361_membership_verification_read_model_test.sql` покрывает tenant A/B and
+service-role authorization, active/trialing/grace/past_due/expired/canceled/terminal
+lifecycle, legacy override/null fields, null association number, self-assigned/no-evidence
+status and append-only latest/expiry semantics. Migration требует canonical d01/d13 schema
+and не применялась к production.
+
+**Files**: `d13_billing.sql`,
+`supabase/migrations/20260731074740_ars_361_membership_verification_read_model.sql`,
+`tests/ars_361_membership_verification_read_model_test.sql`,
+`src/lib/account.ts`, `src/pages/cabinet/shell/{CabinetApp.tsx,store.ts,data/membership.ts,
+screens/MarketScreen.tsx,components/sheets/SubscribeSheet.tsx,mpk/MpkApp.tsx,mpk/types.ts,
+mpk/screens/MpkHomeScreen.tsx}`,
+`Docs/AGOS-Dok3-RPC-Catalog-v1_5.md`, `contracts/rpc_return_keys.txt`,
 `DECISIONS_LOG.md`.
+
+### 2026-07-31: ARS-355 — production rollout and migration identifier
+
+**What**: Production deployment created migration history entry
+`20260731074054_ars_355_org_documents_registry`; the local migration now uses that
+identifier to prevent a future Supabase CLI `db push/pull` mismatch. Both ARS-355 Edge
+Functions are active with JWT verification.
+
+**Verify**: Production transactional SQL contract passed with rollback. The download
+function rejected unauthenticated and unauthorized calls, then issued an authorized
+signed URL with `expires_in=60`; cleanup rejected a normal user JWT. All temporary
+smoke fixtures, Storage metadata and temporary policies were deleted and verified absent.
+
+**E2E smoke**: A separate temporary MPK/user completed the standard RLS flow in
+production with HTTP 200 at every boundary: Storage upload, finalize RPC, signed URL
+issuance and signed-file retrieval. Its object was removed through the Storage API;
+the registry, organization, auth user and exact-path temporary policies were then
+verified absent.
+
+### 2026-07-31: ARS-356 — reconciliation of Supabase migration history
+
+**What**: ARS-356 schema had been provisioned through the canonical `d01_kernel.sql`
+section, but the remote Supabase migration ledger had no corresponding entry. Added
+assertion-only migration
+`20260731093007_ars_356_rbac_invitations_history_reconciled.sql` and applied it to
+production. It verifies the existing tables, RLS, canonical functions, permission
+mapping, unique index and direct-access ACL rather than recreating any objects.
+
+**Why**: A verified history marker makes the local migration directory and remote
+ledger agree, preventing a future `db push/pull` from treating ARS-356 as untracked
+schema drift. This is not a bootstrap migration; a fresh database still receives the
+canonical RBAC base through `d01_kernel.sql`.
+
+**Verify**: `tests/ars_356_rbac_invitations_test.sql` passed against production inside
+`BEGIN … ROLLBACK`. Its direct-table ACL assertion now reads the relation ACL directly,
+which avoids an internal `has_table_privilege()` catalog failure on the current managed
+Postgres build.
+
+### 2026-07-31: ARS-360 — canonical mutual deal-review convergence
+
+**What**: `deal_reviews` и `deal_review_dimension_scores` стали единственным source
+of truth для write/read отзывов. `rpc_submit_deal_review` блокирует batch, допускает
+только delivered exact farmer/MPK pair, создаёт неизменяемую canonical запись и
+раскрывает обе записи атомарно на второй отправке. Legacy
+`rpc_submit_review(uuid,int,int,text)` и `rpc_self_submit_mpk_review(uuid,int,int,text)`
+сохранили frontend signature/boolean response, но теперь только адаптируют pilot
+dimension (`weight_accuracy` / `livestock_condition`) и делегируют canonical RPC;
+`batches.notes.review` и `notes.mpk_review` больше не записываются.
+
+**Why**: Старые notes-отзывы обходили canonical double-blind model и не могли
+безопасно выразить split batch с несколькими МПК. Resolver берёт distinct delivered
+MPK из `batch_allocations`; при отсутствии allocations использует legacy pool-line
+только как детерминированный fallback. При нескольких delivered MPK запись не
+угадывается: writer получает `AMBIGUOUS_MPK_COUNTERPARTY`, legacy backfill сохраняет
+private reconciliation evidence.
+
+**Contract boundary**: Canonical review и её dimension scores append-only: нельзя
+rewrite/delete, нельзя добавить запись или score после reveal; deferred exact-pair
+invariant запрещает committed half-reveal. Direct RLS раскрывает pair только её двум
+проверенным организациям; до reveal каждый видит лишь свою запись. `fn_tsp_batch_json.review` и
+`rpc_get_pool_matches.myRating` canonical-first с валидным read-only notes fallback.
+`rpc_get_mpk_reputation(p_mpk_org_id)` намеренно public только как sanitized aggregate
+взаимно раскрытых farmer→MPK reviews — без batch, reviewer/counterparty, comment или
+individual review data.
+
+**Consequences**: Backfill переносит только safely attributable delivered payload;
+malformed, premature, missing-dimension, no-counterparty и ambiguous payload остаются
+в private `deal_review_legacy_reconciliation`. Existing canonical review wins over a
+legacy value. Продакшен не менялся: migration/contract требуют G3 before deployment.
+
+**Verify**: `bash cross_check.sh` = 0 critical (3 pre-existing TSP overload
+significant); `bash cross_check.sh --update-contracts` обновил 170 RPC contracts;
+`git diff --check` clean; `npm run build` passed. SQL regression
+`tests/ars_360_review_convergence_test.sql` покрывает adapter compatibility,
+no-dual-write, RLS pre/post reveal, review/score immutability, duplicate prevention,
+canonical-first projections, split-MPK quarantine в обоих направлениях, sanitized
+reputation и idempotent backfill. Локальный
+PostgreSQL не был доступен, поэтому тест не исполнялся против DB.
+
+**Files**: `d02_tsp.sql`, `cross_check.sh`,
+`supabase/migrations/20260731074557_ars_360_review_convergence.sql`,
+`tests/ars_360_review_convergence_test.sql`,
+`Docs/AGOS-Dok3-RPC-Catalog-v1_5.md`, `contracts/rpc_return_keys.txt`,
+`DECISIONS_LOG.md`.
+
+### 2026-08-01: ARS-359 — MPK profile data model ЗАДЕПЛОЕН на прод (G3, CEO-approved)
+What: применена миграция `supabase/migrations/20260730134113_ars_359_mpk_profile_data_model.sql` на прод `mwtbozflyldcadypherr` через `python3 scripts/deploy.py --files ...` (единственный санкционированный канал, §Deploy-Playbook). Создано: 4 таблицы (`mpk_profiles`, `mpk_sites`, `org_bank_accounts`, `org_field_reviews`) + их RLS/политики, 2 guard-триггера (`fn_guard_org_bank_account_version`, `fn_guard_org_critical_field_updates`), 7 функций (`rpc_upsert_mpk_profile`, `rpc_update_mpk_org_details`, `rpc_save_mpk_primary_site`, `rpc_append_org_bank_account`, `fn_org_bank_account_snapshot`, `rpc_propose_org_field_change`, `rpc_review_org_field_change`).
+Why: закрытие живого merge≠deploy разрыва — ARS-359 был смёржен (#173) в main, но объекты на проде отсутствовали (выявлено при актуализации статуса МПК-кабинета 2026-08-01). CEO явно авторизовал G3-деплой.
+How verified: (1) миграция сверена — тронута только #173 (a199a1d), идентична origin/main, НЕ контаминирована `1cda3da` (355/360/361 в d-файлах ветки, но в деплой НЕ попали — применён изолированный файл миграции, не d01); (2) чисто транзакционная (нет CONCURRENTLY/cron/publication), deps на проде есть (`fn_org_has_permission`/ARS-356, `organizations`); (3) `deploy.py --rollback-only` replay = OK против живой схемы; (4) реальный деплой `Готово 1/1`, verify_bodies без ⚠ (L-1 нет), строка `ops_deploy_log` в той же транзакции; (5) пост-проба: 4 таблицы present + RLS on + по 1 policy; ACL — anon=false везде, 3 internal-helper заперты на service_role (authenticated=false, Trap-2b §3.4 соблюдён), 6 публичных RPC = SECURITY DEFINER + authenticated + self-guard `fn_org_has_permission`; (6) `prod_diff.py` — прогон (355/360/361 ожидаемо = merged-not-deployed, они не в origin/main).
+Files: supabase/migrations/20260730134113_ars_359_mpk_profile_data_model.sql (задеплоен; канон-зеркало d01_kernel.sql уже в main via #173). НЕ задеплоено: ARS-355/360/361 (`1cda3da`, не в origin/main — отдельное окно после мержа).

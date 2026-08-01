@@ -885,6 +885,23 @@ values
   ('batch-media',           'batch-media',           false)
 on conflict (id) do nothing;
 
+-- ARS-355: an isolated private bucket for the registry-backed MPK document
+-- workflow. Keep membership-documents untouched: its legacy direct-Storage
+-- callers have a different path and authorization contract.
+insert into storage.buckets (
+  id, name, public, file_size_limit, allowed_mime_types
+) values (
+  'org-documents',
+  'org-documents',
+  false,
+  10485760,
+  array['application/pdf', 'image/jpeg', 'image/png']::text[]
+)
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
 -- news-covers: public read, authenticated write
 drop policy if exists "news_covers_select" on storage.objects;
 create policy "news_covers_select"
@@ -943,6 +960,51 @@ set search_path = public, pg_temp as $$
     end;
 $$;
 
+-- ARS-355: exact registry-bound authorization for org-documents. The object key
+-- is server-derived as {organization_id}/{document_id}/upload. Matching the
+-- complete path against public.org_documents (rather than just folder [1])
+-- prevents a same-org caller from writing arbitrary document keys.
+--
+-- This deliberately permits SELECT/UPDATE only while the intent is open. Storage
+-- needs SELECT + UPDATE for client upsert, but finalized documents are downloaded
+-- through the JWT-protected Edge Function that creates a 60-second signed URL.
+create or replace function public.fn_org_document_storage_upload_allowed(
+  p_object_name text
+)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public, pg_temp
+as $$
+    select (select auth.uid()) is not null
+       and exists (
+            select 1
+            from public.org_documents d
+            where d.storage_path = p_object_name
+              and d.is_active
+              and d.upload_state = 'uploading'
+              and d.upload_expires_at > now()
+              and (
+                    public.fn_is_admin()
+                    or public.fn_org_has_permission(
+                        d.organization_id, 'mpk.documents.manage'
+                    )
+              )
+       );
+$$;
+
+comment on function public.fn_org_document_storage_upload_allowed(text) is
+  'ARS-355. RLS-only predicate for exact, unexpired org-document upload intents. Allows INSERT/SELECT/UPDATE needed by Storage upsert; finalized objects require a signed URL.';
+
+-- The predicate is called by storage.objects policies under the authenticated
+-- role. PUBLIC/anon must not execute it; authenticated is intentionally granted
+-- so the policy can evaluate it (the function itself requires auth.uid()).
+revoke execute on function public.fn_org_document_storage_upload_allowed(text)
+  from public, anon;
+grant execute on function public.fn_org_document_storage_upload_allowed(text)
+  to authenticated, service_role;
+
 -- membership-documents: org-scoped read/write (SEC-STORAGE-01), admin full access.
 -- Path convention: membership-documents/{orgId}/... — first segment must match caller's org.
 drop policy if exists "membership_documents_insert_auth" on storage.objects;
@@ -987,6 +1049,43 @@ create policy "membership_documents_delete_admin"
   on storage.objects for delete
   to authenticated
   using (bucket_id = 'membership-documents' and public.fn_is_admin());
+
+-- org-documents (ARS-355): private, registry-backed two-phase upload.
+-- No anonymous policy and no client DELETE policy are intentional. Orphan cleanup
+-- uses the Storage API with the service role after the registry marks it abandoned.
+drop policy if exists "org_documents_insert_intent" on storage.objects;
+create policy "org_documents_insert_intent"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'org-documents'
+    and (select public.fn_org_document_storage_upload_allowed(name))
+  );
+
+-- Required alongside INSERT for Storage's RETURNING behaviour and alongside
+-- UPDATE for the client upsert protocol. Once finalized, this policy no longer
+-- matches, so a raw Storage download/list is denied.
+drop policy if exists "org_documents_select_open_intent" on storage.objects;
+create policy "org_documents_select_open_intent"
+  on storage.objects for select
+  to authenticated
+  using (
+    bucket_id = 'org-documents'
+    and (select public.fn_org_document_storage_upload_allowed(name))
+  );
+
+drop policy if exists "org_documents_update_open_intent" on storage.objects;
+create policy "org_documents_update_open_intent"
+  on storage.objects for update
+  to authenticated
+  using (
+    bucket_id = 'org-documents'
+    and (select public.fn_org_document_storage_upload_allowed(name))
+  )
+  with check (
+    bucket_id = 'org-documents'
+    and (select public.fn_org_document_storage_upload_allowed(name))
+  );
 
 -- batch-media (ARS-227 + ARS-229 reveal): private, org-scoped write/delete; admin full access.
 -- Path convention: batch-media/{orgId}/{batchId}/{uuid}.{ext} — segment[1]=owner org, [2]=batch.

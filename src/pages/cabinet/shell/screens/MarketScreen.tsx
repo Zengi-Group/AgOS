@@ -111,9 +111,11 @@ export function MarketScreen({ membership, batches, loading, onNew, onApply, onP
                 <div className="mk-grace-t">
                   {expired
                     ? 'Текущие сделки можно довести до конца. Для новых партий — оформите подписку.'
-                    : 'Продажа доступна — продлите членство, чтобы не прерывать работу.'}
+                    : 'Продажа временно доступна. Подтвердите оплату и дальнейший статус у TURAN.'}
                 </div>
-                <button className="mk-grace-b" onClick={onPay}>Продлить членство</button>
+                <button className="mk-grace-b" onClick={onPay}>
+                  {expired ? 'Оформить подписку' : 'Уточнить оплату'}
+                </button>
               </div>
             )}
 

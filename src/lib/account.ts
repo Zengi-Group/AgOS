@@ -37,6 +37,168 @@ export interface MyContext {
   memberships: MyMembership[]
 }
 
+// ARS-361: клиентский read-model канонического членства и верификации. Это именно
+// нормализованный ответ защищённого RPC, а не разрешение на действие: все write/gate
+// проверки по-прежнему выполняет сервер.
+export type CanonicalMembershipState =
+  | 'trialing'
+  | 'active'
+  | 'grace'
+  | 'past_due'
+  | 'expired'
+  | 'canceled'
+  | 'revoked'
+
+export type CanonicalMembershipSource = 'subscription' | 'legacy_membership' | 'none'
+
+export type CanonicalVerificationStatus =
+  | 'not_mpk'
+  | 'incomplete'
+  | 'approved'
+  | 'rejected'
+  | 'conditional'
+  | 'expired'
+
+export interface CanonicalMembershipPlan {
+  code: string | null
+  title: string | null
+}
+
+export interface CanonicalMembershipReadModel {
+  isActive: boolean
+  source: CanonicalMembershipSource
+  state: CanonicalMembershipState | null
+  trialEnd: string | null
+  currentPeriodStart: string | null
+  currentPeriodEnd: string | null
+  nextBillingAt: string | null
+  cancelAtPeriodEnd: boolean | null
+  subscriptionId: string | null
+  plan: CanonicalMembershipPlan | null
+  renewalMode: string | null
+  cta: string | null
+}
+
+export interface CanonicalTypeAssignmentReadModel {
+  assignedAt: string | null
+  assignedByUserId: string | null
+  isSelfAssigned: boolean | null
+}
+
+export interface CanonicalVerificationTimelineEntry {
+  id: string | null
+  verificationType: string | null
+  result: string | null
+  verifiedAt: string | null
+  expiresAt: string | null
+  createdAt: string | null
+  effectiveStatus: CanonicalVerificationStatus | null
+}
+
+export interface CanonicalVerificationReadModel {
+  membershipId: string | null
+  status: CanonicalVerificationStatus | null
+  typeAssignment: CanonicalTypeAssignmentReadModel | null
+  timeline: CanonicalVerificationTimelineEntry[]
+  latestByType: CanonicalVerificationTimelineEntry[]
+}
+
+export interface OrgMembershipVerificationReadModel {
+  version: number | null
+  organizationId: string | null
+  associationNumber: string | null
+  membership: CanonicalMembershipReadModel
+  verification: CanonicalVerificationReadModel | null
+}
+
+type UnknownRecord = Record<string, unknown>
+
+const MEMBERSHIP_STATES = ['trialing', 'active', 'grace', 'past_due', 'expired', 'canceled', 'revoked'] as const
+const MEMBERSHIP_SOURCES = ['subscription', 'legacy_membership', 'none'] as const
+const VERIFICATION_STATUSES = ['not_mpk', 'incomplete', 'approved', 'rejected', 'conditional', 'expired'] as const
+
+function asRecord(value: unknown): UnknownRecord | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as UnknownRecord
+    : null
+}
+
+function asNullableString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null
+}
+
+function asNullableBoolean(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null
+}
+
+function asKnownValue<T extends string>(value: unknown, allowed: readonly T[]): T | null {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value) ? value as T : null
+}
+
+function parseVerificationEntry(value: unknown): CanonicalVerificationTimelineEntry | null {
+  const row = asRecord(value)
+  if (!row) return null
+  return {
+    id: asNullableString(row.id),
+    verificationType: asNullableString(row.verification_type),
+    result: asNullableString(row.result),
+    verifiedAt: asNullableString(row.verified_at),
+    expiresAt: asNullableString(row.expires_at),
+    createdAt: asNullableString(row.created_at),
+    effectiveStatus: asKnownValue(row.effective_status, VERIFICATION_STATUSES),
+  }
+}
+
+function parseVerificationEntries(value: unknown): CanonicalVerificationTimelineEntry[] {
+  if (!Array.isArray(value)) return []
+  return value.map(parseVerificationEntry).filter((entry): entry is CanonicalVerificationTimelineEntry => entry !== null)
+}
+
+// Не доверяем JSON из RPC на уровне UI: при частичном/старом деплое просто вернёмся к
+// прежнему rpc_get_org_subscription и legacy membership вместо ложного «approved».
+export function parseOrgMembershipVerificationReadModel(value: unknown): OrgMembershipVerificationReadModel | null {
+  const root = asRecord(value)
+  const membership = asRecord(root?.membership)
+  if (!root || !membership || typeof membership.is_active !== 'boolean') return null
+
+  const verification = asRecord(root.verification)
+  const typeAssignment = asRecord(verification?.type_assignment)
+
+  return {
+    version: typeof root.version === 'number' ? root.version : null,
+    organizationId: asNullableString(root.organization_id),
+    associationNumber: asNullableString(root.association_number),
+    membership: {
+      isActive: membership.is_active,
+      source: asKnownValue(membership.source, MEMBERSHIP_SOURCES) ?? 'none',
+      state: asKnownValue(membership.state, MEMBERSHIP_STATES),
+      trialEnd: asNullableString(membership.trial_end),
+      currentPeriodStart: asNullableString(membership.current_period_start),
+      currentPeriodEnd: asNullableString(membership.current_period_end),
+      nextBillingAt: asNullableString(membership.next_billing_at),
+      cancelAtPeriodEnd: asNullableBoolean(membership.cancel_at_period_end),
+      subscriptionId: asNullableString(membership.subscription_id),
+      plan: membership.plan_code !== undefined || membership.plan_title !== undefined ? {
+        code: asNullableString(membership.plan_code),
+        title: asNullableString(membership.plan_title),
+      } : null,
+      renewalMode: asNullableString(membership.renewal_mode),
+      cta: asNullableString(membership.cta),
+    },
+    verification: verification ? {
+      membershipId: asNullableString(verification.membership_id),
+      status: asKnownValue(verification.status, VERIFICATION_STATUSES),
+      typeAssignment: typeAssignment ? {
+        assignedAt: asNullableString(typeAssignment.assigned_at),
+        assignedByUserId: asNullableString(typeAssignment.assigned_by_user_id),
+        isSelfAssigned: asNullableBoolean(typeAssignment.is_self_assigned),
+      } : null,
+      timeline: parseVerificationEntries(verification.timeline),
+      latestByType: parseVerificationEntries(verification.latest_by_type),
+    } : null,
+  }
+}
+
 // Читает контекст текущего пользователя. null = не авторизован / нет данных / бэкенд недоступен.
 export async function loadMyContext(): Promise<MyContext | null> {
   const { data, error } = await supabase.rpc('rpc_get_my_context')
@@ -88,9 +250,12 @@ export interface AccountProfile {
   orgTypes: string[]           // org_types выбранной организации (farmer/mpk/...)
   membershipLevel: string | null
   applicationStatus: string | null  // последняя membership_applications.status (submitted/under_review/approved/rejected)
-  // ARS-263 / D-BILL-TRUTH-01: подписка = канонический источник «оплачено/активно».
-  // Читается из rpc_get_org_subscription (одна живая подписка на орг или null).
-  subscriptionState: string | null  // membership_subscription.state (trialing/active/grace/past_due/expired/canceled) или null
+  // ARS-361: единый read-model членства + верификации. null означает, что новый RPC
+  // недоступен/вернул несовместимый ответ; consumers обязаны fail closed по verification.
+  membershipVerification: OrgMembershipVerificationReadModel | null
+  // Обратносуместимые поля для фермерского кабинета. Предпочитают ARS-361 read-model,
+  // а при его недоступности сохраняют старый rpc_get_org_subscription fallback.
+  subscriptionState: string | null
   currentPeriodEnd: string | null   // ISO — реальная дата «членство до» (не хардкод)
   nextBillingAt: string | null      // ISO — реальная дата следующего продления
 }
@@ -136,13 +301,36 @@ export async function loadAccountProfile(
     applicationStatus = (appData?.[0] as { status: string } | undefined)?.status ?? null
   }
 
-  // ARS-263: живая подписка орг = канонический источник статуса членства (D-BILL-TRUTH-01).
-  // rpc_get_org_subscription возвращает JSON-объект живой подписки или JSON null. Ошибка/недоступность
-  // → все поля null (кабинет падает на legacy level/заявку — старые члены не ломаются).
+  // ARS-361: новый защищённый read-model — единственный источник статусов членства и
+  // верификации для новых потребителей. При недоступном/старом RPC не ломаем текущий
+  // кабинет: ниже останется совместимый fallback rpc_get_org_subscription.
+  let membershipVerification: OrgMembershipVerificationReadModel | null = null
+  if (org) {
+    try {
+      const { data, error } = await supabase.rpc('rpc_get_org_membership_verification', {
+        p_organization_id: org.id,
+      })
+      if (error) {
+        console.warn('loadAccountProfile: rpc_get_org_membership_verification error:', error)
+      } else {
+        membershipVerification = parseOrgMembershipVerificationReadModel(data)
+      }
+    } catch (error) {
+      // В частности, защищаем UI при выкладке фронта раньше миграции RPC.
+      console.warn('loadAccountProfile: rpc_get_org_membership_verification failed:', error)
+    }
+  }
+
+  // ARS-263: legacy fallback для поверхностей, ещё ожидающих старый subscription RPC.
+  // Он вызывается только когда ARS-361 read-model не получен/невалиден.
   let subscriptionState: string | null = null
   let currentPeriodEnd: string | null = null
   let nextBillingAt: string | null = null
-  if (org) {
+  if (membershipVerification) {
+    subscriptionState = membershipVerification.membership.state
+    currentPeriodEnd = membershipVerification.membership.currentPeriodEnd
+    nextBillingAt = membershipVerification.membership.nextBillingAt
+  } else if (org) {
     const { data: subData } = await supabase.rpc('rpc_get_org_subscription', { p_organization_id: org.id })
     const sub = subData as { state?: string; current_period_end?: string | null; next_billing_at?: string | null } | null
     if (sub && sub.state) {
@@ -167,6 +355,7 @@ export async function loadAccountProfile(
     orgTypes: org?.org_types ?? [],
     membershipLevel: membership?.level ?? null,
     applicationStatus,
+    membershipVerification,
     subscriptionState,
     currentPeriodEnd,
     nextBillingAt,

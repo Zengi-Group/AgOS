@@ -1726,6 +1726,21 @@ values
      'Соблюдение согласованного окна поставки', 4)
 on conflict (code) do nothing;
 
+-- ARS-360: dimensions are active reference data for authenticated review forms;
+-- taxonomy maintenance remains service/admin-only.
+alter table public.review_dimensions enable row level security;
+drop policy if exists review_dimensions_read_active on public.review_dimensions;
+create policy review_dimensions_read_active
+    on public.review_dimensions
+    for select
+    to authenticated
+    using (is_active);
+revoke all on table public.review_dimensions
+    from public, anon, authenticated, service_role;
+grant select on table public.review_dimensions to authenticated;
+grant select, insert, update, delete on table public.review_dimensions
+    to service_role;
+
 -- ------------------------------------------------------------
 -- 7.14: NEW TABLE — deal_reviews
 -- Mutual batch reviews, double-blind reveal (D-M6-11, D-M6-12)
@@ -1739,7 +1754,7 @@ create table if not exists public.deal_reviews (
     overall_score   int     not null check (overall_score between 1 and 5),
     comment         text,
     submitted_at    timestamptz not null default now(),
-    -- Double-blind (D-M6-12): null until both sides submit, or window expires
+    -- ARS-360 double-blind (D-M6-12): null until the exact pair submits.
     visible_at      timestamptz,
     created_at      timestamptz not null default now(),
     unique (batch_id, reviewer_org_id)
@@ -1747,10 +1762,10 @@ create table if not exists public.deal_reviews (
 
 comment on table public.deal_reviews is
     'D-M6-11: Mutual review. One record per reviewer per batch (after delivered state).
-     Double-blind (D-M6-12): visible_at set by system when BOTH parties submit,
-     or when review_window expires (7-day default — pending UX validation).
+     ARS-360 / Double-blind (D-M6-12): visible_at is set atomically only when the
+     exact farmer/MPK pair submits; no timeout reveal or post-reveal mutation exists.
      Before visible_at: reviewer sees own review only; other side sees nothing.
-     After visible_at: both reviews become mutually visible.
+     After visible_at: only the two deal parties can read the mutually revealed rows.
      Pre-deal: org reputation (★ aggregate) shown anonymously — D-M6-12 anti-discrimination.
      Org reputation = derived view (P4), never stored as a field.';
 
@@ -1761,18 +1776,148 @@ create index if not exists idx_deal_reviews_visible      on public.deal_reviews 
 
 alter table public.deal_reviews enable row level security;
 
+-- RLS cannot self-join deal_reviews without recursion. The predicate exposes only
+-- whether the JWT caller owns a review in an exact, fully revealed farmer/MPK pair,
+-- never review data.
+create or replace function public.fn_ars_360_can_read_revealed_deal_review(p_batch_id uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+    return p_batch_id is not null
+       and exists (
+            select 1
+            from public.deal_reviews dr
+            where dr.batch_id = p_batch_id
+              and dr.reviewer_org_id = any(
+                  coalesce(public.fn_my_org_ids(), '{}'::uuid[])
+              )
+              and dr.visible_at is not null
+              and dr.visible_at <= now()
+       )
+       and public.fn_ars_360_is_exact_current_deal_review_pair(p_batch_id, true);
+end;
+$$;
+comment on function public.fn_ars_360_can_read_revealed_deal_review(uuid) is
+    'ARS-360 RLS predicate: true only when the JWT caller owns a review in an exact,
+     fully revealed farmer/MPK pair in the batch.';
+revoke all on function public.fn_ars_360_can_read_revealed_deal_review(uuid)
+    from public, anon, authenticated, service_role;
+grant execute on function public.fn_ars_360_can_read_revealed_deal_review(uuid)
+    to authenticated, service_role;
+
 drop policy if exists deal_reviews_read on public.deal_reviews;
 create policy deal_reviews_read
     on public.deal_reviews for select
     to authenticated
     using (
-        -- reviewer sees own review always
         reviewer_org_id = any(
-            coalesce((select public.fn_my_org_ids()), array[]::uuid[])
+            coalesce(public.fn_my_org_ids(), '{}'::uuid[])
         )
-        -- all see after double-blind reveal
-        or (visible_at is not null and visible_at <= now())
+        or (
+            visible_at is not null
+            and visible_at <= now()
+            and public.fn_ars_360_can_read_revealed_deal_review(batch_id)
+        )
     );
+
+-- ARS-360: submitted review content is append-only. New rows begin hidden; the
+-- one allowed update is the exact-pair NULL -> visible_at mutual reveal.
+create or replace function public.fn_ars_360_guard_deal_review_immutability()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+    if tg_op = 'INSERT' then
+        if new.visible_at is not null then
+            raise exception 'REVIEW_REVEAL_REQUIRES_MUTUAL_PAIR' using errcode = 'P0001';
+        end if;
+        if exists (
+            select 1
+            from public.deal_reviews dr
+            where dr.batch_id = new.batch_id
+              and dr.visible_at is not null
+        ) then
+            raise exception 'REVIEW_IMMUTABLE_AFTER_REVEAL' using errcode = 'P0001';
+        end if;
+        return new;
+    end if;
+
+    if tg_op = 'DELETE' then
+        raise exception 'REVIEW_IMMUTABLE' using errcode = 'P0001';
+    end if;
+
+    if old.visible_at is not null then
+        raise exception 'REVIEW_IMMUTABLE_AFTER_REVEAL' using errcode = 'P0001';
+    end if;
+    if new.id is distinct from old.id
+       or new.batch_id is distinct from old.batch_id
+       or new.reviewer_org_id is distinct from old.reviewer_org_id
+       or new.reviewer_role is distinct from old.reviewer_role
+       or new.overall_score is distinct from old.overall_score
+       or new.comment is distinct from old.comment
+       or new.submitted_at is distinct from old.submitted_at
+       or new.created_at is distinct from old.created_at
+       or new.visible_at is null then
+        raise exception 'REVIEW_IMMUTABLE' using errcode = 'P0001';
+    end if;
+    if not public.fn_ars_360_is_exact_current_deal_review_pair(new.batch_id, false) then
+        raise exception 'REVIEW_REVEAL_REQUIRES_MUTUAL_PAIR' using errcode = 'P0001';
+    end if;
+    return new;
+end;
+$$;
+drop trigger if exists trg_ars_360_deal_review_immutability on public.deal_reviews;
+create trigger trg_ars_360_deal_review_immutability
+    before insert or update or delete on public.deal_reviews
+    for each row execute function public.fn_ars_360_guard_deal_review_immutability();
+revoke all on function public.fn_ars_360_guard_deal_review_immutability()
+    from public, anon, authenticated, service_role;
+
+-- A row trigger alone cannot prove that a direct UPDATE revealed both rows. This
+-- deferred pair invariant rejects any committed half-reveal while permitting the
+-- canonical single-statement update that changes both exact-pair rows together.
+create or replace function public.fn_ars_360_enforce_revealed_deal_review_pair()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+    v_batch_id uuid;
+begin
+    if tg_op = 'DELETE' then
+        v_batch_id := old.batch_id;
+    else
+        v_batch_id := new.batch_id;
+    end if;
+
+    if exists (
+        select 1
+        from public.deal_reviews dr
+        where dr.batch_id = v_batch_id
+          and dr.visible_at is not null
+    ) and not public.fn_ars_360_is_exact_current_deal_review_pair(v_batch_id, true) then
+        raise exception 'REVIEW_REVEAL_REQUIRES_MUTUAL_PAIR' using errcode = 'P0001';
+    end if;
+
+    return null;
+end;
+$$;
+
+drop trigger if exists trg_ars_360_revealed_deal_review_pair on public.deal_reviews;
+create constraint trigger trg_ars_360_revealed_deal_review_pair
+    after insert or update or delete on public.deal_reviews
+    deferrable initially deferred
+    for each row execute function public.fn_ars_360_enforce_revealed_deal_review_pair();
+
+revoke all on function public.fn_ars_360_enforce_revealed_deal_review_pair()
+    from public, anon, authenticated, service_role;
 
 -- ------------------------------------------------------------
 -- 7.15: NEW TABLE — deal_review_dimension_scores
@@ -1798,6 +1943,40 @@ comment on table public.deal_review_dimension_scores is
 create index if not exists idx_review_dim_scores_review    on public.deal_review_dimension_scores (deal_review_id);
 create index if not exists idx_review_dim_scores_dimension on public.deal_review_dimension_scores (dimension_id);
 
+-- ARS-360: score rows are part of the submitted canonical fact, not editable
+-- metadata. They may be inserted only before their parent review is revealed.
+create or replace function public.fn_ars_360_guard_deal_review_dimension_score_immutability()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+    if tg_op <> 'INSERT' then
+        raise exception 'REVIEW_IMMUTABLE' using errcode = 'P0001';
+    end if;
+
+    if exists (
+        select 1
+        from public.deal_reviews dr
+        where dr.id = new.deal_review_id
+          and dr.visible_at is not null
+    ) then
+        raise exception 'REVIEW_IMMUTABLE_AFTER_REVEAL' using errcode = 'P0001';
+    end if;
+
+    return new;
+end;
+$$;
+
+drop trigger if exists trg_ars_360_deal_review_dimension_score_immutability
+    on public.deal_review_dimension_scores;
+create trigger trg_ars_360_deal_review_dimension_score_immutability
+    before insert or update or delete on public.deal_review_dimension_scores
+    for each row execute function public.fn_ars_360_guard_deal_review_dimension_score_immutability();
+
+revoke all on function public.fn_ars_360_guard_deal_review_dimension_score_immutability()
+    from public, anon, authenticated, service_role;
+
 -- ARS-352: dimension scores inherit the parent review's double-blind visibility.
 -- This table used to be exposed with RLS disabled (ARS-274), which let Data API
 -- roles bypass the parent review policy entirely.
@@ -1814,9 +1993,13 @@ create policy deal_review_dimension_scores_read
             where dr.id = deal_review_id
               and (
                   dr.reviewer_org_id = any(
-                      coalesce((select public.fn_my_org_ids()), array[]::uuid[])
+                      coalesce(public.fn_my_org_ids(), '{}'::uuid[])
                   )
-                  or (dr.visible_at is not null and dr.visible_at <= now())
+                  or (
+                      dr.visible_at is not null
+                      and dr.visible_at <= now()
+                      and public.fn_ars_360_can_read_revealed_deal_review(dr.batch_id)
+                  )
               )
         )
     );
@@ -1829,6 +2012,50 @@ grant select on table public.deal_reviews to authenticated;
 grant select on table public.deal_review_dimension_scores to authenticated;
 grant select, insert, update, delete on table public.deal_reviews to service_role;
 grant select, insert, update, delete on table public.deal_review_dimension_scores to service_role;
+
+-- ARS-360: unsafe legacy review payloads are retained privately for reconciliation;
+-- this is audit evidence, never a product review source.
+create table if not exists public.deal_review_legacy_reconciliation (
+    id                              uuid primary key default gen_random_uuid(),
+    batch_id                        uuid not null references public.batches(id)
+                                    on delete restrict,
+    legacy_key                      text not null
+                                    check (legacy_key in ('review', 'mpk_review')),
+    reason_code                     text not null
+                                    check (reason_code in (
+                                        'invalid_payload',
+                                        'invalid_rating',
+                                        'batch_not_delivered',
+                                        'unknown_dimension',
+                                        'no_delivered_mpk_counterparty',
+                                        'ambiguous_mpk_counterparty',
+                                        'review_already_revealed'
+                                    )),
+    raw_payload                     jsonb not null,
+    candidate_counterparty_org_ids  uuid[] not null default '{}'::uuid[],
+    status                          text not null default 'pending'
+                                    check (status in ('pending', 'resolved')),
+    resolution_code                 text,
+    observed_at                     timestamptz not null default now(),
+    last_observed_at                timestamptz not null default now(),
+    resolved_at                     timestamptz,
+    unique (batch_id, legacy_key),
+    constraint deal_review_legacy_reconciliation_resolution_check check (
+        (status = 'pending' and resolution_code is null and resolved_at is null)
+        or
+        (status = 'resolved' and resolution_code = 'canonical_present'
+            and resolved_at is not null)
+    )
+);
+comment on table public.deal_review_legacy_reconciliation is
+    'ARS-360 private reconciliation/audit queue for unsafe legacy batches.notes review values.';
+create index if not exists idx_deal_review_legacy_reconciliation_pending
+    on public.deal_review_legacy_reconciliation (observed_at, batch_id)
+    where status = 'pending';
+alter table public.deal_review_legacy_reconciliation enable row level security;
+revoke all on table public.deal_review_legacy_reconciliation
+    from public, anon, authenticated, service_role;
+grant select on table public.deal_review_legacy_reconciliation to service_role;
 
 -- ------------------------------------------------------------
 -- 7.16: NEW TABLE — tsp_sku_category_map
@@ -3776,11 +4003,9 @@ comment on function public.rpc_confirm_delivery(uuid, uuid) is
 
 
 -- ------------------------------------------------------------
--- RPC-M6-08: rpc_submit_deal_review (D-M6-11 + D-M6-12)
--- Caller: farmer (batch owner) or MPK (counterparty).
--- Inserts deal_reviews row + 1 dimension_score row.
--- D-M6-12 double-blind: if the other side already submitted, set visible_at
--- on BOTH reviews to now() in a single update.
+-- RPC-M6-08: rpc_submit_deal_review (ARS-360 / D-M6-11 + D-M6-12)
+-- Canonical, immutable mutual review. The batch row lock serializes concurrent
+-- submissions; the second exact farmer/MPK submission reveals both atomically.
 -- ------------------------------------------------------------
 drop function if exists public.rpc_submit_deal_review(p_organization_id uuid, p_batch_id uuid, p_overall_score integer, p_dimension_id uuid, p_dimension_score integer, p_comment text);
 create or replace function public.rpc_submit_deal_review(
@@ -3797,11 +4022,11 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-    v_batch         record;
-    v_mpk_org_id    uuid;
-    v_reviewer_role text;
-    v_review_id     uuid;
-    v_other_exists  boolean;
+    v_batch                    public.batches%rowtype;
+    v_mpk_counterparty_org_ids uuid[];
+    v_reviewer_role            text;
+    v_review_id                uuid;
+    v_can_reveal               boolean := false;
 begin
     if public.fn_current_user_id() is null then
         raise exception 'AUTH_REQUIRED' using errcode = '42501';
@@ -3811,55 +4036,81 @@ begin
             using errcode = '42501';
     end if;
 
-    if not (p_overall_score between 1 and 5) then
+    if p_overall_score is null or p_overall_score not between 1 and 5 then
         raise exception 'INVALID_SCORE: overall_score must be between 1 and 5'
             using errcode = 'P0001';
     end if;
-    if not (p_dimension_score between 1 and 5) then
+    if p_dimension_score is null or p_dimension_score not between 1 and 5 then
         raise exception 'INVALID_SCORE: dimension_score must be between 1 and 5'
             using errcode = 'P0001';
     end if;
     if p_dimension_id is null then
         raise exception 'INVALID_INPUT: p_dimension_id required' using errcode = 'P0001';
     end if;
-    if not exists (
-        select 1 from public.review_dimensions
-        where id = p_dimension_id and is_active = true
-    ) then
-        raise exception 'UNKNOWN_DIMENSION: %', p_dimension_id using errcode = 'P0001';
-    end if;
-
-    -- DEF-TSP-M4-OWNERSHIP (resolved): owner-check via pools.organization_id column.
-    select b.*, p.organization_id as mpk_org_id
+    select b.*
       into v_batch
     from public.batches b
-    left join public.pool_lines pl on pl.id = b.pool_line_id
-    left join public.pools p       on p.id = pl.pool_id
-    where b.id = p_batch_id;
+    where b.id = p_batch_id
+    for update;
     if not found then
         raise exception 'BATCH_NOT_FOUND' using errcode = 'P0001';
     end if;
-    -- Microstep6 §4c + D-M6-11: review window opens only after `delivered`.
-    -- A farmer rating MPK weight accuracy before delivery is undefined;
-    -- an MPK rating livestock condition before receiving them is undefined.
-    if v_batch.status != 'delivered' then
+    if v_batch.status <> 'delivered' then
         raise exception 'INVALID_STATUS: reviews only from delivered (current %)',
             v_batch.status using errcode = 'P0001';
     end if;
 
-    v_mpk_org_id := v_batch.mpk_org_id;
+    v_mpk_counterparty_org_ids := public.fn_ars_360_mpk_counterparty_ids(p_batch_id);
 
-    -- Q3 / Resolution: derive reviewer_role from p_organization_id
+    -- Reviews are batch-scoped rather than allocation-scoped, so neither role can
+    -- safely submit until the batch resolves to exactly one delivered MPK.
+    if cardinality(v_mpk_counterparty_org_ids) = 0 then
+        raise exception 'NO_DELIVERED_MPK_COUNTERPARTY' using errcode = 'P0001';
+    end if;
+    if cardinality(v_mpk_counterparty_org_ids) <> 1 then
+        raise exception
+            'AMBIGUOUS_MPK_COUNTERPARTY: allocation-scoped review model required for batch %',
+            p_batch_id using errcode = 'P0001';
+    end if;
+
     if v_batch.organization_id = p_organization_id then
         v_reviewer_role := 'farmer';
-    elsif v_mpk_org_id is not null and v_mpk_org_id = p_organization_id then
+    elsif p_organization_id = v_mpk_counterparty_org_ids[1] then
         v_reviewer_role := 'mpk';
     else
         raise exception 'FORBIDDEN: organization is not a party to this batch'
+            using errcode = '42501';
+    end if;
+
+    if not exists (
+        select 1
+        from public.review_dimensions d
+        where d.id = p_dimension_id
+          and d.is_active
+          and d.applicable_role in (v_reviewer_role, 'both')
+    ) then
+        raise exception 'UNKNOWN_OR_INAPPLICABLE_DIMENSION: %', p_dimension_id
             using errcode = 'P0001';
     end if;
 
-    -- Insert review (unique batch_id + reviewer_org_id prevents duplicate)
+    if exists (
+        select 1
+        from public.deal_reviews dr
+        where dr.batch_id = p_batch_id
+          and dr.reviewer_org_id = p_organization_id
+    ) then
+        raise exception 'REVIEW_ALREADY_SUBMITTED' using errcode = 'P0001';
+    end if;
+
+    if exists (
+        select 1
+        from public.deal_reviews dr
+        where dr.batch_id = p_batch_id
+          and dr.visible_at is not null
+    ) then
+        raise exception 'REVIEW_IMMUTABLE_AFTER_REVEAL' using errcode = 'P0001';
+    end if;
+
     insert into public.deal_reviews (
         batch_id, reviewer_org_id, reviewer_role, overall_score, comment
     ) values (
@@ -3873,17 +4124,20 @@ begin
         v_review_id, p_dimension_id, p_dimension_score
     );
 
-    -- D-M6-12 double-blind reveal: if other side already submitted, reveal both
-    select exists (
-        select 1 from public.deal_reviews
-        where batch_id = p_batch_id
-          and reviewer_org_id != p_organization_id
-    ) into v_other_exists;
+    -- Exact pair only: a batch with several MPKs cannot safely use batch-wide
+    -- visibility until a future allocation-scoped review model exists.
+    select count(*) = 2
+       and count(*) filter (where reviewer_role = 'farmer') = 1
+       and count(*) filter (where reviewer_role = 'mpk') = 1
+      into v_can_reveal
+    from public.deal_reviews
+    where batch_id = p_batch_id;
 
-    if v_other_exists then
+    if v_can_reveal then
         update public.deal_reviews
-        set visible_at = now()
-        where batch_id = p_batch_id and visible_at is null;
+           set visible_at = now()
+         where batch_id = p_batch_id
+           and visible_at is null;
     end if;
 
     insert into public.platform_events (
@@ -3897,7 +4151,7 @@ begin
             'batch_id', p_batch_id,
             'reviewer_role', v_reviewer_role,
             'overall_score', p_overall_score,
-            'mutual_revealed', v_other_exists
+            'mutual_revealed', v_can_reveal
         ),
         true
     );
@@ -3906,10 +4160,9 @@ begin
 end; $$;
 
 comment on function public.rpc_submit_deal_review(uuid, uuid, int, uuid, int, text) is
-    'D-M6-11 + D-M6-12 | Mutual deal review with double-blind reveal.
-     Role derived from p_organization_id: farmer = batch.organization_id,
-     mpk = pool_line -> pools -> pool_requests.organization_id.
-     visible_at set on BOTH reviews when both sides submitted.';
+    'ARS-360 / D-M6-11 / D-M6-12: canonical immutable mutual review. Authenticated
+     caller must belong to the supplied party organization. Batch-row locking makes
+     the second eligible submission reveal the exact farmer/MPK pair atomically.';
 
 revoke execute on function public.rpc_submit_deal_review(uuid, uuid, int, uuid, int, text)
     from public, anon;
@@ -4972,7 +5225,8 @@ insert into public.rpc_name_registry (sql_name, dok3_name, dok5_tool_name, creat
     ('rpc_lower_batch_price',     'rpc_lower_batch_price',     null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §2.6 + D-M6-3: clamp to floor, re-broadcast offers'),
     ('rpc_confirm_dispatch',      'rpc_confirm_dispatch',      null, 'd02_tsp.sql (Section 8 / M4+M6)', 'D-M6-10: batch confirmed -> dispatched (farmer)'),
     ('rpc_confirm_delivery',      'rpc_confirm_delivery',      null, 'd02_tsp.sql (Section 8 / M4+M6)', 'D-M6-10: batch dispatched -> delivered (MPK)'),
-    ('rpc_submit_deal_review',    'rpc_submit_deal_review',    null, 'd02_tsp.sql (Section 8 / M4+M6)', 'D-M6-11 + D-M6-12: mutual deal review with double-blind reveal'),
+    ('rpc_submit_deal_review',    'rpc_submit_deal_review',    null, 'd02_tsp.sql (Section 8 / M4+M6)', 'ARS-360: canonical immutable mutual review; exact pair revealed atomically'),
+    ('rpc_get_mpk_reputation',    'rpc_get_mpk_reputation',    null, 'd02_tsp.sql (Section 9 / ARS-360)', 'ARS-360: public aggregate-only farmer-to-MPK reputation; no counterparty or batch detail'),
     ('rpc_pool_return_batches',   'rpc_pool_return_batches',   null, 'd02_tsp.sql (Section 8 / M4+M6)', 'D-TSP-10: awaiting_mpk_decision -> closed_unfilled; matched -> published'),
     ('rpc_pool_accept_partial',   'rpc_pool_accept_partial',   null, 'd02_tsp.sql (Section 8 / M4+M6)', 'D-TSP-10: awaiting_mpk_decision -> closed_partial; matched -> confirmed'),
     ('rpc_get_reference_price',   'rpc_get_reference_price',   null, 'd02_tsp.sql (Section 8 / M4+M6)', 'M4 §1.1: indicative price + mandatory disclaimer (Art.171)'),
@@ -5222,10 +5476,11 @@ on conflict (sql_name) do update
 --   20260702200000_tsp_price_decision_timer     tsp_config.price_decision_after_minutes
 -- (organizations.district_id — в d01_kernel.sql, миграция 20260701140000_org_district.)
 --
--- Тела RPC Слайса 8–9 (перевыпуски rpc_self_*, fn_tsp_alloc_chunk,
+-- Большинство тел RPC Слайса 8–9 (перевыпуски rpc_self_*, fn_tsp_alloc_chunk,
 -- fn_tsp_rollup_batch_status, fn_tsp_batch_json, rpc_get_pool_matches,
--- rpc_admin_tsp_*) живут в миграциях; в каноне их определений НЕТ —
--- реплей d-файлов их не откатывает. Канон фиксирует СХЕМУ.
+-- rpc_admin_tsp_*) остаются в миграциях. ARS-360 добавляет в канон resolver
+-- контрагента и публичный агрегат репутации, потому что они определяют семантику
+-- канонических deal_reviews при полном replay d-файлов.
 --
 -- ВАЖНО: секция стоит в КОНЦЕ файла намеренно — пересборка batches_status_check
 -- (9.3) обязана выполняться ПОСЛЕ пересборки в 7.1.6, иначе реплей канона
@@ -5366,6 +5621,184 @@ alter table public.batch_allocations drop constraint if exists batch_allocations
 alter table public.batch_allocations add  constraint batch_allocations_status_check
     check (status in ('matched', 'confirmed', 'dispatched', 'delivered', 'cancelled'));
 
+-- ------------------------------------------------------------
+-- 9.6: ARS-360 review counterparty resolution and public aggregate
+-- batch_allocations is defined above; the review RPC in §8 calls this helper.
+-- ------------------------------------------------------------
+
+-- Prefer delivered chunk ownership whenever allocations exist. The pool-line route
+-- is a deterministic compatibility fallback only for pre-Slice-9 batches that have
+-- no allocations at all.
+create or replace function public.fn_ars_360_mpk_counterparty_ids(p_batch_id uuid)
+returns uuid[]
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+    with allocation_state as (
+        select
+            count(*)::int as allocation_count,
+            coalesce(
+                array_agg(distinct p.organization_id order by p.organization_id)
+                    filter (where a.status = 'delivered' and p.organization_id is not null),
+                '{}'::uuid[]
+            ) as delivered_org_ids
+        from public.batch_allocations a
+        join public.pools p on p.id = a.pool_id
+        where a.batch_id = p_batch_id
+    ), legacy_pool_line as (
+        select p.organization_id
+        from public.batches b
+        left join public.pool_lines pl on pl.id = b.pool_line_id
+        left join public.pools p on p.id = pl.pool_id
+        where b.id = p_batch_id
+    )
+    select coalesce(
+        (
+            select case
+                when s.allocation_count > 0 then s.delivered_org_ids
+                when l.organization_id is not null then array[l.organization_id]::uuid[]
+                else '{}'::uuid[]
+            end
+            from allocation_state s
+            cross join legacy_pool_line l
+        ),
+        '{}'::uuid[]
+    );
+$$;
+
+comment on function public.fn_ars_360_mpk_counterparty_ids(uuid) is
+    'ARS-360 internal resolver. Returns distinct delivered MPK organization IDs for a
+     batch; falls back to batch.pool_line only when no allocation rows exist.';
+
+revoke all on function public.fn_ars_360_mpk_counterparty_ids(uuid)
+    from public, anon, authenticated, service_role;
+
+-- One shared attribution invariant for reveal, direct RLS and reputation. The
+-- reviewer identities must still match the batch farmer and current singleton
+-- delivered MPK; a historic pair is never trusted merely because its roles count 1+1.
+create or replace function public.fn_ars_360_is_exact_current_deal_review_pair(
+    p_batch_id uuid,
+    p_require_visible boolean default false
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+    select p_batch_id is not null
+       and exists (
+            select 1
+            from public.deal_reviews dr
+            join public.batches b on b.id = dr.batch_id
+            cross join lateral (
+                select public.fn_ars_360_mpk_counterparty_ids(dr.batch_id)
+                    as counterparty_org_ids
+            ) counterparty
+            where dr.batch_id = p_batch_id
+              and cardinality(counterparty.counterparty_org_ids) = 1
+            group by dr.batch_id, b.organization_id, counterparty.counterparty_org_ids
+            having count(*) = 2
+               and count(*) filter (
+                   where dr.reviewer_role = 'farmer'
+                     and dr.reviewer_org_id = b.organization_id
+               ) = 1
+               and count(*) filter (
+                   where dr.reviewer_role = 'mpk'
+                     and dr.reviewer_org_id = counterparty.counterparty_org_ids[1]
+               ) = 1
+               and (
+                   not p_require_visible
+                   or count(*) filter (where dr.visible_at is not null) = 2
+               )
+       );
+$$;
+
+comment on function public.fn_ars_360_is_exact_current_deal_review_pair(uuid, boolean) is
+    'ARS-360 internal attribution invariant: exact batch farmer/current singleton delivered
+     MPK pair, optionally fully revealed. Used to fail closed on historic or split drift.';
+
+revoke all on function public.fn_ars_360_is_exact_current_deal_review_pair(uuid, boolean)
+    from public, anon, authenticated, service_role;
+
+-- Intentionally public, sanitized reputation aggregate. It uses canonical,
+-- mutually revealed farmer reviews only and never returns counterparty identity,
+-- batch identifiers, review comments, or individual review records.
+create or replace function public.rpc_get_mpk_reputation(p_mpk_org_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+    if p_mpk_org_id is null then
+        raise exception 'MPK_ORGANIZATION_REQUIRED' using errcode = 'P0001';
+    end if;
+
+    return (
+        with eligible_reviews as (
+            select dr.overall_score, weight_score.score as weight_accuracy_score
+            from public.deal_reviews dr
+            join public.batches b on b.id = dr.batch_id
+            cross join lateral (
+                select public.fn_ars_360_mpk_counterparty_ids(dr.batch_id) as counterparty_org_ids
+            ) counterparty
+            left join lateral (
+                select ds.score
+                from public.deal_review_dimension_scores ds
+                join public.review_dimensions d on d.id = ds.dimension_id
+                where ds.deal_review_id = dr.id
+                  and d.code = 'weight_accuracy'
+                limit 1
+            ) weight_score on true
+            where dr.reviewer_role = 'farmer'
+              and dr.reviewer_org_id = b.organization_id
+              and dr.visible_at is not null
+              and dr.visible_at <= now()
+              and public.fn_ars_360_is_exact_current_deal_review_pair(dr.batch_id, true)
+              and cardinality(counterparty.counterparty_org_ids) = 1
+              and counterparty.counterparty_org_ids[1] = p_mpk_org_id
+              and exists (
+                  select 1
+                  from public.deal_reviews mpk_review
+                  where mpk_review.batch_id = dr.batch_id
+                    and mpk_review.reviewer_org_id = p_mpk_org_id
+                    and mpk_review.reviewer_role = 'mpk'
+                    and mpk_review.visible_at is not null
+                    and mpk_review.visible_at <= now()
+              )
+        )
+        select jsonb_build_object(
+            'mpk_org_id', p_mpk_org_id,
+            'review_count', count(*),
+            'average_score', round(avg(overall_score)::numeric, 2),
+            'weight_accuracy_average', round(avg(weight_accuracy_score)::numeric, 2),
+            'distribution', jsonb_build_object(
+                '1', count(*) filter (where overall_score = 1),
+                '2', count(*) filter (where overall_score = 2),
+                '3', count(*) filter (where overall_score = 3),
+                '4', count(*) filter (where overall_score = 4),
+                '5', count(*) filter (where overall_score = 5)
+            )
+        )
+        from eligible_reviews
+    );
+end;
+$$;
+
+comment on function public.rpc_get_mpk_reputation(uuid) is
+    'ARS-360 intentional public aggregate endpoint. Counts only mutually revealed,
+     unambiguously attributable farmer-to-MPK canonical reviews and returns no
+     counterparty, batch, comment, or individual-review data.';
+
+revoke execute on function public.rpc_get_mpk_reputation(uuid)
+    from public, anon, authenticated, service_role;
+grant execute on function public.rpc_get_mpk_reputation(uuid)
+    to anon, authenticated, service_role;
+
 -- ============================================================
 -- SECTION 9 SUMMARY (СЛАЙС 8–9 SCHEMA SYNC)
 -- ============================================================
@@ -5379,6 +5812,8 @@ alter table public.batch_allocations add  constraint batch_allocations_status_ch
 -- Tables created (1): batch_allocations (+2 колонки этапов из 20260702190000,
 --   batch_allocations_status_check: 5 статусов)
 --
+-- Functions: fn_ars_360_mpk_counterparty_ids (private resolver),
+--   rpc_get_mpk_reputation (public sanitized aggregate)
 -- Indexes: 4 | RLS enabled: 1 таблица | Policies: 2 (farmer read / mpk read)
 -- ============================================================
 
@@ -5387,25 +5822,22 @@ alter table public.batch_allocations add  constraint batch_allocations_status_ch
 -- ============================================================
 
 -- ============================================================
--- SECTION 10: BATCH REVIEWS — примечание, без новой схемы (GAP-REVIEW-MOCK-01)
+-- SECTION 10: BATCH REVIEWS — ARS-360 convergence note
 -- ============================================================
--- QA-прогон 2026-07-05/06 (qa/scenarios/05-tsp-farmer.md TSPF-LIFE-16,
--- qa/scenarios/06-tsp-mpk.md TSPM-CLOSE-05) заподозрил отсутствие RPC/таблицы
--- отзывов (PGRST205 на тесте). При реализации выяснилось: rpc_submit_review
--- (миграция 20260622120000, p_batch_id/p_r1/p_r2/p_comment — контракт фронта
--- useBatches.ts) УЖЕ существует и пишет в batches.notes.review; реальный гэп —
--- только (а) fn_tsp_batch_json не отдавал это поле обратно фронту и (б) МПК-сторона
--- (PoolMonitorModal.tsx myRating) не вызывала вообще никакой RPC. Отдельно —
--- полная каноническая система review_dimensions/deal_reviews/
--- deal_review_dimension_scores/rpc_submit_deal_review (§7.13-7.15 выше) существует,
--- но НЕ вызывается ни одним фронтовым файлом — orphan, конвергенция с ней отдельным
--- слайсом (не в скоупе этого точечного фикса).
+-- ARS-360 завершает конвергенцию: deal_reviews +
+-- deal_review_dimension_scores — единственный write/read source. Легаси-сигнатуры
+-- rpc_submit_review и rpc_self_submit_mpk_review остаются только адаптерами и
+-- делегируют rpc_submit_deal_review; они больше не изменяют batches.notes.
 --
--- Новой таблицы НЕ заводим (не дублируем deal_reviews). Фикс — миграция
--- 20260706120000_tsp_batch_reviews.sql: fn_tsp_batch_json += 'review' (читает
--- уже сохранённое) + новый rpc_self_submit_mpk_review (пишет notes.mpk_review,
--- тот же паттерн) + rpc_get_pool_matches += 'myRating'. Обе стороны — без
--- double-blind (тот же уровень простоты, что у уже существующего rpc_submit_review).
+-- fn_tsp_batch_json.review и rpc_get_pool_matches.myRating читают канон первым и
+-- используют только валидный notes fallback, пока legacy-значения не выведены из
+-- эксплуатации. Безопасно неатрибутируемые payload остаются в приватной
+-- deal_review_legacy_reconciliation, а не угадываются.
+--
+-- Раскрытие ограничено точной парой farmer/MPK и выполняется атомарно на второй
+-- отправке; после visible_at review нельзя изменить или дополнить. Публичная
+-- rpc_get_mpk_reputation выдаёт только обезличенный агрегат взаимно раскрытых
+-- canonical farmer→MPK отзывов.
 -- ============================================================
 
 

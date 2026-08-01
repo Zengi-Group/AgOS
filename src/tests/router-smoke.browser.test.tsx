@@ -97,8 +97,8 @@ it('v5-остров: /cabinet рендерит Главную и навигир�
 
 it('v6+v5 сосуществуют: /mpk (v6-роут) рендерит оболочку МПК', async () => {
   mountAppAt('/mpk')
-  // Демо-фолбэк МПК: баннер проверки типа организации (typeStatus='under_review').
-  await expect.element(page.getByText('Проверяем тип организации'), T).toBeInTheDocument()
+  // Демо-фолбэк МПК: баннер статуса типа организации (typeStatus='under_review').
+  await expect.element(page.getByText('Статус типа МПК ещё не подтверждён'), T).toBeInTheDocument()
 })
 
 // Регрессия: авторизованный фермер на Главной кабинета. Системный back (Android edge-swipe

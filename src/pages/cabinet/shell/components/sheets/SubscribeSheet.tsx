@@ -34,6 +34,7 @@ interface Props {
   orgId: string | null | undefined
   onClose: () => void
   onSubscribed: () => void          // родитель ставит membership='active' + тост
+  onSupport: () => void              // grace/past_due → ручная проверка TURAN
   toast: (text: string) => void
 }
 
@@ -50,11 +51,11 @@ const fmtDate = (iso: string | null): string =>
 const STATE_LABEL: Record<string, string> = {
   trialing: 'Пробный период',
   active: 'Активна',
-  grace: 'Ожидает оплаты',
-  past_due: 'Просрочена',
+  grace: 'Ожидает подтверждения оплаты',
+  past_due: 'Требует ручной проверки',
 }
 
-export function SubscribeSheet({ open = true, orgId, onClose, onSubscribed, toast }: Props) {
+export function SubscribeSheet({ open = true, orgId, onClose, onSubscribed, onSupport, toast }: Props) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [plans, setPlans] = useState<Plan[]>([])
@@ -123,7 +124,7 @@ export function SubscribeSheet({ open = true, orgId, onClose, onSubscribed, toas
     })
     setBusy(false)
     if (error) { toast('Не удалось возобновить: ' + error.message); return }
-    toast('Подписка возобновлена — продление снова включено')
+    toast('Настройки продления сохранены')
     load()
   }
 
@@ -152,10 +153,14 @@ export function SubscribeSheet({ open = true, orgId, onClose, onSubscribed, toas
       )
     }
     const stateText = STATE_LABEL[s.state] ?? s.state
+    const needsManualHandling = s.state === 'grace' || s.state === 'past_due'
     const dateLine =
       s.state === 'trialing' ? `Пробный период до ${fmtDate(s.trial_end)}`
       : s.cancel_at_period_end ? `Доступ до ${fmtDate(s.current_period_end)} · продление отключено`
-      : `Следующее продление ${fmtDate(s.next_billing_at)}`
+      : `Расчётная дата следующего периода ${fmtDate(s.next_billing_at)}`
+    const manualText = s.state === 'grace'
+      ? 'Доступ пока сохранён. Оплату и дальнейшее продление подтверждает TURAN вручную.'
+      : 'Для проверки оплаты и дальнейшего статуса членства обратитесь в TURAN.'
     return (
       <>
         <div className="sh-t">Ваша подписка</div>
@@ -164,7 +169,12 @@ export function SubscribeSheet({ open = true, orgId, onClose, onSubscribed, toas
           <div className="ws-big" style={{ fontSize: 20 }}>{s.plan_title ?? s.plan_code}</div>
         </div>
         <div className="sh-b" style={{ marginTop: 10 }}>{dateLine}</div>
-        {s.cancel_at_period_end ? (
+        {needsManualHandling ? (
+          <>
+            <div className="sh-b" style={{ marginTop: 10 }}>{manualText}</div>
+            <Cta variant="primary-green" onClick={onSupport}>Связаться с TURAN</Cta>
+          </>
+        ) : s.cancel_at_period_end ? (
           // B3: продление отключено — предлагаем вернуть подписку до конца периода.
           <Cta variant="primary-green" onClick={doResume} disabled={busy}>Возобновить подписку</Cta>
         ) : (
@@ -182,7 +192,7 @@ export function SubscribeSheet({ open = true, orgId, onClose, onSubscribed, toas
     return (
       <>
         <div className="sh-t">Членство в ассоциации</div>
-        <div className="sh-b">Доступ к Рынку&nbsp;(TSP), справочным ценам и сообществу. Первый период бесплатно, дальше — автоматическое продление. Отменить можно в любой момент.</div>
+        <div className="sh-b">Доступ к Рынку&nbsp;(TSP), справочным ценам и сообществу. Первый период бесплатно; порядок оплаты и продления подтверждает TURAN.</div>
         <div className="blk-h" style={{ margin: '12px 0 6px' }}>ТАРИФ</div>
         <div className="stack8">
           {plans.map((p) => (
