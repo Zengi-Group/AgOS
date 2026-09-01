@@ -56,3 +56,16 @@ __screenshots__/
 # трекаемые graph.json/GRAPH_REPORT.md конфликтовали на каждой паре параллельных PR.
 # Истина = код (P4); регенерация локально: graphify update . (worktree-bootstrap делает сам).
 graphify-out/
+
+# Claude Design canvas — рантайм и сборки прототипов (ARS-351, 2026-09-01).
+# Версионируем ТОЛЬКО сам макет (*.dc.html) + манифест токенов + правила линта;
+# рантайм и бандлы регенерируются повторным экспортом из Claude Design и дают
+# 24 345 строк шума в каждом дальнейшем диффе (82% объёма папки).
+# Как восстановить — Docs/prototype/EXTRACT-tokens-and-data-map.md §2.7.
+Docs/prototype/support.js
+Docs/prototype/agos-readable.js
+Docs/prototype/_ds/**/_ds_bundle.js
+# colors_and_type.css из экспорта = копия Docs/design-system-v12/colors_and_type.css
+# (значения идентичны, отличия только в аннотациях @kind и переводах строки).
+# P4: один факт — один дом; две копии токенов гарантированно разъедутся.
+Docs/prototype/_ds/**/colors_and_type.css
