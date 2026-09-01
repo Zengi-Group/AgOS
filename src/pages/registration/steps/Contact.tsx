@@ -55,7 +55,12 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
         body: { action: 'send', phone: formData.phone },
       })
       if (error || data?.error) {
-        toast.error(data?.error || error?.message || 'Ошибка отправки кода')
+        if (error?.name === 'FunctionsFetchError') {
+          console.error('[Contact] bird-otp network error:', error.message)
+          toast.error('Не удаётся связаться с сервером — проверьте соединение')
+        } else {
+          toast.error(data?.error || error?.message || 'Ошибка отправки кода')
+        }
         return
       }
       onChange({ otp_sent: true, verification_id: data.verificationId })
@@ -96,7 +101,12 @@ export function Contact({ formData, onChange, onNext }: ContactProps) {
         body: { action: 'send', phone: formData.phone },
       })
       if (error || data?.error) {
-        toast.error(data?.error || error?.message)
+        if (error?.name === 'FunctionsFetchError') {
+          console.error('[Contact] bird-otp network error:', error.message)
+          toast.error('Не удаётся связаться с сервером — проверьте соединение')
+        } else {
+          toast.error(data?.error || error?.message)
+        }
         return
       }
       onChange({ verification_id: data.verificationId })

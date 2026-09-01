@@ -61,7 +61,12 @@ export function ForgotPin() {
         body: { action: 'send', phone: `+7${phoneDigits}` },
       })
       if (fnErr || data?.error) {
-        setError(data?.error || fnErr?.message || 'Ошибка отправки кода')
+        if (fnErr?.name === 'FunctionsFetchError') {
+          console.error('[ForgotPin] bird-otp network error:', fnErr.message)
+          setError('Не удаётся связаться с сервером — проверьте соединение')
+        } else {
+          setError(data?.error || fnErr?.message || 'Ошибка отправки кода')
+        }
         return
       }
       setVerificationId(data.verificationId)
@@ -102,7 +107,15 @@ export function ForgotPin() {
       const { data, error: fnErr } = await supabase.functions.invoke('bird-otp', {
         body: { action: 'send', phone: `+7${phoneDigits}` },
       })
-      if (fnErr || data?.error) { setError(data?.error || fnErr?.message); return }
+      if (fnErr || data?.error) {
+        if (fnErr?.name === 'FunctionsFetchError') {
+          console.error('[ForgotPin] bird-otp network error:', fnErr.message)
+          setError('Не удаётся связаться с сервером — проверьте соединение')
+        } else {
+          setError(data?.error || fnErr?.message)
+        }
+        return
+      }
       setVerificationId(data.verificationId)
       setOtp('')
       setCountdown(60)
@@ -137,7 +150,12 @@ export function ForgotPin() {
         body: { action: 'reset_pin', phone: `+7${phoneDigits}`, newPin: value },
       })
       if (fnErr || data?.error) {
-        toast.error(data?.error || fnErr?.message || 'Ошибка сброса PIN')
+        if (fnErr?.name === 'FunctionsFetchError') {
+          console.error('[ForgotPin] bird-otp network error:', fnErr.message)
+          toast.error('Не удаётся связаться с сервером — проверьте соединение')
+        } else {
+          toast.error(data?.error || fnErr?.message || 'Ошибка сброса PIN')
+        }
         return
       }
       toast.success('PIN успешно изменён')

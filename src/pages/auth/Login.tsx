@@ -47,7 +47,12 @@ export function Login() {
         password: value,
       })
       if (authError) {
-        setError('Неверный PIN — попробуйте ещё раз')
+        if (authError.name === 'AuthRetryableFetchError') {
+          console.error('[Login] network error:', authError.message)
+          setError('Не удаётся связаться с сервером — проверьте соединение')
+        } else {
+          setError('Неверный PIN — попробуйте ещё раз')
+        }
         setPin('')
         return
       }
