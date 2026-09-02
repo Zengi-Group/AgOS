@@ -1,6 +1,6 @@
 ---
 status: agreed           # гейт замысла проведён 2026-09-01 (G2-карточка, 3 вопроса закрыты, находки ревью триажированы); код (/build) — после подписи g2_approved
-g2_approved:             # ставит ТОЛЬКО человек: scripts/approve-g2.sh <спек>. Пусто = не одобрено
+g2_approved: 2026-09-02 · Dias Zhagaparov
 baseline_commit:         # пусто до /build; записывается ДО первой правки
 brain_spec: "[[projects/agos/specs/mpk-cabinet]]"
 task_home: "Linear ARS-351 (эпик) · MP-3: ARS-623..631"
@@ -8,17 +8,17 @@ task_home: "Linear ARS-351 (эпик) · MP-3: ARS-623..631"
 
 # Dok 6 — Interface Contracts: Slice 10 «Профиль МПК» (десктопная консоль)
 
-> **Состояние формата (2026-09-01, прогон `/feature:feature`).** Блок
-> `<frozen-after-approval>` собран: `Intent` · `Boundaries & Constraints` (**FR-001…FR-015**) ·
-> `I/O & Edge-Case Matrix` (**M-001…M-015**). Хвосты по контракту на месте: `Open Questions`
-> (пусто — три закрыты владельцем) · `Assumptions` · `Clarifications` · `Implementation Notes` ·
-> `Spec Change Log` · `Review Triage Log`.
+> ✅ **G2 подписан 2026-09-02 · Dias Zhagaparov.** Блок `<frozen-after-approval>` содержит
+> `Intent` · `Boundaries & Constraints` (**FR-001…FR-017**) · `I/O & Edge-Case Matrix`
+> (**M-001…M-019**) и с этого момента **read-only для агентов**: изменение = возврат к
+> владельцу на переговоры, а не подгонка замысла под получившийся код.
 >
-> **Ждёт подписи G2.** `g2_approved` пусто → стена видит «живых слайсов: 1, одобрено: 0» и
-> выносит каждую правку кода человеку. Подпись ставит владелец в своём терминале:
-> `bash <skill-dir>/scripts/approve-g2.sh <этот файл>`. Агент это поле не заполняет.
+> Хвосты по контракту (правятся свободно, append-only): `Open Questions` (пусто — три закрыты
+> на гейте) · `Assumptions` · `Clarifications` · `Implementation Notes` · `Spec Change Log` ·
+> `Review Triage Log`.
 >
-> Контракт-эталон: `<плагин feature>/skills/feature/references/eng-spec-slice.md`.
+> Дальше — `/feature:build MP-3.1` **в новой сессии**; `baseline_commit` пишется там до первой
+> правки кода. Контракт-эталон: `<плагин feature>/skills/feature/references/eng-spec-slice.md`.
 
 > Экранный контракт зоны `/mpk/profile/*`. Пишется ДО кода (`CLAUDE.md` → UI:
 > User Story → Flow → Wireframe → контракт Dok 6 → код).
@@ -28,7 +28,7 @@ task_home: "Linear ARS-351 (эпик) · MP-3: ARS-623..631"
 - **Canon domain owner:** `Docs/AGOS-MPK-Profile-EngSpec-v0_1.md` (архитектура, D-MPK-DESKTOP-01…NARROW-06)
 - **Прототип:** `Docs/prototype/Кабинет МПК v4.dc.html` · разбор — `Docs/prototype/EXTRACT-tokens-and-data-map.md`
 - **Реестр токенов:** `Docs/prototype/_ds/agos-9d11d37b-242b-4955-a814-eac7bd2332de/_ds_manifest.json`
-- **Status:** draft (скоуп подтверждён CEO 2026-09-01: «сначала по эпику, потом расширять»)
+- **Status:** `agreed` · G2 подписан 2026-09-02 (скоуп подтверждён CEO 2026-09-01: «сначала по эпику, потом расширять»)
 
 ---
 

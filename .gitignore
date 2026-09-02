@@ -33,6 +33,12 @@ Thumbs.db
 # .claude/settings.json (shared/committed) stays tracked; only the .local override is ignored.
 .claude/settings.local.json
 
+# Указатель активного слайса G2-стены — derived, у каждой рабочей копии свой.
+# Пишется `preflight --packet` при /build; закоммиченный начнёт врать соседям
+# (предупреждение самого префлайта). Опт-ин .claude/zengi-feature.on, наоборот,
+# ОБЯЗАН быть в git — иначе в свежем клоне стены не будет и никто не заметит.
+.claude/zengi-feature.slice
+
 # Supabase
 supabase/.temp/
 
