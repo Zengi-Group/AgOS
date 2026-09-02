@@ -1,41 +1,29 @@
-# Eng-Spec / Slice — <Feature / Slice name>
+<!--
+AgOS · надстройка к контракт-эталону слайс-спека. НЕ копия контракта.
+Канонический ФОРМА-эталон (frozen-блок · FR-/M- · frontmatter · Open Questions · append-only хвосты):
+скилл /feature → references/eng-spec-slice.md (доставляется со скиллом; в сессии /feature читается оттуда).
+Контракт-ЗАКОН: тот же скилл, SKILL.md §«Slice-spec contract». Здесь — ТОЛЬКО AgOS-дельты.
+-->
 
-> In-repo engineering spec (detailed intent). The thin synthesis lives in the Brain
-> (`apex-brain/projects/agos/specs/<feature>.md`) and POINTS here via `sources:`.
-> Graphify indexes this file — keep entity/RPC/table names matching the SQL tokens.
-> Apply order reminder: d01 → d02 → d03 → d04 → d05 → d07 → d08.
+# AgOS — надстройка слайс-спека (product deltas)
 
-- **Brain synthesis:** [[projects/agos/specs/<feature>]]
-- **Linear epic:** <link>
-- **Canon domain owner:** <Microstep N | Dok X> (per CLAUDE.md Source-of-Truth table)
-- **Status:** draft | agreed | building | shipped
+**База:** контракт-эталон `/feature → references/eng-spec-slice.md` (frozen-блок, `FR-`/`M-`,
+frontmatter `status`/`g2_approved`/`baseline_commit`, Open Questions, append-only хвосты). Заполняй
+эталон, а сюда смотри за AgOS-специфику. Заполненный инстанс обязан проходить `preflight --anchor 6`.
 
-## 1. Data model (P1 — first)
-<entities touched, new columns (additive only), FK, FSM (text+CHECK). Who creates / updates /
-is authority on conflict (P2). History vs current-only (P12). Incomplete-state behaviour (P11).>
-
-## 2. RPC (Dok 3 contract)
-<rpc_ names (registry-canonical), signatures (additive only — never modify existing, P7),
-SECURITY DEFINER, organization_id in every call. Same fn for web + AI (no duplication).>
-
-## 3. Events (Dok 4)
-<domain.entity.action events produced/consumed; notification templates; proactive triggers.>
-
-## 4. UI contract (Dok 6)
-<screens, useSetTopbar() declaration (icon = Sidebar icon), states (empty/partial/error),
-farmer-centric framing (P9). Warm palette = cabinet; neutral = expert console.>
-
-## 5. Slices → Tasks
-<feature decomposed: slice → concrete tasks. Each task = tier (mechanical | semantic) +
-acceptance criteria. "Where it lives" is NOT frozen here — assembled at code-start from graphify.>
-
-| Task | Tier | Acceptance |
-|------|------|-----------|
-| | mechanical / semantic | |
-
-## 6. Conflict / invariant check (G1 inputs)
-<does this break P7, touch FINAL schema, contradict a DECISIONS_LOG entry, or risk Art. 171 /
-cross-org RLS leak? List the invariants this slice must not violate.>
-
-## 7. Verification (G3 inputs)
-<cross_check.sh expectations; RLS/FSM/compliance tests; preview proof; reality↔intent reconcile.>
+- **Дом.** Слайс-спек — `Docs/...` этого репо (детальная высота, graphify-индексируемый; держи
+  имена сущностей/RPC/таблиц в тон SQL-токенам); тонкий синтез — мозг
+  `[[projects/agos/specs/<feature>]]` (ссылка через `brain_spec:`). Дом задач — Linear team `ARS`.
+- **Порядок применения (Design contract → `/build`):** d01 → d02 → d03 → d04 → d05 → d07 → d08.
+- **Маппинг секций на Doks.** Data model = P1 (Dok 1): additive-only, FSM (text+CHECK), кто пишет /
+  авторитет при конфликте (P2), история vs current (P12), неполное состояние (P11). API/RPC = Dok 3:
+  `rpc_`-имена (registry-canonical), сигнатуры additive (существующие не менять, P7), SECURITY DEFINER,
+  `organization_id` в каждом вызове, одна fn для web+AI. Events = Dok 4 (`domain.entity.action`).
+  UI contract = Dok 6: `useSetTopbar()`, состояния пусто/частично/ошибка.
+- **Инварианты (Boundaries `Never`/`Always` со ссылкой).** P1–P12 · RLS/`organization_id` ·
+  Art. 171 (cross-org) · HS-1…6 · additive-first (P7). Полная таблица Source-of-Truth — `CLAUDE.md`
+  (auto-loads, всегда выигрывает).
+- **Персона приёмки (I/O-матрица · Slices→Tasks) — её словами, не разработчика.** Фермер / эксперт
+  (P9 farmer-centric). Тёплая палитра = кабинет фермера, нейтральная = экспертная консоль.
+- **Verify (G3).** `cross_check.sh` (вкл. CHECK 11 контракт-снапшот RPC) + preview + reality↔intent
+  reconcile (converge); набор — из биндинга `[[projects/agos/_project]]` §Биндинг.
