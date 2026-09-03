@@ -108,10 +108,16 @@ export interface MpkState {
   bin: string
 }
 
+// Slice10 §1.1 (D-MPK-NAV-01): слаги URL = ключи прототипа (`ptabs.id`) — один набор
+// идентификаторов вместо двух, нечему разъезжаться (P6). Порядок = порядок вкладок.
+export const MPK_PROFILE_TABS = ['overview', 'org', 'adm', 'team', 'rep', 'appeals'] as const
+export type MpkProfileTab = typeof MPK_PROFILE_TABS[number]
+
 export type MpkRoute =
   | { name: 'home' }
   | { name: 'tsp' }
   | { name: 'offers' }   // входящие broadcast-офферы (Слайс C)
+  | { name: 'profile'; tab: MpkProfileTab }   // десктопная консоль профиля (Slice10 SCR-P0)
 
 // Входящий broadcast-оффер от фермера (rpc_get_incoming_offers). Личность фермера
 // НЕ раскрыта (D-M6-12) — только характеристики партии + цена + дедлайн ответа.

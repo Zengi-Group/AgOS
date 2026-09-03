@@ -1,0 +1,2280 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/agos-9d11d37b-242b-4955-a814-eac7bd2332de/colors_and_type.css">
+<link rel="stylesheet" href="_ds/agos-9d11d37b-242b-4955-a814-eac7bd2332de/styles.css">
+<script src="agos-readable.js"></script>
+<style>
+/* ── Читаемость: тип-шкала и контраст усилены (осознанное отклонение от DS) ── */
+:root{
+  --fs-2xs:11px;--fs-xs:13px;--fs-sm:13px;--fs-base:15px;--fs-md:16px;--fs-lg:18px;--fs-xl:24px;
+  --bg:#0c0b0a;--bg-s:#171614;--bg-c:#211f1e;--bg-m:#2f2c28;
+  --fg:#f8f7f4;--fg2:#c2bbb1;--fg3:#918a83;
+  --bd:#37332e;--bd-s:#2a2724;--bd-h:#4d4841;
+  --cta:#f2efe9;--cta-fg:#12110f;--cta-h:#ffffff;
+  --blue:#82b4f0;--blue-m:rgba(130,180,240,0.13);
+  --green:#6ed189;--green-m:rgba(110,209,137,0.13);
+  --emerald:#5cd8ac;--emerald-m:rgba(92,216,172,0.13);
+  --amber:#f5bd55;--amber-m:rgba(245,189,85,0.13);
+  --red:#f0796a;--red-m:rgba(240,121,106,0.13);
+}
+:root[data-contrast="max"]{
+  --bg:#070706;--bg-s:#141312;--bg-c:#1f1e1c;--bg-m:#332f2b;
+  --fg:#ffffff;--fg2:#d5cfc6;--fg3:#a8a19a;
+  --bd:#423d37;--bd-s:#302c28;--bd-h:#5d574f;
+  --cta:#fbf9f5;--cta-fg:#0b0a09;--cta-h:#ffffff;
+  --blue:#9cc6f7;--blue-m:rgba(156,198,247,0.16);
+  --green:#86dc9c;--green-m:rgba(134,220,156,0.16);
+  --emerald:#74e5bd;--emerald-m:rgba(116,229,189,0.16);
+  --amber:#ffd06a;--amber-m:rgba(255,208,106,0.16);
+  --red:#ff8f7e;--red-m:rgba(255,143,126,0.16);
+}
+:root[data-contrast="ds"]{
+  --bg:#0e0d0c;--bg-s:#161513;--bg-c:#1d1c1a;--bg-m:#252320;
+  --fg:#ededea;--fg2:#a8a29a;--fg3:#706a63;
+  --bd:#2a2825;--bd-s:#1f1d1b;--bd-h:#3a3732;
+  --cta:#e6e2dc;--cta-fg:#141312;--cta-h:#f0ebe2;
+  --blue:#6b9fe0;--blue-m:rgba(107,159,224,0.08);
+  --green:#5ec47a;--green-m:rgba(94,196,122,0.08);
+  --emerald:#4ecba0;--emerald-m:rgba(78,203,160,0.08);
+  --amber:#f0b040;--amber-m:rgba(240,176,64,0.08);
+  --red:#e06050;--red-m:rgba(224,96,80,0.08);
+}
+:root[data-theme="light"]{
+  --bg:#f5f1ea;--bg-s:#e9e3d7;--bg-c:#fffefb;--bg-m:#ded6c7;
+  --fg:#241a11;--fg2:#4e463c;--fg3:#6f675b;
+  --bd:#d7cfc0;--bd-s:#e6e0d4;--bd-h:#b6ab97;
+  --cta:#2b1d13;--cta-fg:#fffefb;--cta-h:#150d06;
+  --blue:#35619f;--blue-m:rgba(53,97,159,0.09);
+  --green:#2c7442;--green-m:rgba(44,116,66,0.09);
+  --emerald:#1f7358;--emerald-m:rgba(31,115,88,0.09);
+  --amber:#8f5f06;--amber-m:rgba(143,95,6,0.10);
+  --red:#b02f22;--red-m:rgba(176,47,34,0.09);
+}
+:root[data-theme="light"][data-contrast="max"]{
+  --bg:#faf8f3;--bg-s:#e6dfd1;--bg-c:#ffffff;--bg-m:#d5ccbc;
+  --fg:#14100b;--fg2:#3b342b;--fg3:#5b5449;
+  --bd:#cbc2b0;--bd-s:#ddd6c8;--bd-h:#a19681;
+  --cta:#1b120a;--cta-fg:#ffffff;--cta-h:#000000;
+  --blue:#2a5390;--blue-m:rgba(42,83,144,0.10);
+  --green:#1f6435;--green-m:rgba(31,100,53,0.10);
+  --emerald:#12654b;--emerald-m:rgba(18,101,75,0.10);
+  --amber:#7a5004;--amber-m:rgba(122,80,4,0.11);
+  --red:#97241a;--red-m:rgba(151,36,26,0.10);
+}
+:root[data-theme="light"][data-contrast="ds"]{
+  --bg:#f6f3ed;--bg-s:#ece7dd;--bg-c:#fbfaf6;--bg-m:#e4ddd0;
+  --fg:#3d2b1f;--fg2:#6b6359;--fg3:#9a9288;
+  --bd:#e0d9cc;--bd-s:#ebe6dc;--bd-h:#c7beac;
+  --cta:#3d2b1f;--cta-fg:#fbfaf6;--cta-h:#2c1e14;
+  --blue:#4571b8;--blue-m:rgba(69,113,184,0.07);
+  --green:#3a8a52;--green-m:rgba(58,138,82,0.08);
+  --emerald:#2d8a6e;--emerald-m:rgba(45,138,110,0.08);
+  --amber:#b37a10;--amber-m:rgba(179,122,16,0.08);
+  --red:#c0392b;--red-m:rgba(192,57,43,0.08);
+}
+html,body{height:100%;overflow:hidden;font-size:15px;line-height:1.55}
+a{color:var(--fg);text-decoration:none}a:hover{color:var(--fg2)}
+input,select,button,textarea{font-family:var(--font-sans)}
+input::placeholder{color:var(--fg3)}
+select{appearance:none;-webkit-appearance:none}
+select option{background:var(--bg-c);color:var(--fg)}
+input:focus,select:focus{border-color:var(--bd-h) !important}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes panelIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+@keyframes pulseDot{0%,100%{opacity:1}50%{opacity:0.25}}
+</style>
+</helmet>
+<div data-app-root="1" style="display:flex;height:100vh;overflow:hidden;background:var(--bg);color:var(--fg);font-family:var(--font-sans);font-size:15px;line-height:1.55">
+<x-import component-from-global-scope="Sidebar" dc-props="{{ sidebar }}" style="flex-shrink:0;height:100%" hint-size="272px,100%"></x-import>
+<main style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)">
+
+<!-- ГЛАВНАЯ -->
+<sc-if value="{{ s_dash }}" hint-placeholder-val="{{ true }}">
+<div data-screen-label="Главная" style="height:100%;min-height:0;overflow-y:auto">
+  <div style="max-width:1264px;margin:0 auto;padding:40px 44px 64px">
+    <div style="display:flex;align-items:flex-start;gap:12px 16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:260px">
+        <div style="font-size:28px;font-weight:600;letter-spacing:-0.02em;line-height:1.2">{{ greet }}</div>
+        <div style="font-size:15px;color:var(--fg3);margin-top:6px">Суббота, 26 июля · МК «Семей Ет» · Turan Standard Pool</div>
+      </div>
+      <div style="display:flex;gap:8px;padding-top:6px">
+        <x-import component-from-global-scope="Button" variant="ghost" icon="barChart" on-click="{{ goMarket }}" hint-size="auto,36px">Маркет-борд</x-import>
+        <x-import component-from-global-scope="Button" variant="cta" icon="plus" on-click="{{ openCreate }}" hint-size="auto,36px">Новая заявка</x-import>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:18px;margin-top:34px">
+      <div onClick="{{ goFill }}" style="background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;padding:24px 26px;cursor:pointer;transition:border-color 80ms var(--ease)" style-hover="border-color:var(--bd-h)">
+        <div style="display:flex;align-items:center;gap:8px">
+          <x-import component-from-global-scope="Icon" name="beef" size="17" color="var(--fg2)" hint-size="17px,17px"></x-import>
+          <span style="font-size:15px;font-weight:500;color:var(--fg)">Идёт набор</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:16px">
+          <span style="font-family:var(--mono);font-size:36px;font-weight:600;line-height:1;letter-spacing:-0.01em;font-variant-numeric:tabular-nums">{{ kpi_fill_n }}</span>
+          <span style="font-size:15px;color:var(--fg2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ kpi_fill_d }}</span>
+          <div style="margin-left:auto;flex-shrink:0"><x-import component-from-global-scope="Button" variant="subtle" on-click="{{ goFill }}" hint-size="auto,36px">Открыть</x-import></div>
+        </div>
+        <div style="height:8px;border-radius:5px;background:var(--bg-m);overflow:hidden;margin-top:16px"><div style="height:100%;width:{{ kpi_fill_pct }};background:var(--blue);border-radius:4px"></div></div>
+        <div style="font-size:13px;color:var(--fg2);margin-top:10px">{{ kpi_fill_c }}</div>
+      </div>
+      <div onClick="{{ goOffers }}" style="background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;padding:24px 26px;cursor:pointer;transition:border-color 80ms var(--ease)" style-hover="border-color:var(--bd-h)">
+        <div style="display:flex;align-items:center;gap:8px">
+          <x-import component-from-global-scope="Icon" name="mail" size="17" color="var(--fg2)" hint-size="17px,17px"></x-import>
+          <span style="font-size:15px;font-weight:500;color:var(--fg)">Входящие офферы</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:16px">
+          <span style="font-family:var(--mono);font-size:36px;font-weight:600;line-height:1;letter-spacing:-0.01em;font-variant-numeric:tabular-nums">{{ kpi_off_n }}</span>
+          <span style="font-size:15px;color:var(--fg2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ kpi_off_d }}</span>
+          <div style="margin-left:auto;flex-shrink:0"><x-import component-from-global-scope="Button" variant="subtle" on-click="{{ goOffers }}" hint-size="auto,36px">Ответить</x-import></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;margin-top:16px;font-size:13px;color:var(--fg2)">
+          <sc-if value="{{ kpi_off_urgent }}" hint-placeholder-val="{{ false }}">
+            <x-import component-from-global-scope="Icon" name="clock" size="13" color="var(--amber)" hint-size="13px,13px"></x-import>
+          </sc-if>
+          <span>{{ kpi_off_c }}</span>
+        </div>
+      </div>
+      <div onClick="{{ goShip }}" style="background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;padding:24px 26px;cursor:pointer;transition:border-color 80ms var(--ease)" style-hover="border-color:var(--bd-h)">
+        <div style="display:flex;align-items:center;gap:8px">
+          <x-import component-from-global-scope="Icon" name="download" size="17" color="var(--fg2)" hint-size="17px,17px"></x-import>
+          <span style="font-size:15px;font-weight:500;color:var(--fg)">Отгрузка и приёмка</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:16px">
+          <span style="font-family:var(--mono);font-size:36px;font-weight:600;line-height:1;letter-spacing:-0.01em;font-variant-numeric:tabular-nums">{{ kpi_ship_n }}</span>
+          <span style="font-size:15px;color:var(--fg2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ kpi_ship_d }}</span>
+          <div style="margin-left:auto;flex-shrink:0"><x-import component-from-global-scope="Button" variant="subtle" on-click="{{ goShip }}" hint-size="auto,36px">Приёмка</x-import></div>
+        </div>
+        <div style="margin-top:16px;font-size:13px;color:var(--fg2)">{{ kpi_ship_c }}</div>
+      </div>
+    </div>
+    <sc-if value="{{ dec_on }}" hint-placeholder-val="{{ false }}">
+      <div style="margin-top:16px;display:flex;flex-wrap:wrap;align-items:center;gap:14px 24px;padding:24px 26px;background:var(--amber-m);border:1px solid color-mix(in srgb, var(--amber) 30%, transparent);border-radius:12px">
+        <div style="width:36px;height:42px;border-radius:9999px;background:color-mix(in srgb, var(--amber) 14%, transparent);display:grid;place-items:center;color:var(--amber);flex-shrink:0">
+          <x-import component-from-global-scope="Icon" name="alert" size="18" hint-size="18px,18px"></x-import>
+        </div>
+        <div style="flex:1;min-width:240px">
+          <div style="font-size:17px;font-weight:600">Z-1039 — требуется решение о недоборе</div>
+          <div style="font-size:15px;color:var(--fg2);margin-top:4px;line-height:1.5">Собрано 52 из 70 голов к сроку 25 июл. Осталось 14 ч — без ответа партии автоматически вернутся фермерам.</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-left:auto;flex-shrink:0">
+          <x-import component-from-global-scope="Button" variant="ghost" on-click="{{ goDecision }}" hint-size="auto,36px">Открыть заявку</x-import>
+          <x-import component-from-global-scope="Button" variant="cta" on-click="{{ acceptShortfall }}" hint-size="auto,36px">Принять 52 головы</x-import>
+        </div>
+      </div>
+    </sc-if>
+    <div style="display:flex;align-items:baseline;gap:12px;margin-top:44px">
+      <div style="font-size:18px;font-weight:600;letter-spacing:-0.01em">Заявки в работе</div>
+      <div style="flex:1"></div>
+      <button onClick="{{ goReqs }}" style="background:none;border:none;padding:0;color:var(--fg2);font-size:15px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:inherit" style-hover="color:var(--fg)">Все заявки
+        <x-import component-from-global-scope="Icon" name="arrowRight" size="15" hint-size="15px,15px"></x-import>
+      </button>
+    </div>
+    <div style="margin-top:14px;background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;overflow:hidden">
+      <sc-for list="{{ dActive }}" as="r" hint-placeholder-count="3">
+        <div onClick="{{ r.open }}" style="display:flex;align-items:center;gap:16px;padding:0 26px;height:78px;border-bottom:1px solid var(--bd-s);cursor:pointer" style-hover="background:var(--bg-m)">
+          <div style="width:150px;flex-shrink:1;min-width:110px">
+            <div style="font-family:var(--mono);font-size:15px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap">{{ r.num }}</div>
+            <div style="font-size:13px;color:var(--fg2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">{{ r.title }}</div>
+          </div>
+          <div style="flex-shrink:0"><x-import component-from-global-scope="Badge" tone="{{ r.tone }}" hint-size="auto,24px">{{ r.status }}</x-import></div>
+          <div style="flex:1;min-width:40px;height:8px;border-radius:5px;background:var(--bg-m);overflow:hidden">
+            <div style="height:100%;width:{{ r.pct }};background:{{ r.barC }};border-radius:4px"></div>
+          </div>
+          <div style="flex-shrink:0;font-family:var(--mono);font-size:15px;font-weight:500;color:var(--fg);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right">{{ r.prog }}</div>
+          <x-import component-from-global-scope="Icon" name="chevronRight" size="16" color="var(--fg3)" hint-size="16px,16px"></x-import>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:baseline;gap:12px;margin-top:44px">
+      <div style="font-size:18px;font-weight:600;letter-spacing:-0.01em">Ориентир рынка · живой вес</div>
+      <div style="flex:1"></div>
+      <button onClick="{{ goMarket }}" style="background:none;border:none;padding:0;color:var(--fg2);font-size:15px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:inherit" style-hover="color:var(--fg)">47 партий на маркет-борде
+        <x-import component-from-global-scope="Icon" name="arrowRight" size="15" hint-size="15px,15px"></x-import>
+      </button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:14px">
+      <div style="background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;padding:22px 24px">
+        <div style="font-size:15px;font-weight:500;color:var(--fg)">Бычки, высшая уп.</div>
+        <div style="font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:-0.01em;margin-top:10px;font-variant-numeric:tabular-nums;white-space:nowrap">615 ₸/кг</div>
+        <div style="font-size:13px;color:var(--fg3);margin-top:6px">защитный минимум — 540</div>
+      </div>
+      <div style="background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;padding:22px 24px">
+        <div style="font-size:15px;font-weight:500;color:var(--fg)">Бычки, средняя уп.</div>
+        <div style="font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:-0.01em;margin-top:10px;font-variant-numeric:tabular-nums;white-space:nowrap">545 ₸/кг</div>
+        <div style="font-size:13px;color:var(--fg3);margin-top:6px">защитный минимум — 480</div>
+      </div>
+      <div style="background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;padding:22px 24px">
+        <div style="font-size:15px;font-weight:500;color:var(--fg)">Тёлки, I категория</div>
+        <div style="font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:-0.01em;margin-top:10px;font-variant-numeric:tabular-nums;white-space:nowrap">505 ₸/кг</div>
+        <div style="font-size:13px;color:var(--fg3);margin-top:6px">защитный минимум — 450</div>
+      </div>
+      <div style="background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;padding:22px 24px">
+        <div style="font-size:15px;font-weight:500;color:var(--fg)">Коровы, II категория</div>
+        <div style="font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:-0.01em;margin-top:10px;font-variant-numeric:tabular-nums;white-space:nowrap">430 ₸/кг</div>
+        <div style="font-size:13px;color:var(--fg3);margin-top:6px">защитный минимум — 380</div>
+      </div>
+    </div>
+    <div style="font-size:13px;color:var(--fg3);margin-top:14px;line-height:1.6;max-width:820px">Индикативные цены — ориентир по рынку, не обязательство и не рекомендация (ст. 171 Предпринимательского кодекса РК). Защитный минимум — жёсткая нижняя граница цены строки при создании заявки.</div>
+  </div>
+</div>
+</sc-if>
+
+<!-- МОИ ЗАЯВКИ -->
+<sc-if value="{{ s_reqs }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Мои заявки" style="display:flex;flex-direction:column;height:100%;min-height:0">
+  <div style="height:88px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:0 32px;border-bottom:1px solid var(--bd)">
+    <x-import component-from-global-scope="HeaderPageIcon" icon="fileText" hint-size="32px,32px"></x-import>
+    <div style="font-size:20px;font-weight:600;letter-spacing:-0.01em">Мои заявки</div>
+    <div style="margin-left:6px;padding:2px 8px;border-radius:9999px;background:var(--bg-c);border:1px solid var(--bd);font-size:13px;color:var(--fg2);font-family:var(--mono);font-variant-numeric:tabular-nums">{{ reqCount }}</div>
+    <div style="flex:1"></div>
+    <x-import component-from-global-scope="Button" variant="cta" icon="plus" on-click="{{ openCreate }}" hint-size="auto,36px">Новая заявка</x-import>
+  </div>
+  <x-import component-from-global-scope="HeaderTabs" dc-props="{{ viewTabs }}" hint-size="100%,52px"></x-import>
+  <div style="flex:1;overflow:auto;padding:20px 32px 32px">
+    <div style="min-width:854px;background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;overflow:hidden">
+    <div style="display:grid;grid-template-columns:minmax(190px,1fr) 176px 176px 116px 132px 64px;white-space:nowrap;height:48px;background:var(--bg-s);border-bottom:1px solid var(--bd)">
+      <div style="display:flex;align-items:center;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Заявка</div>
+      <div style="display:flex;align-items:center;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Статус</div>
+      <div style="display:flex;align-items:center;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Прогресс набора</div>
+      <div style="display:flex;align-items:center;justify-content:flex-end;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Цена, ₸/кг</div>
+      <div style="display:flex;align-items:center;justify-content:flex-end;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Срок</div>
+      <div style="display:flex;align-items:center;justify-content:flex-end;padding:0 18px;font-size:13px;font-weight:500;color:var(--fg3)">Партии</div>
+    </div>
+    <sc-for list="{{ reqRows }}" as="r" hint-placeholder-count="5">
+      <div onClick="{{ r.open }}" style="display:grid;grid-template-columns:minmax(190px,1fr) 176px 176px 116px 132px 64px;white-space:nowrap;height:72px;cursor:pointer;border-bottom:1px solid var(--bd-s);transition:background 80ms var(--ease)" style-hover="background:var(--bg-m)">
+        <div style="display:flex;align-items:center;gap:10px;padding:0 18px;border-right:1px solid var(--bd-s);min-width:0">
+          <div style="min-width:0">
+            <div style="font-family:var(--mono);font-size:15px;font-weight:500;font-variant-numeric:tabular-nums">{{ r.num }}</div>
+            <div style="font-size:13px;color:var(--fg2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.title }}</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:2px;padding:0 18px;border-right:1px solid var(--bd-s)">
+          <x-import component-from-global-scope="Badge" tone="{{ r.tone }}" hint-size="auto,24px">{{ r.status }}</x-import>
+          <sc-if value="{{ r.hasNote }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:var(--fg3)">{{ r.note }}</div></sc-if>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:0 18px;border-right:1px solid var(--bd-s)">
+          <div style="flex:1;height:8px;border-radius:5px;background:var(--bg-m);overflow:hidden"><div style="height:100%;width:{{ r.pct }};background:{{ r.barC }};border-radius:4px"></div></div>
+          <span style="font-family:var(--mono);font-size:15px;color:var(--fg2);font-variant-numeric:tabular-nums;white-space:nowrap">{{ r.prog }}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:flex-end;padding:0 18px;border-right:1px solid var(--bd-s);font-family:var(--mono);font-size:15px;font-weight:500;font-variant-numeric:tabular-nums">{{ r.price }}</div>
+        <div style="display:flex;align-items:center;justify-content:flex-end;padding:0 18px;border-right:1px solid var(--bd-s);font-family:var(--mono);font-size:15px;color:var(--fg3);font-variant-numeric:tabular-nums">{{ r.term }}</div>
+        <div style="display:flex;align-items:center;justify-content:flex-end;padding:0 18px;font-family:var(--mono);font-size:15px;color:var(--fg2);font-variant-numeric:tabular-nums">{{ r.sup }}</div>
+      </div>
+    </sc-for>
+    <div style="height:0"></div>
+    </div>
+  </div>
+  <div style="height:48px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 32px;border-top:1px solid var(--bd);background:var(--bg-s);font-size:13px;color:var(--fg3);font-family:var(--mono)">{{ reqFoot }}</div>
+</div>
+</sc-if>
+
+<!-- МОНИТОРИНГ ЗАЯВКИ -->
+<sc-if value="{{ s_mon }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Мониторинг заявки" style="display:flex;flex-direction:column;height:100%;min-height:0">
+  <x-import component-from-global-scope="HeaderChrome" dc-props="{{ chrome }}" hint-size="100%,48px"></x-import>
+  <div style="min-height:78px;flex-shrink:0;display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;padding:14px 32px;border-bottom:1px solid var(--bd)">
+    <x-import component-from-global-scope="HeaderPageIcon" icon="fileText" size="36" hint-size="36px,36px"></x-import>
+    <h1 style="font-size:24px;font-weight:700;letter-spacing:-0.01em;line-height:1.2;margin:0;white-space:nowrap">{{ m.num }}</h1>
+    <span style="font-size:15px;color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:60px;max-width:220px">{{ m.title }}</span>
+    <x-import component-from-global-scope="Badge" tone="{{ m.tone }}" hint-size="auto,24px">{{ m.status }}</x-import>
+    <span style="font-size:13px;color:var(--fg3);padding-left:8px;border-left:1px solid var(--bd-s);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 120px">{{ m.subtitle }}</span>
+    <div style="display:flex;align-items:center;gap:6px;margin-left:auto;flex:0 0 auto">
+      <sc-if value="{{ m.canDoc }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Button" variant="ghost" icon="fileText" on-click="{{ makeDoc }}" hint-size="auto,36px">Документ сделки</x-import>
+      </sc-if>
+      <sc-if value="{{ m.canAppeal }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Button" variant="ghost" icon="messageCircle" on-click="{{ sendAppeal }}" hint-size="auto,36px">Обращение в TURAN</x-import>
+      </sc-if>
+      <sc-if value="{{ m.canCancel }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Button" variant="danger" on-click="{{ askCancel }}" hint-size="auto,36px">Отменить заявку</x-import>
+      </sc-if>
+    </div>
+  </div>
+  <sc-if value="{{ mb_decision }}" hint-placeholder-val="{{ false }}">
+    <div style="flex-shrink:0;display:flex;align-items:center;gap:14px;padding:12px 20px;background:var(--amber-m);border-bottom:1px solid color-mix(in srgb, var(--amber) 30%, transparent)">
+      <x-import component-from-global-scope="Icon" name="alert" size="18" color="var(--amber)" hint-size="18px,18px"></x-import>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:15px;font-weight:600">Срок набора истёк — собрано 52 из 70 голов</div>
+        <div style="font-size:13px;color:var(--fg2);margin-top:1px">Решение до 21:00 сегодня · осталось 14 ч. Без ответа все партии автоматически вернутся фермерам.</div>
+      </div>
+      <x-import component-from-global-scope="Button" variant="cta" on-click="{{ acceptShortfall }}" hint-size="auto,36px">Принять 52 головы</x-import>
+      <x-import component-from-global-scope="Button" variant="ghost" on-click="{{ askReturn }}" hint-size="auto,36px">Вернуть всё фермерам</x-import>
+    </div>
+  </sc-if>
+  <sc-if value="{{ mb_ok }}" hint-placeholder-val="{{ false }}">
+    <div style="flex-shrink:0;display:flex;align-items:center;gap:10px;padding:10px 20px;background:var(--green-m);border-bottom:1px solid color-mix(in srgb, var(--green) 25%, transparent);font-size:13px;color:var(--fg2)">
+      <x-import component-from-global-scope="Icon" name="check" size="16" color="var(--green)" hint-size="16px,16px"></x-import>
+      Частичный сбор принят — 52 головы. Контакты поставщиков раскрыты, приёмка по партиям — на вкладке «Поставщики».
+    </div>
+  </sc-if>
+  <sc-if value="{{ mb_closedNote }}" hint-placeholder-val="{{ false }}">
+    <div style="flex-shrink:0;display:flex;align-items:center;gap:10px;padding:10px 20px;background:var(--bg-s);border-bottom:1px solid var(--bd);font-size:13px;color:var(--fg3)">{{ m.bannerNote }}</div>
+  </sc-if>
+  <x-import component-from-global-scope="HeaderTabs" dc-props="{{ tabs }}" hint-size="100%,52px"></x-import>
+  <div style="flex:1;min-height:0;display:flex">
+    <div style="flex:1;min-width:0;overflow:auto">
+
+      <sc-if value="{{ tab_overview }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:32px 32px">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:12px">
+            <sc-for list="{{ m.kpis }}" as="k" hint-placeholder-count="4">
+              <div style="position:relative;overflow:hidden;background:var(--bg-c);border:1px solid var(--bd);border-radius:8px;padding:20px 22px;min-height:106px;display:flex;flex-direction:column;justify-content:center">
+                <span style="position:absolute;left:0;top:0;bottom:0;width:3px;background:{{ k.rail }}"></span>
+                <div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--fg3);margin-bottom:8px">{{ k.label }}</div>
+                <div style="display:flex;align-items:baseline;gap:6px;white-space:nowrap">
+                  <span style="font-size:30px;font-weight:600;color:var(--fg);font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-0.01em;line-height:1">{{ k.value }}</span>
+                  <span style="font-size:13px;color:var(--fg3);font-family:var(--font-mono)">{{ k.unit }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:18px;margin-top:18px;align-items:stretch">
+            <div style="background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;padding:22px 24px;display:flex;flex-direction:column">
+              <div style="font-size:16px;font-weight:600">Динамика набора</div>
+              <div style="font-size:13px;color:var(--fg3);margin-top:2px;margin-bottom:16px">Голов привязано нарастающим итогом — с публикации до сегодня</div>
+              <svg viewBox="0 0 460 150" preserveAspectRatio="none" style="width:100%;height:150px;display:block">
+                <line x1="8" x2="452" y1="8" y2="8" stroke="var(--bd-s)" stroke-width="1"></line>
+                <line x1="8" x2="452" y1="52.6" y2="52.6" stroke="var(--bd-s)" stroke-width="1"></line>
+                <line x1="8" x2="452" y1="97.3" y2="97.3" stroke="var(--bd-s)" stroke-width="1"></line>
+                <line x1="8" x2="452" y1="142" y2="142" stroke="var(--bd-s)" stroke-width="1"></line>
+                <path d="{{ m.chartArea }}" fill="{{ m.chartFill }}"></path>
+                <path d="{{ m.chartD }}" fill="none" stroke="{{ m.barC }}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>
+                <circle cx="{{ m.chartCx }}" cy="{{ m.chartCy }}" r="3.5" fill="{{ m.barC }}" stroke="var(--bg-c)" stroke-width="2"></circle>
+              </svg>
+              <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:13px;color:var(--fg3);font-family:var(--mono)">
+                <span>{{ m.chartFrom }}</span>
+                <span>{{ m.chartTo }}</span>
+              </div>
+            </div>
+            <div style="background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;padding:22px 24px;display:flex;flex-direction:column">
+              <div style="font-size:16px;font-weight:600">Наполнение по строкам</div>
+              <div style="font-size:13px;color:var(--fg3);margin-top:2px;margin-bottom:16px">Партии занимают целые ячейки — заявка заполняется без дробления</div>
+              <div style="display:flex;flex-direction:column;gap:18px">
+            <sc-for list="{{ m.lines }}" as="l" hint-placeholder-count="2">
+              <div>
+                <div style="display:flex;align-items:baseline;gap:10px">
+                  <span style="font-size:11px;font-weight:600;color:var(--fg3);letter-spacing:0.06em;text-transform:uppercase;white-space:nowrap">{{ l.idx }}</span>
+                  <span style="font-size:15px;font-weight:600">{{ l.name }}</span>
+                  <div style="flex:1"></div>
+                  <span style="font-family:var(--mono);font-size:15px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap">{{ l.priceTxt }}</span>
+                </div>
+                <div style="font-size:13px;color:var(--fg3);margin-top:3px">{{ l.meta }}</div>
+                <div style="display:flex;gap:2px;height:10px;border-radius:5px;background:var(--bg-m);overflow:hidden;margin-top:10px">
+                  <sc-for list="{{ l.segs }}" as="s" hint-placeholder-count="2">
+                    <div style="width:{{ s.w }};background:{{ s.c }};border-radius:2px" title="{{ s.t }}"></div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;justify-content:flex-end;margin-top:7px;font-size:13px;color:var(--fg2)">
+                  <span style="font-family:var(--mono);font-variant-numeric:tabular-nums">{{ l.progTxt }}</span>
+                </div>
+              </div>
+            </sc-for>
+              </div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(208px,1fr));gap:12px;margin-top:16px">
+            <sc-for list="{{ m.stats }}" as="f" hint-placeholder-count="4">
+              <div style="background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;padding:20px 22px">
+                <div style="font-size:13px;color:var(--fg2)">{{ f.label }}</div>
+                <div style="display:flex;align-items:baseline;gap:6px;margin-top:8px;white-space:nowrap">
+                  <span style="font-size:24px;font-weight:600;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-0.01em;line-height:1">{{ f.value }}</span>
+                  <span style="font-size:13px;color:var(--fg3);font-family:var(--font-mono)">{{ f.unit }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <sc-if value="{{ m.hasNote }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:16px;background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;padding:18px 22px;font-size:13px;color:var(--fg3);line-height:1.6">{{ m.note }}</div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tab_suppliers }}" hint-placeholder-val="{{ false }}">
+        <sc-if value="{{ m.noSups }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:72px 32px;text-align:center">
+            <x-import component-from-global-scope="Icon" name="users" size="52" color="var(--fg3)" stroke="1" hint-size="52px,52px"></x-import>
+            <div style="font-size:15px;font-weight:500;color:var(--fg)">Партий пока нет.</div>
+            <div style="font-size:13px;color:var(--fg3);max-width:420px;line-height:1.6">Система подбирает партии по сорту, региону, сроку и цене автоматически. Подходящие появятся здесь — участие не требуется.</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ m.anon }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:20px 32px 32px;min-width:max-content">
+          <div style="min-width:792px;background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:minmax(160px,1fr) 150px 150px 74px 88px 170px;white-space:nowrap;height:48px;background:var(--bg-s);border-bottom:1px solid var(--bd)">
+            <div style="display:flex;align-items:center;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Партия</div>
+            <div style="display:flex;align-items:center;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Сорт</div>
+            <div style="display:flex;align-items:center;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Регион</div>
+            <div style="display:flex;align-items:center;justify-content:flex-end;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Голов</div>
+            <div style="display:flex;align-items:center;justify-content:flex-end;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Цена</div>
+            <div style="display:flex;align-items:center;padding:0 18px;font-size:13px;font-weight:500;color:var(--fg3)">Привязана</div>
+          </div>
+          <sc-for list="{{ m.sups }}" as="b" hint-placeholder-count="4">
+            <div onClick="{{ b.openP }}" style="display:grid;grid-template-columns:minmax(160px,1fr) 150px 150px 74px 88px 170px;white-space:nowrap;height:68px;cursor:pointer;border-bottom:1px solid var(--bd-s)" style-hover="background:var(--bg-m)">
+              <div style="display:flex;align-items:center;gap:10px;padding:0 18px;border-right:1px solid var(--bd-s);min-width:0">
+                <div>
+                  <div style="font-family:var(--mono);font-size:15px;font-weight:500">{{ b.pid }}</div>
+                  <div style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--fg3)">
+                    <x-import component-from-global-scope="Icon" name="star" size="12" color="var(--amber)" hint-size="12px,12px"></x-import>
+                    <span style="font-family:var(--mono)">{{ b.rating }}</span>
+                    <span>· ферма скрыта</span>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;color:var(--fg2)">{{ b.sortName }}</div>
+              <div style="display:flex;align-items:center;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;color:var(--fg2)">{{ b.region }}</div>
+              <div style="display:flex;align-items:center;justify-content:flex-end;padding:0 18px;border-right:1px solid var(--bd-s);font-family:var(--mono);font-size:15px;font-weight:500;font-variant-numeric:tabular-nums">{{ b.heads }}</div>
+              <div style="display:flex;align-items:center;justify-content:flex-end;padding:0 18px;border-right:1px solid var(--bd-s);font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums">{{ b.price }}</div>
+              <div style="display:flex;align-items:center;padding:0 18px;font-size:13px;color:var(--fg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.srcDate }}</div>
+            </div>
+          </sc-for>
+          </div>
+          <div style="padding:16px 0 0;font-size:13px;color:var(--fg3)">Названия ферм и контакты раскроются, когда заявка будет набрана — симметрично для обеих сторон.</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ m.rev }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:20px 32px 32px;min-width:max-content">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;min-height:28px;padding:0 0 14px">
+            <span style="font-size:13px;color:var(--fg2);font-variant-numeric:tabular-nums">{{ m.supLine }}</span>
+            <div style="flex:1"></div>
+            <sc-for list="{{ m.supChips }}" as="c" hint-placeholder-count="2">
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--fg2);white-space:nowrap">
+                <span style="width:5px;height:5px;border-radius:9999px;background:{{ c.c }};flex-shrink:0"></span>
+                <span>{{ c.label }}</span>
+                <span style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--fg)">{{ c.n }}</span>
+              </span>
+            </sc-for>
+          </div>
+          <div style="min-width:1138px;background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:minmax(200px,1.1fr) minmax(230px,1.3fr) 160px 80px 100px 186px 182px;white-space:nowrap;height:48px;background:var(--bg-s);border-bottom:1px solid var(--bd)">
+            <div style="display:flex;align-items:center;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Партия · ферма</div>
+            <div style="display:flex;align-items:center;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Адрес фермы</div>
+            <div style="display:flex;align-items:center;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Контакт</div>
+            <div style="display:flex;align-items:center;justify-content:flex-end;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Голов</div>
+            <div style="display:flex;align-items:center;justify-content:flex-end;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Ср. вес</div>
+            <div style="display:flex;align-items:center;padding:0 18px;border-right:1px solid var(--bd-s);font-size:13px;font-weight:500;color:var(--fg3)">Статус партии</div>
+            <div style="display:flex;align-items:center;padding:0 18px;font-size:13px;font-weight:500;color:var(--fg3)">Приёмка</div>
+          </div>
+          <sc-for list="{{ m.sups }}" as="b" hint-placeholder-count="3">
+            <div onClick="{{ b.openP }}" style="display:grid;grid-template-columns:minmax(200px,1.1fr) minmax(230px,1.3fr) 160px 80px 100px 186px 182px;white-space:nowrap;height:78px;cursor:pointer;border-bottom:1px solid var(--bd-s)" style-hover="background:var(--bg-m)">
+              <div style="display:flex;flex-direction:column;justify-content:center;gap:3px;padding:0 18px;border-right:1px solid var(--bd-s);min-width:0">
+                <div style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.farm }}</div>
+                <div style="font-size:13px;color:var(--fg3);font-family:var(--mono)">{{ b.pid }} · ★ {{ b.rating }}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;justify-content:center;gap:3px;padding:0 18px;border-right:1px solid var(--bd-s);min-width:0">
+                <div style="font-size:13px;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.addr }}</div>
+                <div style="display:flex;align-items:center;gap:12px;min-width:0">
+                  <span style="font-size:13px;color:var(--fg3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.regionFull }}</span>
+                  <a href="{{ b.gisUrl }}" target="_blank" rel="noopener" onClick="{{ stopClick }}" style="display:inline-flex;align-items:center;gap:4px;flex-shrink:0;font-size:13px;font-weight:500;color:var(--blue);text-decoration:none;white-space:nowrap" style-hover="text-decoration:underline">
+                    <x-import component-from-global-scope="Icon" name="mapPin" size="12" color="var(--blue)" hint-size="12px,12px"></x-import>
+                    <span>2ГИС</span>
+                  </a>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;padding:0 18px;border-right:1px solid var(--bd-s)">
+                <a href="{{ b.telHref }}" onClick="{{ stopClick }}" style="font-family:var(--mono);font-size:13px;color:var(--fg2);text-decoration:none;white-space:nowrap" style-hover="color:var(--fg)">{{ b.phone }}</a>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:flex-end;padding:0 18px;border-right:1px solid var(--bd-s);font-family:var(--mono);font-size:15px;font-weight:500;font-variant-numeric:tabular-nums">{{ b.heads }}</div>
+              <div style="display:flex;align-items:center;justify-content:flex-end;padding:0 18px;border-right:1px solid var(--bd-s);font-family:var(--mono);font-size:15px;color:var(--fg2);font-variant-numeric:tabular-nums">{{ b.weight }}</div>
+              <div style="display:flex;align-items:center;padding:0 18px;border-right:1px solid var(--bd-s)">
+                <x-import component-from-global-scope="Badge" tone="{{ b.stTone }}" hint-size="auto,24px">{{ b.stLabel }}</x-import>
+              </div>
+              <div style="display:flex;align-items:center;padding:0 18px">
+                <sc-if value="{{ b.canReceive }}" hint-placeholder-val="{{ false }}">
+                  <x-import component-from-global-scope="Button" variant="cta" size="sm" on-click="{{ b.receive }}" hint-size="auto,28px">Подтвердить приёмку</x-import>
+                </sc-if>
+                <sc-if value="{{ b.noAction }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:var(--fg3)">—</span></sc-if>
+              </div>
+            </div>
+          </sc-for>
+          </div>
+          </div>
+        </sc-if>
+      </sc-if>
+
+      <sc-if value="{{ tab_events }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:32px 32px;max-width:760px">
+          <sc-for list="{{ m.events }}" as="e" hint-placeholder-count="5">
+            <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--bd-s)">
+              <div style="width:24px;height:24px;border-radius:9999px;display:grid;place-items:center;flex-shrink:0;background:{{ e.bg }};color:{{ e.c }}">
+                <x-import component-from-global-scope="Icon" name="{{ e.icon }}" size="13" hint-size="13px,13px"></x-import>
+              </div>
+              <div style="flex:1;font-size:15px;line-height:1.5;color:var(--fg)">{{ e.t }}</div>
+              <div style="font-family:var(--mono);font-size:13px;color:var(--fg3);white-space:nowrap">{{ e.d }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{ p_open }}" hint-placeholder-val="{{ false }}">
+      <div style="width:392px;flex-shrink:0;border-left:1px solid var(--bd);background:var(--bg-s);overflow-y:auto;animation:panelIn 250ms var(--ease)">
+        <div style="display:flex;align-items:center;gap:8px;padding:16px 18px;border-bottom:1px solid var(--bd)">
+          <div style="min-width:0;flex:1">
+            <div style="font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.title }}</div>
+            <div style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--fg3);margin-top:3px">
+              <x-import component-from-global-scope="Icon" name="star" size="12" color="var(--amber)" hint-size="12px,12px"></x-import>
+              <span style="font-family:var(--mono)">{{ p.rating }}</span>
+              <span>{{ p.sub }}</span>
+            </div>
+          </div>
+          <button onClick="{{ closePanel }}" style="width:32px;height:32px;display:grid;place-items:center;background:transparent;border:none;border-radius:6px;color:var(--fg3);cursor:pointer" style-hover="background:var(--bg-m)">
+            <x-import component-from-global-scope="Icon" name="x" size="16" hint-size="16px,16px"></x-import>
+          </button>
+        </div>
+        <sc-for list="{{ p.rows }}" as="f" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:128px 1fr;gap:14px;padding:12px 18px;border-bottom:1px solid var(--bd-s)">
+            <div style="font-size:13px;color:var(--fg3);line-height:1.6">{{ f.label }}</div>
+            <div style="font-size:15px;font-family:var(--mono);font-weight:500;font-variant-numeric:tabular-nums">{{ f.value }}</div>
+          </div>
+        </sc-for>
+        <sc-if value="{{ p.hasAddr }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:14px 18px;border-bottom:1px solid var(--bd-s)">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--fg3)">Адрес фермы</div>
+            <div style="font-size:15px;line-height:1.5;margin-top:8px">{{ p.addr }}</div>
+            <div style="font-size:13px;color:var(--fg3);margin-top:2px">{{ p.addrRegion }}</div>
+            <a href="{{ p.gisUrl }}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:12px;height:28px;padding:0 10px;border:1px solid var(--bd);border-radius:6px;background:var(--bg-c);font-size:13px;font-weight:500;color:var(--fg);text-decoration:none" style-hover="background:var(--bg-m);border-color:var(--bd-h)">
+              <x-import component-from-global-scope="Icon" name="mapPin" size="15" color="var(--fg2)" hint-size="15px,15px"></x-import>
+              <span>Открыть в 2ГИС</span>
+            </a>
+          </div>
+        </sc-if>
+        <sc-if value="{{ p.photo }}" hint-placeholder-val="{{ false }}">
+          <div style="margin:14px 16px 0;height:110px;border-radius:8px;background:var(--bg-m);border:1px solid var(--bd-s);display:grid;place-items:center;color:var(--fg3)">
+            <x-import component-from-global-scope="Icon" name="beef" size="28" stroke="1.2" hint-size="28px,28px"></x-import>
+          </div>
+          <div style="padding:6px 16px 0;font-size:11px;color:var(--fg3);font-family:var(--mono)">фото партии — если фермер добавил</div>
+        </sc-if>
+        <sc-if value="{{ p.canReceive }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:16px 18px"><x-import component-from-global-scope="Button" variant="cta" on-click="{{ p.receive }}" hint-size="auto,36px">Подтвердить приёмку партии</x-import></div>
+        </sc-if>
+        <sc-if value="{{ p.hasNote }}" hint-placeholder-val="{{ false }}">
+          <div style="margin:14px 16px;padding:12px;background:var(--bg-c);border:1px solid var(--bd-s);border-radius:8px;font-size:13px;color:var(--fg3);line-height:1.6">{{ p.note }}</div>
+        </sc-if>
+      </div>
+    </sc-if>
+  </div>
+</div>
+</sc-if>
+
+<!-- ВХОДЯЩИЕ ОФФЕРЫ -->
+<sc-if value="{{ s_offers }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Входящие офферы" style="display:flex;flex-direction:column;height:100%;min-height:0">
+  <div style="height:88px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:0 32px;border-bottom:1px solid var(--bd)">
+    <x-import component-from-global-scope="HeaderPageIcon" icon="mail" hint-size="32px,32px"></x-import>
+    <div style="min-width:0">
+      <div style="font-size:20px;font-weight:600;letter-spacing:-0.01em;line-height:1.25">Входящие офферы</div>
+      <div style="font-size:13px;color:var(--fg3);line-height:1.3">Партии без прямого совпадения · 24 часа на ответ · кто первый принял — тот получил</div>
+    </div>
+    <div style="margin-left:6px;padding:2px 8px;border-radius:9999px;background:var(--bg-c);border:1px solid var(--bd);font-size:13px;color:var(--fg2);font-family:var(--mono);font-variant-numeric:tabular-nums">{{ offersPending }}</div>
+    <div style="flex:1"></div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:28px 32px;display:flex;flex-direction:column;gap:12px">
+    <sc-for list="{{ offers }}" as="o" hint-placeholder-count="3">
+      <div style="background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;padding:24px 26px;display:flex;flex-wrap:wrap;gap:16px 32px;align-items:center;opacity:{{ o.dim }}">
+        <div style="min-width:0;flex:1 1 190px">
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <span style="font-family:var(--mono);font-size:15px;font-weight:500">{{ o.pid }}</span>
+            <span style="display:inline-flex;align-items:center;gap:3px;font-size:13px;color:var(--fg3)">
+              <x-import component-from-global-scope="Icon" name="star" size="12" color="var(--amber)" hint-size="12px,12px"></x-import>
+              <span style="font-family:var(--mono)">{{ o.rating }}</span>
+            </span>
+          </div>
+          <div style="font-size:20px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums">{{ o.headsTxt }}</div>
+          <div style="font-size:13px;color:var(--fg3);margin-top:3px">{{ o.desc }}</div>
+        </div>
+        <div style="flex:0 0 auto">
+          <div style="display:flex;gap:18px">
+            <div><div style="font-size:11px;color:var(--fg3);text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap">Цена фермера</div><div style="font-family:var(--mono);font-size:16px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums;white-space:nowrap">{{ o.priceTxt }}</div></div>
+            <div><div style="font-size:11px;color:var(--fg3);text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap">Ваша строка</div><div style="font-family:var(--mono);font-size:16px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums;white-space:nowrap">{{ o.myPriceTxt }}</div></div>
+          </div>
+          <div style="font-size:13px;color:var(--fg2);margin-top:4px;font-family:var(--mono);white-space:nowrap">{{ o.deltaTxt }}</div>
+        </div>
+        <div style="min-width:0;flex:1 1 220px">
+          <div style="font-size:13px;color:var(--fg2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ o.reqRef }}</div>
+          <sc-if value="{{ o.pending }}" hint-placeholder-val="{{ true }}">
+            <div style="font-size:13px;color:{{ o.fitC }};margin-top:3px;line-height:1.5">{{ o.fitTxt }}</div>
+          </sc-if>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:0 0 auto;margin-left:auto">
+          <sc-if value="{{ o.pending }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:5px;font-size:13px;color:{{ o.timeC }}">
+              <x-import component-from-global-scope="Icon" name="clock" size="13" hint-size="13px,13px"></x-import>
+              <span style="font-family:var(--mono);font-variant-numeric:tabular-nums">осталось {{ o.left }}</span>
+            </div>
+            <div style="display:flex;gap:6px">
+              <x-import component-from-global-scope="Button" variant="ghost" on-click="{{ o.decline }}" hint-size="auto,36px">Отклонить</x-import>
+              <sc-if value="{{ o.fits }}" hint-placeholder-val="{{ true }}">
+                <x-import component-from-global-scope="Button" variant="cta" on-click="{{ o.accept }}" hint-size="auto,36px">Принять оффер</x-import>
+              </sc-if>
+            </div>
+          </sc-if>
+          <sc-if value="{{ o.accepted }}" hint-placeholder-val="{{ false }}">
+            <x-import component-from-global-scope="Badge" tone="green" hint-size="auto,24px">Принято · партия привязана</x-import>
+          </sc-if>
+          <sc-if value="{{ o.declined }}" hint-placeholder-val="{{ false }}">
+            <x-import component-from-global-scope="Badge" tone="neutral" hint-size="auto,24px">Отклонено</x-import>
+          </sc-if>
+        </div>
+      </div>
+    </sc-for>
+    <div style="font-size:13px;color:var(--fg3);padding:6px 2px;line-height:1.6">Сравнение цен — справочное. Решение по каждому офферу принимаете вы; система не даёт рекомендаций.</div>
+  </div>
+</div>
+</sc-if>
+
+<!-- МАРКЕТ-БОРД (заглушка) -->
+<sc-if value="{{ s_market }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Маркет-борд" style="display:flex;flex-direction:column;height:100%">
+  <div style="height:88px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:0 32px;border-bottom:1px solid var(--bd)">
+    <x-import component-from-global-scope="HeaderPageIcon" icon="barChart" hint-size="32px,32px"></x-import>
+    <div style="font-size:20px;font-weight:600;letter-spacing:-0.01em">Маркет-борд</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:24px 32px">
+    <x-import component-from-global-scope="Icon" name="barChart" size="52" color="var(--fg3)" stroke="1" hint-size="52px,52px"></x-import>
+    <div style="font-size:15px;font-weight:500;color:var(--fg)">Витрина всех доступных партий — в следующей итерации прототипа.</div>
+    <div style="font-size:13px;color:var(--fg3);max-width:496px;line-height:1.6">Партии показываются обезличенно (только регион). Предложение цены за партию: сделка совершается мгновенно, если цена не ниже ожидания фермера.</div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ПРОФИЛЬ МПК -->
+<sc-if value="{{ s_profile }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Профиль МПК" style="display:flex;flex-direction:column;height:100%;min-height:0">
+  <div style="flex-shrink:0;display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;padding:18px 32px 16px;border-bottom:1px solid var(--bd)">
+    <div style="width:46px;height:46px;flex-shrink:0;display:grid;place-items:center;border-radius:12px;background:var(--bg-m);border:1px solid var(--bd);font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:0.03em">{{ pr_mono }}</div>
+    <div style="min-width:0;flex:1 1 300px">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0">
+        <span style="font-size:24px;font-weight:700;letter-spacing:-0.015em;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pr_name }}</span>
+        <x-import component-from-global-scope="Badge" tone="green" hint-size="auto,24px">Допущен к закупкам</x-import>
+      </div>
+      <div style="font-size:13px;color:var(--fg3);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pr_sub }}</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-left:auto;flex-shrink:0">
+      <x-import component-from-global-scope="Button" variant="ghost" icon="messageCircle" on-click="{{ openAppeal }}" hint-size="auto,36px">Обращение в TURAN</x-import>
+    </div>
+  </div>
+  <x-import component-from-global-scope="HeaderTabs" dc-props="{{ ptabs }}" hint-size="100%,52px"></x-import>
+  <div style="flex:1;min-height:0;overflow-y:auto">
+
+    <!-- ОБЗОР -->
+    <sc-if value="{{ pt_ov }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:1180px;margin:0 auto;padding:24px 32px 48px;display:flex;flex-direction:column;gap:18px">
+
+        <div style="background:var(--bg-c);border:1px solid var(--bd);border-radius:14px;overflow:hidden">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:16px 22px;border-bottom:1px solid var(--bd-s);background:var(--bg-s)">
+            <span style="width:9px;height:9px;flex-shrink:0;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px var(--green-m)"></span>
+            <div style="min-width:0;flex:1 1 280px">
+              <div style="font-size:17px;font-weight:600;letter-spacing:-0.01em">{{ ov_title }}</div>
+              <div style="font-size:13px;color:var(--fg3);margin-top:2px;line-height:1.45">{{ ov_sub }}</div>
+            </div>
+            <span style="font-family:var(--mono);font-size:13px;color:var(--fg3);white-space:nowrap">{{ ov_checked }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1px;background:var(--bd-s)">
+            <sc-for list="{{ ov_gates }}" as="g" hint-placeholder-count="3">
+              <div style="display:flex;flex-direction:column;gap:13px;padding:18px 22px 16px;background:var(--bg-c)">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <span style="width:26px;height:26px;flex-shrink:0;border-radius:7px;display:grid;place-items:center;background:{{ g.tint }}">
+                    <x-import component-from-global-scope="Icon" name="{{ g.icon }}" size="14" color="{{ g.color }}" hint-size="14px,14px"></x-import>
+                  </span>
+                  <span style="font-size:13px;font-weight:500;color:var(--fg2)">{{ g.label }}</span>
+                </div>
+                <div style="flex:1">
+                  <div style="font-size:19px;font-weight:600;letter-spacing:-0.015em;line-height:1.25">{{ g.value }}</div>
+                  <div style="font-size:13px;color:var(--fg3);margin-top:4px;line-height:1.45;text-wrap:pretty">{{ g.note }}</div>
+                </div>
+                <div style="height:4px;border-radius:3px;background:var(--bg-m);overflow:hidden">
+                  <div style="height:100%;width:{{ g.w }};background:{{ g.color }};border-radius:3px"></div>
+                </div>
+                <button onClick="{{ g.act }}" style="align-self:flex-start;background:none;border:none;padding:0;font-family:inherit;font-size:13px;font-weight:500;color:var(--fg2);cursor:pointer" style-hover="color:var(--fg)">{{ g.actLabel }} →</button>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">
+          <div style="flex:1 1 440px;min-width:0;background:var(--bg-c);border:1px solid var(--bd);border-radius:14px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:10px;padding:15px 20px;border-bottom:1px solid var(--bd-s)">
+              <span style="font-size:16px;font-weight:600">Требует внимания</span>
+              <span style="padding:1px 8px;border-radius:9999px;background:var(--bg-m);border:1px solid var(--bd);font-family:var(--mono);font-size:12px;color:var(--fg2)">{{ ov_todoN }}</span>
+            </div>
+            <sc-for list="{{ ov_todo }}" as="t" hint-placeholder-count="3">
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;padding:14px 20px;border-bottom:1px solid var(--bd-s)">
+                <span style="width:30px;height:30px;flex-shrink:0;border-radius:8px;display:grid;place-items:center;background:{{ t.tint }}">
+                  <x-import component-from-global-scope="Icon" name="{{ t.icon }}" size="15" color="{{ t.color }}" hint-size="15px,15px"></x-import>
+                </span>
+                <div style="flex:1;min-width:190px">
+                  <div style="font-size:15px;font-weight:500;line-height:1.35">{{ t.title }}</div>
+                  <div style="font-size:13px;color:var(--fg3);margin-top:3px;line-height:1.45;text-wrap:pretty">{{ t.sub }}</div>
+                </div>
+                <x-import component-from-global-scope="Button" variant="subtle" on-click="{{ t.act }}" hint-size="auto,32px">{{ t.cta }}</x-import>
+              </div>
+            </sc-for>
+            <sc-if value="{{ ov_clean }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:11px;padding:20px">
+                <x-import component-from-global-scope="Icon" name="check" size="16" color="var(--green)" hint-size="16px,16px"></x-import>
+                <span style="font-size:15px;color:var(--fg2)">Ничего не требует действий — профиль в порядке.</span>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="flex:1 1 300px;min-width:0;background:var(--bg-c);border:1px solid var(--bd);border-radius:14px;padding:20px">
+            <div style="display:flex;align-items:flex-end;gap:13px">
+              <span style="font-family:var(--mono);font-size:40px;font-weight:600;line-height:0.95;letter-spacing:-0.02em;font-variant-numeric:tabular-nums">{{ pr_rating }}</span>
+              <div style="padding-bottom:2px">
+                <div style="font-size:14px;color:var(--fg2)">из 5 · оценки фермеров</div>
+                <div style="font-size:13px;color:var(--fg3);margin-top:3px">{{ pr_ratingN }}</div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:11px;margin-top:18px">
+              <sc-for list="{{ pr_dims }}" as="d" hint-placeholder-count="2">
+                <div>
+                  <div style="display:flex;align-items:baseline;gap:10px">
+                    <span style="font-size:13px;color:var(--fg2);flex:1;min-width:0;line-height:1.35">{{ d.label }}</span>
+                    <span style="font-family:var(--mono);font-size:14px;font-weight:500;font-variant-numeric:tabular-nums">{{ d.v }}</span>
+                  </div>
+                  <div style="height:6px;border-radius:4px;background:var(--bg-m);overflow:hidden;margin-top:6px"><div style="height:100%;width:{{ d.w }};background:var(--emerald);border-radius:4px"></div></div>
+                </div>
+              </sc-for>
+            </div>
+            <button onClick="{{ goRep }}" style="margin-top:18px;background:none;border:none;padding:0;font-family:inherit;font-size:13px;font-weight:500;color:var(--fg2);cursor:pointer" style-hover="color:var(--fg)">Отзывы фермеров →</button>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:1px;background:var(--bd-s);border:1px solid var(--bd);border-radius:14px;overflow:hidden">
+          <sc-for list="{{ ov_facts }}" as="f" hint-placeholder-count="5">
+            <div style="flex:1 1 180px;padding:15px 20px;background:var(--bg-c)">
+              <div style="font-size:13px;color:var(--fg3)">{{ f.label }}</div>
+              <div style="font-family:var(--mono);font-size:20px;font-weight:600;letter-spacing:-0.01em;margin-top:5px;font-variant-numeric:tabular-nums">{{ f.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    
+<!-- ПРЕДПРИЯТИЕ -->
+    <sc-if value="{{ pt_org }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:1240px;margin:0 auto;padding:24px 32px 48px;display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">
+        <div style="flex:1 1 520px;min-width:0;display:flex;flex-direction:column;gap:14px">
+          <sc-if value="{{ pr_pend }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 14px;padding:14px 18px;background:var(--amber-m);border:1px solid color-mix(in srgb, var(--amber) 30%, transparent);border-radius:12px">
+              <x-import component-from-global-scope="Icon" name="clock" size="16" color="var(--amber)" hint-size="16px,16px"></x-import>
+              <div style="flex:1;min-width:240px">
+                <div style="font-size:15px;font-weight:600">Изменения на повторной проверке TURAN</div>
+                <div style="font-size:13px;color:var(--fg2);margin-top:3px;line-height:1.5">{{ pr_pendTxt }} · 2–5 рабочих дней. Закупки, заявки и приёмка работают как обычно.</div>
+              </div>
+            </div>
+          </sc-if>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;font-size:13px;color:var(--fg3)">
+            <span style="display:inline-flex;align-items:center;gap:6px">
+              <x-import component-from-global-scope="Icon" name="shield" size="13" color="var(--amber)" hint-size="13px,13px"></x-import>входит в допуск</span>
+            <span style="display:inline-flex;align-items:center;gap:6px">
+              <x-import component-from-global-scope="Icon" name="eye" size="13" color="var(--fg3)" hint-size="13px,13px"></x-import>видно фермеру</span>
+            <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px">
+              <x-import component-from-global-scope="Icon" name="edit" size="13" color="var(--fg3)" hint-size="13px,13px"></x-import>клик по значению — правка</span>
+          </div>
+          <sc-for list="{{ pr_cards }}" as="c" hint-placeholder-count="4">
+            <div style="background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:9px;padding:14px 20px;border-bottom:1px solid var(--bd-s)">
+                <x-import component-from-global-scope="Icon" name="{{ c.icon }}" size="15" color="var(--fg3)" hint-size="15px,15px"></x-import>
+                <span style="font-size:15px;font-weight:600">{{ c.title }}</span>
+                <div style="flex:1"></div>
+                <span style="font-size:12px;color:var(--fg3);text-align:right">{{ c.meta }}</span>
+              </div>
+              <sc-for list="{{ c.rows }}" as="r" hint-placeholder-count="4">
+                <div style="display:grid;grid-template-columns:170px minmax(0,1fr);gap:14px;align-items:start;padding:10px 20px;border-bottom:1px solid var(--bd-s)">
+                  <div style="display:flex;align-items:center;gap:6px;padding-top:6px;min-width:0">
+                    <span style="font-size:13px;color:var(--fg3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.label }}</span>
+                    <sc-if value="{{ r.crit }}" hint-placeholder-val="{{ false }}">
+                      <x-import component-from-global-scope="Icon" name="shield" size="12" color="var(--amber)" hint-size="12px,12px"></x-import>
+                    </sc-if>
+                    <sc-if value="{{ r.pub }}" hint-placeholder-val="{{ false }}">
+                      <x-import component-from-global-scope="Icon" name="eye" size="12" color="var(--fg3)" hint-size="12px,12px"></x-import>
+                    </sc-if>
+                  </div>
+                  <div style="min-width:0">
+                    <sc-if value="{{ r.editing }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+                        <input data-edit-input="1" value="{{ r.draft }}" onChange="{{ r.setDraft }}" onKeyDown="{{ r.keyDown }}" style="flex:1;min-width:190px;height:38px;padding:0 11px;background:var(--bg);border:1px solid var(--bd-h);border-radius:6px;color:var(--fg);font-size:15px;outline:none">
+                        <x-import component-from-global-scope="Button" variant="cta" on-click="{{ r.save }}" hint-size="auto,36px">Сохранить</x-import>
+                        <x-import component-from-global-scope="Button" variant="ghost" on-click="{{ r.cancel }}" hint-size="auto,36px">Отмена</x-import>
+                      </div>
+                      <sc-if value="{{ r.crit }}" hint-placeholder-val="{{ false }}">
+                        <div style="font-size:13px;color:var(--amber);margin-top:7px;line-height:1.5">Поле в допуске: после сохранения уйдёт на повторную проверку TURAN. Закупки не блокируются.</div>
+                      </sc-if>
+                    </sc-if>
+                    <sc-if value="{{ r.reading }}" hint-placeholder-val="{{ true }}">
+                      <div onClick="{{ r.start }}" title="Изменить" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-height:26px;margin:-3px -8px;padding:3px 8px;border-radius:6px;cursor:text;transition:background 80ms var(--ease)" style-hover="background:var(--bg-m)">
+                        <span style="font-size:15px;color:var(--fg);word-break:break-word">{{ r.value }}</span>
+                        <sc-if value="{{ r.onReview }}" hint-placeholder-val="{{ false }}">
+                          <x-import component-from-global-scope="Badge" tone="amber" hint-size="auto,24px">На проверке</x-import>
+                        </sc-if>
+                        <span style="opacity:0.4;display:inline-flex">
+                          <x-import component-from-global-scope="Icon" name="edit" size="12" color="var(--fg3)" hint-size="12px,12px"></x-import>
+                        </span>
+                      </div>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="flex:1 1 330px;min-width:0;position:sticky;top:0;background:var(--bg-c);border:1px solid var(--bd);border-radius:14px;overflow:hidden">
+          <div style="padding:15px 18px;border-bottom:1px solid var(--bd-s)">
+            <div style="font-size:16px;font-weight:600">Как вас видит фермер</div>
+            <div style="font-size:13px;color:var(--fg3);margin-top:3px;line-height:1.45">Одна карточка на двух стадиях сделки.</div>
+            <div style="display:inline-flex;margin-top:13px;padding:3px;gap:2px;background:var(--bg-m);border-radius:9px">
+              <sc-for list="{{ pv_tabs }}" as="t" hint-placeholder-count="2">
+                <button onClick="{{ t.set }}" style="padding:6px 12px;border:none;border-radius:6px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;background:{{ t.bg }};color:{{ t.fg }}">{{ t.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div style="padding:18px;background:var(--bg-s)">
+            <div style="background:var(--bg-c);border:1px solid var(--bd-h);border-radius:12px;box-shadow:var(--sh-xl);overflow:hidden">
+              <div style="display:flex;align-items:center;gap:11px;padding:14px 16px;border-bottom:1px solid var(--bd-s)">
+                <span style="width:38px;height:38px;flex-shrink:0;border-radius:10px;display:grid;place-items:center;background:var(--bg-m);border:1px solid var(--bd);font-family:var(--mono);font-size:14px;font-weight:600">{{ pv_mono }}</span>
+                <div style="min-width:0;flex:1">
+                  <div style="font-size:15px;font-weight:600;line-height:1.3;text-wrap:pretty">{{ pv_title }}</div>
+                  <div style="font-size:12px;color:var(--fg3);margin-top:3px">{{ pv_sub }}</div>
+                </div>
+                <span style="display:inline-flex;align-items:center;gap:4px;flex-shrink:0;font-family:var(--mono);font-size:14px;font-weight:600">
+                  <x-import component-from-global-scope="Icon" name="star" size="13" color="var(--fg2)" hint-size="13px,13px"></x-import>{{ pr_rating }}
+                </span>
+              </div>
+              <sc-for list="{{ pv_rows }}" as="r" hint-placeholder-count="5">
+                <div style="display:flex;gap:12px;padding:9px 16px;border-bottom:1px solid var(--bd-s)">
+                  <span style="flex:0 0 118px;font-size:12px;color:var(--fg3);line-height:1.4">{{ r.label }}</span>
+                  <span style="flex:1;min-width:0;font-size:13px;line-height:1.4;word-break:break-word;color:{{ r.color }}">{{ r.value }}</span>
+                </div>
+              </sc-for>
+              <div style="display:flex;gap:9px;padding:12px 16px;background:var(--bg-s)">
+                <x-import component-from-global-scope="Icon" name="shield" size="14" color="var(--fg3)" hint-size="14px,14px"></x-import>
+                <span style="font-size:12px;color:var(--fg2);line-height:1.5;text-wrap:pretty">{{ pv_foot }}</span>
+              </div>
+            </div>
+            <div style="font-size:12px;color:var(--fg3);margin-top:10px;text-align:center">Экран фермера · AgOS</div>
+          </div>
+          <div style="padding:14px 18px;border-top:1px solid var(--bd-s);font-size:13px;color:var(--fg3);line-height:1.55;text-wrap:pretty">{{ pv_note }}</div>
+        </div>
+      </div>
+    </sc-if>
+
+    
+<!-- ДОПУСК И ДОКУМЕНТЫ -->
+    <sc-if value="{{ pt_adm }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:1240px;margin:0 auto;padding:24px 32px 48px;display:flex;flex-direction:column;gap:24px">
+        <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:stretch">
+          <div style="flex:1 1 440px;min-width:0;display:flex;flex-direction:column;background:var(--bg-c);border:1px solid var(--bd);border-radius:14px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:9px;padding:15px 20px;border-bottom:1px solid var(--bd-s)">
+              <x-import component-from-global-scope="Icon" name="shield" size="15" color="var(--fg3)" hint-size="15px,15px"></x-import>
+              <span style="font-size:16px;font-weight:600">Верификация TURAN</span>
+              <div style="flex:1"></div>
+              <x-import component-from-global-scope="Badge" tone="{{ v_tone }}" hint-size="auto,24px">{{ v_label }}</x-import>
+            </div>
+            <div style="flex:1;padding:22px 20px 18px">
+              <div style="display:flex">
+                <sc-for list="{{ v_steps }}" as="s" hint-placeholder-count="3">
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center">
+                      <span style="width:11px;height:11px;flex-shrink:0;border-radius:50%;background:{{ s.dot }};box-shadow:0 0 0 3px {{ s.ring }}"></span>
+                      <span style="flex:1;height:2px;background:{{ s.line }}"></span>
+                    </div>
+                    <div style="padding:14px 14px 0 0">
+                      <div style="font-size:13px;font-weight:500;line-height:1.35;text-wrap:pretty">{{ s.title }}</div>
+                      <div style="font-family:var(--mono);font-size:12px;color:var(--fg3);margin-top:4px;line-height:1.4">{{ s.date }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="padding:13px 20px;border-top:1px solid var(--bd-s);font-size:13px;color:var(--fg3);line-height:1.55">Подтверждает, что вы — действующий мясокомбинат. Без верификации раздел закупок закрыт.</div>
+          </div>
+
+          <div style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;background:var(--bg-c);border:1px solid var(--bd);border-radius:14px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:9px;padding:15px 20px;border-bottom:1px solid var(--bd-s)">
+              <x-import component-from-global-scope="Icon" name="briefcase" size="15" color="var(--fg3)" hint-size="15px,15px"></x-import>
+              <span style="font-size:16px;font-weight:600">Членство</span>
+              <div style="flex:1"></div>
+              <x-import component-from-global-scope="Badge" tone="{{ mem_tone }}" hint-size="auto,24px">{{ mem_label }}</x-import>
+            </div>
+            <div style="padding:18px 20px 16px;border-bottom:1px solid var(--bd-s)">
+              <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px">
+                <span style="font-family:var(--mono);font-size:24px;font-weight:600;letter-spacing:-0.01em;font-variant-numeric:tabular-nums;white-space:nowrap">до 07 авг 2026</span>
+                <span style="font-size:14px;color:var(--amber)">{{ mem_left }}</span>
+              </div>
+              <div style="height:6px;border-radius:4px;background:var(--bg-m);overflow:hidden;margin-top:13px"><div style="height:100%;width:{{ mem_w }};background:{{ mem_bar }};border-radius:4px"></div></div>
+              <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--fg3);margin-top:6px">
+                <span>07 авг 2025</span><span>07 авг 2026</span>
+              </div>
+            </div>
+            <sc-for list="{{ mem_rows }}" as="r" hint-placeholder-count="3">
+              <div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:12px;padding:10px 20px;border-bottom:1px solid var(--bd-s)">
+                <div style="font-size:13px;color:var(--fg3)">{{ r.label }}</div>
+                <div style="font-size:14px">{{ r.value }}</div>
+              </div>
+            </sc-for>
+            <div style="flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:14px 20px">
+              <sc-if value="{{ mem_canRenew }}" hint-placeholder-val="{{ true }}">
+                <x-import component-from-global-scope="Button" variant="cta" on-click="{{ renewMem }}" hint-size="auto,36px">Продлить членство</x-import>
+                <span style="font-size:13px;color:var(--fg3);flex:1;min-width:160px;line-height:1.5">Без членства закупки закрываются — заявки в работе сохраняются.</span>
+              </sc-if>
+              <sc-if value="{{ mem_renewing }}" hint-placeholder-val="{{ false }}">
+                <span style="font-size:13px;color:var(--fg2);line-height:1.5">Заявка на продление у ассоциации — 1–3 рабочих дня. Действий от вас не требуется.</span>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:12px">
+            <div style="font-size:18px;font-weight:600;letter-spacing:-0.01em">Документы и лицензии</div>
+            <span style="font-size:13px;color:var(--fg3)">{{ docN }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;margin-top:14px">
+            <sc-for list="{{ pr_docs }}" as="d" hint-placeholder-count="5">
+              <div style="display:flex;flex-direction:column;gap:13px;padding:16px;background:var(--bg-c);border:1px solid var(--bd);border-radius:12px;transition:border-color 100ms var(--ease)" style-hover="border-color:var(--bd-h)">
+                <div style="display:flex;align-items:flex-start;gap:11px">
+                  <span style="width:32px;height:32px;flex-shrink:0;border-radius:8px;display:grid;place-items:center;background:var(--bg-m)">
+                    <x-import component-from-global-scope="Icon" name="fileText" size="15" color="var(--fg2)" hint-size="15px,15px"></x-import>
+                  </span>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:14px;font-weight:500;line-height:1.35;text-wrap:pretty">{{ d.name }}</div>
+                    <div style="font-family:var(--mono);font-size:12px;color:var(--fg3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.file }}</div>
+                  </div>
+                  <x-import component-from-global-scope="IconButton" icon="download" on-click="{{ d.dl }}" hint-size="28px,28px"></x-import>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+                  <span style="padding:2px 8px;border-radius:9999px;background:var(--bg-m);border:1px solid var(--bd);font-size:12px;color:var(--fg2)">{{ d.kind }}</span>
+                  <x-import component-from-global-scope="Badge" tone="{{ d.tone }}" hint-size="auto,24px">{{ d.st }}</x-import>
+                </div>
+                <div style="margin-top:auto">
+                  <div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--fg3)">
+                    <span>{{ d.untilLabel }}</span>
+                    <span style="font-family:var(--mono);white-space:nowrap">{{ d.left }}</span>
+                  </div>
+                  <div style="height:3px;border-radius:2px;background:var(--bg-m);overflow:hidden;margin-top:7px"><div style="height:100%;width:{{ d.w }};background:{{ d.bar }};border-radius:2px"></div></div>
+                </div>
+              </div>
+            </sc-for>
+            <button onClick="{{ uploadDoc }}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;min-height:158px;padding:16px;background:transparent;border:1px dashed var(--bd-h);border-radius:12px;cursor:pointer;font-family:inherit;color:var(--fg3);transition:border-color 100ms var(--ease)" style-hover="border-color:var(--fg3)">
+              <x-import component-from-global-scope="Icon" name="upload" size="19" color="currentColor" hint-size="19px,19px"></x-import>
+              <span style="font-size:13px;font-weight:500;color:var(--fg2)">Загрузить документ</span>
+              <span style="font-size:12px;text-align:center;line-height:1.45;max-width:210px">Уставные документы и лицензии проверяет TURAN</span>
+            </button>
+          </div>
+          <div style="font-size:13px;color:var(--fg3);margin-top:14px;line-height:1.6;max-width:820px">Документы по конкретным сделкам формируются из закрытых заявок и лежат в разделе «Документы сделок».</div>
+        </div>
+      </div>
+    </sc-if>
+
+    
+<!-- КОМАНДА -->
+    <sc-if value="{{ pt_team }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:1240px;margin:0 auto;padding:24px 32px 48px">
+        <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:12px">
+          <div style="font-size:18px;font-weight:600;letter-spacing:-0.01em">Кто работает в кабинете</div>
+          <span style="font-size:13px;color:var(--fg3)">{{ st_sub }}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;margin-top:14px">
+          <sc-for list="{{ pr_staff }}" as="u" hint-placeholder-count="4">
+            <div style="display:flex;flex-direction:column;padding:16px 18px;background:var(--bg-c);border:1px solid var(--bd);border-radius:12px">
+              <div style="display:flex;align-items:center;gap:12px">
+                <x-import component-from-global-scope="Avatar" name="{{ u.name }}" size="38" hint-size="38px,38px"></x-import>
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:7px;min-width:0">
+                    <span style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ u.name }}</span>
+                    <sc-if value="{{ u.isMe }}" hint-placeholder-val="{{ false }}">
+                      <span style="flex-shrink:0;padding:1px 7px;border-radius:9999px;background:var(--bg-m);border:1px solid var(--bd);font-size:11px;color:var(--fg2)">Вы</span>
+                    </sc-if>
+                  </div>
+                  <div style="font-size:13px;color:var(--fg3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ u.email }}</div>
+                </div>
+                <x-import component-from-global-scope="Badge" tone="{{ u.tone }}" hint-size="auto,24px">{{ u.stLabel }}</x-import>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:15px">
+                <span style="padding:3px 9px;border-radius:7px;background:var(--bg-m);border:1px solid var(--bd);font-size:12px;font-weight:600;color:var(--fg)">{{ u.role }}</span>
+                <sc-for list="{{ u.perms }}" as="p" hint-placeholder-count="3">
+                  <span style="padding:3px 9px;border-radius:7px;background:var(--bg-s);border:1px solid var(--bd-s);font-size:12px;color:var(--fg2)">{{ p.t }}</span>
+                </sc-for>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-top:15px;padding-top:12px;border-top:1px solid var(--bd-s)">
+                <span style="font-size:12px;color:var(--fg3)">Последний вход</span>
+                <span style="font-family:var(--mono);font-size:13px;color:var(--fg2)">{{ u.last }}</span>
+                <div style="flex:1"></div>
+                <sc-if value="{{ u.canResend }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ u.resend }}" style="background:none;border:none;padding:0;color:var(--fg2);font-size:13px;cursor:pointer;font-family:inherit;text-decoration:underline;text-underline-offset:2px" style-hover="color:var(--fg)">Отправить снова</button>
+                </sc-if>
+              </div>
+            </div>
+          </sc-for>
+          <button onClick="{{ openInvite }}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;min-height:172px;padding:16px;background:transparent;border:1px dashed var(--bd-h);border-radius:12px;cursor:pointer;font-family:inherit;color:var(--fg3);transition:border-color 100ms var(--ease)" style-hover="border-color:var(--fg3)">
+            <x-import component-from-global-scope="Icon" name="plus" size="19" color="currentColor" hint-size="19px,19px"></x-import>
+            <span style="font-size:13px;font-weight:500;color:var(--fg2)">Пригласить сотрудника</span>
+            <span style="font-size:12px;text-align:center;line-height:1.45;max-width:220px">Приглашение уходит на рабочий e-mail</span>
+          </button>
+        </div>
+        <div style="font-size:13px;color:var(--fg3);margin-top:16px;line-height:1.6;max-width:860px">Роль решает, что сотрудник делает в закупках. Реквизиты и состав сотрудников меняет только администратор.</div>
+      </div>
+    </sc-if>
+
+    
+<!-- РЕПУТАЦИЯ -->
+    <sc-if value="{{ pt_rep }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:1240px;margin:0 auto;padding:24px 32px 48px;display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">
+        <div style="flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:14px">
+          <div style="background:var(--bg-c);border:1px solid var(--bd);border-radius:14px;padding:20px">
+            <div style="display:flex;align-items:flex-end;gap:14px">
+              <span style="font-family:var(--mono);font-size:52px;font-weight:600;line-height:0.9;letter-spacing:-0.03em;font-variant-numeric:tabular-nums">{{ pr_rating }}</span>
+              <div style="padding-bottom:4px">
+                <div style="font-size:15px;color:var(--fg2)">из 5 · оценки фермеров</div>
+                <div style="font-size:13px;color:var(--fg3);margin-top:4px">{{ pr_ratingN }}</div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;margin-top:20px">
+              <sc-for list="{{ pr_dist }}" as="x" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="font-family:var(--mono);font-size:12px;color:var(--fg3);width:12px">{{ x.n }}</span>
+                  <div style="flex:1;height:7px;border-radius:4px;background:var(--bg-m);overflow:hidden"><div style="height:100%;width:{{ x.w }};background:var(--fg3);border-radius:4px"></div></div>
+                  <span style="font-family:var(--mono);font-size:12px;color:var(--fg3);width:18px;text-align:right">{{ x.c }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;margin-top:22px;padding-top:18px;border-top:1px solid var(--bd-s)">
+              <sc-for list="{{ pr_dims }}" as="d" hint-placeholder-count="2">
+                <div>
+                  <div style="display:flex;align-items:baseline;gap:10px">
+                    <span style="font-size:13px;color:var(--fg2);flex:1;min-width:0;line-height:1.35">{{ d.label }}</span>
+                    <span style="font-family:var(--mono);font-size:14px;font-weight:500;font-variant-numeric:tabular-nums">{{ d.v }}</span>
+                  </div>
+                  <div style="height:7px;border-radius:4px;background:var(--bg-m);overflow:hidden;margin-top:7px"><div style="height:100%;width:{{ d.w }};background:var(--emerald);border-radius:4px"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;gap:11px;padding:16px 18px;background:var(--bg-c);border:1px solid var(--bd);border-radius:12px">
+            <x-import component-from-global-scope="Icon" name="shield" size="16" color="var(--fg3)" hint-size="16px,16px"></x-import>
+            <div style="font-size:13px;color:var(--fg2);line-height:1.6;text-wrap:pretty">Оценку ставит хозяйство после закрытия сделки. Отзыв открывается, только когда обе стороны оценили друг друга — до этого он скрыт от всех.</div>
+          </div>
+        </div>
+        <div style="flex:1 1 460px;min-width:0;display:flex;flex-direction:column;gap:12px">
+          <sc-if value="{{ pr_hidden }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;padding:16px 18px;background:var(--bg-c);border:1px dashed var(--bd-h);border-radius:12px">
+              <span style="width:34px;height:34px;flex-shrink:0;border-radius:9px;display:grid;place-items:center;background:var(--bg-m)">
+                <x-import component-from-global-scope="Icon" name="eye" size="15" color="var(--fg3)" hint-size="15px,15px"></x-import>
+              </span>
+              <div style="flex:1;min-width:200px">
+                <div style="font-size:15px;font-weight:500">{{ pr_hiddenFarm }} — отзыв скрыт</div>
+                <div style="font-size:13px;color:var(--fg3);margin-top:3px;line-height:1.5">Вы этого поставщика ещё не оценили.</div>
+              </div>
+              <x-import component-from-global-scope="Button" variant="subtle" on-click="{{ openRate }}" hint-size="auto,36px">Оценить поставщика</x-import>
+            </div>
+          </sc-if>
+          <sc-for list="{{ pr_reviews }}" as="v" hint-placeholder-count="3">
+            <div style="padding:16px 18px;background:var(--bg-c);border:1px solid var(--bd);border-radius:12px">
+              <div style="display:flex;align-items:center;gap:11px">
+                <x-import component-from-global-scope="Avatar" name="{{ v.farm }}" size="32" hint-size="32px,32px"></x-import>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ v.farm }}</div>
+                  <div style="font-family:var(--mono);font-size:12px;color:var(--fg3);margin-top:2px">{{ v.meta }}</div>
+                </div>
+                <span style="display:inline-flex;align-items:center;gap:5px;flex-shrink:0;padding:4px 9px;border-radius:8px;background:var(--bg-m);font-family:var(--mono);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums">
+                  <x-import component-from-global-scope="Icon" name="star" size="13" color="var(--fg2)" hint-size="13px,13px"></x-import>{{ v.overall }}
+                </span>
+              </div>
+              <div style="font-size:15px;color:var(--fg2);margin-top:11px;line-height:1.55;text-wrap:pretty">{{ v.text }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    
+<!-- ОБРАЩЕНИЯ -->
+    <sc-if value="{{ pt_appeals }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:920px;margin:0 auto;padding:24px 32px 48px">
+        <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:12px">
+          <div style="font-size:18px;font-weight:600;letter-spacing:-0.01em">Обращения в TURAN</div>
+          <span style="font-size:13px;color:var(--fg3)">{{ ap_sub }}</span>
+          <div style="flex:1"></div>
+          <x-import component-from-global-scope="Button" variant="cta" icon="plus" on-click="{{ openAppeal }}" hint-size="auto,36px">Новое обращение</x-import>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px;margin-top:16px">
+          <sc-for list="{{ pr_appeals }}" as="a" hint-placeholder-count="2">
+            <div style="background:var(--bg-c);border:1px solid var(--bd);border-radius:14px;overflow:hidden">
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;padding:15px 20px;border-bottom:1px solid var(--bd-s)">
+                <span style="width:8px;height:8px;flex-shrink:0;border-radius:50%;background:{{ a.dot }}"></span>
+                <div style="flex:1;min-width:220px;font-size:16px;font-weight:600;letter-spacing:-0.01em;line-height:1.3;text-wrap:pretty">{{ a.topic }}</div>
+                <x-import component-from-global-scope="Badge" tone="{{ a.tone }}" hint-size="auto,24px">{{ a.stLabel }}</x-import>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:14px;padding:16px 20px">
+                <div style="display:flex;align-items:flex-start;gap:11px">
+                  <x-import component-from-global-scope="Avatar" name="{{ pr_me }}" size="28" hint-size="28px,28px"></x-import>
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:8px">
+                      <span style="font-size:13px;font-weight:600">Вы</span>
+                      <span style="font-family:var(--mono);font-size:12px;color:var(--fg3)">{{ a.date }}</span>
+                    </div>
+                    <div style="margin-top:7px;padding:12px 14px;background:var(--bg-s);border:1px solid var(--bd-s);border-radius:10px;border-top-left-radius:3px;font-size:15px;color:var(--fg2);line-height:1.6;text-wrap:pretty">{{ a.msg }}</div>
+                  </div>
+                </div>
+                <sc-if value="{{ a.hasAnswer }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;align-items:flex-start;gap:11px">
+                    <span style="width:28px;height:28px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;background:var(--green-m);font-family:var(--mono);font-size:11px;font-weight:700;color:var(--green)">TR</span>
+                    <div style="flex:1;min-width:0">
+                      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:8px">
+                        <span style="font-size:13px;font-weight:600">TURAN Compliance</span>
+                        <span style="font-family:var(--mono);font-size:12px;color:var(--fg3)">{{ a.aDate }}</span>
+                      </div>
+                      <div style="margin-top:7px;padding:12px 14px;background:var(--green-m);border:1px solid color-mix(in srgb, var(--green) 24%, transparent);border-radius:10px;border-top-left-radius:3px;font-size:15px;color:var(--fg);line-height:1.6;text-wrap:pretty">{{ a.answer }}</div>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ a.waiting }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;align-items:center;gap:11px;margin-left:39px;padding:11px 14px;border:1px dashed var(--bd-h);border-radius:10px">
+                    <span style="width:7px;height:7px;flex-shrink:0;border-radius:50%;background:var(--amber);animation:pulseDot 1.6s var(--ease) infinite"></span>
+                    <span style="font-size:13px;color:var(--fg2);line-height:1.5;text-wrap:pretty">{{ ap_waitTxt }}</span>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:13px;color:var(--fg3);margin-top:16px;line-height:1.6">Отменить подтверждённую сделку кнопкой в кабинете нельзя — только через обращение. TURAN разбирает его вручную и отвечает здесь.</div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</sc-if>
+
+<!-- ДОКУМЕНТЫ СДЕЛОК (заглушка) -->
+<sc-if value="{{ s_docs }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Документы сделок" style="display:flex;flex-direction:column;height:100%">
+  <div style="height:88px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:0 32px;border-bottom:1px solid var(--bd)">
+    <x-import component-from-global-scope="HeaderPageIcon" icon="folder" hint-size="32px,32px"></x-import>
+    <div style="font-size:20px;font-weight:600;letter-spacing:-0.01em">Документы сделок</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:24px 32px">
+    <x-import component-from-global-scope="Icon" name="folder" size="52" color="var(--fg3)" stroke="1" hint-size="52px,52px"></x-import>
+    <div style="font-size:15px;font-weight:500;color:var(--fg)">Документы сделок появятся здесь.</div>
+    <div style="font-size:13px;color:var(--fg3);max-width:400px;line-height:1.6">Документ сделки формируется одним кликом из закрытой заявки: реквизиты сторон, таблица по партиям, таймлайн.</div>
+  </div>
+</div>
+</sc-if>
+</main>
+
+<!-- МОДАЛКА: НОВАЯ ЗАЯВКА -->
+<sc-if value="{{ cm_open }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeCreate }}" style="position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.6);display:grid;place-items:center">
+  <div onClick="{{ eat }}" style="width:760px;max-width:calc(100vw - 48px);max-height:90vh;overflow-y:auto;background:var(--bg-c);border:1px solid var(--bd-h);border-radius:12px;box-shadow:var(--sh-xl);animation:fadeUp 150ms var(--ease)">
+    <div style="padding:20px 24px 14px;border-bottom:1px solid var(--bd-s)">
+      <div style="font-size:20px;font-weight:600;letter-spacing:-0.01em">Новая заявка на закупку</div>
+      <div style="font-size:13px;color:var(--fg3);margin-top:3px">Черновика нет — после публикации заявка сразу видна фермерам, и система начинает подбор партий.</div>
+    </div>
+    <div style="padding:20px 24px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--fg);letter-spacing:0.04em;text-transform:uppercase;margin-bottom:6px">Голов всего</div>
+          <input value="{{ f_head }}" onChange="{{ setHead }}" inputmode="numeric" style="width:100%;height:42px;padding:0 12px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;color:var(--fg);font-size:15px;outline:none">
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--fg);letter-spacing:0.04em;text-transform:uppercase;margin-bottom:6px">Срок набора</div>
+          <input value="{{ f_deadline }}" onChange="{{ setDeadline }}" placeholder="например, 15 сен" style="width:100%;height:42px;padding:0 12px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;color:var(--fg);font-size:15px;outline:none">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--fg);letter-spacing:0.04em;text-transform:uppercase;margin-bottom:6px">Область забора</div>
+          <div style="position:relative">
+            <select value="{{ f_obl }}" onChange="{{ setObl }}" style="width:100%;height:42px;padding:0 32px 0 12px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;color:var(--fg);font-size:15px;outline:none;cursor:pointer">
+              <option value="">Любой регион</option>
+              <option value="ВКО">ВКО</option>
+              <option value="обл. Абай">обл. Абай</option>
+              <option value="Павлодарская">Павлодарская</option>
+              <option value="Карагандинская">Карагандинская</option>
+              <option value="СКО">СКО</option>
+            </select>
+            <span style="position:absolute;right:10px;top:0;bottom:0;display:grid;place-items:center;pointer-events:none;color:var(--fg3)">
+              <x-import component-from-global-scope="Icon" name="chevronDown" size="15" hint-size="15px,15px"></x-import>
+            </span>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--fg);letter-spacing:0.04em;text-transform:uppercase;margin-bottom:6px">Район <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--fg3)">— необязательно</span></div>
+          <input value="{{ f_ray }}" onChange="{{ setRay }}" placeholder="Любой район" style="width:100%;height:42px;padding:0 12px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;color:var(--fg);font-size:15px;outline:none">
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="font-size:11px;font-weight:600;color:var(--fg3);letter-spacing:0.06em;text-transform:uppercase">Строки заявки — сорт и цена</div>
+        <sc-for list="{{ fl }}" as="l" hint-placeholder-count="1">
+          <div style="background:var(--bg-s);border:1px solid var(--bd);border-radius:8px;padding:14px">
+            <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 110px 90px minmax(0,1fr) 28px;gap:10px;align-items:end">
+              <div>
+                <div style="font-size:13px;color:var(--fg2);margin-bottom:5px">Сорт</div>
+                <div style="position:relative">
+                  <select value="{{ l.sort }}" onChange="{{ l.setSort }}" style="width:100%;height:42px;padding:0 30px 0 10px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;color:var(--fg);font-size:15px;outline:none;cursor:pointer">
+                    <option value="s1">Бычки, высшая уп.</option>
+                    <option value="s2">Бычки, средняя уп.</option>
+                    <option value="s3">Тёлки, I категория</option>
+                    <option value="s4">Коровы, II категория</option>
+                  </select>
+                  <span style="position:absolute;right:9px;top:0;bottom:0;display:grid;place-items:center;pointer-events:none;color:var(--fg3)">
+                    <x-import component-from-global-scope="Icon" name="chevronDown" size="13" hint-size="13px,13px"></x-import>
+                  </span>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:13px;color:var(--fg2);margin-bottom:5px">Цена, ₸/кг</div>
+                <input value="{{ l.price }}" onChange="{{ l.setPrice }}" inputmode="numeric" placeholder="{{ l.ind }}" style="width:100%;height:42px;padding:0 10px;background:var(--bg);border:1px solid {{ l.bd }};border-radius:6px;color:var(--fg);font-size:15px;font-family:var(--mono);outline:none">
+              </div>
+              <div>
+                <div style="font-size:13px;color:var(--fg2);margin-bottom:5px">Лимит голов</div>
+                <input value="{{ l.limit }}" onChange="{{ l.setLimit }}" inputmode="numeric" placeholder="—" style="width:100%;height:42px;padding:0 10px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;color:var(--fg);font-size:15px;font-family:var(--mono);outline:none">
+              </div>
+              <div>
+                <div style="font-size:13px;color:var(--fg2);margin-bottom:5px">Порода — необязательно</div>
+                <input value="{{ l.breed }}" onChange="{{ l.setBreed }}" placeholder="Любая" style="width:100%;height:42px;padding:0 10px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;color:var(--fg);font-size:15px;outline:none">
+              </div>
+              <sc-if value="{{ l.canDel }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ l.del }}" title="Убрать строку" style="width:38px;height:42px;display:grid;place-items:center;background:transparent;border:1px solid var(--bd);border-radius:6px;color:var(--fg3);cursor:pointer">
+                  <x-import component-from-global-scope="Icon" name="x" size="13" hint-size="13px,13px"></x-import>
+                </button>
+              </sc-if>
+            </div>
+            <div style="display:flex;gap:14px;margin-top:8px;font-size:13px;color:var(--fg3);font-family:var(--mono)">
+              <span>{{ l.minTxt }}</span>
+              <span>{{ l.indTxt }}</span>
+            </div>
+            <sc-if value="{{ l.err }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:6px;font-size:13px;color:var(--red)">Цена ниже защитного минимума сорта — публикация заблокирована.</div>
+            </sc-if>
+          </div>
+        </sc-for>
+        <button onClick="{{ addLine }}" style="height:38px;display:flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1px dashed var(--bd-h);border-radius:6px;color:var(--fg3);font-size:13px;cursor:pointer" style-hover="color:var(--fg2)">
+          <x-import component-from-global-scope="Icon" name="plus" size="13" hint-size="13px,13px"></x-import>
+          Добавить строку
+        </button>
+      </div>
+      <div style="font-size:13px;color:var(--fg3);line-height:1.6;border-top:1px solid var(--bd-s);padding-top:12px">Индикативная цена — ориентир по рынку, не обязательство и не рекомендация (ст. 171 Предпринимательского кодекса РК). Цена строки не может быть ниже защитного минимума сорта.</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 24px;border-top:1px solid var(--bd-s);background:var(--bg-s);border-radius:0 0 12px 12px">
+      <span style="font-size:13px;color:var(--fg3)">{{ f_msg }}</span>
+      <div style="flex:1"></div>
+      <x-import component-from-global-scope="Button" variant="ghost" on-click="{{ closeCreate }}" hint-size="auto,36px">Отмена</x-import>
+      <sc-if value="{{ fv }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Button" variant="cta" on-click="{{ publish }}" hint-size="auto,36px">Опубликовать заявку</x-import>
+      </sc-if>
+      <sc-if value="{{ fvNot }}" hint-placeholder-val="{{ true }}">
+        <div style="height:32px;display:inline-flex;align-items:center;padding:0 12px;border-radius:6px;background:var(--cta);color:var(--cta-fg);font-size:13px;font-weight:600;opacity:0.4;cursor:not-allowed">Опубликовать заявку</div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- МОДАЛКА: ПОДТВЕРЖДЕНИЕ -->
+<sc-if value="{{ cf_open }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ cf_no }}" style="position:fixed;inset:0;z-index:110;background:rgba(0,0,0,0.6);display:grid;place-items:center">
+  <div onClick="{{ eat }}" style="width:496px;max-width:calc(100vw - 48px);background:var(--bg-c);border:1px solid var(--bd-h);border-radius:12px;box-shadow:var(--sh-xl);animation:fadeUp 150ms var(--ease)">
+    <div style="padding:20px 24px 8px;font-size:20px;font-weight:600;letter-spacing:-0.01em">{{ cf_title }}</div>
+    <div style="padding:0 24px 20px;font-size:15px;color:var(--fg2);line-height:1.6">{{ cf_body }}</div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding:14px 24px;border-top:1px solid var(--bd-s)">
+      <x-import component-from-global-scope="Button" variant="ghost" on-click="{{ cf_no }}" hint-size="auto,36px">Отмена</x-import>
+      <x-import component-from-global-scope="Button" variant="danger" on-click="{{ cf_yes }}" hint-size="auto,36px">{{ cf_label }}</x-import>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- МОДАЛКА: ПРИГЛАШЕНИЕ СОТРУДНИКА -->
+<sc-if value="{{ iv_open }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeInvite }}" style="position:fixed;inset:0;z-index:105;background:rgba(0,0,0,0.6);display:grid;place-items:center">
+  <div onClick="{{ eat }}" style="width:560px;max-width:calc(100vw - 48px);background:var(--bg-c);border:1px solid var(--bd-h);border-radius:12px;box-shadow:var(--sh-xl);animation:fadeUp 150ms var(--ease)">
+    <div style="padding:20px 24px 14px;border-bottom:1px solid var(--bd-s)">
+      <div style="font-size:20px;font-weight:600;letter-spacing:-0.01em">Пригласить сотрудника</div>
+      <div style="font-size:13px;color:var(--fg3);margin-top:3px">Приглашение уходит на e-mail. Доступ появится после первого входа.</div>
+    </div>
+    <div style="padding:20px 24px;display:flex;flex-direction:column;gap:16px">
+      <div>
+        <div style="font-size:13px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:6px">Рабочий e-mail</div>
+        <input value="{{ iv_email }}" onChange="{{ setIvEmail }}" placeholder="name@semeyet.kz" style="width:100%;height:42px;padding:0 12px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;color:var(--fg);font-size:15px;outline:none">
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:6px">Роль</div>
+        <div style="position:relative">
+          <select value="{{ iv_role }}" onChange="{{ setIvRole }}" style="width:100%;height:42px;padding:0 32px 0 12px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;color:var(--fg);font-size:15px;outline:none;cursor:pointer">
+            <option value="Снабженец">Снабженец</option>
+            <option value="Приёмщик">Приёмщик</option>
+            <option value="Бухгалтер">Бухгалтер</option>
+            <option value="Администратор">Администратор</option>
+          </select>
+          <span style="position:absolute;right:10px;top:0;bottom:0;display:grid;place-items:center;pointer-events:none;color:var(--fg3)">
+            <x-import component-from-global-scope="Icon" name="chevronDown" size="15" hint-size="15px,15px"></x-import>
+          </span>
+        </div>
+        <div style="font-size:13px;color:var(--fg3);margin-top:8px;line-height:1.55">{{ iv_scope }}</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 24px;border-top:1px solid var(--bd-s);background:var(--bg-s);border-radius:0 0 12px 12px">
+      <span style="font-size:13px;color:var(--fg3);flex:1">{{ iv_msg }}</span>
+      <x-import component-from-global-scope="Button" variant="ghost" on-click="{{ closeInvite }}" hint-size="auto,36px">Отмена</x-import>
+      <sc-if value="{{ iv_ok }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Button" variant="cta" on-click="{{ sendInvite }}" hint-size="auto,36px">Отправить приглашение</x-import>
+      </sc-if>
+      <sc-if value="{{ iv_bad }}" hint-placeholder-val="{{ true }}">
+        <div style="height:32px;display:inline-flex;align-items:center;padding:0 12px;border-radius:6px;background:var(--cta);color:var(--cta-fg);font-size:13px;font-weight:600;opacity:0.4;cursor:not-allowed">Отправить приглашение</div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- МОДАЛКА: ОБРАЩЕНИЕ В TURAN -->
+<sc-if value="{{ ap_open }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeAppeal }}" style="position:fixed;inset:0;z-index:105;background:rgba(0,0,0,0.6);display:grid;place-items:center">
+  <div onClick="{{ eat }}" style="width:600px;max-width:calc(100vw - 48px);background:var(--bg-c);border:1px solid var(--bd-h);border-radius:12px;box-shadow:var(--sh-xl);animation:fadeUp 150ms var(--ease)">
+    <div style="padding:20px 24px 14px;border-bottom:1px solid var(--bd-s)">
+      <div style="font-size:20px;font-weight:600;letter-spacing:-0.01em">Обращение в TURAN</div>
+      <div style="font-size:13px;color:var(--fg3);margin-top:3px">{{ ap_hint }}</div>
+    </div>
+    <div style="padding:20px 24px;display:flex;flex-direction:column;gap:16px">
+      <div>
+        <div style="font-size:13px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:6px">Тема</div>
+        <div style="position:relative">
+          <select value="{{ ap_topic }}" onChange="{{ setApTopic }}" style="width:100%;height:42px;padding:0 32px 0 12px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;color:var(--fg);font-size:15px;outline:none;cursor:pointer">
+            <option value="Отмена подтверждённой сделки">Отмена подтверждённой сделки</option>
+            <option value="Скот не соответствует заявленному">Скот не соответствует заявленному</option>
+            <option value="Партия не приехала в срок">Партия не приехала в срок</option>
+            <option value="Вопрос по документам и реквизитам">Вопрос по документам и реквизитам</option>
+            <option value="Другое">Другое</option>
+          </select>
+          <span style="position:absolute;right:10px;top:0;bottom:0;display:grid;place-items:center;pointer-events:none;color:var(--fg3)">
+            <x-import component-from-global-scope="Icon" name="chevronDown" size="15" hint-size="15px,15px"></x-import>
+          </span>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:6px">Сообщение</div>
+        <textarea value="{{ ap_msg }}" onChange="{{ setApMsg }}" rows="5" placeholder="Что произошло, по какой заявке и какой партии" style="width:100%;padding:11px 12px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;color:var(--fg);font-size:15px;line-height:1.55;outline:none;resize:vertical"></textarea>
+      </div>
+      <div style="font-size:13px;color:var(--fg3);line-height:1.6;border-top:1px solid var(--bd-s);padding-top:12px">Ответ придёт в профиль, раздел «Обращения», и на {{ pr_email }}. Обычный срок разбора — 1–2 рабочих дня.</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 24px;border-top:1px solid var(--bd-s);background:var(--bg-s);border-radius:0 0 12px 12px">
+      <div style="flex:1"></div>
+      <x-import component-from-global-scope="Button" variant="ghost" on-click="{{ closeAppeal }}" hint-size="auto,36px">Отмена</x-import>
+      <sc-if value="{{ ap_ok }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Button" variant="cta" on-click="{{ sendAppealNow }}" hint-size="auto,36px">Отправить обращение</x-import>
+      </sc-if>
+      <sc-if value="{{ ap_bad }}" hint-placeholder-val="{{ true }}">
+        <div style="height:32px;display:inline-flex;align-items:center;padding:0 12px;border-radius:6px;background:var(--cta);color:var(--cta-fg);font-size:13px;font-weight:600;opacity:0.4;cursor:not-allowed">Отправить обращение</div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- МОДАЛКА: ОЦЕНКА ПОСТАВЩИКА -->
+<sc-if value="{{ rt_open }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeRate }}" style="position:fixed;inset:0;z-index:105;background:rgba(0,0,0,0.6);display:grid;place-items:center">
+  <div onClick="{{ eat }}" style="width:560px;max-width:calc(100vw - 48px);background:var(--bg-c);border:1px solid var(--bd-h);border-radius:12px;box-shadow:var(--sh-xl);animation:fadeUp 150ms var(--ease)">
+    <div style="padding:20px 24px 14px;border-bottom:1px solid var(--bd-s)">
+      <div style="font-size:20px;font-weight:600;letter-spacing:-0.01em">Оценить поставщика</div>
+      <div style="font-size:13px;color:var(--fg3);margin-top:3px">{{ rt_sub }}</div>
+    </div>
+    <div style="padding:20px 24px;display:flex;flex-direction:column;gap:20px">
+      <div>
+        <div style="font-size:15px;font-weight:500">Общая оценка</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
+          <sc-for list="{{ rt_overall }}" as="s" hint-placeholder-count="5">
+            <button onClick="{{ s.set }}" title="{{ s.title }}" style="width:40px;height:40px;display:grid;place-items:center;background:transparent;border:1px solid var(--bd);border-radius:6px;cursor:pointer" style-hover="border-color:var(--bd-h)">
+              <sc-if value="{{ s.on }}" hint-placeholder-val="{{ false }}">
+                <x-import component-from-global-scope="Icon" name="star" size="18" color="var(--fg)" stroke="2" hint-size="18px,18px"></x-import>
+              </sc-if>
+              <sc-if value="{{ s.off }}" hint-placeholder-val="{{ true }}">
+                <x-import component-from-global-scope="Icon" name="star" size="18" color="var(--fg3)" hint-size="18px,18px"></x-import>
+              </sc-if>
+            </button>
+          </sc-for>
+          <span style="font-size:13px;color:var(--fg3);margin-left:6px">{{ rt_overallTxt }}</span>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:15px;font-weight:500">Соответствие скота заявленному</div>
+        <div style="font-size:13px;color:var(--fg3);margin-top:2px">Сорт, вес и порода — как в партии на бумаге</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
+          <sc-for list="{{ rt_spec }}" as="s" hint-placeholder-count="5">
+            <button onClick="{{ s.set }}" title="{{ s.title }}" style="width:40px;height:40px;display:grid;place-items:center;background:transparent;border:1px solid var(--bd);border-radius:6px;cursor:pointer" style-hover="border-color:var(--bd-h)">
+              <sc-if value="{{ s.on }}" hint-placeholder-val="{{ false }}">
+                <x-import component-from-global-scope="Icon" name="star" size="18" color="var(--fg)" stroke="2" hint-size="18px,18px"></x-import>
+              </sc-if>
+              <sc-if value="{{ s.off }}" hint-placeholder-val="{{ true }}">
+                <x-import component-from-global-scope="Icon" name="star" size="18" color="var(--fg3)" hint-size="18px,18px"></x-import>
+              </sc-if>
+            </button>
+          </sc-for>
+          <span style="font-size:13px;color:var(--fg3);margin-left:6px">{{ rt_specTxt }}</span>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:6px">Комментарий <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--fg3)">— необязательно</span></div>
+        <textarea value="{{ rt_comment }}" onChange="{{ setRtComment }}" rows="3" placeholder="Что стоит знать другим комбинатам" style="width:100%;padding:11px 12px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;color:var(--fg);font-size:15px;line-height:1.55;outline:none;resize:vertical"></textarea>
+      </div>
+      <div style="font-size:13px;color:var(--fg3);line-height:1.6;border-top:1px solid var(--bd-s);padding-top:12px">Отзыв поставщика о вас откроется, только когда оценят обе стороны — или когда истечёт срок ожидания.</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 24px;border-top:1px solid var(--bd-s);background:var(--bg-s);border-radius:0 0 12px 12px">
+      <div style="flex:1"></div>
+      <x-import component-from-global-scope="Button" variant="ghost" on-click="{{ closeRate }}" hint-size="auto,36px">Отмена</x-import>
+      <sc-if value="{{ rt_ok }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Button" variant="cta" on-click="{{ sendRate }}" hint-size="auto,36px">Отправить отзыв</x-import>
+      </sc-if>
+      <sc-if value="{{ rt_bad }}" hint-placeholder-val="{{ true }}">
+        <div style="height:32px;display:inline-flex;align-items:center;padding:0 12px;border-radius:6px;background:var(--cta);color:var(--cta-fg);font-size:13px;font-weight:600;opacity:0.4;cursor:not-allowed">Отправить отзыв</div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- TOAST -->
+<sc-if value="{{ t_on }}" hint-placeholder-val="{{ false }}">
+<div style="position:fixed;right:24px;bottom:24px;z-index:200;display:flex;align-items:center;gap:10px;max-width:420px;padding:14px 18px;background:var(--bg-c);border:1px solid var(--bd);border-radius:8px;box-shadow:var(--sh-lg);animation:fadeUp 150ms var(--ease)">
+  <x-import component-from-global-scope="Icon" name="check" size="16" color="var(--green)" hint-size="16px,16px"></x-import>
+  <span style="font-size:13px;color:var(--fg);line-height:1.5">{{ t_msg }}</span>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Вид&quot;},&quot;contrast&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Усиленный&quot;,&quot;Максимальный&quot;,&quot;Как в DS&quot;],&quot;default&quot;:&quot;Максимальный&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Вид&quot;},&quot;uiScale&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:1,&quot;max&quot;:1.3,&quot;step&quot;:0.05,&quot;unit&quot;:&quot;×&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Вид&quot;},&quot;startScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dashboard&quot;,&quot;requests&quot;,&quot;offers&quot;,&quot;profile&quot;],&quot;default&quot;:&quot;dashboard&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Прототип&quot;},&quot;preRevealDetails&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Анонимность&quot;}}">
+class Component extends DCLogic {
+  state = {
+    theme: null, screen: null, view: "all", tab: "overview", reqId: "z1042",
+    panel: null, cm: false, confirm: null, toastMsg: null,
+    offers: { o1: "pending", o2: "pending", o3: "pending" },
+    extra42: [], dyn42: [],
+    shortfall: "pending",
+    z37: { b2: "transit", b3: "waiting" },
+    cancelled: {}, published: [],
+    form: { head: "120", obl: "", ray: "", deadline: "", lines: [{ sort: "s1", price: "", limit: "80", breed: "" }] },
+    ptab: "overview", pubView: "pre", edit: null, pending: [], membership: "active",
+    invite: null, appeal: null, rate: null, rated: false,
+    prof: {
+      name: "ТОО «Семей Ет»", bin: "041240004987",
+      jaddr: "обл. Абай, г. Семей, ул. Мәңгілік Ел 41",
+      head: "Оспанов Дамир Серікұлы",
+      place: "г. Семей, ул. Промышленная 8 — площадка №1",
+      hours: "Пн–Сб · 07:00–19:00",
+      capacity: "до 90 голов в сутки",
+      placePhone: "+7 722 240 11 08",
+      bank: "АО «Halyk Bank»", iik: "KZ22 6010 1310 0004 5678", bik: "HSBKKZKX",
+      contact: "Дамир Оспанов", phone: "+7 701 330 22 41", email: "zakup@semeyet.kz",
+    },
+    staff: [
+      { id: "u1", name: "Дамир Оспанов", email: "zakup@semeyet.kz", role: "Снабженец", scope: "Заявки, входящие офферы, маркет-борд", st: "me", last: "Сегодня, 09:14" },
+      { id: "u2", name: "Айгүл Сейтқали", email: "priem@semeyet.kz", role: "Приёмщик", scope: "Приёмка партий, отзывы о поставщиках", st: "active", last: "Вчера, 17:02" },
+      { id: "u3", name: "Ерлан Мұқанов", email: "buh@semeyet.kz", role: "Бухгалтер", scope: "Документы сделок, реквизиты — только чтение", st: "active", last: "24 июл" },
+      { id: "u4", name: "Нұржан Әбіш", email: "admin@semeyet.kz", role: "Администратор", scope: "Профиль, реквизиты, сотрудники", st: "invited", last: "приглашение 25 июл" },
+    ],
+    appeals: [
+      { id: "a1", topic: "Отмена подтверждённой сделки · Z-1037", msg: "Фермер сообщил, что не сможет отгрузить партию P-7655 — 25 голов. Просим отменить сделку по этой партии, остальные принимаем в срок.", date: "25 июл, 14:20", st: "open", answer: "" },
+      { id: "a2", topic: "Скот не соответствует заявленному · Z-1033", msg: "По партии P-7501 фактическая упитанность ниже заявленной высшей — расхождение зафиксировано при приёмке, есть акт и фото.", date: "18 июл, 10:05", adate: "22 июл, 11:30", st: "answered", answer: "Проверили с ветеринарной службой ассоциации. Сорт партии скорректирован до средней упитанности, разница в цене возвращена 22 июл. Оценка поставщика по критерию «соответствие заявленному» доступна для изменения." },
+    ],
+  };
+
+  CRIT = ["name", "bin", "jaddr"];
+
+  REVIEWS = [
+    { farm: "ТОО «Алтын Дала»", overall: "5.0", spec: "5.0", date: "02 июл", req: "Z-1033", text: "Приняли партию в назначенный день, взвешивание при нас, расчёт в день приёмки. Замечаний нет." },
+    { farm: "КХ «Береке»", overall: "4.6", spec: "4.5", date: "21 июл", req: "Z-1037", text: "Приёмка по факту, вес совпал с нашим. Из минусов — ждали разгрузку около двух часов." },
+    { farm: "КХ «Ақжол»", overall: "4.5", spec: "4.0", date: "30 июн", req: "Z-1033", text: "Всё по договорённости. Хотелось бы заранее знать окно приёмки, а не в день отгрузки." },
+  ];
+
+  DOCS = [
+    { name: "Устав ТОО «Семей Ет»", file: "ustav-2024.pdf", kind: "Уставный", date: "12 мая 2026", until: "—", st: "Принят TURAN", tone: "green" },
+    { name: "Справка о государственной регистрации", file: "reg-041240004987.pdf", kind: "Уставный", date: "12 мая 2026", until: "—", st: "Принят TURAN", tone: "green" },
+    { name: "Лицензия на переработку мяса", file: "licence-mp-0412.pdf", kind: "Лицензия", date: "12 мая 2026", until: "31 дек 2027", st: "Действует", tone: "green" },
+    { name: "Ветеринарное разрешение на приём скота", file: "vet-vr-04-118.pdf", kind: "Ветеринарный", date: "14 мая 2026", until: "30 сен 2026", st: "Действует", tone: "green" },
+    { name: "Договор членства в ассоциации", file: "assoc-2025-2026.pdf", kind: "Членство", date: "07 авг 2025", until: "07 авг 2026", st: "Истекает через 12 дней", tone: "amber" },
+  ];
+
+  CAT = {
+    s1: { name: "Бычки, высшая уп.", min: 540, ind: 615 },
+    s2: { name: "Бычки, средняя уп.", min: 480, ind: 545 },
+    s3: { name: "Тёлки, I категория", min: 450, ind: 505 },
+    s4: { name: "Коровы, II категория", min: 380, ind: 430 },
+  };
+
+  TONE = { blue: "var(--blue)", green: "var(--green)", emerald: "var(--emerald)", amber: "var(--amber)", red: "var(--red)", neutral: "var(--fg3)" };
+
+  OFFERS = [
+    { id: "o1", pid: "P-7823", rating: "4.5", sortKey: "s1", line: 0, breed: "Казахская белоголовая", heads: 14, region: "обл. Абай · Аягөз", price: 640, left: "21:40", urgent: false },
+    { id: "o2", pid: "P-7831", rating: "4.8", sortKey: "s1", line: 0, breed: "Ангус", heads: 16, region: "ВКО · Зайсан", price: 620, left: "9:12", urgent: false },
+    { id: "o3", pid: "P-7808", rating: "4.1", sortKey: "s3", line: 1, breed: "Симментал", heads: 18, region: "Павлодарская · Аққулы", price: 505, left: "3:05", urgent: true },
+  ];
+
+  DATA = {
+    z1042: {
+      num: "Z-1042", title: "Август · КРС, откорм", created: "18 июл", term: "15 авг", leftTxt: "осталось 20 дн", region: "ВКО · любой район",
+      lines: [
+        { sort: "s1", price: 620, limit: 80, breed: null, batches: [
+          { pid: "P-7811", heads: 24, rating: "4.7", region: "ВКО · Урджар", src: "Автоподбор", date: "21 июл", price: 620 },
+          { pid: "P-7790", heads: 22, rating: "4.4", region: "обл. Абай · Аягөз", src: "Входящий оффер", date: "22 июл", price: 640 },
+          { pid: "P-7756", heads: 18, rating: "4.9", region: "ВКО · Катон-Карагай", src: "Маркет-борд", date: "24 июл", price: 625 },
+        ] },
+        { sort: "s3", price: 510, limit: 40, breed: null, batches: [
+          { pid: "P-7802", heads: 12, rating: "4.2", region: "ВКО · Бескарагай", src: "Автоподбор", date: "23 июл", price: 510 },
+          { pid: "P-7818", heads: 10, rating: "4.6", region: "обл. Абай · Урджар", src: "Автоподбор", date: "25 июл", price: 510 },
+        ] },
+      ],
+      events: [
+        { k: "plus", tone: "blue", t: "Партия P-7818 · 10 голов привязана — автоподбор", d: "25 июл" },
+        { k: "barChart", tone: "blue", t: "P-7756 · 18 голов — ваше предложение с маркет-борда принято фермером", d: "24 июл" },
+        { k: "plus", tone: "blue", t: "Партия P-7802 · 12 голов привязана — автоподбор", d: "23 июл" },
+        { k: "mail", tone: "green", t: "Оффер принят — P-7790 · 22 головы, строка 1", d: "22 июл" },
+        { k: "plus", tone: "blue", t: "Партия P-7811 · 24 головы привязана — автоподбор", d: "21 июл" },
+        { k: "fileText", tone: "neutral", t: "Заявка опубликована", d: "18 июл" },
+      ],
+    },
+    z1039: {
+      num: "Z-1039", title: "Июль · доп. объём", created: "08 июл", term: "истёк 25 июл", leftTxt: "", region: "ВКО и обл. Абай",
+      lines: [
+        { sort: "s2", price: 560, limit: 70, breed: null, batches: [
+          { pid: "P-7714", heads: 20, rating: "4.3", region: "ВКО · Шемонаиха", src: "Автоподбор", date: "12 июл", price: 560, farm: "КХ «Алтай Өрісі»", phone: "+7 777 214 90 33", addr: "г. Шемонаиха, ул. Вокзальная 17", breed: "Казахская белоголовая", weight: "398 кг" },
+          { pid: "P-7729", heads: 18, rating: "4.8", region: "обл. Абай · Бородулиха", src: "Входящий оффер", date: "15 июл", price: 575, farm: "ТОО «Шыңғыстау»", phone: "+7 705 118 44 02", addr: "с. Бородулиха, ул. Достық 45", breed: "Ангус", weight: "405 кг" },
+          { pid: "P-7741", heads: 14, rating: "4.5", region: "ВКО · Глубокое", src: "Маркет-борд", date: "19 июл", price: 560, farm: "КХ «Береке-Восток»", phone: "+7 747 902 15 87", addr: "п. Глубокое, ул. Пирогова 9", breed: "Аулиеколь", weight: "390 кг" },
+        ] },
+      ],
+      events: [
+        { k: "alert", tone: "amber", t: "Срок набора истёк — собрано 52 из 70. Требуется решение до 21:00", d: "25 июл" },
+        { k: "barChart", tone: "blue", t: "P-7741 · 14 голов — предложение с маркет-борда принято фермером", d: "19 июл" },
+        { k: "mail", tone: "green", t: "Оффер принят — P-7729 · 18 голов", d: "15 июл" },
+        { k: "plus", tone: "blue", t: "Партия P-7714 · 20 голов привязана — автоподбор", d: "12 июл" },
+        { k: "fileText", tone: "neutral", t: "Заявка опубликована", d: "08 июл" },
+      ],
+    },
+    z1037: {
+      num: "Z-1037", title: "Июль · основной", created: "28 июн", term: "18 июл", leftTxt: "набрана 18 июл", region: "ВКО · любой район",
+      lines: [
+        { sort: "s1", price: 610, limit: 90, breed: null, batches: [
+          { pid: "P-7622", heads: 30, rating: "4.6", region: "ВКО · Уланский", src: "Автоподбор", date: "05 июл", price: 610, farm: "КХ «Береке»", phone: "+7 705 481 22 10", addr: "с. Герасимовка, ул. Абая 14", breed: "Казахская белоголовая", weight: "415 кг", bk: "b1" },
+          { pid: "P-7640", heads: 35, rating: "4.9", region: "обл. Абай · Көкпекті", src: "Входящий оффер", date: "11 июл", price: 615, farm: "ТОО «Айдын Агро»", phone: "+7 701 355 60 48", addr: "с. Көкпекті, ул. Достық 8", breed: "Ангус", weight: "428 кг", bk: "b2" },
+          { pid: "P-7655", heads: 25, rating: "4.4", region: "ВКО · Тарбагатай", src: "Автоподбор", date: "18 июл", price: 610, farm: "КХ «Нұрлы Жол»", phone: "+7 747 220 87 14", addr: "с. Ақжар, ул. Тәуелсіздік 21", breed: "Аулиеколь", weight: "402 кг", bk: "b3" },
+        ] },
+      ],
+      events: [
+        { k: "arrowRight", tone: "blue", t: "P-7640 · 35 голов отгружена фермером — в пути", d: "24 июл" },
+        { k: "check", tone: "green", t: "Приёмка подтверждена — P-7622 · 30 голов", d: "21 июл" },
+        { k: "users", tone: "green", t: "Заявка набрана полностью — контакты сторон раскрыты", d: "18 июл" },
+        { k: "fileText", tone: "neutral", t: "Заявка опубликована", d: "28 июн" },
+      ],
+    },
+    z1033: {
+      num: "Z-1033", title: "Июнь · основной", created: "02 июн", term: "28 июн", leftTxt: "закрыта 30 июн", region: "ВКО · любой район",
+      lines: [
+        { sort: "s2", price: 550, limit: 110, breed: null, batches: [
+          { pid: "P-7488", heads: 60, rating: "4.7", region: "ВКО · Уланский", src: "Автоподбор", date: "10 июн", price: 550, farm: "ТОО «Алтын Дала»", phone: "+7 701 224 18 05", addr: "с. Молодёжное, ул. Целинная 2", breed: "Казахская белоголовая", weight: "396 кг", bk: "done" },
+          { pid: "P-7501", heads: 50, rating: "4.5", region: "обл. Абай · Аягөз", src: "Входящий оффер", date: "14 июн", price: 560, farm: "КХ «Ақжол»", phone: "+7 778 640 12 90", addr: "г. Аягөз, ул. Абылай хана 30", breed: "Ангус", weight: "410 кг", bk: "done" },
+        ] },
+      ],
+      events: [
+        { k: "check", tone: "green", t: "Все партии приняты — заявка закрыта", d: "30 июн" },
+        { k: "check", tone: "green", t: "Приёмка подтверждена — P-7501 · 50 голов", d: "30 июн" },
+        { k: "check", tone: "green", t: "Приёмка подтверждена — P-7488 · 60 голов", d: "27 июн" },
+        { k: "fileText", tone: "neutral", t: "Заявка опубликована", d: "02 июн" },
+      ],
+    },
+    z1028: {
+      num: "Z-1028", title: "Май · тёлки", created: "05 мая", term: "—", leftTxt: "", region: "Павлодарская",
+      lines: [ { sort: "s3", price: 480, limit: 40, breed: null, batches: [] } ],
+      events: [
+        { k: "x", tone: "neutral", t: "Заявка отменена вручную — привязанных партий не было", d: "12 мая" },
+        { k: "fileText", tone: "neutral", t: "Заявка опубликована", d: "05 мая" },
+      ],
+    },
+  };
+
+  STATUS = {
+    filling: ["Набирается", "blue"], decision: ["Требует решения", "amber"], partial: ["Набрана частично", "green"],
+    shipping: ["Отгрузка и приёмка", "emerald"], closed: ["Закрыта", "neutral"], cancelled: ["Отменена", "neutral"],
+    returned: ["Отменена · возврат", "neutral"],
+  };
+
+  componentDidMount() { this.applyTheme(); }
+  componentDidUpdate() {
+    this.applyTheme();
+    const k = this.state.edit ? this.state.edit.key : null;
+    if (k !== this._lastEdit) {
+      this._lastEdit = k;
+      if (k) { const el = document.querySelector("[data-edit-input]"); if (el) { const v = el.value; el.focus(); el.value = ""; el.value = v; } }
+    }
+  }
+
+  saveEdit() {
+    const e = this.state.edit; if (!e) return;
+    const crit = this.CRIT.indexOf(e.key) >= 0;
+    const prof = { ...this.state.prof, [e.key]: e.draft };
+    const pending = crit && this.state.pending.indexOf(e.key) < 0 ? this.state.pending.concat([e.key]) : this.state.pending;
+    this.setState({ prof: prof, pending: pending, edit: null });
+    this.showToast(crit
+      ? "Сохранено и отправлено на повторную проверку TURAN — 2–5 раб. дней. Закупки работают как обычно."
+      : "Сохранено.");
+  }
+
+  SCOPES = {
+    "Снабженец": "Создаёт заявки, отвечает на входящие офферы, предлагает цену на маркет-борде.",
+    "Приёмщик": "Подтверждает приёмку партий по факту и оценивает поставщиков.",
+    "Бухгалтер": "Формирует и скачивает документы сделок. Реквизиты — только чтение.",
+    "Администратор": "Меняет реквизиты и состав сотрудников, ведёт обращения в TURAN.",
+  };
+
+  sendInvite() {
+    const i = this.state.invite; if (!i || i.email.indexOf("@") < 1) return;
+    const nm = i.email.split("@")[0].replace(/[._-]/g, " ");
+    this.setState({
+      staff: this.state.staff.concat([{ id: "u" + (this.state.staff.length + 1), name: nm, email: i.email, role: i.role, scope: this.SCOPES[i.role], st: "invited", last: "приглашение сегодня" }]),
+      invite: null,
+    });
+    this.showToast("Приглашение отправлено на " + i.email + ". Доступ откроется после первого входа.");
+  }
+
+  submitAppeal() {
+    const a = this.state.appeal; if (!a || !a.msg.trim()) return;
+    const t = new Date();
+    const hh = ("0" + t.getHours()).slice(-2) + ":" + ("0" + t.getMinutes()).slice(-2);
+    this.setState({
+      appeals: [{ id: "a" + (this.state.appeals.length + 1), topic: a.topic + (a.ref ? " · " + a.ref : ""), msg: a.msg, date: "Сегодня, " + hh, st: "open", answer: "" }].concat(this.state.appeals),
+      appeal: null, screen: "profile", ptab: "appeals", panel: null,
+    });
+    this.showToast("Обращение отправлено. Разбор — 1–2 раб. дня, статус здесь, в разделе «Обращения».");
+  }
+
+  submitRate() {
+    const r = this.state.rate; if (!r || !r.overall) return;
+    this.setState({ rate: null, rated: true });
+    this.showToast("Отзыв отправлен. Отзыв поставщика о вас откроется, когда оценят обе стороны.");
+  }
+
+  renewMembership() { this.setState({ membership: "renewing" }); this.showToast("Заявка на продление членства отправлена в ассоциацию — 1–3 рабочих дня."); }
+  applyTheme() {
+    const el = document.documentElement;
+    el.setAttribute("data-theme", this.state.theme || this.props.theme || "dark");
+    const CM = { "Усиленный": "boost", "Максимальный": "max", "Как в DS": "ds" };
+    el.setAttribute("data-contrast", CM[this.props.contrast] || "boost");
+    const z = Math.max(1, Math.min(1.4, +this.props.uiScale || 1));
+    const root = document.querySelector("[data-app-root]");
+    if (root) { root.style.zoom = String(z); root.style.height = (100 / z) + "vh"; }
+  }
+
+  showToast(msg) { clearTimeout(this._tt); this.setState({ toastMsg: msg }); this._tt = setTimeout(() => this.setState({ toastMsg: null }), 4500); }
+  go(id) { this.setState({ screen: id, panel: null }); }
+  openReq(key, tab) { this.setState({ screen: "monitor", reqId: key, tab: tab || "overview", panel: null }); }
+  setLine(i, k, v) { const lines = this.state.form.lines.map((l, j) => j === i ? { ...l, [k]: v } : l); this.setState({ form: { ...this.state.form, [ "lines" ]: lines } }); }
+  setF(k, v) { this.setState({ form: { ...this.state.form, [k]: v } }); }
+
+  statusOf(key) {
+    const S = this.state;
+    if (S.cancelled[key]) return "cancelled";
+    if (key === "z1039") return S.shortfall === "pending" ? "decision" : S.shortfall === "accepted" ? "partial" : "returned";
+    if (key === "z1037") return (S.z37.b2 === "accepted" && S.z37.b3 === "accepted") ? "closed" : "shipping";
+    if (key === "z1033") return "closed";
+    if (key === "z1028") return "cancelled";
+    return "filling";
+  }
+
+  liveLines(key, def) {
+    if (key !== "z1042") return def.lines;
+    const ex = this.state.extra42;
+    return def.lines.map((l, i) => ({ ...l, batches: l.batches.concat(ex.filter(b => b.line === i)) }));
+  }
+
+  acceptOffer(o) {
+    const S = this.state;
+    this.setState({
+      offers: { ...S.offers, [o.id]: "accepted" },
+      extra42: S.extra42.concat([{ pid: o.pid, heads: o.heads, rating: o.rating, region: o.region, src: "Входящий оффер", date: "Сегодня", price: o.price, line: o.line }]),
+      dyn42: [{ k: "mail", tone: "green", t: "Оффер принят — " + o.pid + " · " + o.heads + " голов, строка " + (o.line + 1), d: "Сегодня" }].concat(S.dyn42),
+    });
+    this.showToast("Партия " + o.pid + " привязана к Z-1042, строка " + (o.line + 1) + ".");
+  }
+  declineOffer(id) { this.setState({ offers: { ...this.state.offers, [id]: "declined" } }); }
+
+  acceptShortfall() { this.setState({ shortfall: "accepted" }); this.showToast("Принято 52 головы. Контакты 3 поставщиков раскрыты — приёмка по партиям."); }
+
+  receive(bk) {
+    const z = { ...this.state.z37, [bk]: "accepted" };
+    this.setState({ z37: z, panel: null });
+    this.showToast(z.b2 === "accepted" && z.b3 === "accepted" ? "Все партии приняты — заявка Z-1037 закрыта." : "Приёмка подтверждена.");
+  }
+
+  confirmYes() {
+    const c = this.state.confirm; if (!c) return;
+    if (c.kind === "return") { this.setState({ shortfall: "returned", confirm: null }); this.showToast("Партии возвращены фермерам. Заявка закрыта без сделки."); }
+    if (c.kind === "cancel") { this.setState({ cancelled: { ...this.state.cancelled, [c.key]: true }, confirm: null }); this.showToast("Заявка отменена — привязанные партии возвращены на рынок."); }
+  }
+
+  publish() {
+    const S = this.state, f = S.form;
+    const n = S.published.length;
+    const lines = f.lines.map(ln => ({ sort: ln.sort, price: +ln.price, limit: ln.limit ? +ln.limit : null, breed: ln.breed || null, batches: [] }));
+    const names = []; lines.forEach(l => { const nm = this.CAT[l.sort].name.split(",")[0]; if (!names.includes(nm)) names.push(nm); });
+    const def = {
+      num: "Z-" + (1043 + n), title: names.join(" + ") + " · " + f.head + " голов", created: "Сегодня",
+      term: f.deadline, leftTxt: "", region: f.obl ? f.obl + (f.ray ? " · " + f.ray : "") : "Любой регион", head: +f.head,
+      lines, events: [{ k: "fileText", tone: "blue", t: "Заявка опубликована — видна фермерам, автоподбор запущен", d: "Сегодня" }],
+    };
+    this.setState({
+      published: [{ key: "pub" + n, def }].concat(S.published), cm: false, screen: "requests", view: "all",
+      form: { head: "120", obl: "", ray: "", deadline: "", lines: [{ sort: "s1", price: "", limit: "80", breed: "" }] },
+    });
+    this.showToast("Заявка " + def.num + " опубликована и видна фермерам.");
+  }
+
+  renderVals() {
+    const S = this.state, P = this.props, CAT = this.CAT, TONE = this.TONE;
+    const screen = S.screen || P.startScreen || "dashboard";
+    const preReveal = P.preRevealDetails == null ? true : !!P.preRevealDetails;
+    const mix = (tone) => "color-mix(in srgb, " + TONE[tone] + " 12%, transparent)";
+
+    const defs = S.published.map(p => ({ key: p.key, def: p.def }))
+      .concat(["z1042", "z1039", "z1037", "z1033", "z1028"].map(k => ({ key: k, def: this.DATA[k] })));
+
+    const vm = defs.map(({ key, def }) => {
+      const st = this.statusOf(key);
+      const [label, tone] = this.STATUS[st];
+      const lines = this.liveLines(key, def);
+      const total = def.head || lines.reduce((a, l) => a + (l.limit || 0), 0);
+      const filled = lines.reduce((a, l) => a + l.batches.reduce((x, b) => x + b.heads, 0), 0);
+      const supCount = lines.reduce((a, l) => a + l.batches.length, 0);
+      const prices = lines.map(l => l.price);
+      const dead = st === "cancelled" || st === "returned" || st === "closed";
+      const barC = dead ? "var(--bd-h)" : TONE[tone];
+      const transit = key === "z1037" ? (S.z37.b2 === "transit" ? 1 : 0) : 0;
+      return {
+        key, def, st, lines, total, filled, supCount,
+        num: def.num, title: def.title, status: label, tone,
+        prog: filled + "/" + total, pct: Math.min(100, Math.round(filled / total * 100)) + "%", barC,
+        price: prices.length > 1 ? Math.min(...prices) + "–" + Math.max(...prices) : String(prices[0]),
+        term: def.term || "—", sup: String(supCount),
+        note: st === "decision" ? "решение — осталось 14 ч" : (st === "shipping" && transit ? transit + " партия в пути" : null),
+        open: () => this.openReq(key),
+      };
+    });
+
+    const byView = { all: () => true, active: r => r.st === "filling", decision: r => r.st === "decision", shipping: r => r.st === "shipping", closed: r => ["closed", "cancelled", "returned", "partial"].includes(r.st) };
+    const cnt = v => vm.filter(byView[v]).length;
+    const reqRows = vm.filter(byView[S.view] || byView.all).map(r => ({ ...r, hasNote: !!r.note }));
+    const fillingVm = vm.filter(r => ["filling", "decision", "shipping", "partial"].includes(r.st));
+
+    // ---- monitor VM
+    const cur = vm.find(r => r.key === S.reqId) || vm[0];
+    const idx = vm.indexOf(cur);
+    const stMap = { b1: ["Принята 21 июл", "green"], done: ["Принята", "green"], transit: ["В пути · отгружена 24 июл", "blue"], waiting: ["Ждёт отгрузки", "neutral"], accepted: ["Принята", "green"] };
+    const revealed = ["shipping", "closed", "partial"].includes(cur.st) && cur.supCount > 0;
+    const anon = !revealed && cur.supCount > 0;
+    const sups = [];
+    const supAgg = { done: 0, transit: 0, waiting: 0 };
+    let wH = 0, wT = 0;
+    cur.lines.forEach((l) => l.batches.forEach(b => {
+      const bst = b.bk === "b1" || b.bk === "done" ? (b.bk === "b1" ? "b1" : "done") : (b.bk ? S.z37[b.bk] : (cur.st === "partial" ? "waiting" : null));
+      const [sl, stone] = bst ? stMap[bst] : ["", "neutral"];
+      const canReceive = bst === "transit";
+      if (bst === "transit") supAgg.transit += b.heads; else if (bst === "waiting") supAgg.waiting += b.heads; else if (bst) supAgg.done += b.heads;
+      const wv = parseInt(b.weight || "", 10); if (wv) { wH += b.heads; wT += wv * b.heads; }
+      sups.push({
+        pid: b.pid, rating: b.rating, heads: String(b.heads), price: String(b.price),
+        sortName: preReveal ? CAT[l.sort].name : "—", region: preReveal ? b.region : "—",
+        srcDate: b.src + " · " + b.date,
+        farm: b.farm || "", phone: b.phone || "", weight: b.weight || "—",
+        addr: b.addr || "", regionFull: b.region,
+        gisUrl: "https://2gis.kz/search/" + encodeURIComponent((b.addr ? b.addr + ", " : "") + b.region.replace(" · ", ", ")),
+        telHref: "tel:" + (b.phone || "").replace(/[^\d+]/g, ""),
+        stLabel: sl || "—", stTone: stone, canReceive, noAction: !canReceive,
+        receive: (e) => { e.stopPropagation(); this.receive(b.bk); },
+        openP: () => this.setState({ panel: b.pid }),
+        _b: b, _sort: l.sort,
+      });
+    }));
+
+    const segsFor = (l) => {
+      const lim = l.limit || cur.total;
+      return l.batches.map(b => ({ w: (b.heads / lim * 100).toFixed(1) + "%", c: cur.barC, t: b.pid + " · " + b.heads + " голов" }));
+    };
+    const mLines = cur.lines.map((l, i) => {
+      const lim = l.limit || cur.total;
+      const f = l.batches.reduce((a, b) => a + b.heads, 0);
+      return {
+        idx: "Строка " + (i + 1), name: CAT[l.sort].name,
+        priceTxt: l.price + " ₸/кг",
+        meta: (l.limit ? "лимит " + l.limit + " голов" : "без лимита — до объёма заявки") + " · порода — " + (l.breed || "любая") + " · " + l.batches.length + " парт.",
+        progTxt: f + " из " + lim + " · свободно " + Math.max(0, lim - f),
+        segs: segsFor(l),
+      };
+    });
+    const allB = [];
+    cur.lines.forEach(l => l.batches.forEach(b => allB.push(b)));
+    const MON = { мая: 5, июн: 6, июл: 7, авг: 8, сен: 9 };
+    const dv = s => { if (!s || s === "Сегодня") return 900; const p2 = s.split(" "); return (MON[p2[1]] || 0) * 100 + parseInt(p2[0], 10); };
+    const sortedB = allB.slice().sort((a, b) => dv(a.date) - dv(b.date));
+    let accH = 0;
+    const pts = [0].concat(sortedB.map(b => (accH += b.heads)));
+    pts.push(accH);
+    const CW = 460, CH = 150, cpad = 8;
+    const maxY = Math.max(cur.total, accH, 1);
+    const nP = pts.length;
+    const CX = i => cpad + i / (nP - 1) * (CW - cpad * 2);
+    const CY = v => CH - cpad - (v / maxY) * (CH - cpad * 2);
+    const dPath = pts.map((v, i) => (i ? "L " : "M ") + CX(i).toFixed(1) + " " + CY(v).toFixed(1)).join(" ");
+    const areaPath = dPath + " L " + CX(nP - 1).toFixed(1) + " " + (CH - cpad) + " L " + cpad + " " + (CH - cpad) + " Z";
+    const wavg = accH ? Math.round(allB.reduce((a, b) => a + b.price * b.heads, 0) / accH) : 0;
+    const srcCnt = { "Автоподбор": 0, "Входящий оффер": 0, "Маркет-борд": 0 };
+    allB.forEach(b => { if (srcCnt[b.src] != null) srcCnt[b.src] += 1; });
+    const plural = (n2, f2) => n2 % 10 === 1 && n2 % 100 !== 11 ? f2[0] : n2 % 10 >= 2 && n2 % 10 <= 4 && (n2 % 100 < 12 || n2 % 100 > 14) ? f2[1] : f2[2];
+    const partWord = n2 => plural(n2, ["партия", "партии", "партий"]);
+    const noteMap = {
+      filling: "Если к сроку наберётся не всё — будет 24 часа на решение: принять собранное или вернуть партии фермерам. Без ответа всё вернётся фермерам автоматически.",
+      shipping: "Приёмка — по каждой партии отдельно. Заявка закроется, когда приняты все партии.",
+      decision: "", partial: "Приёмка — по каждой партии отдельно. Заявка закроется, когда приняты все партии.", closed: "", cancelled: "", returned: "",
+    };
+    const m = {
+      num: cur.num, title: cur.title, status: cur.status, tone: cur.tone,
+      subtitle: "создана " + cur.def.created + " · " + cur.def.region + (cur.def.term ? " · срок " + cur.def.term : ""),
+      canCancel: cur.st === "filling", canDoc: revealed, canAppeal: revealed,
+      lines: mLines, pct: cur.pct, barC: cur.barC,
+      kpis: [
+        { label: "Набрано", rail: TONE[cur.tone], value: cur.filled + "/" + cur.total, unit: "голов" },
+        { label: "Партии привязано", rail: "var(--emerald)", value: String(cur.supCount), unit: partWord(cur.supCount) },
+        { label: "Срок набора", rail: "var(--amber)", value: (cur.def.term || "—").replace("истёк ", ""), unit: cur.st === "decision" ? "срок истёк" : (cur.def.leftTxt || "") },
+        { label: "Ср. цена сделок", rail: "var(--green)", value: accH ? String(wavg) : "—", unit: accH ? "₸/кг" : "" },
+      ],
+      stats: [
+        { label: "Автоподбор", value: String(srcCnt["Автоподбор"]), unit: partWord(srcCnt["Автоподбор"]) },
+        { label: "Принятые офферы", value: String(srcCnt["Входящий оффер"]), unit: partWord(srcCnt["Входящий оффер"]) },
+        { label: "С маркет-борда", value: String(srcCnt["Маркет-борд"]), unit: partWord(srcCnt["Маркет-борд"]) },
+        { label: "Свободно в заявке", value: String(Math.max(0, cur.total - cur.filled)), unit: "голов" },
+      ],
+      chartD: dPath, chartArea: areaPath, chartFill: "color-mix(in srgb, " + cur.barC + " 14%, transparent)",
+      chartCx: CX(nP - 1).toFixed(1), chartCy: CY(pts[nP - 1]).toFixed(1),
+      chartFrom: cur.def.created, chartTo: "сегодня",
+      hasNote: !!noteMap[cur.st], note: noteMap[cur.st],
+      anon, rev: revealed, noSups: cur.supCount === 0,
+      sups,
+      supLine: cur.supCount + " " + partWord(cur.supCount) + " · " + cur.filled + " голов" + (wH ? " · ср. вес " + Math.round(wT / wH) + " кг" : ""),
+      supChips: [
+        supAgg.done ? { label: "Принято", n: String(supAgg.done), c: "var(--green)" } : null,
+        supAgg.transit ? { label: "В пути", n: String(supAgg.transit), c: "var(--blue)" } : null,
+        supAgg.waiting ? { label: "Ждёт отгрузки", n: String(supAgg.waiting), c: "var(--fg3)" } : null,
+      ].filter(Boolean),
+      events: (cur.key === "z1042" ? S.dyn42.concat(cur.def.events) : cur.def.events).map(e => ({ icon: e.k, c: TONE[e.tone], bg: mix(e.tone), t: e.t, d: e.d })),
+      bannerNote: cur.st === "cancelled" || cur.st === "returned" ? "Заявка отменена — привязанные партии возвращены на рынок." : (cur.st === "closed" ? "Заявка закрыта — все партии приняты. Не забудьте оценить поставщиков." : ""),
+    };
+
+    // ---- offers VM
+    const l42 = this.liveLines("z1042", this.DATA.z1042);
+    const offers = this.OFFERS.map(o => {
+      const st = S.offers[o.id];
+      const line = l42[o.line];
+      const free = line.limit - line.batches.reduce((a, b) => a + b.heads, 0);
+      const fits = o.heads <= free;
+      const d = o.price - line.price;
+      return {
+        pid: o.pid, rating: o.rating, left: o.left,
+        headsTxt: o.heads + " голов",
+        desc: CAT[o.sortKey].name + " · " + o.breed + " · " + o.region,
+        priceTxt: o.price + " ₸/кг", myPriceTxt: line.price + " ₸/кг",
+        deltaTxt: d === 0 ? "цены равны" : (d > 0 ? "+" : "−") + Math.abs(d) + " ₸ к вашей цене",
+        reqRef: "К заявке Z-1042 · строка " + (o.line + 1) + " · " + CAT[o.sortKey].name,
+        fits: st === "pending" && fits, 
+        fitTxt: fits ? "Поместится целиком — в строке свободно " + free + " из " + line.limit + " голов" : "Не поместится — свободно " + free + " голов, партии не дробятся",
+        fitC: fits ? "var(--fg3)" : "var(--amber)",
+        timeC: o.urgent ? "var(--amber)" : "var(--fg3)",
+        pending: st === "pending", accepted: st === "accepted", declined: st === "declined",
+        dim: st === "pending" ? "1" : "0.6",
+        accept: () => this.acceptOffer(o), decline: () => this.declineOffer(o.id),
+      };
+    });
+    const pendingN = offers.filter(o => o.pending).length;
+
+    // ---- dashboard VM
+    const acts = [];
+    if (pendingN > 0) acts.push({ icon: "mail", c: TONE.amber, bg: mix("amber"), title: "Входящие офферы — " + pendingN, meta: "Ближайший дедлайн ответа — через 3:05. Не ответите за 24 часа — оффер уйдёт другим МПК.", cta: "Открыть офферы", go: () => this.go("offers") });
+    if (this.statusOf("z1039") === "decision") acts.push({ icon: "alert", c: TONE.amber, bg: mix("amber"), title: "Z-1039 — решение о недоборе", meta: "Собрано 52 из 70 голов. Осталось 14 ч, иначе партии автоматически вернутся фермерам.", cta: "Принять решение", go: () => this.openReq("z1039") });
+    if (this.statusOf("z1037") === "shipping" && S.z37.b2 === "transit") acts.push({ icon: "download", c: TONE.blue, bg: mix("blue"), title: "Приёмка — партия в пути", meta: "Z-1037 · P-7640 · 35 голов · отгружена фермером 24 июл.", cta: "К приёмке", go: () => this.openReq("z1037", "suppliers") });
+    const dActive = fillingVm.slice(0, 4).map(r => ({ num: r.num, title: r.title, status: r.status, tone: r.tone, prog: r.prog, pct: r.pct, barC: r.barC, term: r.term, open: r.open }));
+    const fills = vm.filter(r => r.st === "filling");
+    const fSum = fills.reduce((a, r) => a + r.filled, 0);
+    const fTot = fills.reduce((a, r) => a + r.total, 0);
+    const shipR = vm.find(r => r.st === "shipping");
+    const transitN = shipR && S.z37.b2 === "transit" ? 1 : 0;
+    const hour = new Date().getHours();
+    const offWord = pendingN === 1 ? "входящий оффер" : pendingN >= 2 && pendingN <= 4 ? "входящих оффера" : "входящих офферов";
+
+    // ---- create form VM
+    const f = S.form;
+    const fl = f.lines.map((ln, i) => {
+      const cat = CAT[ln.sort];
+      const num = parseFloat(ln.price);
+      const err = ln.price !== "" && (isNaN(num) || num < cat.min);
+      return {
+        i, sort: ln.sort, price: ln.price, limit: ln.limit, breed: ln.breed,
+        ind: String(cat.ind), minTxt: "защитный минимум — " + cat.min + " ₸/кг", indTxt: "ориентир — " + cat.ind + " ₸/кг · не обязательство",
+        err, bd: err ? "var(--red)" : "var(--bd)", canDel: f.lines.length > 1,
+        setSort: e => this.setLine(i, "sort", e.target.value), setPrice: e => this.setLine(i, "price", e.target.value),
+        setLimit: e => this.setLine(i, "limit", e.target.value), setBreed: e => this.setLine(i, "breed", e.target.value),
+        del: () => this.setState({ form: { ...f, lines: f.lines.filter((_, j) => j !== i) } }),
+      };
+    });
+    const priceEmpty = f.lines.some(ln => ln.price === "");
+    const priceBad = fl.some(l => l.err);
+    const headOk = parseFloat(f.head) > 0;
+    const deadlineOk = f.deadline.trim() !== "";
+    const fv = !priceEmpty && !priceBad && headOk && deadlineOk;
+    const f_msg = priceBad ? "Цена ниже защитного минимума — публикация недоступна." : priceEmpty ? "Укажите цену по каждой строке." : !headOk ? "Укажите объём заявки в головах." : !deadlineOk ? "Укажите срок набора." : "Публикуется сразу — без черновика.";
+
+    // ---- confirm VM
+    const cfMap = {
+      cancel: { title: "Отменить заявку " + cur.num + "?", body: "Привязанные партии (" + cur.supCount + ") вернутся на рынок. Фермеры получат уведомление. Действие необратимо.", label: "Отменить заявку" },
+      "return": { title: "Вернуть всё фермерам?", body: "52 головы в 3 партиях вернутся на рынок, заявка Z-1039 закроется без сделки.", label: "Вернуть фермерам" },
+    };
+    const cf = S.confirm ? cfMap[S.confirm.kind] : null;
+
+    // ---- panel VM
+    const pb = S.panel ? sups.find(x => x.pid === S.panel) : null;
+    const p = pb ? {
+      title: revealed ? pb.farm : "Партия " + pb.pid,
+      rating: pb.rating, sub: revealed ? "· " + pb.pid : "· ферма скрыта до набора заявки",
+      rows: [
+        { label: "Сорт", value: preReveal || revealed ? CAT[pb._sort].name : "—" },
+        { label: "Голов", value: pb.heads },
+        { label: "Порода", value: revealed ? (pb._b.breed || "—") : "скрыто до раскрытия" },
+        { label: "Ср. вес", value: revealed ? pb.weight : "скрыто до раскрытия" },
+        { label: "Регион", value: preReveal || revealed ? pb._b.region : "—" },
+        { label: "Цена сделки", value: pb.price + " ₸/кг" },
+        { label: "Источник", value: pb._b.src },
+        { label: "Привязана", value: pb._b.date },
+      ].concat(revealed ? [{ label: "Телефон", value: pb.phone }] : []),
+      photo: revealed, canReceive: pb.canReceive, receive: () => this.receive(pb._b.bk),
+      hasAddr: revealed && !!pb.addr, addr: pb.addr, addrRegion: pb.regionFull, gisUrl: pb.gisUrl,
+      hasNote: !revealed, note: "Название фермы и контакты откроются, когда заявка будет набрана. Симметрично: фермер тоже не видит вас до закрытия сделки.",
+    } : { title: "", rating: "", sub: "", rows: [], photo: false, canReceive: false, receive: () => {}, hasNote: false, note: "", hasAddr: false, addr: "", addrRegion: "", gisUrl: "" };
+
+    // ───────── профиль МПК
+    const PR = S.prof, pend = S.pending;
+    const fRow = (key, label, pub) => {
+      const crit = this.CRIT.indexOf(key) >= 0;
+      const ed = !!S.edit && S.edit.key === key;
+      return {
+        label: label, value: PR[key], crit: crit, pub: !!pub, onReview: pend.indexOf(key) >= 0,
+        editing: ed, reading: !ed, draft: ed ? S.edit.draft : PR[key],
+        start: () => this.setState({ edit: { key: key, draft: PR[key] } }),
+        setDraft: e => this.setState({ edit: { key: key, draft: e.target.value } }),
+        keyDown: e => { if (e.key === "Enter") this.saveEdit(); else if (e.key === "Escape") this.setState({ edit: null }); },
+        save: () => this.saveEdit(), cancel: () => this.setState({ edit: null }),
+      };
+    };
+    const pr_cards = [
+      { icon: "building", title: "Предприятие", meta: "входит в допуск", rows: [fRow("name", "Наименование", 1), fRow("bin", "БИН", 1), fRow("jaddr", "Юридический адрес"), fRow("head", "Руководитель")] },
+      { icon: "mapPin", title: "Площадка приёмки", meta: "одна площадка", rows: [fRow("place", "Адрес", 1), fRow("hours", "Часы приёмки", 1), fRow("capacity", "Мощность приёмки"), fRow("placePhone", "Телефон площадки", 1)] },
+      { icon: "briefcase", title: "Банковские реквизиты", meta: "идут в документ сделки", rows: [fRow("bank", "Банк"), fRow("iik", "ИИК"), fRow("bik", "БИК")] },
+      { icon: "user", title: "Контакт для фермеров", meta: "раскрывается после сделки", rows: [fRow("contact", "Контактное лицо", 1), fRow("phone", "Телефон", 1), fRow("email", "E-mail", 1)] },
+    ];
+    const PLBL = { name: "наименование", bin: "БИН", jaddr: "юридический адрес" };
+    const pr_pendTxt = pend.length ? "На проверке: " + pend.map(k => PLBL[k]).join(", ") : "";
+    const renewing = S.membership === "renewing";
+    const goTab = t => () => this.setState({ ptab: t, edit: null });
+
+    const ov_gates = [
+      { icon: "shield", label: "Верификация TURAN",
+        value: pend.length ? "Проверка изменений" : "Подтверждена",
+        note: pend.length ? pr_pendTxt + " · 2–5 раб. дней" : "12 мая 2026 · TURAN Compliance",
+        color: pend.length ? "var(--amber)" : "var(--green)", tint: pend.length ? "var(--amber-m)" : "var(--green-m)",
+        w: pend.length ? "62%" : "100%", actLabel: "Открыть допуск", act: goTab("adm") },
+      { icon: "briefcase", label: "Членство в ассоциации",
+        value: renewing ? "Продление в работе" : "12 дней до конца",
+        note: renewing ? "Заявка у ассоциации · 1–3 раб. дня" : "Мясной союз Казахстана · до 07 авг 2026",
+        color: renewing ? "var(--blue)" : "var(--amber)", tint: renewing ? "var(--blue-m)" : "var(--amber-m)",
+        w: renewing ? "100%" : "8%", actLabel: renewing ? "Открыть членство" : "Продлить",
+        act: renewing ? goTab("adm") : (() => this.renewMembership()) },
+      { icon: "fileText", label: "Документы", value: "5 из 5 приняты",
+        note: "Договор членства истекает в течение 30 дней",
+        color: "var(--green)", tint: "var(--green-m)", w: "100%", actLabel: "Все документы", act: goTab("adm") },
+    ];
+
+    const apOpen = S.appeals.filter(a => a.st === "open").length;
+    const ov_todo = [];
+    if (!renewing) ov_todo.push({ icon: "clock", tint: "var(--amber-m)", color: "var(--amber)", title: "Членство истекает через 12 дней", sub: "Без активного членства закупки закрываются — заявки в работе сохранятся.", cta: "Продлить", act: () => this.renewMembership() });
+    if (pend.length) ov_todo.push({ icon: "shield", tint: "var(--amber-m)", color: "var(--amber)", title: "Реквизиты на повторной проверке", sub: pr_pendTxt + " · 2–5 рабочих дней. На закупки не влияет.", cta: "Посмотреть", act: goTab("org") });
+    if (!S.rated) ov_todo.push({ icon: "star", tint: "var(--blue-m)", color: "var(--blue)", title: "Отзыв КХ «Береке-Восток» скрыт", sub: "Оцените поставщика — отзывы откроются у обеих сторон.", cta: "Оценить", act: goTab("rep") });
+    if (apOpen) ov_todo.push({ icon: "messageCircle", tint: "var(--amber-m)", color: "var(--amber)", title: apOpen === 1 ? "Обращение на рассмотрении" : apOpen + " обращения на рассмотрении", sub: "TURAN отвечает 1–2 рабочих дня — ответ придёт в кабинет и на почту.", cta: "Открыть", act: goTab("appeals") });
+
+    const ov_facts = [
+      { label: "Закрытых сделок", value: "18" },
+      { label: "Принято голов", value: "1 240" },
+      { label: "Хозяйств-поставщиков", value: "12" },
+      { label: "Средний расчёт", value: "1 день" },
+      { label: "Сотрудников", value: String(S.staff.length) },
+    ];
+
+    const pv = S.pubView || "pre", pvPost = pv === "post";
+    const pv_tabs = [{ id: "pre", label: "До подтверждения" }, { id: "post", label: "После подтверждения" }].map(t => ({
+      label: t.label, set: () => this.setState({ pubView: t.id }),
+      bg: pv === t.id ? "var(--bg-c)" : "transparent", fg: pv === t.id ? "var(--fg)" : "var(--fg3)",
+    }));
+    const pv_rows = pvPost ? [
+      { label: "БИН", value: PR.bin, color: "var(--fg)" },
+      { label: "Площадка приёмки", value: PR.place, color: "var(--fg)" },
+      { label: "Часы приёмки", value: PR.hours, color: "var(--fg)" },
+      { label: "Контакт", value: PR.contact + " · " + PR.phone, color: "var(--fg)" },
+      { label: "Сделок закрыто", value: "18 · 1 240 голов", color: "var(--fg)" },
+    ] : [
+      { label: "Тип покупателя", value: "Мясокомбинат · допуск TURAN", color: "var(--fg)" },
+      { label: "Регион", value: "обл. Абай · Семей", color: "var(--fg)" },
+      { label: "Наименование", value: "откроется после подтверждения", color: "var(--fg3)" },
+      { label: "Площадка и контакт", value: "откроются после подтверждения", color: "var(--fg3)" },
+      { label: "Сделок закрыто", value: "18 · 1 240 голов", color: "var(--fg)" },
+    ];
+
+    const v_steps = [
+      { title: "Заявка подана", date: "28 апр 2026", dot: "var(--green)", ring: "var(--green-m)", line: "var(--green)" },
+      { title: "Проверка пройдена", date: "12 мая 2026", dot: "var(--green)", ring: "var(--green-m)", line: pend.length ? "var(--amber)" : "var(--green)" },
+    ].concat(pend.length ? [
+      { title: "Допуск действует", date: "закупки открыты", dot: "var(--green)", ring: "var(--green-m)", line: "var(--amber)" },
+      { title: "Повторная проверка", date: "изменения · 2–5 дн", dot: "var(--amber)", ring: "var(--amber-m)", line: "transparent" },
+    ] : [
+      { title: "Допуск действует", date: "пока реквизиты неизменны", dot: "var(--green)", ring: "var(--green-m)", line: "transparent" },
+    ]);
+
+    const docMeta = [
+      { untilLabel: "Бессрочный", left: "принят", w: "100%", bar: "var(--bd-h)" },
+      { untilLabel: "Бессрочный", left: "принят", w: "100%", bar: "var(--bd-h)" },
+      { untilLabel: "Действует до 31 дек 2027", left: "523 дня", w: "82%", bar: "var(--green)" },
+      { untilLabel: "Действует до 30 сен 2026", left: "66 дней", w: "48%", bar: "var(--green)" },
+      { untilLabel: "Действует до 07 авг 2026", left: "12 дней", w: "9%", bar: "var(--amber)" },
+    ];
+    const pr_docs = this.DOCS.map((d, i) => Object.assign({}, d, docMeta[i], { dl: () => this.showToast(d.name + " — файл скачан.") }));
+
+    const PERMS = {
+      "Снабженец": ["Заявки", "Офферы", "Маркет-борд"],
+      "Приёмщик": ["Приёмка партий", "Отзывы"],
+      "Бухгалтер": ["Документы сделок", "Реквизиты — чтение"],
+      "Администратор": ["Профиль", "Реквизиты", "Сотрудники"],
+    };
+    const staffTone = { me: "neutral", active: "green", invited: "amber" };
+    const staffLabel = { me: "Доступ открыт", active: "Доступ открыт", invited: "Ждёт входа" };
+    const pr_staff = S.staff.map(u => ({
+      name: u.name, email: u.email, role: u.role, last: u.last,
+      perms: (PERMS[u.role] || []).map(t => ({ t: t })),
+      isMe: u.st === "me", tone: staffTone[u.st], stLabel: staffLabel[u.st],
+      canResend: u.st === "invited",
+      resend: () => this.showToast("Приглашение отправлено повторно на " + u.email + "."),
+    }));
+    const invitedN = S.staff.filter(u => u.st === "invited").length;
+
+    const revBase = this.REVIEWS.map(v => ({ farm: v.farm, overall: v.overall, text: v.text, meta: v.date + " · " + v.req }));
+    const pr_reviews = S.rated
+      ? [{ farm: "КХ «Береке-Восток»", overall: "4.8", text: "Приёмка без придирок, расчёт в срок. Открылся после того, как оценили обе стороны.", meta: "24 июл · Z-1039" }].concat(revBase)
+      : revBase;
+
+    const pr_appeals = S.appeals.map(a => ({
+      topic: a.topic, msg: a.msg, date: a.date, answer: a.answer, aDate: a.adate || "",
+      tone: a.st === "open" ? "amber" : "green",
+      dot: a.st === "open" ? "var(--amber)" : "var(--green)",
+      stLabel: a.st === "open" ? "На рассмотрении" : "Ответ получен",
+      hasAnswer: !!a.answer, waiting: a.st === "open",
+    }));
+
+    const iv = S.invite, ap = S.appeal, rt = S.rate;
+    const stars = (n, set) => [1, 2, 3, 4, 5].map(i => ({ on: i <= n, off: i > n, title: i + " из 5", set: () => set(i) }));
+    const rateTxt = n => n ? n + " из 5" : "не выбрано";
+
+    const theme = S.theme || P.theme || "dark";
+    const pendStr = pendingN > 0 ? String(pendingN) : null;
+
+    return {
+      // shell
+      sidebar: {
+        state: "expanded", active: screen === "monitor" ? "requests" : screen,
+        orgName: "МК «Семей Ет»", farmName: "Turan Standard Pool · закупки",
+        userName: "Дамир Оспанов", role: "Снабженец",
+        theme, onThemeToggle: () => this.setState({ theme: theme === "dark" ? "light" : "dark" }),
+        favorites: [],
+        primary: [
+          { id: "dashboard", icon: "dashboard", label: "Главная" },
+          { id: "requests", icon: "fileText", label: "Мои заявки", count: String(vm.length) },
+          { id: "offers", icon: "mail", label: "Входящие офферы", count: pendStr, tone: pendStr ? "amber" : undefined },
+          { id: "market", icon: "barChart", label: "Маркет-борд" },
+        ],
+        secondary: [
+          { id: "profile", icon: "building", label: "Профиль МПК" },
+          { id: "docs", icon: "folder", label: "Документы сделок" },
+        ],
+        onSelect: id => this.go(id),
+      },
+      s_dash: screen === "dashboard", s_reqs: screen === "requests", s_mon: screen === "monitor",
+      s_offers: screen === "offers", s_market: screen === "market", s_profile: screen === "profile", s_docs: screen === "docs",
+      openCreate: () => this.setState({ cm: true }), goMarket: () => this.go("market"),
+      // dashboard
+      acts, actsEmpty: acts.length === 0, dActive,
+      greet: (hour >= 5 && hour < 12 ? "Доброе утро" : hour >= 12 && hour < 18 ? "Добрый день" : "Добрый вечер") + ", Дамир",
+      kpi_fill_n: String(fSum), kpi_fill_d: "из " + fTot + " голов",
+      kpi_fill_pct: fTot ? Math.min(100, Math.round(fSum / fTot * 100)) + "%" : "0%",
+      kpi_fill_c: fills.length ? fills[0].num + " · срок " + fills[0].term + (fills.length > 1 ? " · ещё " + (fills.length - 1) : "") : "активного набора нет",
+      kpi_off_n: String(pendingN), kpi_off_d: offWord,
+      kpi_off_c: pendingN ? "ближайший дедлайн — через 3:05" : "новых предложений нет",
+      kpi_off_urgent: pendingN > 0,
+      kpi_ship_n: shipR ? String(shipR.filled) : "0", kpi_ship_d: "голов в отгрузке",
+      kpi_ship_c: shipR ? shipR.num + (transitN ? " · " + transitN + " партия в пути" : " · ждём отгрузку фермеров") : "отгрузок сейчас нет",
+      dec_on: this.statusOf("z1039") === "decision",
+      goReqs: () => this.go("requests"),
+      goOffers: () => this.go("offers"),
+      goFill: () => fills.length ? this.openReq(fills[0].key) : this.go("requests"),
+      goShip: () => shipR ? this.openReq(shipR.key, "suppliers") : this.go("requests"),
+      goDecision: () => this.openReq("z1039"),
+      stopClick: (e) => e.stopPropagation(),
+      // requests
+      reqCount: String(vm.length),
+      viewTabs: {
+        tabs: [
+          { id: "all", label: "Все", icon: "fileText", count: cnt("all") },
+          { id: "active", label: "Набираются", icon: "beef", count: cnt("active") },
+          { id: "decision", label: "Требуют решения", icon: "alert", count: cnt("decision") },
+          { id: "shipping", label: "Отгрузка", icon: "download", count: cnt("shipping") },
+          { id: "closed", label: "Закрытые", icon: "check", count: cnt("closed") },
+        ],
+        active: S.view, onChange: v => this.setState({ view: v }),
+      },
+      reqRows,
+      reqFoot: vm.length + " заявок · в наборе " + vm.filter(r => r.st === "filling").reduce((a, r) => a + r.filled, 0) + " голов · в отгрузке " + vm.filter(r => r.st === "shipping").reduce((a, r) => a + r.filled, 0) + " голов",
+      // monitor
+      chrome: {
+        parentLabel: "Мои заявки", onBack: () => this.go("requests"), onClose: () => this.go("requests"),
+        current: idx + 1, total: vm.length,
+        onPrev: () => this.openReq(vm[(idx - 1 + vm.length) % vm.length].key, S.tab),
+        onNext: () => this.openReq(vm[(idx + 1) % vm.length].key, S.tab),
+      },
+      tabs: {
+        tabs: [{ id: "overview", label: "Обзор", icon: "dashboard" }, { id: "suppliers", label: "Поставщики", icon: "users", count: cur.supCount || null }, { id: "events", label: "События", icon: "clock" }],
+        active: S.tab, onChange: t => this.setState({ tab: t, panel: null }),
+      },
+      m,
+      tab_overview: S.tab === "overview", tab_suppliers: S.tab === "suppliers", tab_events: S.tab === "events",
+      mb_decision: cur.key === "z1039" && cur.st === "decision",
+      mb_ok: cur.key === "z1039" && cur.st === "partial",
+      mb_closedNote: !!m.bannerNote,
+      acceptShortfall: () => this.acceptShortfall(),
+      askReturn: () => this.setState({ confirm: { kind: "return" } }),
+      askCancel: () => this.setState({ confirm: { kind: "cancel", key: cur.key } }),
+      makeDoc: () => this.showToast("Документ сделки сформирован — реквизиты, таблица по партиям, таймлайн."),
+      sendAppeal: () => this.setState({ appeal: { topic: "Отмена подтверждённой сделки", msg: "", ref: cur.num } }),
+      // panel
+      p_open: !!pb, p, closePanel: () => this.setState({ panel: null }),
+      // offers
+      offers, offersPending: String(pendingN),
+      // create modal
+      cm_open: S.cm, closeCreate: () => this.setState({ cm: false }), eat: e => e.stopPropagation(),
+      f_head: f.head, f_deadline: f.deadline, f_obl: f.obl, f_ray: f.ray,
+      setHead: e => this.setF("head", e.target.value), setDeadline: e => this.setF("deadline", e.target.value),
+      setObl: e => this.setF("obl", e.target.value), setRay: e => this.setF("ray", e.target.value),
+      fl, addLine: () => this.setState({ form: { ...f, lines: f.lines.concat([{ sort: "s3", price: "", limit: "", breed: "" }]) } }),
+      fv, fvNot: !fv, f_msg, publish: () => this.publish(),
+      // confirm
+      cf_open: !!cf, cf_title: cf ? cf.title : "", cf_body: cf ? cf.body : "", cf_label: cf ? cf.label : "",
+      cf_yes: () => this.confirmYes(), cf_no: () => this.setState({ confirm: null }),
+      // профиль
+      ptabs: {
+        tabs: [
+          { id: "overview", label: "Обзор", icon: "dashboard" },
+          { id: "org", label: "Предприятие", icon: "building", count: pend.length || null },
+          { id: "adm", label: "Допуск", icon: "shield" },
+          { id: "team", label: "Команда", icon: "users", count: S.staff.length },
+          { id: "rep", label: "Репутация", icon: "star" },
+          { id: "appeals", label: "Обращения", icon: "messageCircle", count: apOpen || null },
+        ],
+        active: S.ptab, onChange: t => this.setState({ ptab: t, edit: null }),
+      },
+      pt_ov: S.ptab === "overview", pt_org: S.ptab === "org", pt_adm: S.ptab === "adm",
+      pt_team: S.ptab === "team", pt_rep: S.ptab === "rep", pt_appeals: S.ptab === "appeals",
+      pr_name: PR.name, pr_email: PR.email, pr_me: PR.contact, pr_mono: "СЕ",
+      pr_sub: "БИН " + PR.bin + " · " + PR.jaddr + " · допуск TURAN с 12 мая 2026",
+      pr_cards: pr_cards, pr_pend: pend.length > 0, pr_pendTxt: pr_pendTxt,
+      ov_title: "Допущен к закупкам",
+      ov_sub: pend.length
+        ? "Верификация, членство и документы в порядке. Изменения реквизитов проверяются — на закупки это не влияет."
+        : "Верификация, членство и документы в порядке. Ограничений на заявки и приёмку нет.",
+      ov_checked: "обновлено сегодня, 09:14",
+      ov_gates: ov_gates, ov_todo: ov_todo, ov_todoN: String(ov_todo.length), ov_clean: ov_todo.length === 0,
+      ov_facts: ov_facts, goRep: () => this.setState({ ptab: "rep" }),
+      pv_tabs: pv_tabs, pv_rows: pv_rows,
+      pv_title: pvPost ? PR.name : "Мясокомбинат · обл. Абай",
+      pv_sub: pvPost ? "Допуск TURAN · член ассоциации" : "Проверен TURAN · название скрыто",
+      pv_mono: pvPost ? "СЕ" : "—",
+      pv_foot: pvPost
+        ? "Раскрытие симметрично: вы одновременно видите ферму, её телефон и адрес."
+        : "До подтверждения фермер видит сорт, цену и регион — без названия комбината. Вы так же не видите имя фермы.",
+      pv_note: "Карточка собирается из реквизитов слева: поля с «глазом» уходят фермеру, остальные остаются внутри кабинета.",
+      v_tone: pend.length ? "amber" : "green",
+      v_label: pend.length ? "Проверка изменений" : "Подтверждена",
+      v_steps: v_steps,
+      mem_tone: renewing ? "blue" : "green", mem_label: renewing ? "Продление на рассмотрении" : "Активно",
+      mem_left: renewing ? "продление у ассоциации" : "истекает через 12 дней",
+      mem_w: renewing ? "100%" : "97%", mem_bar: renewing ? "var(--blue)" : "var(--amber)",
+      mem_rows: [
+        { label: "Ассоциация", value: "Мясной союз Казахстана" },
+        { label: "Номер", value: "ЧЛ-2024-0187" },
+        { label: "Взнос за 2026", value: "оплачен 07 авг 2025" },
+      ],
+      mem_canRenew: !renewing, mem_renewing: renewing, renewMem: () => this.renewMembership(),
+      pr_docs: pr_docs, docN: this.DOCS.length + " файлов · проверяет TURAN",
+      uploadDoc: () => this.showToast("Документ загружен и отправлен на проверку TURAN."),
+      st_sub: S.staff.length + " в кабинете" + (invitedN ? " · " + invitedN + " ждёт входа" : ""),
+      pr_staff: pr_staff,
+      pr_rating: "4.7", pr_ratingN: "18 оценок · 12 хозяйств",
+      pr_dims: [{ label: "Общая оценка", v: "4.7", w: "94%" }, { label: "Приёмка и расчёт по договорённости", v: "4.5", w: "90%" }],
+      pr_dist: [{ n: "5", c: "11", w: "61%" }, { n: "4", c: "6", w: "33%" }, { n: "3", c: "1", w: "6%" }, { n: "2", c: "0", w: "0%" }, { n: "1", c: "0", w: "0%" }],
+      pr_reviews: pr_reviews, pr_hidden: !S.rated, pr_hiddenFarm: "КХ «Береке-Восток»",
+      ap_waitTxt: "Обращение получено, разбирается. Ответ — обычно 1–2 рабочих дня, придёт сюда и на " + PR.email + ".",
+      pr_appeals: pr_appeals, ap_sub: apOpen ? apOpen + " на рассмотрении" : "все обращения закрыты",
+      // модалка: приглашение
+      iv_open: !!iv, iv_email: iv ? iv.email : "", iv_role: iv ? iv.role : "Снабженец",
+      iv_scope: iv ? this.SCOPES[iv.role] : "",
+      iv_ok: !!iv && iv.email.indexOf("@") > 0, iv_bad: !iv || iv.email.indexOf("@") < 1,
+      iv_msg: iv && iv.email.indexOf("@") > 0 ? "Роль можно сменить позже." : "Укажите рабочий e-mail сотрудника.",
+      openInvite: () => this.setState({ invite: { email: "", role: "Снабженец" } }),
+      closeInvite: () => this.setState({ invite: null }),
+      setIvEmail: e => this.setState({ invite: { ...S.invite, email: e.target.value } }),
+      setIvRole: e => this.setState({ invite: { ...S.invite, role: e.target.value } }),
+      sendInvite: () => this.sendInvite(),
+      // модалка: обращение
+      ap_open: !!ap, ap_topic: ap ? ap.topic : "", ap_msg: ap ? ap.msg : "",
+      ap_hint: ap && ap.ref ? "По заявке " + ap.ref + ". Отмена подтверждённой сделки — только через TURAN, не кнопкой в кабинете." : "Свободная форма: тема и сообщение. Разбирает специалист TURAN вручную.",
+      ap_ok: !!ap && ap.msg.trim().length > 0, ap_bad: !ap || ap.msg.trim().length === 0,
+      openAppeal: () => this.setState({ appeal: { topic: "Отмена подтверждённой сделки", msg: "", ref: "" } }),
+      closeAppeal: () => this.setState({ appeal: null }),
+      setApTopic: e => this.setState({ appeal: { ...S.appeal, topic: e.target.value } }),
+      setApMsg: e => this.setState({ appeal: { ...S.appeal, msg: e.target.value } }),
+      sendAppealNow: () => this.submitAppeal(),
+      // модалка: оценка поставщика
+      rt_open: !!rt, rt_sub: "КХ «Береке-Восток» · Z-1039 · 14 голов, принято 24 июл",
+      rt_overall: stars(rt ? rt.overall : 0, n => this.setState({ rate: { ...S.rate, overall: n } })),
+      rt_spec: stars(rt ? rt.spec : 0, n => this.setState({ rate: { ...S.rate, spec: n } })),
+      rt_overallTxt: rateTxt(rt ? rt.overall : 0), rt_specTxt: rateTxt(rt ? rt.spec : 0),
+      rt_comment: rt ? rt.comment : "",
+      setRtComment: e => this.setState({ rate: { ...S.rate, comment: e.target.value } }),
+      rt_ok: !!rt && rt.overall > 0, rt_bad: !rt || rt.overall === 0,
+      openRate: () => this.setState({ rate: { overall: 0, spec: 0, comment: "" } }),
+      closeRate: () => this.setState({ rate: null }), sendRate: () => this.submitRate(),
+      // toast
+      t_on: !!S.toastMsg, t_msg: S.toastMsg || "",
+    };
+  }
+}
+</script>
+</body>
+</html>

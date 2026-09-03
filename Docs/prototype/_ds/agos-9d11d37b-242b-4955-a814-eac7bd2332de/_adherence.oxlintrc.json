@@ -1,0 +1,222 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": [
+          {
+            "group": [
+              "design-canvas.jsx",
+              "header.jsx",
+              "primitives.jsx",
+              "sidebar-bold.jsx",
+              "sidebar-conservative.jsx",
+              "sidebar.jsx",
+              "ui_kits/console/**",
+              "ui_kits/farmer/**"
+            ],
+            "message": "Import design-system components from 'index.js', not component internals."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/\\b\\d+px\\b/]",
+        "message": "Raw px value — use a design-system spacing token via var()."
+      },
+      {
+        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:Geist|Geist Mono))/i]",
+        "message": "Font not provided by the design system. Available: Geist, Geist Mono."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {},
+    "tokens": [
+      "--accent",
+      "--amber",
+      "--amber-m",
+      "--bd",
+      "--bd-h",
+      "--bd-s",
+      "--bg",
+      "--bg-c",
+      "--bg-m",
+      "--bg-s",
+      "--blue",
+      "--blue-m",
+      "--cta",
+      "--cta-fg",
+      "--cta-h",
+      "--dur-default",
+      "--dur-fast",
+      "--dur-layout",
+      "--dur-slow",
+      "--ease",
+      "--emerald",
+      "--emerald-m",
+      "--fg",
+      "--fg2",
+      "--fg3",
+      "--font-display",
+      "--font-mono",
+      "--font-sans",
+      "--fs-2xs",
+      "--fs-base",
+      "--fs-lg",
+      "--fs-md",
+      "--fs-sm",
+      "--fs-xl",
+      "--fs-xs",
+      "--fw-bold",
+      "--fw-medium",
+      "--fw-regular",
+      "--fw-semibold",
+      "--green",
+      "--green-m",
+      "--h-lg",
+      "--h-md",
+      "--h-row",
+      "--h-sm",
+      "--h-xl",
+      "--h-xs",
+      "--ls-normal",
+      "--ls-tight",
+      "--ls-tighter",
+      "--ls-wide",
+      "--ls-wider",
+      "--mono",
+      "--r-full",
+      "--r-lg",
+      "--r-md",
+      "--r-sm",
+      "--r-xl",
+      "--red",
+      "--red-m",
+      "--sh-lg",
+      "--sh-md",
+      "--sh-sm",
+      "--sh-xl",
+      "--sp-0",
+      "--sp-05",
+      "--sp-1",
+      "--sp-12",
+      "--sp-15",
+      "--sp-2",
+      "--sp-25",
+      "--sp-3",
+      "--sp-4",
+      "--sp-5",
+      "--sp-6",
+      "--sp-8"
+    ],
+    "tokenKinds": {
+      "--bg": "color",
+      "--bg-s": "color",
+      "--bg-c": "color",
+      "--bg-m": "color",
+      "--fg": "color",
+      "--fg2": "color",
+      "--fg3": "color",
+      "--bd": "color",
+      "--bd-s": "color",
+      "--bd-h": "color",
+      "--accent": "color",
+      "--cta": "color",
+      "--cta-fg": "color",
+      "--cta-h": "color",
+      "--blue": "color",
+      "--blue-m": "color",
+      "--green": "color",
+      "--green-m": "color",
+      "--emerald": "color",
+      "--emerald-m": "color",
+      "--amber": "color",
+      "--amber-m": "color",
+      "--red": "color",
+      "--red-m": "color",
+      "--sh-sm": "shadow",
+      "--sh-md": "shadow",
+      "--sh-lg": "shadow",
+      "--sh-xl": "shadow",
+      "--ease": "other",
+      "--dur-fast": "other",
+      "--dur-default": "other",
+      "--dur-slow": "other",
+      "--dur-layout": "other",
+      "--r-sm": "spacing",
+      "--r-md": "spacing",
+      "--r-lg": "spacing",
+      "--r-xl": "spacing",
+      "--r-full": "spacing",
+      "--sp-0": "spacing",
+      "--sp-05": "spacing",
+      "--sp-1": "spacing",
+      "--sp-15": "spacing",
+      "--sp-2": "spacing",
+      "--sp-25": "spacing",
+      "--sp-3": "spacing",
+      "--sp-4": "spacing",
+      "--sp-5": "spacing",
+      "--sp-6": "spacing",
+      "--sp-8": "spacing",
+      "--sp-12": "spacing",
+      "--h-xs": "spacing",
+      "--h-sm": "spacing",
+      "--h-md": "spacing",
+      "--h-lg": "spacing",
+      "--h-row": "spacing",
+      "--h-xl": "spacing",
+      "--font-sans": "font",
+      "--font-mono": "font",
+      "--font-display": "font",
+      "--mono": "color",
+      "--fs-2xs": "spacing",
+      "--fs-xs": "spacing",
+      "--fs-sm": "spacing",
+      "--fs-base": "spacing",
+      "--fs-md": "spacing",
+      "--fs-lg": "spacing",
+      "--fs-xl": "spacing",
+      "--fw-regular": "font",
+      "--fw-medium": "font",
+      "--fw-semibold": "font",
+      "--fw-bold": "font",
+      "--ls-tighter": "spacing",
+      "--ls-tight": "spacing",
+      "--ls-normal": "font",
+      "--ls-wide": "spacing",
+      "--ls-wider": "spacing"
+    },
+    "fontFamilies": [
+      "Geist",
+      "Geist Mono"
+    ]
+  }
+}

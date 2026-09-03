@@ -18,10 +18,13 @@ artifact. Their restoration remains a visual-fidelity gate, not a database gate.
   `DECISIONS_LOG.md`.
 - Schema/RPC implementation may start only after ARS-353 records the detailed
   convergence/migration ADR. It must follow the sources of truth in §6.
-- Desktop visual implementation may build the shell geometry and isolation boundary,
-  but exact color, typography, spacing, motion, and copy cannot pass visual acceptance
-  until `DESIGN-TOKENS.md` and `prototype/mpk-cabinet-v4.dc.html` are restored or the
-  epic is amended to point to their real canonical locations.
+- Desktop visual implementation may build the shell geometry and isolation boundary.
+  ✅ **Resolved 2026-09-01:** the prototype is in the repository at
+  `Docs/prototype/Кабинет МПК v4.dc.html`, and the token artifact is
+  `Docs/prototype/_ds/agos-9d11d37b-242b-4955-a814-eac7bd2332de/_ds_manifest.json`
+  (full token registry) — a separate `DESIGN-TOKENS.md` is not needed. Extracted
+  values, screen→data map and RPC coverage: `Docs/prototype/EXTRACT-tokens-and-data-map.md`.
+  Type scale deviates from the DS by design — see `D-MPK-TYPE-01` in `DECISIONS_LOG.md`.
 - No production migration or rollout is authorized by this document.
 
 ## 1. Product boundary
@@ -376,9 +379,10 @@ and rollback impact. This file satisfies the engineering side of that contract.
 Remaining gates are explicit and owned elsewhere:
 
 - ARS-353: accepted convergence ADR; downstream schema/RPC work must follow it;
-- missing `AGOS-Dok6-Slice10-MPK-Profile.md`, `DESIGN-TOKENS.md`, and
-  `prototype/mpk-cabinet-v4.dc.html`: restore or correct canonical paths before visual
-  fidelity sign-off;
+- ~~missing `DESIGN-TOKENS.md` and `prototype/mpk-cabinet-v4.dc.html`~~ ✅ **closed
+  2026-09-01**: prototype → `Docs/prototype/Кабинет МПК v4.dc.html`; token registry →
+  `Docs/prototype/_ds/…/_ds_manifest.json`; extraction → `Docs/prototype/EXTRACT-tokens-and-data-map.md`;
+  `AGOS-Dok6-Slice10-MPK-Profile.md` → written 2026-09-01 (screen contract);
 - ARS-358/360 and the recorded security defect: close review ACL/RLS behavior before
   the reputation surface can ship;
 - G3: production migration/deployment approval after tests and staging evidence.
