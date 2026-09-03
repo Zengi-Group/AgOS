@@ -51,13 +51,15 @@ export function ProfileSidebar({
   const renderItem = (item: SidebarNavItem) => {
     // Построен на десктопе только профиль — он и есть активный раздел консоли. Остальные
     // пять пунктов кликабельны и честно сообщают о себе, но никуда не ведут (FR-009/FR-013).
+    // Приглушённого начертания у них НЕТ: оно давало в светлой теме 2.49:1 при норме 4.5
+    // (подробности — profile-console.css). Непостроенность сообщает подсказка по клику.
     const built = item.id === 'profile'
     const hinted = item.id === soonHint
     return (
       <div key={item.id}>
         <button
           type="button"
-          className={`mpkc-item${built ? ' on' : ''}${built ? '' : ' soon'}`}
+          className={`mpkc-item${built ? ' on' : ''}`}
           aria-current={built ? 'page' : undefined}
           aria-expanded={built ? undefined : hinted}
           onClick={() => onSelect(item)}
