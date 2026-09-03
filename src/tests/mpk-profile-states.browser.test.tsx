@@ -33,11 +33,12 @@ vi.mock('@/lib/account', async (importOriginal) => {
 function profileWith(
   verificationStatus: string | null,
   membershipActive: boolean,
+  name = 'МК «Семей Ет»',
 ): AccountProfile {
   return {
     userId: 'u1',
     orgId: 'org-1',
-    name: 'МК «Семей Ет»',
+    name,
     bin: '180440021345',
     district: 'Абайский район',
     ownerName: 'Дамир Оспанов',
@@ -149,6 +150,35 @@ it('M-013: rejected → «Допуск отклонён», not_mpk не выда
   loader.impl = async () => profileWith('not_mpk', true)
   mountConsoleAt('/mpk/profile/overview')
   await expect.poll(() => badge()?.textContent?.trim(), T).toBe('Организация не заявлена как МПК')
+})
+
+// Монограмма шапки (`pr_mono`, §2) — инициалы ПРЕДПРИЯТИЯ, не формы собственности.
+// Регрессия найдена прогоном против реальной базы 03.09.2026: «ТОО QA-Тест МПК» давало
+// «ТQ». Кавычек в реальных названиях может не быть — это обычный случай, не исключение.
+it('монограмма берёт имя предприятия, а не организационно-правовую форму', async () => {
+  const mono = () => document.querySelector('.agos-mpk-console .mpkc-head-mono')?.textContent
+
+  loader.impl = async () => profileWith('approved', true, 'ТОО QA-Тест МПК')
+  mountConsoleAt('/mpk/profile/overview')
+  await expect.poll(() => mono(), T).toBe('QМ')
+
+  // Кавычки по-прежнему главнее: имя внутри них, форма снаружи игнорируется.
+  root?.unmount(); mountEl?.remove()
+  loader.impl = async () => profileWith('approved', true, 'МК «Семей Ет»')
+  mountConsoleAt('/mpk/profile/overview')
+  await expect.poll(() => mono(), T).toBe('СЕ')
+
+  // Без кавычек и без формы — просто первые две буквы слов.
+  root?.unmount(); mountEl?.remove()
+  loader.impl = async () => profileWith('approved', true, 'Агрофирма Восток')
+  mountConsoleAt('/mpk/profile/overview')
+  await expect.poll(() => mono(), T).toBe('АВ')
+
+  // Форма без имени не должна схлопнуть монограмму в пустоту.
+  root?.unmount(); mountEl?.remove()
+  loader.impl = async () => profileWith('approved', true, 'ТОО')
+  mountConsoleAt('/mpk/profile/overview')
+  await expect.poll(() => mono(), T).toBe('ТО')
 })
 
 // M-014 · чтение упало: честный текст + retry; сырой текст SDK наружу не идёт.
