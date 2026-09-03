@@ -78,6 +78,10 @@ const CabinetDashboard = lazy(() => import('@/pages/cabinet/CabinetDashboard').t
 const CabinetApp = lazy(() => import('@/pages/cabinet/shell/CabinetApp').then(m => ({ default: m.CabinetApp })))
 // MpkApp — lazy (P-1): тоже нативная оболочка (Ionic-остров), не нужна в entry.
 const MpkApp = lazy(() => import('@/pages/cabinet/shell/mpk/MpkApp').then(m => ({ default: m.MpkApp })))
+// MpkProfileApp — Slice10 SCR-P0: десктопная консоль профиля МПК. Sibling-поверхность
+// рядом с Ionic-оболочкой закупок (§1.2), поэтому свой v6-роут, а не ветка внутри MpkApp:
+// Ionic-остров и телефонный каркас ей не нужны. Тоже lazy — свой CSS-скоуп и токены.
+const MpkProfileApp = lazy(() => import('@/pages/cabinet/shell/mpk/profile/MpkProfileApp').then(m => ({ default: m.MpkProfileApp })))
 const HerdOverview = lazy(() => import('@/pages/cabinet/herd/HerdOverview').then(m => ({ default: m.HerdOverview })))
 const HerdGroupForm = lazy(() => import('@/pages/cabinet/herd/HerdGroupForm').then(m => ({ default: m.HerdGroupForm })))
 const FeedInventory = lazy(() => import('@/pages/cabinet/feed/FeedInventory').then(m => ({ default: m.FeedInventory })))
@@ -236,6 +240,10 @@ function App() {
               {/* New mobile shells — full-screen, own chrome, NOT wrapped in AppLayout.
                   Primary /cabinet (farmer) + /mpk (МПК); legacy web cabinet → /cabinet-legacy. */}
               <Route path="/cabinet/*" element={<Suspense fallback={<BootScreen />}><CabinetApp /></Suspense>} />
+              {/* Консоль профиля МПК — до общего /mpk/*: отдельная десктопная поверхность
+                  внутри той же авторизации (Slice10 §1.2). Мобильный шелл закупок ниже
+                  не меняется (HS-2 / FR-005). */}
+              <Route path="/mpk/profile/*" element={<Suspense fallback={<BootScreen />}><MpkProfileApp /></Suspense>} />
               <Route path="/mpk/*" element={<Suspense fallback={<BootScreen />}><MpkApp /></Suspense>} />
               {/* Легаси web-кабинет + админ/эксперт-консоль: только web-таргет (§8). */}
               {!IS_NATIVE && (

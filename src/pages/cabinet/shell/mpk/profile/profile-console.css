@@ -1,0 +1,535 @@
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   AgOS · Slice10 · SCR-P0 — десктопная консоль «Профиль МПК» (MP-3.1).
+
+   ИЗОЛЯЦИЯ (FR-006, §0.3, критерий приёмки 3). Прототип задаёт токены на `:root` —
+   так нельзя: тёмная палитра и увеличенная тип-шкала протекут в `/cabinet` и нарушат
+   D-UI-FARMER-RULES-01. Всё переопределение привязано к контейнеру `.agos-mpk-console`
+   по образцу `.agos-cabinet-stage` (cabinet.css). Ни одного правила на `:root`/`body`.
+
+   Значения — EXTRACT-tokens-and-data-map.md §1.3. По умолчанию тёмная/max (эталон
+   приёмки: theme=dark, contrast=max, 1440×900). Светлая — набор «светлая/ds», намеренно
+   приведённый к daylight-палитре AgOS; включается атрибутом `data-theme="light"` на
+   том же контейнере (переключатель в сайдбаре, §0.2).
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.agos-mpk-console {
+  /* поверхности / текст / границы — тёмная/max */
+  --bg: #070706;
+  --bg-s: #141312;
+  --bg-c: #1f1e1c;
+  --bg-m: #332f2b;
+  --fg: #ffffff;
+  --fg2: #d5cfc6;
+  --fg3: #a8a19a;
+  --bd: #423d37;
+  --bd-s: #302c28;
+  --bd-h: #5d574f;
+  --cta: #fbf9f5;
+  --cta-fg: #0b0a09;
+  --cta-h: #ffffff;
+
+  /* семантика статусов (+ -m подложки) */
+  --blue: #9cc6f7;   --blue-m: rgba(156, 198, 247, 0.16);
+  --green: #86dc9c;  --green-m: rgba(134, 220, 156, 0.16);
+  --emerald: #74e5bd; --emerald-m: rgba(116, 229, 189, 0.16);
+  --amber: #ffd06a;  --amber-m: rgba(255, 208, 106, 0.16);
+  --red: #ff8f7e;    --red-m: rgba(255, 143, 126, 0.16);
+
+  /* Акцент — ТОЛЬКО звезда логотипа, ≤5% поверхности (§0.2, _ds/README.md).
+     Для кнопок, ссылок и статусов используется семантическая палитра выше. */
+  --accent: #f0a020;
+
+  /* тип-шкала прототипа, не DS (D-MPK-TYPE-01, §1.1 выписки) */
+  --fs-2xs: 11px;
+  --fs-xs: 13px;
+  --fs-sm: 13px;
+  --fs-base: 15px;
+  --fs-md: 16px;
+  --fs-lg: 18px;
+  --fs-xl: 24px;
+
+  /* радиусы · длительности · высоты контролов · сетка отступов (§0.2) */
+  --r-sm: 4px; --r-md: 6px; --r-lg: 8px; --r-xl: 12px; --r-full: 9999px;
+  --dur-fast: 60ms; --dur-default: 80ms; --dur-slow: 150ms; --dur-layout: 250ms;
+  --h-xs: 24px; --h-sm: 28px; --h-md: 32px; --h-lg: 36px; --h-row: 48px; --h-xl: 56px;
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
+  --sh-sm: 0 1px 3px rgba(0, 0, 0, 0.30), 0 0 0 1px rgba(0, 0, 0, 0.18);
+  --sh-xl: 0 20px 40px -8px rgba(0, 0, 0, 0.45);
+
+  position: fixed;
+  inset: 0;
+  display: flex;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: 1.55;
+}
+
+/* Светлая тема консоли — набор «светлая/ds» (§1.3 выписки): намеренно сведён к
+   daylight-палитре AgOS, поэтому переключение не конфликтует с каноном фермерской зоны. */
+.agos-mpk-console[data-theme='light'] {
+  --bg: #f6f3ed;
+  --bg-s: #ece7dd;
+  --bg-c: #fbfaf6;
+  --bg-m: #e4ddd0;
+  --fg: #3d2b1f;
+  --fg2: #6b6359;
+  --fg3: #9a9288;
+  --bd: #e0d9cc;
+  --bd-s: #ebe6dc;
+  --bd-h: #c7beac;
+  --cta: #3d2b1f;
+  --cta-fg: #fbfaf6;
+  --cta-h: #2c1e14;
+
+  --blue: #4571b8;   --blue-m: rgba(69, 113, 184, 0.07);
+  --green: #3a8a52;  --green-m: rgba(58, 138, 82, 0.08);
+  --emerald: #2d8a6e; --emerald-m: rgba(45, 138, 110, 0.08);
+  --amber: #b37a10;  --amber-m: rgba(179, 122, 16, 0.08);
+  --red: #c0392b;    --red-m: rgba(192, 57, 43, 0.08);
+
+  --sh-sm: 0 1px 3px rgba(61, 43, 31, 0.06), 0 0 0 1px rgba(61, 43, 31, 0.04);
+  --sh-xl: 0 20px 40px -8px rgba(61, 43, 31, 0.12);
+}
+
+/* Контролы не наследуют font-family по умолчанию — иначе Geist не применяется
+   (тот же приём, что в cabinet.css). */
+.agos-mpk-console button,
+.agos-mpk-console input,
+.agos-mpk-console select,
+.agos-mpk-console textarea { font-family: inherit; }
+
+.agos-mpk-console .mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─────────────────────────── сайдбар · 272px ─────────────────────────── */
+
+.agos-mpk-console .mpkc-side {
+  width: 272px;
+  flex-shrink: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-s);
+  border-right: 1px solid var(--bd);
+  overflow: hidden;
+}
+
+.agos-mpk-console .mpkc-side-head {
+  padding: 12px 10px 10px;
+  border-bottom: 1px solid var(--bd-s);
+}
+
+/* Карточка организации — не кнопка: переключателя организаций в слайсе нет,
+   мёртвых affordance не рисуем. */
+.agos-mpk-console .mpkc-org {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px;
+  height: 44px;
+  border-radius: var(--r-lg);
+}
+.agos-mpk-console .mpkc-org-txt { flex: 1; min-width: 0; }
+.agos-mpk-console .mpkc-org-name {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agos-mpk-console .mpkc-org-sub {
+  font-size: var(--fs-2xs);
+  color: var(--fg3);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agos-mpk-console .mpkc-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+}
+
+.agos-mpk-console .mpkc-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: var(--h-md);
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  color: var(--fg2);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  line-height: 1;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-default) var(--ease),
+              border-color var(--dur-default) var(--ease),
+              color var(--dur-default) var(--ease);
+}
+.agos-mpk-console .mpkc-item:hover { background: var(--bg-m); color: var(--fg); }
+.agos-mpk-console .mpkc-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cta) 40%, transparent);
+}
+.agos-mpk-console .mpkc-item.on {
+  background: var(--bg-m);
+  border-color: var(--bd);
+  color: var(--fg);
+  font-weight: 500;
+}
+/* Активный пункт — левый рельс 2px цветом CTA (паттерн SidebarRow дизайн-системы). */
+.agos-mpk-console .mpkc-item.on::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: var(--r-full);
+  background: var(--cta);
+}
+.agos-mpk-console .mpkc-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Пункт, у которого десктопного раздела ещё нет: кликабелен, честно сообщает о себе
+   (FR-013), но визуально приглушён. */
+.agos-mpk-console .mpkc-item.soon { color: var(--fg3); }
+.agos-mpk-console .mpkc-item.soon:hover { color: var(--fg2); }
+
+/* Подсказка «Раздел в разработке» принадлежит пункту сайдбара, а не области контента:
+   экран и URL она не меняет — иначе рвётся M-003 («экран соответствует URL»). */
+.agos-mpk-console .mpkc-soon {
+  margin: 2px 0 6px 36px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--bd);
+  color: var(--fg3);
+  font-size: var(--fs-2xs);
+  line-height: 1.4;
+}
+
+.agos-mpk-console .mpkc-div {
+  height: 1px;
+  background: var(--bd-s);
+  margin: 12px 6px;
+}
+
+.agos-mpk-console .mpkc-side-foot {
+  padding: 8px 10px;
+  border-top: 1px solid var(--bd-s);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* «← Вернуться в закупки» — единственный рабочий выход из консоли (§2). */
+.agos-mpk-console .mpkc-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: var(--h-md);
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  color: var(--fg2);
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-default) var(--ease), color var(--dur-default) var(--ease);
+}
+.agos-mpk-console .mpkc-back:hover { background: var(--bg-m); color: var(--fg); }
+
+.agos-mpk-console .mpkc-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  height: var(--h-lg);
+  min-width: 0;
+}
+.agos-mpk-console .mpkc-user-txt { flex: 1; min-width: 0; }
+.agos-mpk-console .mpkc-user-name {
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  color: var(--fg);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agos-mpk-console .mpkc-theme {
+  width: var(--h-sm);
+  height: var(--h-sm);
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid var(--bd);
+  border-radius: var(--r-md);
+  color: var(--fg3);
+  cursor: pointer;
+  transition: color var(--dur-default) var(--ease), background var(--dur-default) var(--ease);
+}
+.agos-mpk-console .mpkc-theme:hover { color: var(--fg); background: var(--bg-m); }
+
+.agos-mpk-console .mpkc-mark {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md);
+  background: var(--bg-m);
+  border: 1px solid var(--bd);
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  color: var(--fg2);
+}
+
+/* ─────────────────────────── правая колонка ─────────────────────────── */
+
+.agos-mpk-console .mpkc-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* Шапка профиля (§2): монограмма · название + бейдж допуска · pr_sub · действия. */
+.agos-mpk-console .mpkc-head {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 18px 32px 16px;
+  border-bottom: 1px solid var(--bd);
+}
+.agos-mpk-console .mpkc-head-mono {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-xl);
+  background: var(--bg-m);
+  border: 1px solid var(--bd);
+  font-family: var(--mono);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.agos-mpk-console .mpkc-head-txt { min-width: 0; flex: 1 1 300px; }
+.agos-mpk-console .mpkc-head-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.agos-mpk-console .mpkc-head-name {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.agos-mpk-console .mpkc-head-sub {
+  font-size: var(--fs-xs);
+  color: var(--fg3);
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agos-mpk-console .mpkc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--h-xs);
+  padding: 0 8px;
+  flex-shrink: 0;
+  border-radius: var(--r-full);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.agos-mpk-console .mpkc-badge.green { color: var(--green); background: var(--green-m); }
+.agos-mpk-console .mpkc-badge.amber { color: var(--amber); background: var(--amber-m); }
+.agos-mpk-console .mpkc-badge.red { color: var(--red); background: var(--red-m); }
+.agos-mpk-console .mpkc-badge.neutral { color: var(--fg3); background: var(--bg-c); }
+
+/* ptabs — 6 подразделов (порт HeaderTabs дизайн-системы). */
+.agos-mpk-console .mpkc-tabs {
+  flex-shrink: 0;
+  height: 44px;
+  display: flex;
+  align-items: stretch;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--bd);
+  background: var(--bg);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.agos-mpk-console .mpkc-tabs::-webkit-scrollbar { height: 0; }
+.agos-mpk-console .mpkc-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 12px;
+  margin-bottom: -1px;
+  background: transparent;
+  border: none;
+  color: var(--fg3);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--dur-default) var(--ease);
+}
+.agos-mpk-console .mpkc-tab:hover { color: var(--fg2); }
+.agos-mpk-console .mpkc-tab.on { color: var(--fg); font-weight: 600; }
+.agos-mpk-console .mpkc-tab.on::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--cta);
+}
+
+/* Контент — max-width 1264px, padding 40px 44px 64px (§2). */
+.agos-mpk-console .mpkc-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.agos-mpk-console .mpkc-body-inner {
+  max-width: 1264px;
+  margin: 0 auto;
+  padding: 40px 44px 64px;
+}
+
+/* ─────────── заглушка раздела · скелет загрузки · ошибка чтения ─────────── */
+
+.agos-mpk-console .mpkc-stub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 72px 24px;
+  text-align: center;
+}
+.agos-mpk-console .mpkc-stub-title {
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--fg);
+}
+.agos-mpk-console .mpkc-stub-note {
+  font-size: var(--fs-xs);
+  color: var(--fg3);
+  max-width: 496px;
+  line-height: 1.6;
+}
+.agos-mpk-console .mpkc-stub-act {
+  margin-top: 6px;
+  height: var(--h-lg);
+  padding: 0 14px;
+  background: transparent;
+  border: 1px solid var(--bd);
+  border-radius: var(--r-md);
+  color: var(--fg);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: border-color var(--dur-default) var(--ease), background var(--dur-default) var(--ease);
+}
+.agos-mpk-console .mpkc-stub-act:hover { border-color: var(--bd-h); background: var(--bg-c); }
+
+/* M-015: первый рендер — скелет, а не белый провал. */
+.agos-mpk-console .mpkc-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.agos-mpk-console .mpkc-skel-row {
+  height: var(--h-xl);
+  border-radius: var(--r-xl);
+  background: var(--bg-c);
+  border: 1px solid var(--bd-s);
+  animation: mpkcPulse 1.2s ease-in-out infinite;
+}
+.agos-mpk-console .mpkc-skel-row:nth-child(2) { animation-delay: 0.12s; }
+.agos-mpk-console .mpkc-skel-row:nth-child(3) { animation-delay: 0.24s; }
+
+@keyframes mpkcPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .agos-mpk-console .mpkc-skel-row { animation: none; }
+}
+
+/* ─────────── узкий вьюпорт < 1024px (FR-012, временная заглушка) ─────────── */
+
+.agos-mpk-console.narrow {
+  display: block;
+  overflow-y: auto;
+  padding: 32px 20px 48px;
+}
+.agos-mpk-console .mpkc-narrow {
+  max-width: 440px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.agos-mpk-console .mpkc-narrow-title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.agos-mpk-console .mpkc-narrow-note {
+  font-size: var(--fs-xs);
+  color: var(--fg3);
+  line-height: 1.6;
+}
+.agos-mpk-console .mpkc-narrow-link {
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  color: var(--fg2);
+  word-break: break-all;
+  padding: 10px 12px;
+  background: var(--bg-c);
+  border: 1px solid var(--bd-s);
+  border-radius: var(--r-md);
+}
