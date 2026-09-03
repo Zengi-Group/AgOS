@@ -139,7 +139,8 @@
 }
 .agos-mpk-console .mpkc-org-txt { flex: 1; min-width: 0; }
 .agos-mpk-console .mpkc-org-name {
-  font-size: var(--fs-xs);
+  /* та же поправка ступени: DS-компонент задаёт 13px = ступень `base` (см. .mpkc-item) */
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--fg);
   letter-spacing: -0.01em;
@@ -175,7 +176,13 @@
   border: 1px solid transparent;
   border-radius: var(--r-md);
   color: var(--fg2);
-  font-size: var(--fs-xs);
+  /* `--fs-base` (15px), а НЕ `--fs-xs`. Компоненты дизайн-системы задают размер жёстко
+     в пикселях: `SidebarRow` — 13px, и это ступень `base` ШКАЛЫ DS. При переносе легко
+     подставить `--fs-xs`, который в нашей шкале тоже 13px: число совпадает, ступень нет —
+     и сайдбар молча получает размеры DS. Именно от них отказался `D-MPK-TYPE-01`:
+     шкала DS калибровалась под фермерскую мобилку, а не под рабочий монитор снабженца.
+     Переносить надо СТУПЕНЬ, а не пиксели. */
+  font-size: var(--fs-base);
   font-weight: 400;
   line-height: 1;
   text-align: left;
@@ -228,10 +235,10 @@
   margin: 2px 0 6px 36px;
   padding: 4px 8px;
   border-left: 2px solid var(--bd);
-  /* `--fg2`, а не `--fg3`: подсказка набрана 11px, а мелкий текст требует БОЛЬШЕ контраста,
-     не меньше. В светлой теме `--fg3` дал бы 2.49:1 при норме 4.5. */
+  /* `--fg2`, а не `--fg3`: в светлой теме `--fg3` дал бы 2.49:1 при норме 4.5. */
   color: var(--fg2);
-  font-size: var(--fs-2xs);
+  /* `--fs-xs` (13px) — на ступень мельче пункта, но не 11px: подсказку надо читать */
+  font-size: var(--fs-xs);
   line-height: 1.4;
 }
 
@@ -261,7 +268,8 @@
   border: 1px solid transparent;
   border-radius: var(--r-md);
   color: var(--fg2);
-  font-size: var(--fs-xs);
+  /* один размер с пунктами сайдбара — это тоже пункт навигации */
+  font-size: var(--fs-base);
   text-align: left;
   cursor: pointer;
   transition: background var(--dur-default) var(--ease), color var(--dur-default) var(--ease);
@@ -278,7 +286,8 @@
 }
 .agos-mpk-console .mpkc-user-txt { flex: 1; min-width: 0; }
 .agos-mpk-console .mpkc-user-name {
-  font-size: var(--fs-2xs);
+  /* DS-подвал задаёт 12px = ступень `sm`; в нашей шкале это 13px, а не 11px */
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--fg);
   line-height: 1.2;
@@ -417,7 +426,8 @@
   background: transparent;
   border: none;
   color: var(--fg3);
-  font-size: var(--fs-xs);
+  /* та же поправка ступени: DS `HeaderTabs` задаёт 13px = ступень `base` (см. .mpkc-item) */
+  font-size: var(--fs-base);
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
