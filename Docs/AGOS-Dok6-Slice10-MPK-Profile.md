@@ -502,7 +502,8 @@ affordance, никогда не граница безопасности (`EngSpe
 
 | Подраздел | RPC | Тикет | Статус |
 |---|---|---|---|
-| enterprise | `rpc_update_mpk_org_details`, `rpc_upsert_mpk_profile`, `rpc_save_mpk_primary_site`, `rpc_append_org_bank_account`, `rpc_propose_org_field_change` | ARS-359 | ✅ |
+| enterprise · **запись** | `rpc_update_mpk_org_details`, `rpc_upsert_mpk_profile`, `rpc_save_mpk_primary_site`, `rpc_append_org_bank_account`, `rpc_propose_org_field_change` | ARS-359 | ✅ |
+| **enterprise · чтение** (реквизиты · площадка · банк · pending-правки · карточка для фермера) | `rpc_get_org_profile` (`MP-2.1`) | **ARS-362** | ❌ Backlog |
 | admission · верификация+членство | `rpc_get_org_membership_verification` | ARS-361 | ✅ |
 | admission · документы | `rpc_create_org_document_upload_intent`, `rpc_finalize_org_document_upload`, `rpc_abandon_org_document_upload` | ARS-355 | ✅ |
 | team | RBAC + invitations поверх `user_organization_roles` | ARS-356 | ✅ |
@@ -513,6 +514,16 @@ affordance, никогда не граница безопасности (`EngSpe
 | RLS · grants · тесты | `MP-1.7` | **ARS-358** | ❌ Backlog |
 
 Все ✅ проверены `prod_diff.py` 2026-09-01 — дрейф 0, задеплоены.
+
+⚠️ **Исправлено 2026-09-03 при заходе на MP-3.3.** До этой правки строка `enterprise` стояла
+одним «✅», хотя все пять названных RPC — **писатели**: ни одного читателя для раздела `org`
+не существует, а таблицы `mpk_profiles`/`mpk_sites`/`org_bank_accounts`/`org_field_reviews`
+для роли `authenticated` закрыты (`revoke all` — `d01_kernel.sql`), поэтому UI не может прочесть
+ни реквизиты сверх `rpc_get_my_context`, ни pending-правки, ни площадку, ни банк. Дом читателя —
+**ARS-362** (`MP-2.1 · Read RPC: overview + organization profile`, в Scope дословно
+`rpc_get_org_profile`: canonical org/site/bank/contact + pending field reviews), а не новая
+задача. Та же ошибка была и в `EXTRACT-tokens-and-data-map.md` §4 («4 из 6 подразделов имеют
+полное задеплоенное покрытие») — исправлена там же. Подробности захода — `Implementation Notes`.
 
 ---
 
@@ -673,7 +684,44 @@ MP-3.8, `ARS-628` — MP-3.7, `ARS-629` — MP-3.2. Порядок номеро�
 | задача | точка отсчёта | поставлена |
 |---|---|---|
 | MP-3.1 · SCR-P0 | `2eca878` | 2026-09-02 · влита PR #176 (squash `92fc66b`) |
-| MP-3.3 · SCR-P2 «Предприятие» | `d0f87cc` | 2026-09-03 · текущий `main` до первой правки |
+| MP-3.3 · SCR-P2 «Предприятие» | `d0f87cc` | 2026-09-03 · поставлена, **не израсходована** — сборка остановлена до первой правки кода (см. ниже) |
+
+**MP-3.3 · SCR-P2, заход 2026-09-03 остановлен на якоре 6 — читать до следующей попытки.**
+Кода нет: от `d0f87cc` не сделано ни одной правки в `src/`, точка отсчёта остаётся валидной
+для будущего прогона. Причина — **у раздела `org` нет read-пути**, тогда как ARS-624 закрывает
+`FR-007` («одна read-model») и приёмку 3 («сетевой ответ до `confirmed` не содержит закрытых
+полей — тест на payload»).
+
+| что требует §4 | состояние чтения на 2026-09-03 |
+|---|---|
+| название, БИН, регион, телефон | ✅ `rpc_get_my_context` (`src/lib/account.ts`) |
+| право на мутацию (`FR-016`/`M-019`) | ✅ `fn_org_has_permission(uuid, text)` — grant `authenticated` есть |
+| юр. адрес, e-mail, руководитель | ❌ читателя нет; прямое чтение таблицы из UI профиля запрещено EngSpec §8 |
+| площадка, банк, описание/логотип, pending-правки (`pr_pend`) | ❌ `revoke all … from authenticated` на `mpk_profiles`/`mpk_sites`/`org_bank_accounts`/`org_field_reviews` |
+| §4.2 превью карточки фермера | ❌ shared read-model не существует; фермерская сторона (`buyer`/`buyerPhone`) — тип без бэкенда |
+| запись (5 RPC ARS-359) | ✅ задеплоены |
+
+**Решение владельца 2026-09-03 (Dias):** MP-3.3 на паузу; новой задачи под читателя **не
+заводить** — его дом уже существует, это **ARS-362** (`MP-2.1 · Read RPC: overview +
+organization profile`, Backlog/High), в Scope дословно `rpc_get_org_profile`: canonical
+org/site/bank/contact + pending field reviews. На ARS-624 проставлена связь *blocked by*
+ARS-362, статус возвращён Done → Backlog вручную (интеграция закрыла тикет по id в заголовке
+docs-PR #178, где кода MP-3.3 не было). Следующий шаг — `/feature:feature` по ARS-362: у неё
+есть Scope и DoD, но **нет слайс-спеки с замороженными требованиями и подписи G2**.
+
+Почему читатель не был написан здесь же, в этом прогоне: §4.2 — юридически несущий блок
+(ст. 171 ПК РК), а `FR-007` требует **одну** модель на превью и на фермерскую выдачу.
+Фермерской выдачи не существует, значит модель нужно спроектировать, а не «дописать RPC» —
+проектирование на якоре 6 ровно то, что ладдер запрещает. Заодно этот заход показал, что
+`§9`/`EXTRACT §4` утверждали «`org` — полное задеплоенное покрытие ✅», перечисляя только
+писателей; обе строки исправлены в этом же коммите (`§9`, `EXTRACT §4` «Итог»).
+Долг по мёртвым SELECT-политикам без грантов — `IMPL_DEBT` MPK-PROFILE-READ-PATH-01.
+
+Что **не** проверялось в этом заходе, честно: converge-обход живых слайсов (хук на старте
+сессии его требовал) не запускался — вердикт converge существует ради пакета G3, а G3 в этом
+заходе не будет; прод-сверка `prod_diff.py` не гонялась — утверждения о грантах и об
+отсутствии читателя сделаны **по файлам** `d01_kernel.sql` / `supabase/migrations/2026073…`,
+а не по живой БД (последняя сверка §9 — 2026-09-01, дрейф 0).
 
 **MP-3.1 · SCR-P0, сборка 2026-09-02** (`baseline_commit` 2eca878). Каждая запись называет id.
 
