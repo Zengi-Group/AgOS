@@ -94,6 +94,7 @@
 | RPC-59 | `rpc_finalize_org_document_upload` | Identity/MPK | web | ✅ Implemented (ARS-355) | jsonb finalized summary |
 | RPC-60 | `rpc_abandon_org_document_upload` | Identity/MPK | web | ✅ Implemented (ARS-355) | jsonb abandon summary |
 | RPC-61 | `rpc_get_org_membership_verification` | Membership/MPK | web | ✅ Implemented (ARS-361) | jsonb canonical read model |
+| RPC-63 | `rpc_get_org_profile` | Identity/MPK | web | ✅ Implemented (ARS-362) | jsonb bounded profile read model |
 | RPC-05 | `rpc_upsert_farm` | Farm | web, ai | 📋 Planned | uuid (farm_id) |
 | RPC-05b | `rpc_set_farm_activity_types` | Farm | web, ai | 📋 Planned | jsonb { inserted, removed } |
 | RPC-06 | `rpc_upsert_herd_group` | Farm | web, ai | ✅ Implemented | uuid (group_id) |
@@ -448,6 +449,39 @@ approval by itself; a recorded assigner is provenance, not operator confirmation
 `association_number` is JSON null because no canonical source column exists.
 
 **Исключения:** `FORBIDDEN: not a member of organization …`
+
+### RPC-63 `MPK organization profile read model` [WEB] ✅ Implemented (ARS-362)
+
+| RPC | Параметры | Возвращает / правило |
+|---|---|---|
+| `rpc_get_org_profile` | `organization_id` | Ограниченный jsonb-payload вкладки «Предприятие» одним вызовом; участник организации, админ TURAN или service_role |
+
+Ключи ответа: `contract_version` · `organization` · `profile` · `primary_site` ·
+`bank {access, current, history[]}` · `field_reviews {pending[], resolved_recent[],
+resolved_total}` · `permissions {mpk.profile.edit, mpk.bank.manage}`.
+
+Владение проверяется в базе — `p_organization_id` не является доказательством (класс
+дефекта `VET-02`). `null`, чужая и несуществующая организация дают **один и тот же** отказ:
+ответ не подтверждает существование чужой организации.
+
+Банковский подблок открыт держателю `mpk.bank.manage` или админу — та же граница, что у
+задеплоенной политики `org_bank_accounts_read_authorized`. Без права приходит
+`bank.access = 'denied'` и **пустые** `current`/`history`: раздел остаётся читаемым, реквизитов
+нет в сетевом ответе. `permissions` отражает права на **запись** (проверки, которые реально
+делают писатели ARS-359), поэтому админ без `mpk.bank.manage` читает банк, но получает
+`permissions."mpk.bank.manage" = false`.
+
+Append-only история приходит отдельными ключами: актуальная версия банка — `bank.current`,
+предыдущие — `bank.history` по убыванию `version_no`; правки критических полей — `pending`
+отдельно от `resolved_recent` (20 последних) + `resolved_total`. При pending-правке `bin_iin`
+поле `organization.bin_iin` остаётся **прод-значением**.
+
+Читатель ничего не мутирует и не эмитит событий. Внутренний сбой чтения уходит наружу как
+`PROFILE_READ_FAILED` + человекочитаемая причина; текст SQL-исключения пишется только в
+серверный лог.
+
+**Исключения:** `AUTH_REQUIRED` (нет сессии) | `FORBIDDEN: not a member of organization …`
+(чужая, несуществующая или не названная организация) | `PROFILE_READ_FAILED`
 
 ---
 

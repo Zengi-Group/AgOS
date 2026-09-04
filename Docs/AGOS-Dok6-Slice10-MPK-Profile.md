@@ -513,7 +513,7 @@ affordance, никогда не граница безопасности (`EngSpe
 | Подраздел | RPC | Тикет | Статус |
 |---|---|---|---|
 | enterprise · **запись** | `rpc_update_mpk_org_details`, `rpc_upsert_mpk_profile`, `rpc_save_mpk_primary_site`, `rpc_append_org_bank_account`, `rpc_propose_org_field_change` | ARS-359 | ✅ |
-| **enterprise · чтение** (реквизиты · площадка · банк · pending-правки) | `rpc_get_org_profile` (`MP-2.1`) | **ARS-362** | 🟡 замысел (спека `AGOS-MPK-Profile-ReadRPC-ARS-362.md`, G2 не подписан) |
+| **enterprise · чтение** (реквизиты · площадка · банк · pending-правки) | `rpc_get_org_profile` (`MP-2.1`) | **ARS-362** | ✅ построен (спека `AGOS-MPK-Profile-ReadRPC-ARS-362.md`, G2 подписан 2026-09-04; контракт — `AGOS-Dok3-RPC-Catalog-v1_5.md` RPC-63) |
 | **enterprise · карточка для фермера** (`FR-007`, §4.2) | отдельная проекция раскрытия | **ARS-624** | ❌ решение владельца ожидается 07.09; долг `IMPL_DEBT` MPK-CARD-PROJECTION-01 |
 | admission · верификация+членство | `rpc_get_org_membership_verification` | ARS-361 | ✅ |
 | admission · документы | `rpc_create_org_document_upload_intent`, `rpc_finalize_org_document_upload`, `rpc_abandon_org_document_upload` | ARS-355 | ✅ |
