@@ -94,6 +94,7 @@
 | RPC-59 | `rpc_finalize_org_document_upload` | Identity/MPK | web | ✅ Implemented (ARS-355) | jsonb finalized summary |
 | RPC-60 | `rpc_abandon_org_document_upload` | Identity/MPK | web | ✅ Implemented (ARS-355) | jsonb abandon summary |
 | RPC-61 | `rpc_get_org_membership_verification` | Membership/MPK | web | ✅ Implemented (ARS-361) | jsonb canonical read model |
+| RPC-63 | `rpc_get_org_profile` | Identity/MPK | web | ✅ Implemented (ARS-362) | jsonb bounded profile read model |
 | RPC-05 | `rpc_upsert_farm` | Farm | web, ai | 📋 Planned | uuid (farm_id) |
 | RPC-05b | `rpc_set_farm_activity_types` | Farm | web, ai | 📋 Planned | jsonb { inserted, removed } |
 | RPC-06 | `rpc_upsert_herd_group` | Farm | web, ai | ✅ Implemented | uuid (group_id) |
@@ -448,6 +449,55 @@ approval by itself; a recorded assigner is provenance, not operator confirmation
 `association_number` is JSON null because no canonical source column exists.
 
 **Исключения:** `FORBIDDEN: not a member of organization …`
+
+### RPC-63 `MPK organization profile read model` [WEB] ✅ Implemented (ARS-362)
+
+| RPC | Параметры | Возвращает / правило |
+|---|---|---|
+| `rpc_get_org_profile` | `organization_id` | Ограниченный jsonb-payload вкладки «Предприятие» одним вызовом; участник организации либо админ TURAN. Служебного пути **нет** |
+
+Ключи ответа: `contract_version` · `organization` · `profile` · `primary_site` ·
+`bank {access, current, history[], history_total}` · `field_reviews {pending[],
+resolved_recent[], resolved_total}` · `permissions {mpk.profile.edit, mpk.bank.manage}`.
+
+Доступ открыт **двумя** путями и никакими другими: членство в запрошенной организации ·
+админ TURAN. **Служебного пути нет** — в отличие от соседа `rpc_get_org_membership_verification`
+(ARS-361), откуда ветка была скопирована при первой сборке и убрана решением владельца
+2026-09-07: потребителя нет ни одного, а ветка открывала бы чтение профиля любой организации
+в обход проверки владения. Грант `to service_role` **сохранён** — без него служебный вызов
+падал бы сырой ошибкой прав Postgres мимо обработчика; с ним он доходит до предиката и
+получает типизированный отказ. Доказательством членства служит **подписанный
+Supabase клейм** (`app_metadata.org_ids`) либо запрос к базе, но **никогда**
+`p_organization_id` от клиента (класс дефекта `VET-02`). Следствие, названное явно:
+исключённый из организации сохраняет доступ **до обновления токена** — окно устаревания
+общее с ARS-361 и писателями ARS-359, дом — `fn_my_org_ids()` (`D-NEW-1`), долг
+`IMPL_DEBT` `JWT-MEMBERSHIP-STALENESS-01`. `null`, чужая и несуществующая организация дают
+**один и тот же** отказ: ответ не подтверждает существование чужой организации.
+
+Банковский подблок открыт держателю `mpk.bank.manage` или админу — та же граница, что у
+задеплоенной политики `org_bank_accounts_read_authorized`. Без права приходит
+`bank.access = 'denied'` и **пустые** `current`/`history`: раздел остаётся читаемым, реквизитов
+нет в сетевом ответе. `permissions` отражает права на **запись** (проверки, которые реально
+делают писатели ARS-359), поэтому админ без `mpk.bank.manage` читает банк, но получает
+`permissions."mpk.bank.manage" = false`.
+
+Append-only история приходит отдельными ключами: актуальная версия банка — `bank.current`,
+предыдущие — `bank.history` по убыванию `version_no` (20 последних **закрытых** версий) +
+`bank.history_total`; правки критических полей — `pending` отдельно от `resolved_recent`
+(20 последних) + `resolved_total`. При pending-правке `bin_iin` поле `organization.bin_iin`
+остаётся **прод-значением**. Граница истории режет только закрытые версии: живая запись
+(`valid_to is null`), не попавшая в `current`, приходит **мимо** границы — писатель
+`rpc_append_org_bank_account` при `p_previous_account_id = null` делает второй живой счёт
+достижимым, и общий `limit` вытолкнул бы его из ответа целиком (`FR-019`/`M-013`, долг
+`IMPL_DEBT` `BANK-MULTI-LIVE-ACCOUNT-01`).
+
+Читатель ничего не мутирует и не эмитит событий. Наружу идёт **код, по которому клиент
+подбирает текст**, а не готовая формулировка: текст ошибки — UI-факт (`FR-018`). Внутренний
+сбой чтения уходит как `PROFILE_READ_FAILED`; текст SQL-исключения пишется только в серверный
+лог.
+
+**Исключения:** `AUTH_REQUIRED` (нет сессии) | `FORBIDDEN: not a member of organization …`
+(чужая, несуществующая или не названная организация) | `PROFILE_READ_FAILED`
 
 ---
 
