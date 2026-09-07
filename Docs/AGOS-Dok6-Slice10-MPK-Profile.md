@@ -349,9 +349,13 @@ initial read per tab»).
 Не более одной pending-правки на организацию × поле. Все три пути записи требуют
 permission `mpk.profile.edit`; approve/reject — только TURAN.
 
-**RPC:** `rpc_update_mpk_org_details`, `rpc_upsert_mpk_profile`,
+**RPC:** запись — `rpc_update_mpk_org_details`, `rpc_upsert_mpk_profile`,
 `rpc_save_mpk_primary_site`, `rpc_append_org_bank_account`,
-`rpc_propose_org_field_change` (все ✅ задеплоены, ARS-359).
+`rpc_propose_org_field_change` (все ✅ задеплоены, ARS-359); чтение —
+`rpc_get_org_profile` (ARS-362, 🟡 собран, не задеплоен; контракт ответа —
+`AGOS-Dok3-RPC-Catalog-v1_5.md` RPC-63). До ARS-362 перечень назывался «RPC раздела», но
+состоял только из писателей — читателя раздела не существовало, и именно на этом
+остановилась MP-3.3 (`ARS-624`).
 
 ### 4.2. 🔴 Превью карточки для фермера — юридически несущий блок
 
@@ -522,7 +526,7 @@ affordance, никогда не граница безопасности (`EngSpe
 | Подраздел | RPC | Тикет | Статус |
 |---|---|---|---|
 | enterprise · **запись** | `rpc_update_mpk_org_details`, `rpc_upsert_mpk_profile`, `rpc_save_mpk_primary_site`, `rpc_append_org_bank_account`, `rpc_propose_org_field_change` | ARS-359 | ✅ |
-| **enterprise · чтение** (реквизиты · площадка · банк · pending-правки) | `rpc_get_org_profile` (`MP-2.1`) | **ARS-362** | ✅ построен (спека `AGOS-MPK-Profile-ReadRPC-ARS-362.md`, G2 подписан 2026-09-04; контракт — `AGOS-Dok3-RPC-Catalog-v1_5.md` RPC-63) |
+| **enterprise · чтение** (реквизиты · площадка · банк · pending-правки) | `rpc_get_org_profile` (`MP-2.1`) | **ARS-362** | 🟡 построен, **НЕ задеплоен** (спека `AGOS-MPK-Profile-ReadRPC-ARS-362.md`, G2 **переподписан 2026-09-07**, прежняя подпись 04.09 снята вместе со сборкой `56631d8`; контракт — `AGOS-Dok3-RPC-Catalog-v1_5.md` RPC-63). Отдельная метка, а не ✅: строка «все ✅ задеплоены» ниже к нему не относится — в проде функции нет (сверено запросом к `pg_proc`), merge ≠ деплой |
 | **enterprise · карточка для фермера** (`FR-007`, §4.2) | отдельная проекция раскрытия | **ARS-624** | ❌ решение владельца ожидается 07.09; долг `IMPL_DEBT` MPK-CARD-PROJECTION-01 |
 | admission · верификация+членство | `rpc_get_org_membership_verification` | ARS-361 | ✅ |
 | admission · документы | `rpc_create_org_document_upload_intent`, `rpc_finalize_org_document_upload`, `rpc_abandon_org_document_upload` | ARS-355 | ✅ |
@@ -533,7 +537,9 @@ affordance, никогда не граница безопасности (`EngSpe
 | admission · доп. RPC | `MP-2.3` | **ARS-363** | ❌ Backlog |
 | RLS · grants · тесты | `MP-1.7` | **ARS-358** | ❌ Backlog |
 
-Все ✅ проверены `prod_diff.py` 2026-09-01 — дрейф 0, задеплоены.
+Все ✅ проверены `prod_diff.py` 2026-09-01 — дрейф 0, задеплоены. **Строка 🟡 в это
+утверждение не входит:** `rpc_get_org_profile` собран в ветке `ars-362-org-profile-read` и
+в проде отсутствует, поэтому обобщение «задеплоены» на него не распространяется.
 
 ⚠️ **Исправлено 2026-09-03 при заходе на MP-3.3.** До этой правки строка `enterprise` стояла
 одним «✅», хотя все пять названных RPC — **писатели**: ни одного читателя для раздела `org`
