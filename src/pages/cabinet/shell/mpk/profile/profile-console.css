@@ -549,3 +549,280 @@
   border: 1px solid var(--bd-s);
   border-radius: var(--r-md);
 }
+
+/* ─────────── SCR-P2 «Предприятие» — левая половина (ARS-624, MP-3.3) ───────────
+   Префикс `mpkc-req-*`, а не `mpkc-org*`: тот уже занят карточкой организации в
+   сайдбаре (см. `.mpkc-org` выше, KEEP-11). Все значения — существующие переменные
+   `.agos-mpk-console` (light/dark оба уже переопределяют их), новых токенов нет. */
+
+.agos-mpk-console .mpkc-req {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 640px;
+}
+
+.agos-mpk-console .mpkc-req-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  /* Числа прототипа (L774): gap 8px/18px, кегль 13px. Было `--fs-2xs` (11px) и gap 6/16 —
+     легенда выглядела мельче подписей строк, найдено владельцем на экране 08.09. */
+  gap: 8px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-xs);
+  color: var(--fg3);
+}
+/* Третий пункт — в правый угол (`margin-left:auto`, прототип L780), как meta в шапках. */
+.agos-mpk-console .mpkc-req-legend li.last { margin-left: auto; }
+/* Пункт легенды несёт свою иконку (§4.1.1): точка-заменитель убрана, иначе дублирует маркер. */
+.agos-mpk-console .mpkc-req-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.agos-mpk-console .mpkc-req-pend {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--amber);
+  background: var(--amber-m);
+}
+.agos-mpk-console .mpkc-req-pend-txt { flex: 1; min-width: 0; }
+/* Числа прототипа (L770-771): заголовок 15px/600, текст 13px, line-height 1.5, margin-top 3px.
+   Было 13px и 11px — снова на ступень ниже макета, как у подписей строк, meta и легенды.
+   Корень класса и таблица всех кеглей — §4.1.1 «Типографика». */
+.agos-mpk-console .mpkc-req-pend-title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--fg);
+}
+.agos-mpk-console .mpkc-req-pend-body {
+  margin-top: 3px;
+  font-size: var(--fs-xs);
+  color: var(--fg2);
+  line-height: 1.5;
+}
+
+.agos-mpk-console .mpkc-req-card {
+  border: 1px solid var(--bd);
+  border-radius: var(--r-lg);
+  background: var(--bg-c);
+  overflow: hidden;
+}
+.agos-mpk-console .mpkc-req-card-head {
+  display: flex;
+  /* center, а не baseline — как в прототипе (L784): при baseline иконка заголовка
+     садится по базовой линии текста и выглядит смещённой вверх. */
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--bd-s);
+}
+.agos-mpk-console .mpkc-req-card-title {
+  margin: 0;
+  /* §0.3 (изоляция) — ОБЯЗАТЕЛЬНО, не косметика: глобальное правило
+     `h1..h6 { @apply font-serif }` (src/index.css:418) протекает внутрь консоли и делает
+     все пять заголовков карточек ЗАСЕЧНЫМИ вместо Geist. В прототипе заголовок — `span`,
+     поэтому там утечки нет. Найдено владельцем на экране 08.09: «никакого Geist почему-то
+     нет» — и в этой надписи его действительно не было. Семантику заголовка не отдаём
+     (доступность), поэтому перебиваем шрифт здесь. */
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--fg);
+}
+/* Распорка между заголовком и `meta` (§4.1.1 «Структура карточки», прототип L788
+   `<div style="flex:1">`) — уносит `meta` к правому краю шапки карточки; без неё `meta`
+   липнет к заголовку слева (находка владельца 08.09, третий круг правок по структуре). */
+.agos-mpk-console .mpkc-req-card-spacer {
+  flex: 1;
+}
+.agos-mpk-console .mpkc-req-card-meta {
+  /* Прототип (L788) даёт meta 12px. В тип-шкале консоли (D-MPK-TYPE-01, снята с прототипа)
+     ступени 12px нет: 11px `--fs-2xs` мельче макета, 13px `--fs-xs` крупнее. Ставим макетное
+     число литералом — подгонять на ближайшую ступень значило бы молча разойтись с макетом,
+     а заводить новую ступень ради одной подписи — менять шкалу под частный случай. */
+  font-size: 12px;
+  color: var(--fg3);
+  text-align: right;
+}
+.agos-mpk-console .mpkc-req-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 16px;
+}
+
+/* Двухколоночная сетка (§4.1.1 «Структура карточки», прототип L792: `display:grid;
+   grid-template-columns:170px minmax(0,1fr);gap:14px;align-items:start`) — раньше строка
+   была вертикальным стеком (flex-column), из-за чего подпись/значение/карандаш садились
+   в три отдельные строки вместо одной (находка владельца 08.09). */
+.agos-mpk-console .mpkc-req-row {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+/* Левая ячейка (170px, прототип L793): подпись + маркеры допуска/видимости фермеру. */
+.agos-mpk-console .mpkc-req-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* Правая ячейка (minmax(0,1fr)): обёртка над режимом правки ИЛИ над строкой чтения —
+   сама не флекс, раскладку внутри задают `.mpkc-req-edit`/`.mpkc-req-row-value-inline`. */
+.agos-mpk-console .mpkc-req-row-value {
+  min-width: 0;
+}
+/* Строка чтения внутри правой ячейки (прототип L814: `display:flex;flex-wrap:wrap;
+   align-items:center;gap:8px`) — значение · Badge «На проверке» · карандаш в ОДНУ строку,
+   Badge после значения (прототип L816), а не после подписи. */
+.agos-mpk-console .mpkc-req-row-value-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 190px;
+}
+/* Прототип L794: `min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap` —
+   без этого длинные подписи («Юридический адрес», «Мощность приёмки», «Телефон площадки»)
+   при 170px-колонке переносились бы на вторую строку (`.mpkc-req-row-head` не задаёт
+   flex-wrap, но inline-текст спана переносится сам) и сдвигали маркеры допуска/видимости
+   вниз — здесь однострочное усечение с многоточием, как в источнике. */
+.agos-mpk-console .mpkc-req-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* 13px = `--fs-xs`, как в прототипе (L794), а НЕ `--fs-2xs` (11px). Найдено владельцем на
+     экране 08.09: «подписи слишком маленькие, значения слишком большие». Значение (15px) при
+     этом совпадало с макетом — сломан был КОНТРАСТ: 11 против 15 вместо макетных 13 против 15. */
+  font-size: var(--fs-xs);
+  color: var(--fg3);
+}
+/* Маркеры строки (§4.1.1 легенда: «входит в допуск» / «видно фермеру») — B.7,
+   RowMarkers в OrgSection.tsx. Иконки уже несут цвет (shieldCheck — amber, eye — fg3). */
+.agos-mpk-console .mpkc-req-markers {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.agos-mpk-console .mpkc-req-value {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--fg);
+  font-size: var(--fs-base);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.agos-mpk-console .mpkc-req-value:hover:not(:disabled) { border-color: var(--bd); background: var(--bg-m); }
+.agos-mpk-console .mpkc-req-value:disabled { cursor: default; opacity: 0.6; }
+.agos-mpk-console .mpkc-req-value.readonly {
+  cursor: default;
+  color: var(--fg);
+  font-size: var(--fs-base);
+  overflow-wrap: anywhere;
+}
+.agos-mpk-console .mpkc-req-static {
+  color: var(--fg);
+  font-size: var(--fs-base);
+  overflow-wrap: anywhere;
+}
+
+.agos-mpk-console .mpkc-req-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.agos-mpk-console .mpkc-req-input {
+  height: var(--h-md);
+  padding: 0 10px;
+  background: var(--bg);
+  border: 1px solid var(--bd-h);
+  border-radius: var(--r-md);
+  color: var(--fg);
+  font-size: var(--fs-base);
+}
+.agos-mpk-console .mpkc-req-input:focus-visible {
+  outline: none;
+  border-color: var(--cta);
+}
+.agos-mpk-console .mpkc-req-hint {
+  font-size: var(--fs-2xs);
+  color: var(--fg3);
+  line-height: 1.5;
+}
+.agos-mpk-console .mpkc-req-error {
+  font-size: var(--fs-2xs);
+  color: var(--red);
+}
+.agos-mpk-console .mpkc-req-note {
+  font-size: var(--fs-xs);
+  color: var(--fg3);
+  line-height: 1.5;
+}
+.agos-mpk-console .mpkc-req-empty {
+  font-size: var(--fs-xs);
+  color: var(--fg3);
+}
+.agos-mpk-console .mpkc-req-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.agos-mpk-console .mpkc-req-history {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--bd-s);
+}
+.agos-mpk-console .mpkc-req-history-cap {
+  font-size: var(--fs-2xs);
+  color: var(--fg3);
+  margin-bottom: 6px;
+}
+.agos-mpk-console .mpkc-req-history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.agos-mpk-console .mpkc-req-history-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--fs-2xs);
+  color: var(--fg2);
+}
+.agos-mpk-console .mpkc-req-history-meta { color: var(--fg3); white-space: nowrap; }
+
+.agos-mpk-console .mpkc-req-textarea {
+  min-height: 96px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--bd-h);
+  border-radius: var(--r-md);
+  color: var(--fg);
+  font-size: var(--fs-base);
+  font-family: inherit;
+  resize: vertical;
+}
+.agos-mpk-console .mpkc-req-textarea:focus-visible {
+  outline: none;
+  border-color: var(--cta);
+}
