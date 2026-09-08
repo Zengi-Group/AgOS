@@ -21,6 +21,7 @@ import type { MpkProfileTab } from '../types'
 import { ProfileSidebar } from './ProfileSidebar'
 import { ProfileTabs, profileTabLabel } from './ProfileTabs'
 import { ConsoleError, ConsoleSkeleton, SectionStub } from './SectionStub'
+import { OrgSection } from './OrgSection'
 import './profile-console.css'
 
 // §1.4 / FR-012: полная консоль поддерживается при ≥1024px.
@@ -115,8 +116,17 @@ const SECTION_STUB: Record<MpkProfileTab, { title: string; note: string; mpkActi
     note: 'Сводка допуска и списка дел появится здесь. Пока статус допуска виден на главной мобильного кабинета МПК.',
   },
   org: {
+    // B.8 (круг правок ARS-624, 08.09.2026): текст ниже НЕ показывается — ветка
+    // `tab === 'org'` в body() рендерит `OrgSection` раньше, чем эта заглушка. Запись
+    // остаётся мёртвой, а не удалена: `Record<MpkProfileTab, …>` требует ключ для каждого
+    // таба, и порядок веток в body() однажды может измениться, снова выведя её на экран.
+    // Прежний текст («изменить реквизиты можно только через обращение в TURAN») к этому
+    // моменту утверждал неправду дважды: реквизиты уже редактировались напрямую, а затем
+    // круг правок B убрал часть той самой правки (см. комментарий в OrgSection.tsx, раздел
+    // A) — заглушка обязана быть нейтральной, а не подтверждать то, что уже другое на
+    // экране. Превью карточки для фермера (§4.2) по-прежнему не построено — дом ARS-666.
     title: 'Раздел в разработке',
-    note: 'Реквизиты предприятия и превью карточки для фермера появятся здесь. Пока изменить реквизиты можно только через обращение в TURAN.',
+    note: 'Превью карточки для фермера появится здесь.',
   },
   adm: {
     title: 'Раздел в разработке',
@@ -238,6 +248,9 @@ export function MpkProfileApp() {
   const body = () => {
     if (loading) return <ConsoleSkeleton />
     if (failed) return <ConsoleError onRetry={() => setReloadToken((n) => n + 1)} />
+    // ARS-624 (KEEP-11): ветка ВЫШЕ SECTION_STUB[tab] — аддитивно, ни одной строки
+    // существующей заглушки не удалено; пять прочих табов продолжают отдавать SectionStub.
+    if (tab === 'org') return <OrgSection organizationId={profile?.orgId ?? null} />
     const stub = SECTION_STUB[tab]
     return (
       <SectionStub
