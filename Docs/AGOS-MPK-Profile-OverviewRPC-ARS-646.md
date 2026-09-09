@@ -1,6 +1,6 @@
 ---
 status: agreed             # гейт замысла пройден 2026-09-09: оба Open Questions закрыты решениями владельца (OQ-1 источник фактов → batch_allocations/delivered; OQ-2 дом расхождения pools.organization_id → ARS-668). Разборы оставлены на месте, ответы в Clarifications
-g2_approved:               # пусто = НЕ одобрено. Пишется ТОЛЬКО владельцем, своей командой в своём терминале (плагин feature → scripts/approve-g2.sh). Агент этого сделать не может и не должен
+g2_approved: 2026-09-09 · Dias Zhagaparov
 baseline_commit:           # ставится в /build до первой правки кода
 review_iterations: 0
 brain_spec: "[[projects/agos/specs/mpk-cabinet]]"
