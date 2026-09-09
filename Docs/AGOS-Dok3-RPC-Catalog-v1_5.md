@@ -95,6 +95,7 @@
 | RPC-60 | `rpc_abandon_org_document_upload` | Identity/MPK | web | ✅ Implemented (ARS-355) | jsonb abandon summary |
 | RPC-61 | `rpc_get_org_membership_verification` | Membership/MPK | web | ✅ Implemented (ARS-361) | jsonb canonical read model |
 | RPC-63 | `rpc_get_org_profile` | Identity/MPK | web | ✅ Implemented (ARS-362) | jsonb bounded profile read model |
+| RPC-64 | `rpc_get_mpk_profile_overview` | Identity/MPK | web | ✅ Implemented (ARS-646) | jsonb bounded overview read model; deal counters unavailable pending ARS-668 |
 | RPC-05 | `rpc_upsert_farm` | Farm | web, ai | 📋 Planned | uuid (farm_id) |
 | RPC-05b | `rpc_set_farm_activity_types` | Farm | web, ai | 📋 Planned | jsonb { inserted, removed } |
 | RPC-06 | `rpc_upsert_herd_group` | Farm | web, ai | ✅ Implemented | uuid (group_id) |
@@ -498,6 +499,64 @@ Append-only история приходит отдельными ключами:
 
 **Исключения:** `AUTH_REQUIRED` (нет сессии) | `FORBIDDEN: not a member of organization …`
 (чужая, несуществующая или не названная организация) | `PROFILE_READ_FAILED`
+
+---
+
+### RPC-64 `MPK profile overview read model` [WEB] ✅ Implemented (ARS-646)
+
+| RPC | Параметры | Возвращает / правило |
+|---|---|---|
+| `rpc_get_mpk_profile_overview` | `organization_id` | Ограниченный jsonb-payload вкладки «Обзор» одним вызовом; участник организации либо админ TURAN. Служебного пути **нет** |
+
+Ключи ответа: `contract_version` · `organization_id` · `admission {status, checked_at,
+has_pending_reviews}` · `gates[]` · `attention[]` · `reputation` · `facts {staff_active,
+deals_closed, heads_accepted, supplier_orgs}` · `permissions {mpk.review.submit}`.
+
+Доступ и отказы — **те же, что у RPC-63**: два пути (членство · админ TURAN), служебного нет,
+грант `to service_role` сохранён ради типизированного отказа, `null`/чужая/несуществующая
+организация дают один и тот же отказ. Окно устаревания членства общее (`fn_my_org_ids()`,
+`D-NEW-1`, долг `JWT-MEMBERSHIP-STALENESS-01`).
+
+**Чужие факты берутся у их хозяев, а не перевыводятся** (`P4`): членство и верификация —
+`rpc_get_org_membership_verification` (ARS-361), репутация — `rpc_get_mpk_reputation`
+(ARS-360). Свои — только те, у которых дома нет: правки критических полей, скрытые отзывы,
+число сотрудников.
+
+**Дом текста — клиент.** Наружу идут машинные поля (`kind` · `tone` · `action.type` + числа),
+никогда готовая формулировка: тексты интерфейса берутся дословно из прототипа и правятся
+владельцем, поэтому их правка не должна быть деплоем SQL. Перечни **закрыты**, и новый
+элемент = правка спеки + этой строки Dok3 в том же PR (`D-RPC-CONTRACT-SYNC-01`; прецедент
+`_fn_farm_attention`, где спека обещала два типа, а код отдавал четыре):
+
+- `admission.status` ∈ `allowed` · `allowed_conditional` · `restricted` · `pending` · `unknown`.
+  Выводится из `membership.is_active` + `verification.status` (ARS-361). Отсутствие данных
+  верификации даёт `unknown` («статус уточняется»), **никогда** `restricted`. Гейт `documents`
+  в вывод статуса **не входит**: рантайм-гейт закупок — членство (`D-BILL-TRUTH-01`), документы
+  — доказательная база верификации, не отдельный запрет.
+- `gates[].kind` ∈ `verification` · `membership` · `documents`; `tone` ∈ `ok` · `warning` ·
+  `info` · `unknown`. Поля: `verification` — `status`/`approved_at`/`pending_field_count`;
+  `membership` — `is_active`/`source`/`days_left`/`current_period_end`/`plan_title`/`cta`;
+  `documents` — **только** `{available: false, blocked_by: "ARS-363"}`, счётчика «N из M» нет
+  (читателя документов не существует).
+- `attention[].kind` ∈ `membership_expiring` · `pending_field_review` · `hidden_review`.
+  Зарезервирован и **не выдаётся** `appeal_open` — модели `org_appeal_cases` нет (ARS-357/364).
+  `action.type` ∈ `open_admission` · `open_org` · `open_reputation`. Пустой список — это
+  посчитанное «чисто», отличимое от «не считалось», поэтому всегда массив, а не `null`.
+  Кнопка продления членства **не мутирует** подписку.
+
+**Три сделочных числа приходят признаком, а не цифрой:** `deals_closed`, `heads_accepted` и
+`supplier_orgs` = `{available: false, blocked_by: "ARS-668"}` при любых данных. Причина —
+**неопределённость смысла, а не отсутствие источника**: не решено, закрыта ли сделка в момент
+подтверждения приёмки или в момент расчёта (расчёт вне системы, ст. 171 ПК РК), сходится ли
+число с собственным учётом комбината, считать за всё время или за сезон. Ноль означал бы
+«сделок нет» — утверждение, которого система сделать не может. Ключи оставлены в контракте,
+чтобы возврат счётчика **заполнил** форму, а не сменил её. Считается только `staff_active`.
+
+Читатель ничего не мутирует и не эмитит событий. Внутренний сбой чтения уходит как
+`OVERVIEW_READ_FAILED`; текст SQL-исключения пишется только в серверный лог.
+
+**Исключения:** `AUTH_REQUIRED` (нет сессии) | `FORBIDDEN: not a member of organization …`
+(чужая, несуществующая или не названная организация) | `OVERVIEW_READ_FAILED`
 
 ---
 
