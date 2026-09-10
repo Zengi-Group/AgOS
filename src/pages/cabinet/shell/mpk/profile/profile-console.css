@@ -826,3 +826,333 @@
   outline: none;
   border-color: var(--cta);
 }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   MP-3.7 (ARS-628) · SCR-P1 «Обзор». Дописано в конец файла — ни одно правило
+   выше не изменено (P7). Селекторы по-прежнему scoped на `.agos-mpk-console`,
+   ни одного на `:root`/`body` (FR-006, критерий приёмки 3).
+
+   Тон блока задаёт класс `tone-*` на самом блоке: он объявляет локальные
+   `--tone`/`--tone-m`, а точка, плашка иконки и полоса читают их. Семантика
+   статуса приходит из данных (`tone` контракта RPC-64), а не из места в разметке.
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.agos-mpk-console .tone-ok      { --tone: var(--green);  --tone-m: var(--green-m); }
+.agos-mpk-console .tone-warning { --tone: var(--amber);  --tone-m: var(--amber-m); }
+.agos-mpk-console .tone-info    { --tone: var(--blue);   --tone-m: var(--blue-m); }
+.agos-mpk-console .tone-unknown { --tone: var(--fg3);    --tone-m: var(--bg-m); }
+
+.agos-mpk-console .mpkc-ov {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.agos-mpk-console .mpkc-ov-card {
+  background: var(--bg-c);
+  border: 1px solid var(--bd);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+}
+
+/* ── Статус допуска */
+
+.agos-mpk-console .mpkc-ov-adm-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--bd-s);
+  background: var(--bg-s);
+}
+.agos-mpk-console .mpkc-ov-dot {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  border-radius: var(--r-full);
+  background: var(--tone);
+  box-shadow: 0 0 0 4px var(--tone-m);
+}
+.agos-mpk-console .mpkc-ov-adm-txt { min-width: 0; flex: 1 1 280px; }
+.agos-mpk-console .mpkc-ov-adm-title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.agos-mpk-console .mpkc-ov-adm-sub {
+  margin: 2px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--fg3);
+  line-height: 1.45;
+}
+.agos-mpk-console .mpkc-ov-checked {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--fg3);
+  white-space: nowrap;
+}
+
+/* ── Гейты. Сетка прототипа: auto-fit от 250px, разделители — фон под зазором 1px. */
+
+.agos-mpk-console .mpkc-ov-gates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1px;
+  background: var(--bd-s);
+}
+.agos-mpk-console .mpkc-ov-gate {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 18px 22px 16px;
+  background: var(--bg-c);
+}
+.agos-mpk-console .mpkc-ov-gate-head { display: flex; align-items: center; gap: 9px; }
+.agos-mpk-console .mpkc-ov-gate-ico {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: var(--tone-m);
+  color: var(--tone);
+}
+.agos-mpk-console .mpkc-ov-gate-label {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--fg2);
+}
+.agos-mpk-console .mpkc-ov-gate-body { flex: 1; }
+.agos-mpk-console .mpkc-ov-gate-value {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+.agos-mpk-console .mpkc-ov-gate-note {
+  margin-top: 4px;
+  font-size: var(--fs-xs);
+  color: var(--fg3);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+.agos-mpk-console .mpkc-ov-gate-bar {
+  height: 4px;
+  border-radius: 3px;
+  background: var(--bg-m);
+  overflow: hidden;
+}
+.agos-mpk-console .mpkc-ov-gate-bar > i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: 3px;
+  background: var(--tone);
+}
+
+/* Ссылка-действие: то же начертание, что у прототипных `g.actLabel` и `goRep`. */
+.agos-mpk-console .mpkc-ov-link {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--fg2);
+  cursor: pointer;
+  transition: color var(--dur-default) var(--ease);
+}
+.agos-mpk-console .mpkc-ov-link:hover { color: var(--fg); }
+.agos-mpk-console .mpkc-ov-link:focus-visible { outline: 1px solid var(--bd-h); outline-offset: 2px; }
+
+/* ── Средний ряд: «Требует внимания» + сводка репутации */
+
+.agos-mpk-console .mpkc-ov-mid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: flex-start;
+}
+.agos-mpk-console .mpkc-ov-todo { flex: 1 1 440px; min-width: 0; }
+.agos-mpk-console .mpkc-ov-todo-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--bd-s);
+}
+.agos-mpk-console .mpkc-ov-todo-title { font-size: var(--fs-md); font-weight: 600; }
+.agos-mpk-console .mpkc-ov-count {
+  padding: 1px 8px;
+  border-radius: var(--r-full);
+  background: var(--bg-m);
+  border: 1px solid var(--bd);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--fg2);
+}
+.agos-mpk-console .mpkc-ov-todo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--bd-s);
+}
+.agos-mpk-console .mpkc-ov-todo-row:last-child { border-bottom: none; }
+.agos-mpk-console .mpkc-ov-todo-ico {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: var(--r-lg);
+  display: grid;
+  place-items: center;
+  background: var(--tone-m);
+  color: var(--tone);
+}
+.agos-mpk-console .mpkc-ov-todo-txt { flex: 1; min-width: 190px; }
+.agos-mpk-console .mpkc-ov-todo-t { font-size: var(--fs-base); font-weight: 500; line-height: 1.35; }
+.agos-mpk-console .mpkc-ov-todo-s {
+  margin-top: 3px;
+  font-size: var(--fs-xs);
+  color: var(--fg3);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+/* M-019, третья клаузула: недоступное действие ОБЪЯСНЯЕТСЯ. Тон — тот же приглушённый
+   `--fg2`, что у пояснений «нет права» в разделе `org` (один язык на обе поверхности). */
+.agos-mpk-console .mpkc-ov-todo-denied {
+  margin-top: 5px;
+  font-size: var(--fs-2xs);
+  color: var(--fg2);
+  line-height: 1.4;
+}
+.agos-mpk-console .mpkc-ov-btn {
+  height: var(--h-md);
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--bd);
+  background: var(--bg-m);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--dur-default) var(--ease);
+}
+.agos-mpk-console .mpkc-ov-btn:hover { border-color: var(--bd-h); }
+.agos-mpk-console .mpkc-ov-btn:focus-visible { outline: 1px solid var(--bd-h); outline-offset: 2px; }
+
+.agos-mpk-console .mpkc-ov-clean {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 20px;
+  font-size: var(--fs-base);
+  color: var(--fg2);
+}
+.agos-mpk-console .mpkc-ov-clean svg { color: var(--green); }
+
+/* ── Сводка репутации */
+
+.agos-mpk-console .mpkc-ov-rep {
+  flex: 1 1 300px;
+  min-width: 0;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.agos-mpk-console .mpkc-ov-rep-top { display: flex; align-items: flex-end; gap: 13px; }
+.agos-mpk-console .mpkc-ov-rep-num {
+  font-family: var(--mono);
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.agos-mpk-console .mpkc-ov-rep-cap { padding-bottom: 2px; }
+.agos-mpk-console .mpkc-ov-rep-of { font-size: var(--fs-sm); color: var(--fg2); }
+.agos-mpk-console .mpkc-ov-rep-n { margin-top: 3px; font-size: var(--fs-xs); color: var(--fg3); }
+/* M-016: «оценок пока нет» — словами, НЕ числом «0.0», поэтому и начертание не
+   цифровое: моно-шрифт в этой позиции прочитался бы как показатель. */
+.agos-mpk-console .mpkc-ov-rep-none {
+  margin-top: 6px;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--fg2);
+}
+.agos-mpk-console .mpkc-ov-rep-empty + .mpkc-ov-link { margin-top: 18px; }
+.agos-mpk-console .mpkc-ov-dims {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  margin-top: 18px;
+  align-self: stretch;
+}
+.agos-mpk-console .mpkc-ov-dims + .mpkc-ov-link { margin-top: 18px; }
+.agos-mpk-console .mpkc-ov-dim-row { display: flex; align-items: baseline; gap: 10px; }
+.agos-mpk-console .mpkc-ov-dim-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--fg2);
+  line-height: 1.35;
+}
+.agos-mpk-console .mpkc-ov-dim-v {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.agos-mpk-console .mpkc-ov-dim-bar {
+  height: 6px;
+  border-radius: 4px;
+  background: var(--bg-m);
+  overflow: hidden;
+  margin-top: 6px;
+}
+.agos-mpk-console .mpkc-ov-dim-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--emerald);
+}
+
+/* ── Факты */
+
+.agos-mpk-console .mpkc-ov-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: var(--bd-s);
+  border: 1px solid var(--bd);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+}
+.agos-mpk-console .mpkc-ov-fact { flex: 1 1 180px; padding: 15px 20px; background: var(--bg-c); }
+.agos-mpk-console .mpkc-ov-fact-label { font-size: var(--fs-xs); color: var(--fg3); }
+.agos-mpk-console .mpkc-ov-fact-value {
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+/* Строка без числа (FR-008): «пока не ведётся» набирается как ТЕКСТ, а не как
+   показатель — моно-начертание в позиции числа читалось бы как данные. */
+.agos-mpk-console .mpkc-ov-fact.is-na .mpkc-ov-fact-value {
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--fg3);
+}

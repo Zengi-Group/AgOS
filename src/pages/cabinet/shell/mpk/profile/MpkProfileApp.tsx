@@ -15,55 +15,41 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { loadAccountProfile, type AccountProfile, type CanonicalVerificationStatus } from '@/lib/account'
+import { loadAccountProfile, type AccountProfile } from '@/lib/account'
 import { mpkProfileTabFromUrl, mpkRouteToUrl } from '../nav'
 import type { MpkProfileTab } from '../types'
 import { ProfileSidebar } from './ProfileSidebar'
 import { ProfileTabs, profileTabLabel } from './ProfileTabs'
 import { ConsoleError, ConsoleSkeleton, SectionStub } from './SectionStub'
-import { OrgSection } from './OrgSection'
+import { OrgSection, type LoadFailure } from './OrgSection'
+import { OverviewSection } from './OverviewSection'
+import { admissionBadgeFromVerdict, loadOverview, type OverviewPayload } from './overview-model'
 import './profile-console.css'
 
 // §1.4 / FR-012: полная консоль поддерживается при ≥1024px.
 const WIDE_QUERY = '(min-width: 1024px)'
 
-type BadgeTone = 'green' | 'amber' | 'red' | 'neutral'
-
-// Истина доступа к закупкам — та же цепочка, что у мобильной оболочки
-// (`MpkApp.deriveMpkMembership`): сначала `is_active` из ARS-361 read-model, и только при
-// его отсутствии — legacy `subscriptionState`. Дублируется, а не импортируется: импорт из
-// `MpkApp.tsx` затащил бы в чанк консоли весь Ionic-остров. Правило одно, дом факта —
-// read-model, а не вторая интерпретация статусов.
-function hasMembershipAccess(profile: AccountProfile | null): boolean {
-  const readModel = profile?.membershipVerification?.membership
-  if (readModel) return readModel.isActive
-  const state = profile?.subscriptionState
-  return state === 'trialing' || state === 'active' || state === 'grace'
-}
-
-// Бейдж шапки отвечает на вопрос Intent — «можем ли мы закупать прямо сейчас». Поэтому
-// он читает И верификацию, И членство: approved с истёкшим членством закупки не открывает
-// (мобильная оболочка в этом случае TSP закрывает), и обещать «Допущен к закупкам» нельзя.
-// M-013: пусто ≠ «отказано» — отсутствие данных показывается как «Статус уточняется».
-function admissionBadge(
-  status: CanonicalVerificationStatus | null | undefined,
-  membershipOk: boolean,
-): { tone: BadgeTone; label: string } {
-  switch (status) {
-    case 'approved':
-      return membershipOk
-        ? { tone: 'green', label: 'Допущен к закупкам' }
-        : { tone: 'amber', label: 'Членство неактивно' }
-    case 'rejected': return { tone: 'red', label: 'Допуск отклонён' }
-    // `not_mpk` — организация вообще не заявлена как МПК. Говорить ей «допуск не
-    // подтверждён» значит обещать проверку, которой не существует.
-    case 'not_mpk': return { tone: 'neutral', label: 'Организация не заявлена как МПК' }
-    case 'incomplete':
-    case 'conditional':
-    case 'expired': return { tone: 'amber', label: 'Допуск не подтверждён' }
-    default: return { tone: 'neutral', label: 'Статус уточняется' }
-  }
-}
+// БЕЙДЖ ШАПКИ БОЛЬШЕ НЕ ВЫВОДИТ ВЕРДИКТ САМ (§3.0 спеки, решение владельца 2026-09-09).
+//
+// Здесь стояли `hasMembershipAccess` и `admissionBadge` — клиентский вывод «можем ли мы
+// закупать прямо сейчас» из `verification.status` + членства (MP-3.1). Они удалены, а не
+// оставлены без вызова (`HS-4`): вердикт считает база и отдаёт готовым в
+// `admission.status` агрегата, а вторая интерпретация статусов на клиенте — это второй дом
+// одного факта (`P4`) и нарушение `FR-003` («авторизация проверяется в базе»).
+//
+// Что это не «упрощение UX» и не потеря функции: бейдж остался на месте и продолжает
+// отвечать на тот же вопрос Intent — он берёт ту же строку из того же словаря, что и
+// заголовок «Обзора» (`admissionBadgeFromVerdict` в `overview-model.ts`). Строки матрицы
+// `M-013` держат его по-прежнему, но фикстуры их тестов переехали с `loadAccountProfile` на
+// ответ агрегата — вместе с домом факта.
+//
+// Почему это понадобилось: словарь MP-3.1 переиспользовали, а вывод — нет, и при
+// `verification = conditional` шапка говорила «Допуск не подтверждён» рядом с заголовком
+// «Допущен с условиями». На тогдашних прод-данных расхождение было недостижимо по ДАННЫМ,
+// а не по коду. Маршрут `bad_spec` на якоре 7, откат, §3.0.
+//
+// Мобильный шелл закупок не затронут (`FR-005`, `HS-2`): у него своя цепочка
+// `MpkApp.deriveMpkMembership`, агрегата там нет, и ни одна её строка не менялась.
 
 // Организационно-правовые формы: их буква в монограмму не идёт — иначе «ТОО Агрофирма
 // Восток» даёт «ТА», где «Т» не о предприятии, а о форме собственности. Русские и
@@ -112,6 +98,10 @@ function headerSubtitle(profile: AccountProfile | null): string {
 // строка матрицы требует не только честного текста, но и достижимого пути.
 const SECTION_STUB: Record<MpkProfileTab, { title: string; note: string; mpkAction?: string }> = {
   overview: {
+    // MP-3.7 (ARS-628): текст ниже БОЛЬШЕ НЕ показывается — ветка `tab === 'overview'` в
+    // body() рендерит `OverviewSection` раньше. Запись остаётся мёртвой, а не удалена, по
+    // той же причине, что и `org`: `Record<MpkProfileTab, …>` требует ключ для каждого
+    // таба, и порядок веток в body() однажды может измениться.
     title: 'Раздел в разработке',
     note: 'Сводка допуска и списка дел появится здесь. Пока статус допуска виден на главной мобильного кабинета МПК.',
   },
@@ -162,6 +152,15 @@ export function MpkProfileApp() {
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
   const [reloadToken, setReloadToken] = useState(0)
+
+  // §3.0: агрегат «Обзора» читается ЗДЕСЬ, на уровне оболочки, а не внутри вкладки —
+  // потому что его `admission.status` нужен и бейджу шапки, и заголовку «Обзора». Один
+  // вызов на монтирование консоли; `EngSpec §8` («one typed initial read per tab») этим не
+  // нарушается: «Обзор» — вкладка по умолчанию, второго чтения у неё нет.
+  const [overview, setOverview] = useState<OverviewPayload | null>(null)
+  const [overviewStatus, setOverviewStatus] = useState<'loading' | 'error' | 'ready'>('loading')
+  const [overviewFailure, setOverviewFailure] = useState<LoadFailure | null>(null)
+  const [overviewToken, setOverviewToken] = useState(0)
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
   // id пункта сайдбара, по которому показана подсказка «Раздел в разработке» (FR-013).
   // Это подсказка САМОГО ПУНКТА, а не состояние экрана: контент, ptabs и URL она не
@@ -195,6 +194,28 @@ export function MpkProfileApp() {
     return () => { alive = false }
   }, [reloadToken])
 
+  // `KEEP-21`: флаг отмены обязателен — без него второй запрос (повтор после отказа или
+  // смена организации) может завершиться раньше первого, и поздний ответ перезапишет
+  // свежий. Организация известна только после профиля, поэтому чтение последовательное:
+  // `p_organization_id = null` дал бы FORBIDDEN, а честнее не звать вовсе.
+  const orgId = profile?.orgId ?? null
+  useEffect(() => {
+    if (!orgId) return
+    let alive = true
+    setOverviewStatus('loading')
+    void loadOverview(orgId).then((result) => {
+      if (!alive) return
+      if ('failure' in result) {
+        setOverviewFailure(result.failure)
+        setOverviewStatus('error')
+      } else {
+        setOverview(result.payload)
+        setOverviewStatus('ready')
+      }
+    })
+    return () => { alive = false }
+  }, [orgId, overviewToken])
+
   const goTab = useCallback((next: MpkProfileTab) => {
     setSoonHint(null)
     // Клик по уже активной вкладке не кладёт запись в историю: иначе browser-back
@@ -212,10 +233,12 @@ export function MpkProfileApp() {
   // выданное за данные значение.
   const orgLoaded = !loading && !failed && profile?.name
   const orgName = profile?.name ?? 'Предприятие'
-  const badge = admissionBadge(
-    profile?.membershipVerification?.verification?.status,
-    hasMembershipAccess(profile),
-  )
+  // §3.0 п.2: пока вердикт не пришёл, бейджа НЕТ вовсе. Нейтральной подписи-заполнителя
+  // здесь тоже не появляется: любая строка в этом месте была бы утверждением о статусе,
+  // которого мы ещё не знаем (`FR-008`), а вычислять его на клиенте больше нельзя.
+  const badge = overviewStatus === 'ready' && overview
+    ? admissionBadgeFromVerdict(overview.admission.status)
+    : null
 
   // FR-012: ниже 1024px консоль не сжимается. Полноценный Ionic-мост со сводкой допуска —
   // отдельная задача MP-3.2 (её overview-RPC ещё в бэклоге, ARS-362); до неё здесь стоит
@@ -251,6 +274,24 @@ export function MpkProfileApp() {
     // ARS-624 (KEEP-11): ветка ВЫШЕ SECTION_STUB[tab] — аддитивно, ни одной строки
     // существующей заглушки не удалено; пять прочих табов продолжают отдавать SectionStub.
     if (tab === 'org') return <OrgSection organizationId={profile?.orgId ?? null} />
+    // MP-3.7 (ARS-628): тем же приёмом — ветка ВЫШЕ заглушки, аддитивно. Раздел получает
+    // состояние чтения, а не читает сам (§3.0): дом факта один, и он в оболочке.
+    // Навигация передаётся пропсами — карта URL↔маршрут одна на обе поверхности
+    // (`../nav.ts`, `P4`/`P6`). `onContactTuran` ведёт на `/mpk`, где живёт шторка
+    // «Обратиться в TURAN» — тот же достижимый путь, что у заглушки `appeals`.
+    if (tab === 'overview') {
+      return (
+        <OverviewSection
+          status={overviewStatus}
+          payload={overview}
+          failure={overviewFailure}
+          organizationId={orgId}
+          onRetry={() => setOverviewToken((n) => n + 1)}
+          onOpenTab={goTab}
+          onContactTuran={backToMpk}
+        />
+      )
+    }
     const stub = SECTION_STUB[tab]
     return (
       <SectionStub
@@ -281,7 +322,7 @@ export function MpkProfileApp() {
           <div className="mpkc-head-txt">
             <div className="mpkc-head-row">
               <span className="mpkc-head-name">{orgName}</span>
-              <span className={`mpkc-badge ${badge.tone}`}>{badge.label}</span>
+              {badge && <span className={`mpkc-badge ${badge.tone}`}>{badge.label}</span>}
             </div>
             <div className="mpkc-head-sub">{headerSubtitle(profile)}</div>
           </div>

@@ -509,8 +509,23 @@ Append-only история приходит отдельными ключами:
 | `rpc_get_mpk_profile_overview` | `organization_id` | Ограниченный jsonb-payload вкладки «Обзор» одним вызовом; участник организации либо админ TURAN. Служебного пути **нет** |
 
 Ключи ответа: `contract_version` · `organization_id` · `admission {status, checked_at,
-has_pending_reviews}` · `gates[]` · `attention[]` · `reputation` · `facts {staff_active,
+has_pending_reviews}` — **`checked_at` = момент ЧТЕНИЯ (`now()`), а не время последней
+проверки TURAN**; клиент опирается на это, печатая «обновлено сегодня, HH:MM», поэтому смена
+смысла поля обязана идти вместе с правкой копирайта потребителя *(дописано 2026-09-10:
+семантика была только в комментарии SQL, и утверждение UI о ней ничем не проверялось —
+`ARS-628`, итерация 2)* · `gates[]` · `attention[]` · `reputation {mpk_org_id, review_count,
+average_score, weight_accuracy_average, distribution{1..5}}` (сквозной проброс ответа
+`rpc_get_mpk_reputation`, ARS-360 — форма его, не наша) · `facts {staff_active,
 deals_closed, heads_accepted, supplier_orgs}` · `permissions {mpk.review.submit}`.
+
+> ⚠️ **Дописано 2026-09-09 при сборке первого потребителя (`ARS-628`, `D-RPC-CONTRACT-SYNC-01`).**
+> Перечень выше называл `attention` и `reputation` одним словом, без состава — а клиент
+> опирается на `attention[].priority` (порядок пунктов), на поля пунктов по видам и на
+> подключи `reputation`. Признак `available` тоже был описан только у гейта `documents`,
+> хотя SQL печатает его у всех трёх. Ни одно из этих полей не попало бы в проверку
+> код↔док — ровно тот дрейф, от которого правило и заводилось (прецедент Slice8 §2.2 /
+> `ARS-279`). Снапшот CHECK 11 их не ловит: он сверяет **имена** ключей, а не то, описаны
+> ли они здесь.
 
 Доступ и отказы — **те же, что у RPC-63**: два пути (членство · админ TURAN), служебного нет,
 грант `to service_role` сохранён ради типизированного отказа, `null`/чужая/несуществующая
@@ -543,6 +558,14 @@ deals_closed, heads_accepted, supplier_orgs}` · `permissions {mpk.review.submit
   `action.type` ∈ `open_admission` · `open_org` · `open_reputation`. Пустой список — это
   посчитанное «чисто», отличимое от «не считалось», поэтому всегда массив, а не `null`.
   Кнопка продления членства **не мутирует** подписку.
+  Общие поля каждого пункта: `kind` · `priority` (целое; **порядок показа задаёт он**, а не
+  позиция в массиве) · `tone` · `action {type}`. Поля по видам: `membership_expiring` —
+  `days_left`/`current_period_end`; `pending_field_review` — `field_count`/`fields[]` (имена
+  полей `org_field_reviews.field_name`, не тексты: дом формулировок — клиент);
+  `hidden_review` — `count`/`counterparty_name`. Потребитель обязан пропускать вид вне
+  перечня, а не подписывать его текстом соседнего вида.
+- Признак `available` несут **все три** гейта: `verification` и `membership` — `true`,
+  `documents` — `false` (с `blocked_by`). Гейт `documents` единственный **не несёт `tone`**.
 
 **Три сделочных числа приходят признаком, а не цифрой:** `deals_closed`, `heads_accepted` и
 `supplier_orgs` = `{available: false, blocked_by: "ARS-668"}` при любых данных. Причина —

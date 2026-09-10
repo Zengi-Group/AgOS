@@ -113,7 +113,10 @@ interface OrgBankAccountRow {
   created_at: string
 }
 
-type CriticalFieldName = 'legal_name' | 'address_text' | 'bin_iin'
+// MP-3.7 (`KEEP-5`): `export` добавлен аддитивно — «Обзор» собирает ту же фразу
+// «На проверке: наименование, БИН» из ТОГО ЖЕ словаря `PEND_FIELD_LABEL` (`P4`, один дом
+// подписи поля), а не из второй таблицы переводов. Ни одна строка ниже не менялась.
+export type CriticalFieldName = 'legal_name' | 'address_text' | 'bin_iin'
 
 interface OrgFieldReviewPending {
   id: string
@@ -171,7 +174,7 @@ interface OrgProfilePayload {
 
 type SaveResult = { ok: true } | { ok: false; message: string }
 
-type LoadFailure =
+export type LoadFailure =
   | { kind: 'rpc'; code: string }
   | { kind: 'local'; message: string }
 
@@ -179,7 +182,7 @@ type LoadFailure =
 // живут на клиенте (`AGOS-MPK-Profile-ReadRPC-ARS-362.md` «UI contract»). Сравнение —
 // по коду ДО ДВОЕТОЧИЯ: путь FORBIDDEN несёт машинный хвост
 // («FORBIDDEN: not a member of organization <id>»), сравнивать строку целиком нельзя.
-function parseRpcCode(message: string | null | undefined): string {
+export function parseRpcCode(message: string | null | undefined): string {
   return ((message ?? '').split(':')[0] ?? '').trim()
 }
 
@@ -233,7 +236,7 @@ const NO_EDIT_RIGHT_NOTE = 'На изменение этих данных нет
 const READ_ONLY_NOT_BUILT_NOTE = 'Пока только просмотр: изменение этих данных на этом экране ещё не заведено.'
 
 // pr_pendTxt (§4.1.1, L1990-1991) — русские подписи ИМЕННО в этом регистре, дословно.
-const PEND_FIELD_LABEL: Record<CriticalFieldName, string> = {
+export const PEND_FIELD_LABEL: Record<CriticalFieldName, string> = {
   legal_name: 'наименование',
   bin_iin: 'БИН',
   address_text: 'юридический адрес',
