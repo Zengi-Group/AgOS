@@ -65,7 +65,7 @@ export interface PoolLine {
 
 export interface SupplierRow {
   id: string
-  rating: number         // 1–5
+  rating?: number        // 1–5 · демо-данные (seed/addSupplier); реальные строки рейтинг не несут — см. myRating
   heads: number
   price: number
   deliveryStatus: 'awaiting_dispatch' | 'in_transit' | 'delivered' | 'withdrawn'
@@ -83,6 +83,9 @@ export interface SupplierRow {
   confirmedAt?: string | null
   dispatchedAt?: string | null
   deliveredAt?: string | null
+  // ARS-684 (двухмаршрутная read-model): маршрут строки — кусок партии (batch_allocations)
+  // или партия целиком (batches.pool_line_id). Определяет, какую RPC приёмки звать.
+  source?: 'allocation' | 'batch'
 }
 
 export interface Pool {
