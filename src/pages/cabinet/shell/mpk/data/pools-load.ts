@@ -3,7 +3,7 @@
 // (контакты раскрыты только после executing, D40). Фолбэк — caller берёт seed.
 
 import { supabase } from '@/lib/supabase'
-import { MPK_CATS, mpkCatName, type MpkCatKey, type Pool, type PoolLine, type PoolStatus, type SupplierRow } from '../types'
+import { MPK_CATS, mpkCatName, type MpkCatKey, type Pool, type PoolLine, type PoolsRead, type PoolStatus, type SupplierRow } from '../types'
 
 interface RawPool {
   id: string
@@ -80,15 +80,54 @@ function toPool(r: RawPool): Pool {
   }
 }
 
-// Пулы МПК. null = backend недоступен/аноним → caller берёт seedPools.
-export async function loadMyPools(): Promise<Pool[] | null> {
+// ARS-687 (FR-009): исход чтения заявок различим — «пусто» ≠ «не прочитали».
+// До этого единственным читателем был loadMyPools(): Pool[] | null, где `null` означал
+// сразу два разных исхода, и оператору в любом из них показали бы либо список, которого он
+// не выбирал (seed-демо), либо «заявок нет». readMyPools заменил его целиком (все три
+// вызова в MpkApp), поэтому обёртки-с-null больше нет — два дома одного чтения (P4).
+export type MyPoolsRead =
+  | { kind: 'ok'; pools: Pool[] }
+  | { kind: 'no_session' }   // читать нечего (аноним/демо-шелл) → caller оставляет seed
+  | { kind: 'failed' }       // сессия есть, RPC/сеть отказали → «список не загрузился»
+
+// Отказ RPC у залогиненного МПК — это «не прочитали» (M-013); без сессии читать нечего —
+// демо-шелл, поведение до ARS-687.
+// «Сессии нет» утверждаем ТОЛЬКО когда getSession ответил без ошибки. Это не
+// перестраховка: проверено по установленному @supabase/auth-js — внутри
+// EXPIRY_MARGIN_MS (AUTO_REFRESH_TICK_THRESHOLD × AUTO_REFRESH_TICK_DURATION_MS = 90 с до
+// истечения) `__loadSession()` уходит в СЕТЬ за `_callRefreshToken` и при её недоступности
+// отдаёт `{ session: null, error }`. То есть у реального оператора с почти истёкшим токеном
+// в оффлайне «нет сессии» и «не смогли обновить» выглядят одинаково, и без проверки `error`
+// ему подставились бы seed-заявки ровно там, где FR-009 это запрещает.
+async function failedOrNoSession(): Promise<MyPoolsRead> {
+  try {
+    const { data, error } = await supabase.auth.getSession()
+    return error || data?.session ? { kind: 'failed' } : { kind: 'no_session' }
+  } catch {
+    return { kind: 'failed' }
+  }
+}
+
+// Пулы МПК с различимым исходом чтения (FR-009). Дом маппинга RawPool → Pool.
+export async function readMyPools(): Promise<MyPoolsRead> {
   try {
     const { data, error } = await supabase.rpc('rpc_get_my_pools', {})
-    if (error || !Array.isArray(data)) return null
-    return (data as RawPool[]).map(toPool)
+    if (error || !Array.isArray(data)) return await failedOrNoSession()
+    return { kind: 'ok', pools: (data as RawPool[]).map(toPool) }
   } catch {
-    return null
+    return await failedOrNoSession()
   }
+}
+
+// ARS-687 (FR-009): исход чтения → состояние экрана. Чистая функция, а не строка внутри
+// колбэка MpkApp, ровно чтобы переходы можно было закрепить тестом.
+// «Не загрузился» — про то, что список не прочитан НИ РАЗУ («пока список не прочитан»):
+// отказ поллинга (20с) ПОСЛЕ успешного чтения назад не отбрасывает, иначе транзиентный
+// сбой обнулил бы селектор под руками оператора, у которого список уже есть.
+export function nextPoolsRead(cur: PoolsRead, r: MyPoolsRead): PoolsRead {
+  if (r.kind === 'ok') return 'ready'
+  if (cur === 'ready') return 'ready'
+  return r.kind === 'failed' ? 'failed' : 'ready'
 }
 
 // Авто-закрытие просроченных пулов (D-AUTOCLOSE-01): дедлайн (конец target_month)

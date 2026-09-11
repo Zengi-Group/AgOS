@@ -37,11 +37,11 @@ import { DealClosedModal } from './modals/DealClosedModal'
 import { ContactTuranSheet } from './sheets/ContactTuranSheet'
 import { seedPools } from './data/pools'
 import { loadMarketBatches, seedMarketBatches, type MarketBatch } from './data/market'
-import { loadMyPools, loadPoolMatches, closeDuePools } from './data/pools-load'
+import { readMyPools, nextPoolsRead, loadPoolMatches, closeDuePools, type MyPoolsRead } from './data/pools-load'
 import { loadIncomingOffers } from './data/offers-load'
 import { mpkRouteToUrl, mpkUrlToRoute, mpkRouteKey, mpkDirFor } from './nav'
 import type {
-  IncomingOffer, MpkMembership, MpkModal, MpkRoute, MpkSheet, MpkState, MpkTypeStatus, PendingDeal, Pool, SupplierRow,
+  IncomingOffer, MpkMembership, MpkModal, MpkRoute, MpkSheet, MpkState, MpkTypeStatus, PendingDeal, Pool, PoolsRead, SupplierRow,
 } from './types'
 
 interface MpkAppProps {
@@ -127,6 +127,9 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
   const [typeStatus, setTypeStatus] = useState<MpkTypeStatus>(initialState?.typeStatus ?? 'under_review')
   const [membership, setMembership] = useState<MpkMembership>(initialState?.membership ?? 'submitted')
   const [pools, setPools] = useState<Pool[]>(initialState?.pools ?? seedPools())
+  // ARS-687 (FR-009): исход чтения заявок — маркет-борд гейтит отправку по нему, чтобы
+  // «не прочитали» не выглядело как «заявок нет», а seed-демо не попадало реальному МПК.
+  const [poolsRead, setPoolsRead] = useState<PoolsRead>(initialState?.pools ? 'ready' : 'loading')
   // S6: URL — источник истины экрана (deep-link открывает нужный экран).
   const [route, setRoute] = useState<MpkRoute>(() => mpkUrlToRoute(window.location.pathname))
   const [modal, setModal] = useState<MpkModal>(null)
@@ -170,6 +173,15 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
   const [marketBatches, setMarketBatches] = useState<MarketBatch[]>(seedMarketBatches())
   // Входящие broadcast-офферы (Слайс C): партии без прямого матча, разосланные мне (FCFS).
   const [offers, setOffers] = useState<IncomingOffer[]>([])
+
+  // ARS-687 (FR-009): единственное место, где исход чтения заявок превращается в состояние.
+  // Нет сессии (аноним/демо-шелл) — seed остаётся, как до ARS-687; отказ чтения у
+  // залогиненного МПК — отдельное «не загрузился» (M-013), а не «заявок нет» (M-004).
+  const applyPoolsRead = useCallback((r: MyPoolsRead) => {
+    if (r.kind === 'ok') setPools(r.pools)
+    setPoolsRead((cur) => nextPoolsRead(cur, r))
+  }, [])
+
   useEffect(() => {
     let alive = true
     loadAccountProfile('mpk').then(async (p) => {
@@ -212,22 +224,24 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     })
     // Реальные пулы МПК из БД; null (аноним/нет backend) — оставляем seed-демо.
     // Перед загрузкой — авто-закрытие просроченных пулов (D-AUTOCLOSE-01).
-    closeDuePools().then(() => loadMyPools()).then((list) => {
-      if (alive && list !== null) setPools(list)
+    closeDuePools().then(() => readMyPools()).then((r) => {
+      if (alive) applyPoolsRead(r)
     })
     loadIncomingOffers().then((list) => {
       if (alive && list !== null) setOffers(list)
     })
     return () => { alive = false }
-  }, [])
+    // applyPoolsRead — стабильный useCallback([]), эффект по-прежнему разовый.
+  }, [applyPoolsRead])
 
   // Перечитать всё разом — тело поллинга и pull-to-refresh (IonRefresher, spec §7).
-  // Безопасно для демо/анонима: load* вернут null → seed сохраняется.
+  // Безопасно для демо/анонима: loadMarketBatches/loadIncomingOffers вернут null → seed
+  // сохраняется; по заявкам то же делает исход `no_session` от readMyPools (ARS-687).
   const pullAll = useCallback(() => Promise.all([
-    closeDuePools().then(() => loadMyPools()).then((list) => { if (list !== null) setPools(list) }),
+    closeDuePools().then(() => readMyPools()).then(applyPoolsRead),
     loadMarketBatches().then((list) => { if (list !== null) setMarketBatches(list) }),
     loadIncomingOffers().then((list) => { if (list !== null) setOffers(list) }),
-  ]), [])
+  ]), [applyPoolsRead])
 
   // Лёгкий поллинг (D-SYNC-01): пулы и маркет-борд обновляются раз в 20с — МПК
   // видит авто-матч партий фермеров и изменения без перезагрузки.
@@ -241,8 +255,15 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     loadMarketBatches().then((list) => { if (list !== null) setMarketBatches(list) })
 
   // Перечитать пулы из БД (после смены статуса/матча).
-  const refetchPools = () =>
-    loadMyPools().then((list) => { if (list !== null) setPools(list) })
+  const refetchPools = () => readMyPools().then(applyPoolsRead)
+
+  // ARS-687 M-013: «Повторить» — у нажатия должна быть видимая реакция, поэтому возвращаем
+  // «грузится», но ТОЛЬКО из «не загрузился». Обычный refetchPools (после привязки/приёмки)
+  // состояние не трогает — иначе селектор мигал бы у оператора на каждом обновлении.
+  const retryPools = () => {
+    setPoolsRead((cur) => (cur === 'failed' ? 'loading' : cur))
+    return refetchPools()
+  }
 
   // Перечитать входящие офферы (после accept/reject/истечения).
   const refetchOffers = () =>
@@ -466,9 +487,13 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
               <BatchDetailModal
                 batch={marketBatches.find((b) => b.id === detailBatchId)}
                 pools={pools.filter((p) => p.status === 'filling')}
+                poolsState={poolsRead}
                 onClose={() => closeModal('batch_detail')}
                 toast={showToast}
                 onMatch={offerBatch}
+                // FR-004: заявок нет → уводим на создание, окно партии при этом закрывается.
+                onCreatePool={() => { closeModal('batch_detail'); openModal({ kind: 'create_pool' }) }}
+                onRetryPools={retryPools}
                 onOffer={(deal) => openModal({ kind: 'deal_closed', deal })}
               />
             )}
