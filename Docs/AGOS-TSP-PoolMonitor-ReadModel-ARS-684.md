@@ -1,5 +1,5 @@
 ---
-status: agreed           # гейт замысла проведён 2026-09-10 (G2-карточка: 5 находок ревью закрыты правкой, 1 Open Question отвечен владельцем → Clarifications); код (/build) — после подписи g2_approved
+status: shipped          # G3 подписан владельцем 10.09, влито PR #189 (e0d1e88), выложено 11.09 (prod_diff = 0) · гейт замысла проведён 2026-09-10 (G2-карточка: 5 находок ревью закрыты правкой, 1 Open Question отвечен владельцем → Clarifications); код (/build) — после подписи g2_approved
 g2_approved: 2026-09-10 · Dias Zhagaparov
 baseline_commit: 29da494c36bcdbc77ce389e355452518cd31729c   # /build ARS-684, зафиксирован до первой правки 2026-09-10
 brain_spec: "[[projects/agos/specs/tsp-farmer-sell-flow]]"
