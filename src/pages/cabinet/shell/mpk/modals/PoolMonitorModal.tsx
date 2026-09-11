@@ -1,7 +1,7 @@
 // AgOS · TSP-3 · Мониторинг заявки. Контент зависит от pool.status.
 // Анонимность (D40): в filling поставщики показаны без имени (★ · гол · аноним).
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Cta } from '../../components/Cta'
 import { PhIcon } from '../../components/icons/PhIcon'
 import { fmtMoney } from '../../tsp/data/tsp-utils'
@@ -20,7 +20,7 @@ interface Props {
   mpk?: { orgName: string; region: string; bin: string }            // реквизиты МПК — для документа сделки
   onAdvance?: (poolId: string, status: string) => Promise<void>     // реальный перевод статуса в БД
   onLoadMatches?: (poolId: string) => Promise<SupplierRow[] | null> // реальные поставщики пула
-  onConfirmDelivery?: (allocationId: string) => Promise<void>       // МПК подтверждает приёмку КУСКА (BT-18, Слайс 9 S3)
+  onConfirmDelivery?: (id: string, source?: SupplierRow['source']) => Promise<void>  // приёмка строки — кусок или партия целиком (ARS-684)
   onSubmitReview?: (batchId: string, rating: number) => Promise<void>  // GAP-REVIEW-MOCK-01: отзыв МПК о фермере
 }
 
@@ -217,19 +217,61 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
   const realPool = UUID_RE.test(pool.id)
   // Реальные поставщики из БД перекрывают демо-список (контакты — только при executing, D40).
   const [liveSuppliers, setLiveSuppliers] = useState<SupplierRow[] | null>(null)
+  // ARS-684 (M-013/M-016): состояние живого чтения read-model — общее для веток filling
+  // и executing/filled (обе рисуют suppliers из liveSuppliers через один и тот же источник).
+  const [matchesLoading, setMatchesLoading] = useState(() => realPool && !!onLoadMatches)
+  const [matchesError, setMatchesError] = useState(false)
+  // Ответы поллинга и ручного перечита могут прийти НЕ в порядке отправки: перечит
+  // после приёмки обгоняется ответом опроса, выданного до неё, и строка откидывается
+  // назад в «В пути» до следующего тика. Поэтому применяем только ответ, который не
+  // старше уже применённого (номер выдачи, а не времени прихода).
+  const reqSeq = useRef(0)
+  const appliedSeq = useRef(0)
+  const applyMatches = (rows: SupplierRow[] | null, seq: number) => {
+    if (seq < appliedSeq.current) return
+    appliedSeq.current = seq
+    if (rows !== null) { setLiveSuppliers(rows); setMatchesError(false) } else { setMatchesError(true) }
+    setMatchesLoading(false)
+  }
   useEffect(() => {
-    if (!realPool || !onLoadMatches) return
+    if (!realPool || !onLoadMatches) { setMatchesLoading(false); return }
     let alive = true
-    const load = () => onLoadMatches(pool.id).then((rows) => { if (alive && rows !== null) setLiveSuppliers(rows) })
+    const load = () => {
+      const seq = ++reqSeq.current
+      return onLoadMatches(pool.id).then((rows) => { if (alive) applyMatches(rows, seq) })
+    }
     load()
-    // Лёгкий поллинг (Слайс 9 S3): пока модалка открыта, тихо перечитываем куски —
+    // Лёгкий поллинг (Слайс 9 S3): пока модалка открыта, тихо перечитываем строки —
     // МПК видит отгрузку фермера (matched→dispatched) без переоткрытия окна.
     const iv = setInterval(load, 8000)
     return () => { alive = false; clearInterval(iv) }
   }, [realPool, pool.id, onLoadMatches])
 
+  // Ручной перечит после действия (приёмка, ARS-684 FR-005): строка обязана показать
+  // состояние ИЗ БАЗЫ, а не локально угаданное. Тот же путь, что и поллинг выше.
+  const reloadMatches = (): Promise<SupplierRow[] | null> => {
+    if (!onLoadMatches) return Promise.resolve(null)
+    const seq = ++reqSeq.current
+    return onLoadMatches(pool.id).then((rows) => { applyMatches(rows, seq); return rows })
+  }
+
   const suppliers = liveSuppliers ?? pool.suppliers ?? []
   const avgPrice = avgLinePrice(pool)
+
+  // Баннер ошибки/офлайн (M-013) и заметка первой загрузки (M-016) — общие для веток
+  // filling и executing/filled, обе показывают suppliers из живого чтения.
+  const matchesErrorNote = matchesError
+    ? <div className="mpk-error-hint" style={{ marginBottom: 8 }}>Не удалось обновить список</div>
+    : null
+  const matchesLoadingNote = realPool && matchesLoading
+    ? <div className="pool-card-sub">Загрузка…</div>
+    : null
+  // «Поставщиков пока нет» (M-005) — утверждение О БАЗЕ, поэтому только когда список
+  // РЕАЛЬНО прочитан и пуст. При сбое чтения (M-013) liveSuppliers остаётся null, и
+  // подпись не показывается: «не смогли прочитать» ≠ «поставщиков нет».
+  const matchesEmptyNote = realPool && liveSuppliers !== null && liveSuppliers.length === 0
+    ? <div className="pool-card-sub">Поставщиков пока нет</div>
+    : null
 
   const downloadDoc = () => {
     const ok = printDealDoc(buildMpkDealDoc(pool, suppliers, mpk))
@@ -245,12 +287,18 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
   }
 
   // Демо-патч статуса + (для реального пула) реальный перевод в БД через RPC.
+  // FR-007: у реального пула на экране не остаётся состояние, которого нет в базе —
+  // при отказе RPC локальный патч откатывается. Прогресс (filledHeads) огорожен тем же
+  // правилом ниже; статус пула был из него выпущен.
   const applyStatus = (patch: Partial<Pool>) => {
+    const prevStatus = pool.status
     onPatch(patch)
     const st = patch.status
     if (realPool && onAdvance && st && REAL_STATUSES.includes(st)) {
-      onAdvance(pool.id, st).catch((e) =>
-        toast('Не удалось обновить статус: ' + (e instanceof Error ? e.message : '')))
+      onAdvance(pool.id, st).catch((e) => {
+        onPatch({ status: prevStatus })
+        toast('Не удалось обновить статус: ' + (e instanceof Error ? e.message : ''))
+      })
     }
   }
 
@@ -272,28 +320,43 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
 
           <div>
             <div className="mpk-field-label">Поставщики ({suppliers.length})</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {suppliers.map((s) => (
-                <div className="supplier-row" key={s.id}>
-                  <div className="supplier-row-t">
-                    <span>★ {s.rating.toFixed(1)} · {s.heads} гол</span>
-                    <span className="supplier-row-s">аноним</span>
+            {matchesErrorNote}
+            {matchesLoadingNote ?? matchesEmptyNote ?? (suppliers.length === 0 ? null : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {suppliers.map((s) => (
+                  <div className="supplier-row" key={s.id}>
+                    <div className="supplier-row-t">
+                      {/* FR-015: своя прошлая оценка либо прочерк. Демо-строки несут свой
+                          rating (разные значения) — константы 4.5 у реальных строк больше нет. */}
+                      <span>★ {(s.myRating ?? s.rating) != null ? (s.myRating ?? s.rating)!.toFixed(1) : '—'} · {s.heads} гол</span>
+                      <span className="supplier-row-s">аноним</span>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ))}
             <div className="mpk-error-hint" style={{ color: 'var(--ink-3)', marginTop: 8 }}>
               Личность поставщика раскрывается только после подтверждения сделки
             </div>
           </div>
 
-          <Cta variant="ghost" onClick={addSupplier}>+ Добавить поставщика</Cta>
-          <Cta onClick={() => { applyStatus({ status: 'filled', filledHeads: pool.totalHeads }); toast('Заявка набрана') }}>
+          {/* FR-007: дорисовывающие поставщиков элементы — только демо (по образцу «Демо: фермер отгрузил»). */}
+          {!realPool && (
+            <Cta variant="ghost" onClick={addSupplier}>+ Добавить поставщика</Cta>
+          )}
+          <Cta onClick={() => {
+            // FR-007: для реального пула прогресс обязан прийти из базы — filledHeads не дорисовываем,
+            // applyStatus обновит статус в БД (onAdvance), а следующий refetch принесёт настоящий filledHeads.
+            applyStatus(realPool ? { status: 'filled' } : { status: 'filled', filledHeads: pool.totalHeads })
+            toast('Заявка набрана')
+          }}>
             Все набраны
           </Cta>
-          <Cta variant="ghost" onClick={() => { onPatch({ status: 'expired' }); toast('Срок заявки истёк') }}>
-            Истёк срок
-          </Cta>
+          {!realPool && (
+            <Cta variant="ghost" onClick={() => { onPatch({ status: 'expired' }); toast('Срок заявки истёк') }}>
+              Истёк срок
+            </Cta>
+          )}
           <Cta variant="danger" onClick={() => { applyStatus({ status: 'closed' }); toast('Заявка отменена'); onClose() }}>
             Отменить заявку
           </Cta>
@@ -321,7 +384,12 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
         <ModalHead title={pool.title} onClose={onClose} />
         <div className="mpk-modal-body">
           <div className="mpk-banner neutral"><div className="mpk-banner-t">⚠ Срок истёк</div></div>
-          <div className="pool-card-sub">Осталось решить: 23 ч 41 мин</div>
+          {/* FR-007: выдуманный срок — ветка 'expired' и так недостижима для реального пула
+              (статус ставится только локально, REAL_STATUSES его не содержит), но не полагаемся
+              на это молча — гейт явный. */}
+          {!realPool && (
+            <div className="pool-card-sub">Осталось решить: 23 ч 41 мин</div>
+          )}
           <div className="pool-card-sub">
             Набрано {pool.filledHeads} из {pool.totalHeads} · средняя цена {fmtMoney(avgPrice)}{NBSP}₸/кг
           </div>
@@ -342,11 +410,11 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
     )
   }
 
-  // ── filled / executing (приёмка ПО КУСКАМ) ───────────────────────────────
-  // Слайс 9 S3: контакты раскрыты по факту закрытия пула (mpk_contact_revealed_at),
-  // а приёмку МПК подтверждает по КАЖДОМУ куску, как только фермер его отгрузил.
-  // Поэтому отдельный шаг «Перейти к приёмке» не нужен — filled и executing едины:
-  // как только пул набран, МПК сразу видит куски и принимает отгруженные.
+  // ── filled / executing (приёмка по маршруту строки) ──────────────────────
+  // Слайс 9 S3 + ARS-684: контакты раскрыты по факту закрытия пула (mpk_contact_revealed_at),
+  // а приёмку МПК подтверждает по КАЖДОЙ строке (кусок или партия целиком — см. s.source),
+  // как только фермер её отгрузил. Поэтому отдельный шаг «Перейти к приёмке» не нужен —
+  // filled и executing едины: как только пул набран, МПК сразу видит строки и принимает отгруженные.
   if (pool.status === 'executing' || pool.status === 'filled') {
     const allDone = suppliers.length > 0
       && suppliers.every((s) => s.deliveryStatus === 'delivered' || s.deliveryStatus === 'withdrawn')
@@ -361,7 +429,19 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
               : 'Идёт приёмка'}
           </div></div>
           <Cta variant="ghost" onClick={downloadDoc}>Скачать документ сделки</Cta>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {matchesErrorNote}
+          {matchesLoadingNote}
+          {/* M-005: набранный пул с пустым списком — ровно тот симптом, с которого начался
+              слайс, поэтому подпись обязана быть и здесь, а не только в ветке filling
+              (closed_filled маппится в 'filled', pools-load.ts:44). */}
+          {matchesEmptyNote}
+          {/* M-016: список за тем же гейтом загрузки, что в ветке filling. Раньше эта ветка
+              рендерила строки БЕЗУСЛОВНО, и до первого ответа сюда попадал бы pool.suppliers
+              одновременно с надписью «Загрузка…» — проверено экспериментом (подложенная строка
+              просачивалась в DOM). В проде путь замаскирован: toPool всегда ставит
+              suppliers: [] реальному пулу (pools-load.ts:78). Но комментарии выше обещают эту
+              гарантию для ОБЕИХ ветвей, а структурно она была только в одной. */}
+          {!matchesLoadingNote && <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {suppliers.map((s) => (
               <div className="supplier-row" key={s.id}>
                 <div className="supplier-row-t">
@@ -373,6 +453,17 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                   {s.heads} гол{s.avgWeight ? ` · ~${s.avgWeight}${NBSP}кг` : ''} · {fmtMoney(s.price)}{NBSP}₸/кг
                   {supplierSum(s) > 0 ? ` · ≈ ${fmtMoney(supplierSum(s))}${NBSP}₸` : ''}
                 </div>
+                {/* FR-003/M-001: телефон хозяйства В СТРОКЕ, а не только в печатном документе.
+                    RPC его отдаёт после раскрытия контактов пула, до раскрытия присылает null
+                    (M-004) — поэтому отдельного гейта здесь не нужно, гейт живёт в базе.
+                    Половина смысла слайса — «узнать, у кого купил, и позвонить»: у фермера
+                    телефон покупателя печатается в строке (BatchScreen.tsx:287), у комбината
+                    не печатался нигде — та самая асимметрия, которую FR-003 и называет. */}
+                {s.farmPhone && (
+                  <div className="supplier-row-s">
+                    <a href={`tel:${s.farmPhone}`}>{s.farmPhone}</a>
+                  </div>
+                )}
                 {s.deliveryStatus === 'awaiting_dispatch' && (
                   <>
                     <div className="supplier-status">Ожидает отгрузки</div>
@@ -389,9 +480,26 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                     <div className="supplier-status transit">В пути</div>
                     <Cta onClick={() => {
                       if (realPool && onConfirmDelivery) {
-                        onConfirmDelivery(s.id)
-                          .then(() => toast('Приёмка подтверждена'))
-                          .catch((e) => toast('Не удалось: ' + (e instanceof Error ? e.message : '')))
+                        // ARS-684 FR-002: адрес приёмки по маршруту строки — кусок (allocation.id)
+                        // или партия целиком (batchId).
+                        const confirmId = s.source === 'batch' ? s.batchId : s.id
+                        if (!confirmId) return
+                        onConfirmDelivery(confirmId, s.source)
+                          .then(() => {
+                            toast('Приёмка подтверждена')
+                            // FR-005: строка обязана показать состояние ИЗ БАЗЫ, не локальный патч.
+                            reloadMatches()
+                          })
+                          .catch((e) => {
+                            const msg = e instanceof Error ? e.message : ''
+                            // M-017: двойной клик / уже принята — перечитываем факт из базы; если
+                            // строка там уже delivered, это не ошибка оператора (цель достигнута).
+                            reloadMatches().then((rows) => {
+                              const fresh = rows?.find((r) => r.id === s.id)
+                              if (msg.includes('INVALID_STATUS') && fresh?.deliveryStatus === 'delivered') return
+                              toast('Не удалось: ' + msg)
+                            })
+                          })
                       } else {
                         patchSupplier(s.id, { deliveryStatus: 'delivered' }); toast('Приёмка подтверждена')
                       }
@@ -400,12 +508,39 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                     </Cta>
                   </>
                 )}
-                {s.deliveryStatus === 'delivered' && <div className="supplier-status done">✓ Принята</div>}
+                {s.deliveryStatus === 'delivered' && (
+                  <>
+                    <div className="supplier-status done">✓ Принята</div>
+                    {/* FR-006/M-010,011: отзыв достижим сразу после приёмки, не дожидаясь закрытия
+                        всего пула — но ТОЛЬКО на маршруте «партия». Канонический
+                        rpc_submit_deal_review гейтит по статусу ПАРТИИ
+                        (20260731074557:470 «reviews only from delivered»), а строка-кусок
+                        delivered не означает delivered у партии: пока в пути другие куски,
+                        отзыв упрётся в INVALID_STATUS. Матрица и говорит про партию
+                        («партия принята», M-010/M-011). Для кусков отзыв остаётся там, где был —
+                        в ветке executed ниже (пул completed = все партии delivered), поведение
+                        куска не меняется (M-007). */}
+                    {s.source === 'batch' && <StarPicker
+                      value={s.myRating ?? 0}
+                      onChange={(n) => {
+                        const prev = s.myRating
+                        patchSupplier(s.id, { myRating: n })
+                        if (realPool && s.batchId && onSubmitReview) {
+                          onSubmitReview(s.batchId, n).catch((e) => {
+                            // Не оставляем на экране оценку, которой нет в базе (FR-005).
+                            patchSupplier(s.id, { myRating: prev })
+                            toast('Не удалось отправить отзыв: ' + (e instanceof Error ? e.message : ''))
+                          })
+                        }
+                      }}
+                    />}
+                  </>
+                )}
                 {s.deliveryStatus === 'withdrawn' && <div className="supplier-status">Отозвана</div>}
                 {realPool && s.batchId && <RevealedBatchDetail batchId={s.batchId} />}
               </div>
             ))}
-          </div>
+          </div>}
           {allDone && (
             <Cta onClick={() => { applyStatus({ status: 'executed', executionResult: 'full' }); toast('Сделка завершена') }}>
               Завершить
@@ -418,7 +553,12 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
 
   // ── executed (и closed) ───────────────────────────────────────────────────
   const allRated = suppliers.length > 0 && suppliers.every((s) => (s.myRating ?? 0) > 0)
-  const sumMln = Math.round((pool.filledHeads * 0.45 * avgPrice) / 100000) / 10
+  // Итог сделки — сумма по строкам поставщиков (гол × средний вес × цена строки), тем же
+  // supplierSum, которым считается «≈ N ₸» в самой строке. Прежняя формула брала выдуманный
+  // коэффициент 0.45 вместо настоящего avgWeight и делила так, что печатала величину примерно
+  // в 1000 раз меньше действительной (100 гол × 450 кг × 1650 ₸ = 74 млн ₸ → «0.1 млн ₸»).
+  // Решение владельца 10.09: считать по настоящим данным, элемент сохранить.
+  const dealSum = suppliers.reduce((acc, s) => acc + supplierSum(s), 0)
   return (
     <div className="mpk-modal">
       <ModalHead title={pool.title} onClose={onClose} />
@@ -429,8 +569,13 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
           <>
             <div className="mpk-banner ok"><div className="mpk-banner-t">✓ Сделка завершена</div></div>
             <div className="pool-card-sub">
-              {pool.filledHeads} гол · ср. цена {fmtMoney(avgPrice)}{NBSP}₸/кг · сумма ≈ {sumMln} млн{NBSP}₸
+              {pool.filledHeads} гол · ср. цена {fmtMoney(avgPrice)}{NBSP}₸/кг
+              {dealSum > 0 ? ` · сумма ≈ ${fmtMoney(dealSum)}${NBSP}₸` : ''}
             </div>
+            {/* M-013 / M-016: сообщение о сбое чтения и признак загрузки нужны и здесь —
+                завершённый пул читает тот же список тем же вызовом. */}
+            {matchesErrorNote}
+            {matchesLoadingNote}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {suppliers.map((s) => (
                 <div className="supplier-row" key={s.id}>
@@ -438,20 +583,36 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                     <span>{s.farmName ?? 'Хозяйство'}</span>
                     <span className="supplier-row-s">{s.heads} гол</span>
                   </div>
-                  <StarPicker
+                  {s.farmPhone && (
+                    <div className="supplier-row-s">
+                      <a href={`tel:${s.farmPhone}`}>{s.farmPhone}</a>
+                    </div>
+                  )}
+                  {/* M-011: отзыв — только на принятой строке. Пул может оказаться здесь
+                      с непринятыми строками: rollup закрытия считает лишь свой маршрут
+                      (POOL-COMPLETE-PER-ROUTE-01), и тогда «в пути» получала бы звёзды,
+                      а канон отказал бы («reviews only from delivered»). Состояние строки
+                      теперь и подписано — раньше эта ветка его не показывала вовсе. */}
+                  <div className={s.deliveryStatus === 'delivered' ? 'supplier-status done' : 'supplier-status'}>
+                    {deliveryLabel(s.deliveryStatus)}
+                  </div>
+                  {s.deliveryStatus === 'delivered' && <StarPicker
                     value={s.myRating ?? 0}
                     onChange={(n) => {
+                      const prev = s.myRating
                       patchSupplier(s.id, { myRating: n })
                       // GAP-REVIEW-MOCK-01: одна звёздная форма шлёт то же значение как
                       // overall и как ключевую размерность («Соответствие скота заявленному»,
                       // MS6 §4c) — раздельный ввод второй размерности + комментария не
                       // добавлялся (это отдельное UX-расширение, не входит в этот фикс).
                       if (realPool && s.batchId && onSubmitReview) {
-                        onSubmitReview(s.batchId, n).catch((e) =>
-                          toast('Не удалось отправить отзыв: ' + (e instanceof Error ? e.message : '')))
+                        onSubmitReview(s.batchId, n).catch((e) => {
+                          patchSupplier(s.id, { myRating: prev })
+                          toast('Не удалось отправить отзыв: ' + (e instanceof Error ? e.message : ''))
+                        })
                       }
                     }}
-                  />
+                  />}
                   {realPool && s.batchId && <RevealedBatchDetail batchId={s.batchId} />}
                 </div>
               ))}

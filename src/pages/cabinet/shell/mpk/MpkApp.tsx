@@ -41,7 +41,7 @@ import { loadMyPools, loadPoolMatches, closeDuePools } from './data/pools-load'
 import { loadIncomingOffers } from './data/offers-load'
 import { mpkRouteToUrl, mpkUrlToRoute, mpkRouteKey, mpkDirFor } from './nav'
 import type {
-  IncomingOffer, MpkMembership, MpkModal, MpkRoute, MpkSheet, MpkState, MpkTypeStatus, PendingDeal, Pool,
+  IncomingOffer, MpkMembership, MpkModal, MpkRoute, MpkSheet, MpkState, MpkTypeStatus, PendingDeal, Pool, SupplierRow,
 } from './types'
 
 interface MpkAppProps {
@@ -263,10 +263,14 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     await refetchOffers()
   }
 
-  // Подтвердить приёмку КУСКА (BT-18): allocation dispatched→delivered (Слайс 9 S3).
-  // id строки поставщика = allocation.id (rpc_get_pool_matches.matchId). Бросает при ошибке.
-  const confirmDelivery = async (allocationId: string) => {
-    const { error } = await supabase.rpc('rpc_self_confirm_delivery_alloc', { p_allocation_id: allocationId })
+  // Подтвердить приёмку — по маршруту строки (ARS-684, двухмаршрутная read-model монитора):
+  // 'batch' → партия целиком (batches.id, FR-005); иначе ('allocation' / легаси без source,
+  // BT-18, Слайс 9 S3) → кусок партии (allocation.id). id строки поставщика — см.
+  // rpc_get_pool_matches.matchId / batchId. Обе RPC уже задеплоены (FR-012). Бросает при ошибке.
+  const confirmDelivery = async (id: string, source?: SupplierRow['source']) => {
+    const { error } = source === 'batch'
+      ? await supabase.rpc('rpc_self_confirm_delivery', { p_batch_id: id })
+      : await supabase.rpc('rpc_self_confirm_delivery_alloc', { p_allocation_id: id })
     if (error) throw new Error(error.message)
     host.haptics('medium')   // S2.1-паттерн: приёмка подтверждена — ключевое действие
     await refetchPools()

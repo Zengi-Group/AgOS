@@ -35,6 +35,7 @@ interface RawMatch {
   farmName: string | null
   farmPhone: string | null
   myRating: number | null   // GAP-REVIEW-MOCK-01: персистентная оценка МПК о фермере
+  source: string            // ARS-684: 'allocation' | 'batch' — маршрут строки read-model монитора
 }
 
 // DB-статус пула → фронтовый PoolStatus (dispatched/delivered показываем как «Приёмка»).
@@ -104,7 +105,6 @@ export async function closeDuePools(): Promise<void> {
 function toSupplier(m: RawMatch): SupplierRow {
   return {
     id: m.matchId,
-    rating: 4.5,
     heads: m.heads,
     price: m.price,
     deliveryStatus:
@@ -125,6 +125,8 @@ function toSupplier(m: RawMatch): SupplierRow {
     dispatchedAt: m.dispatchedAt,
     deliveredAt: m.deliveredAt,
     myRating: m.myRating ?? undefined,
+    // ARS-684: маршрут строки — определяет RPC приёмки (rpc_self_confirm_delivery vs _alloc).
+    source: m.source === 'batch' ? 'batch' : 'allocation',
   }
 }
 
