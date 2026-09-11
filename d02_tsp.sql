@@ -5555,13 +5555,22 @@ comment on column public.tsp_config.min_split_heads is
      остаток либо 0, либо >= min. Продажа всего остатка целиком разрешена всегда.';
 
 alter table public.tsp_config
-    add column if not exists price_decision_after_minutes int not null default 1;
+    add column if not exists price_decision_after_minutes int not null default 1440;
+-- ARS-690 (D-PRICEREC-01, 2026-09-11): боевой дефолт = 1440 мин (сутки).
+-- `add column if not exists` выше НЕ меняет дефолт уже существующей колонки, поэтому
+-- на боевое значение его переводит явный `set default` — без него свежая база получала
+-- бы 1440, а прод остался бы на тестовой 1 (ровно этот разрыв и был найден 11.09).
+-- Прод переведён миграцией 20260911120000_tsp_price_decision_default_1440.
+alter table public.tsp_config
+    alter column price_decision_after_minutes set default 1440;
 alter table public.tsp_config drop constraint if exists chk_tsp_config_price_decision_after_minutes;
 alter table public.tsp_config add  constraint chk_tsp_config_price_decision_after_minutes
     check (price_decision_after_minutes > 0);
 comment on column public.tsp_config.price_decision_after_minutes is
     'Слайс C: через сколько минут непроданная партия (published/offering, matched_heads=0)
-     переводится в awaiting_price_decision (экран снижения цены). Дефолт 1 мин (тест).';
+     переводится в awaiting_price_decision (экран снижения цены). Дефолт 1440 мин = сутки
+     (D-PRICEREC-01, владелец 11.09) — в одном шаге с offer_window_hours/
+     mpk_decision_window_hours. Было 1 мин: тестовое значение миграции 20260702200000.';
 
 -- ------------------------------------------------------------
 -- 9.5: НОВАЯ ТАБЛИЦА — batch_allocations (кусок = сделка)
