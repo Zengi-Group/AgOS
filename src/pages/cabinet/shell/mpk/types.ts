@@ -102,6 +102,10 @@ export interface Pool {
   executionResult?: 'full' | 'partial' | 'failed'
 }
 
+// ARS-687 (FR-009): исход чтения списка заявок как состояние экрана. Один дом на всех
+// потребителей — шелл (MpkApp) и модалка партии не должны описывать его каждый своим union.
+export type PoolsRead = 'loading' | 'ready' | 'failed'
+
 export interface MpkState {
   typeStatus: MpkTypeStatus
   membership: MpkMembership
