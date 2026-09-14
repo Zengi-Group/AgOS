@@ -839,6 +839,9 @@
 .agos-cabinet-stage .pool-chip.filling { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); }
 .agos-cabinet-stage .pool-chip.executing { background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--green-d); }
 .agos-cabinet-stage .pool-chip.expired { background: color-mix(in srgb, var(--red) 10%, transparent); color: var(--red); }
+/* ARS-695: заявка ждёт решения комбината — состояние, требующее действия, но не ошибка.
+   Токен --warn (=--amber) уже живёт в палитре фермерской зоны; новых цветов не вводим. */
+.agos-cabinet-stage .pool-chip.decision { background: var(--amber-m); color: var(--warn); }
 
 /* Maket-board batch cards */
 .agos-cabinet-stage .mb-card { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line-soft); border-radius: 11px; background: var(--card); padding: 11px 13px; cursor: pointer; text-align: left; width: 100%; }

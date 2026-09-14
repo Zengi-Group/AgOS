@@ -123,3 +123,47 @@ it('ARS-687 FR-009: отказ ПОСЛЕ успешного чтения не �
   expect(nextPoolsRead('ready', { kind: 'failed' })).toBe('ready')
   expect(nextPoolsRead('ready', { kind: 'no_session' })).toBe('ready')
 })
+
+// ── ARS-695 · маппинг статуса заявки (FR-010) ────────────────────────────────────────
+// Эти три утверждения — единственное машинное покрытие mapStatus/toPool: тесты модалки
+// строят Pool литералом и этот код не исполняют. Без них схлопывание awaiting_mpk_decision
+// обратно в «Набран» вернулось бы молча — при зелёном прогоне всего остального.
+it('ARS-695 FR-010: awaiting_mpk_decision — отдельное состояние, а не «Набран»', async () => {
+  rpc.mockResolvedValue({
+    data: [{ ...RAW_POOL, status: 'awaiting_mpk_decision', minPoolHeads: 10 }],
+    error: null,
+  })
+
+  const r = await readMyPools()
+
+  expect(r.kind === 'ok' && r.pools[0]!.status).toBe('awaiting_decision')
+  // Порог обязан доехать до экрана: он объясняет оператору отсутствие хода (P8 — из данных).
+  expect(r.kind === 'ok' && r.pools[0]!.minPoolHeads).toBe(10)
+})
+
+it('ARS-695 FR-010: закрытые исходы различимы по dbStatus, хотя все дают «Закрыт»', async () => {
+  // Возврат обнуляет matched_heads, поэтому по числам недобор и пустую заявку не различить —
+  // причина закрытия может прийти только сырым статусом.
+  rpc.mockResolvedValue({
+    data: [
+      { ...RAW_POOL, id: 'p-unfilled', status: 'closed_unfilled', filledHeads: 0 },
+      { ...RAW_POOL, id: 'p-empty', status: 'expired_empty', filledHeads: 0 },
+    ],
+    error: null,
+  })
+
+  const r = await readMyPools()
+
+  expect(r.kind === 'ok' && r.pools[0]!.status).toBe('closed')
+  expect(r.kind === 'ok' && r.pools[1]!.status).toBe('closed')
+  expect(r.kind === 'ok' && r.pools[0]!.dbStatus).toBe('closed_unfilled')
+  expect(r.kind === 'ok' && r.pools[1]!.dbStatus).toBe('expired_empty')
+})
+
+it('ARS-695 FR-001: полный набор по-прежнему читается как «Набран»', async () => {
+  rpc.mockResolvedValue({ data: [{ ...RAW_POOL, status: 'closed_filled' }], error: null })
+
+  const r = await readMyPools()
+
+  expect(r.kind === 'ok' && r.pools[0]!.status).toBe('filled')
+})

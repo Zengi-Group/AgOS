@@ -41,6 +41,10 @@ interface Props {
 
 const CHIP_LABEL: Record<PoolStatus, string> = {
   filling: 'Набирается',
+  // ARS-695 (FR-010): недобравшаяся заявка — НЕ «Набран». Подпись зовёт к действию,
+  // потому что из этого состояния заявка сама не выйдет ничем, кроме решения (или
+  // истечения окна, которое база трактует как «вернуть»).
+  awaiting_decision: 'Нужно ваше решение',
   filled: 'Набран',
   executing: 'Приёмка',
   expired: 'Истёк',
@@ -50,6 +54,8 @@ const CHIP_LABEL: Record<PoolStatus, string> = {
 
 function chipClass(s: PoolStatus): string {
   if (s === 'filling') return 'filling'
+  // ARS-695: «Нужно ваше решение» — требует действия, но это не ошибка и не набор.
+  if (s === 'awaiting_decision') return 'decision'
   if (s === 'executing' || s === 'executed') return 'executing'
   if (s === 'expired' || s === 'closed') return 'expired'
   return ''
@@ -224,7 +230,11 @@ export function MpkHomeScreen({
   onOpenTsp, onOpenOffers, offersCount, onOpenPool, onOpenContactTuran, realAccount, onSimulateApprove, onSimulateMember,
   onRefresh,
 }: Props) {
-  const activeCount = pools.filter((p) => p.status === 'filling' || p.status === 'executing').length
+  // ARS-695: заявка, ждущая решения, — самая активная из всех: она стоит и ждёт хода
+  // оператора. Не считать её активной значило бы прятать именно то, что требует внимания.
+  const activeCount = pools.filter(
+    (p) => p.status === 'filling' || p.status === 'executing' || p.status === 'awaiting_decision',
+  ).length
   const totalTonnes = Math.round(
     pools.filter((p) => p.status === 'executing').reduce((s, p) => s + p.filledHeads * 0.45, 0),
   )

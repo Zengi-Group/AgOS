@@ -158,8 +158,12 @@ begin
 
             -- auto-close по головам → closed_filled + matched-партии → confirmed; стоп свипа
             if (v_line.matched_heads + v_batch.heads) >= v_line.target_heads then
+                -- ARS-695 (FR-012): + filled_at, аддитивно. Статусная логика не меняется
+                -- (FR-001). Путь полного набора имеет несколько входов — отметка дописана
+                -- в каждый активный, иначе колонка оставалась бы пустой в части случаев.
                 update public.pools
                 set status = 'closed_filled', completed_at = now(),
+                    filled_at = coalesce(filled_at, now()),
                     mpk_contact_revealed_at = coalesce(mpk_contact_revealed_at, now()), updated_at = now()
                 where id = v_pool_id and status = 'filling';
                 update public.batches b
@@ -305,8 +309,10 @@ begin
         where id = v_line.pool_id;
 
         if (v_line.matched_heads + v_batch.heads) >= v_line.target_heads then
+            -- ARS-695 (FR-012): + filled_at, аддитивно (см. пояснение выше).
             update public.pools
             set status = 'closed_filled', completed_at = now(),
+                filled_at = coalesce(filled_at, now()),
                 mpk_contact_revealed_at = coalesce(mpk_contact_revealed_at, now()), updated_at = now()
             where id = v_line.pool_id and status = 'filling';
             if found then
@@ -475,7 +481,9 @@ begin
     where id = v_line.pool_id;
 
     if (v_line.matched_heads + v_batch.heads) >= v_line.target_heads then
+        -- ARS-695 (FR-012): + filled_at, аддитивно (см. пояснение выше).
         update public.pools set status = 'closed_filled', completed_at = now(),
+            filled_at = coalesce(filled_at, now()),
             mpk_contact_revealed_at = coalesce(mpk_contact_revealed_at, now()), updated_at = now()
         where id = v_line.pool_id and status = 'filling';
         if found then

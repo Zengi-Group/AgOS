@@ -22,6 +22,12 @@ interface Props {
   onLoadMatches?: (poolId: string) => Promise<SupplierRow[] | null> // реальные поставщики пула
   onConfirmDelivery?: (id: string, source?: SupplierRow['source']) => Promise<void>  // приёмка строки — кусок или партия целиком (ARS-684)
   onSubmitReview?: (batchId: string, rating: number) => Promise<void>  // GAP-REVIEW-MOCK-01: отзыв МПК о фермере
+  // ARS-695 — закрытие заявки и точка выбора при недоборе (FR-002/003/004).
+  // Возвращают исход из БД: экран не угадывает, чем кончилось закрытие, — правило
+  // порога живёт в SQL (одно на кнопку и на подметание), а не дублируется здесь.
+  onClosePool?: (poolId: string) => Promise<string>       // → outcome заявки
+  onAcceptPartial?: (poolId: string) => Promise<void>
+  onReturnBatches?: (poolId: string) => Promise<void>
 }
 
 // Код категории партии → человекочитаемо (fn_tsp_cat_display отдаёт код bychki/telki/korovy).
@@ -212,7 +218,7 @@ function LinesList({ pool }: { pool: Pool }) {
   )
 }
 
-export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran, mpk, onAdvance, onLoadMatches, onConfirmDelivery, onSubmitReview }: Props) {
+export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran, mpk, onAdvance, onLoadMatches, onConfirmDelivery, onSubmitReview, onClosePool, onAcceptPartial, onReturnBatches }: Props) {
   useGradeFormula()
   const realPool = UUID_RE.test(pool.id)
   // Реальные поставщики из БД перекрывают демо-список (контакты — только при executing, D40).
@@ -257,6 +263,12 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
 
   const suppliers = liveSuppliers ?? pool.suppliers ?? []
   const avgPrice = avgLinePrice(pool)
+  // ARS-695: пока запрос решения в полёте — кнопки заблокированы (M-011/M-013: двойное
+  // нажатие не должно уходить дважды, а при обрыве сети кнопки обязаны вернуться).
+  const [closing, setClosing] = useState(false)
+  // Порог приезжает с заявкой (FR-010, P8). Фолбэк 10 совпадает с дефолтом tsp_config:
+  // объяснение «минимум не набран» не должно исчезнуть из-за старого кэша ответа.
+  const minHeads = pool.minPoolHeads ?? 10
 
   // Баннер ошибки/офлайн (M-013) и заметка первой загрузки (M-016) — общие для веток
   // filling и executing/filled, обе показывают suppliers из живого чтения.
@@ -344,13 +356,34 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
           {!realPool && (
             <Cta variant="ghost" onClick={addSupplier}>+ Добавить поставщика</Cta>
           )}
-          <Cta onClick={() => {
-            // FR-007: для реального пула прогресс обязан прийти из базы — filledHeads не дорисовываем,
-            // applyStatus обновит статус в БД (onAdvance), а следующий refetch принесёт настоящий filledHeads.
-            applyStatus(realPool ? { status: 'filled' } : { status: 'filled', filledHeads: pool.totalHeads })
-            toast('Заявка набрана')
+          {/* ARS-695 (FR-002): «Все набраны» больше не утверждение оператора, а запрос
+              на закрытие. Исход решает база по порогу (fn_tsp_pool_settle_underfill) —
+              недобор ведёт в точку выбора, а не в «Набрана». Демо-заявка (не UUID) живёт
+              как раньше: локальный патч без похода в БД. */}
+          <Cta disabled={closing} onClick={() => {
+            if (!realPool) {
+              applyStatus({ status: 'filled', filledHeads: pool.totalHeads })
+              toast('Заявка набрана')
+              return
+            }
+            // FR-002: у реальной заявки исход считает база. Локального «Набрана» здесь быть
+            // не может — это ровно то молчаливое утверждение оператора, которое слайс снял.
+            if (!onClosePool) { toast('Закрытие заявки недоступно — обновите кабинет'); return }
+            setClosing(true)
+            onClosePool(pool.id)
+              .then((outcome) => {
+                // M-003: когда хода нет — экран обязан объяснить почему, а не молчать.
+                if (outcome === 'awaiting_mpk_decision') toast('Заявка недобрана — нужно ваше решение')
+                else if (outcome === 'closed_unfilled') toast(`Набрано меньше минимума (${minHeads} гол.) — партии возвращены`)
+                else if (outcome === 'expired_empty') toast('Заявка закрыта: не набрано ни одной партии')
+                else if (outcome === 'closed_filled') toast('Заявка набрана')
+                // Исход, которого мы не знаем, — не повод утверждать «набрана» (FR-002).
+                else toast('Заявка закрыта — обновите список')
+              })
+              .catch((e) => toast('Не удалось закрыть заявку: ' + (e instanceof Error ? e.message : '')))
+              .finally(() => setClosing(false))
           }}>
-            Все набраны
+            {closing ? 'Закрываем…' : 'Закрыть заявку'}
           </Cta>
           {!realPool && (
             <Cta variant="ghost" onClick={() => { onPatch({ status: 'expired' }); toast('Срок заявки истёк') }}>
@@ -359,6 +392,51 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
           )}
           <Cta variant="danger" onClick={() => { applyStatus({ status: 'closed' }); toast('Заявка отменена'); onClose() }}>
             Отменить заявку
+          </Cta>
+        </div>
+      </div>
+    )
+  }
+
+  // ── awaiting_decision · точка выбора комбината (ARS-695, FR-010) ─────────
+  // Заявка недобрана, но набрано осмысленно (>= min_pool_heads). Ровно два хода —
+  // из этого состояния всегда есть выход (FR-002). Молчание дольше окна решения
+  // база трактует как «вернуть» (FR-007), поэтому обещать бесконечное ожидание нельзя.
+  if (pool.status === 'awaiting_decision') {
+    const decide = (run: ((id: string) => Promise<void>) | undefined, okText: string) => {
+      // Пропс не пришёл — кнопка не должна выглядеть живой и молчать: оператор в точке
+      // выбора остался бы без хода и без объяснения, что это сбой, а не правило.
+      if (!run) { toast('Решение недоступно — обновите кабинет'); return }
+      setClosing(true)
+      run(pool.id)
+        .then(() => { toast(okText); onClose() })
+        // M-013: запрос не дошёл — заявка осталась в точке выбора, кнопки снова живы.
+        .catch((e) => toast('Не удалось применить решение: ' + (e instanceof Error ? e.message : '')))
+        .finally(() => setClosing(false))
+    }
+    return (
+      <div className="mpk-modal">
+        <ModalHead title={pool.title} onClose={onClose} />
+        <div className="mpk-modal-body">
+          <div className="mpk-banner neutral">
+            <div className="mpk-banner-t">Нужно ваше решение</div>
+          </div>
+          <div className="pool-card-sub">
+            Набрано {pool.filledHeads} из {pool.totalHeads} гол. Срок набора истёк.
+            Примите набранное или верните партии поставщикам — они вернутся на рынок.
+          </div>
+          <ProgressLg pool={pool} />
+          <LinesList pool={pool} />
+          {suppliers.length > 0 && (
+            <div className="mpk-error-hint" style={{ color: 'var(--ink-3)', marginTop: 8 }}>
+              Личность поставщика раскрывается только после подтверждения сделки
+            </div>
+          )}
+          <Cta disabled={closing} onClick={() => decide(onAcceptPartial, 'Набранное принято — поставщики видны')}>
+            {closing ? 'Применяем…' : `Принять частично (${pool.filledHeads} гол.)`}
+          </Cta>
+          <Cta variant="ghost" disabled={closing} onClick={() => decide(onReturnBatches, 'Партии возвращены поставщикам')}>
+            Вернуть партии
           </Cta>
         </div>
       </div>
@@ -564,7 +642,26 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
       <ModalHead title={pool.title} onClose={onClose} />
       <div className="mpk-modal-body">
         {pool.status === 'closed' ? (
-          <div className="mpk-banner neutral"><div className="mpk-banner-t">Заявка закрыта</div></div>
+          <>
+            <div className="mpk-banner neutral"><div className="mpk-banner-t">Заявка закрыта</div></div>
+            {/* ARS-695 (FR-010 / M-003): когда выбора не было — сказать почему, иначе
+                оператор видит закрытую заявку без причины и считает это сбоем.
+                Причину берём из СЫРОГО статуса, а не из чисел: возврат обнуляет
+                matched_heads (FR-004), поэтому filledHeads у недобравшей заявки такой же
+                нулевой, как у пустой, — по числам их не различить. */}
+            {pool.dbStatus === 'expired_empty' ? (
+              <div className="pool-card-sub">
+                За время действия заявки не набрано ни одной партии.
+              </div>
+            ) : pool.dbStatus === 'closed_unfilled' ? (
+              <div className="pool-card-sub">
+                Заявка не набрала минимум для закупки — {minHeads} гол.,
+                поэтому партии возвращены поставщикам.
+              </div>
+            ) : pool.dbStatus === 'cancelled' ? (
+              <div className="pool-card-sub">Заявка отменена, партии возвращены поставщикам.</div>
+            ) : null}
+          </>
         ) : (
           <>
             <div className="mpk-banner ok"><div className="mpk-banner-t">✓ Сделка завершена</div></div>

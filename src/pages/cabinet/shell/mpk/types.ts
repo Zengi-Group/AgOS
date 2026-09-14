@@ -15,12 +15,13 @@ export type MpkMembership =
   | 'revoked'
 
 export type PoolStatus =
-  | 'filling'    // набирается
-  | 'filled'     // набран, ждёт подтверждения
-  | 'executing'  // приёмка (контакты раскрыты)
-  | 'expired'    // истёк
-  | 'closed'     // закрыт admin'ом
-  | 'executed'   // завершён
+  | 'filling'           // набирается
+  | 'awaiting_decision' // ARS-695 (FR-010): недобор ≥ порога — ход за комбинатом
+  | 'filled'            // набран, ждёт подтверждения
+  | 'executing'         // приёмка (контакты раскрыты)
+  | 'expired'           // истёк
+  | 'closed'            // закрыт admin'ом
+  | 'executed'          // завершён
 
 export type MpkCatKey = 'premium' | 'vysshaya' | 'pervaya' | 'vtoraya' | 'mrs_vyssh' | 'mrs_perv'
 
@@ -100,6 +101,16 @@ export interface Pool {
   suppliers?: SupplierRow[]   // раскрываются при executing
   createdAt: string
   executionResult?: 'full' | 'partial' | 'failed'
+  // ARS-695 (FR-010): порог осмысленности закупки, приезжает с заявкой из tsp_config
+  // (P8 — данные, не константа в UI). Нужен, чтобы объяснить оператору отсутствие хода:
+  // «Набрано N из M. Минимум для закупки — K голов».
+  minPoolHeads?: number
+  // ARS-695: сырой статус заявки из БД — PoolStatus его схлопывает (closed_unfilled,
+  // expired_empty и cancelled все дают 'closed'), а причину закрытия по числам восстановить
+  // НЕЛЬЗЯ: возврат обнуляет matched_heads, поэтому у недобравшей заявки filledHeads = 0
+  // ровно как у пустой. Без этого поля экран объяснял бы недобор словами «не набрано ни
+  // одной партии» — то есть врал бы оператору.
+  dbStatus?: string
 }
 
 // ARS-687 (FR-009): исход чтения списка заявок как состояние экрана. Один дом на всех

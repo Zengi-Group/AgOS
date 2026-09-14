@@ -186,10 +186,28 @@ function close_pool(pool):
 
 ### 2.5. Истечение окна Pool без достижения target
 
+> **Правка ARS-695 (2026-09-14, владелец 11.09) — порог осмысленности закупки.**
+> Канон ниже отправлял в точку выбора **любой** недобор. Введено отступление: в точку
+> выбора уходит только заявка, набравшая `tsp_config.min_pool_heads` (дефолт 10 голов) и
+> больше. Набрано меньше порога — выбора МПК нет, партии возвращаются автоматически
+> (`closed_unfilled`). Причина: решать судьбу закупки в 4 головы из 220 комбинату незачем,
+> а партии фермеров всё это время висят неотгружаемыми. Порог живёт как данные (P8) —
+> меняется строкой `tsp_config`, без выкладки кода. Псевдокод обновлён ниже.
+>
+> `schedule_default_action` остаётся **намерением, а не реализацией**: планировщика нет
+> (ARS-694 заблокирован ARS-264), дефолт «вернуть» исполняет ленивое подметание
+> `rpc_self_close_due_pools` при заходе МПК в кабинет — то есть не в минуту истечения
+> окна. Это честная граница, а не тихое расхождение.
+
 ```
 function pool_window_expires(pool):
   if pool.filled_volume == 0:
     pool.state = 'expired_empty'
+    return
+
+  # ARS-695: ниже порога решать нечего — возвращаем сразу.
+  if pool.filled_heads < config.min_pool_heads:
+    pool_mpk_returns_batches(pool)      # → closed_unfilled
     return
 
   if pool.filled_volume < pool.target_volume:
@@ -338,7 +356,7 @@ stateDiagram-v2
 |---|---|
 | `draft` | МПК заполняет, не опубликовал |
 | `filling` | Опубликован, ждёт батчи. Окно открыто. |
-| `awaiting_mpk_decision` | Окно истекло, target не достигнут. МПК должен решить (вернуть или партиал) |
+| `awaiting_mpk_decision` | Окно истекло, target не достигнут, **набрано ≥ `tsp_config.min_pool_heads`** (ARS-695). МПК должен решить (вернуть или партиал). Недобор ниже порога сюда не заходит — сразу `closed_unfilled` |
 | `closed_filled` | Target достигнут (с возможным overshoot), батчи переведены в confirmed, готовы к dispatch |
 | `closed_partial` | МПК согласился на партиал |
 | `closed_unfilled` | МПК вернул батчи (или дефолт после окна) |
@@ -356,7 +374,8 @@ stateDiagram-v2
     draft --> cancelled: discard
 
     filling --> closed_filled: target reached (incl overshoot)
-    filling --> awaiting_mpk_decision: window expired, partial fill
+    filling --> awaiting_mpk_decision: window expired, partial fill >= min_pool_heads
+    filling --> closed_unfilled: window expired, fill < min_pool_heads (ARS-695)
     filling --> expired_empty: window expired, 0 batches
     filling --> cancelled: MPK cancel (batches returned to published)
 

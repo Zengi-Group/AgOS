@@ -13,7 +13,13 @@ set -uo pipefail
 CRITICAL=0
 SIGNIFICANT=0
 MINOR=0
-SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d11_norms.sql d12_messaging.sql d13_billing.sql d14_governance.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql)
+SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d11_norms.sql d12_messaging.sql d13_billing.sql d14_governance.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql supabase/migrations/20260914120000_ars_695_pool_underfill_decision.sql)
+# ARS-695 (2026-09-14): миграция точки выбора добавлена сюда по правилу строкой ниже —
+# три новых self-serve RPC и пять хелперов иначе остались бы файлом, чьи дубликаты и
+# возвращаемые контракты никто не проверяет, при том что Verification слайса прямо
+# требует CHECK 9 и CHECK 11 по этому коду. Имена зарегистрированы в rpc_name_registry
+# (D-NEW-A), поэтому исключение нужно только в CHECK 5: org-параметра у них нет
+# сознательно — гейт идёт через fn_my_org_ids(), а не через клиентский аргумент.
 # TSP canonical trade layer = self-serve adapter migration (D-TSP-CANON-01, 2026-06-23).
 # Brought into cross_check scope per convergence Slice A. The adapter intentionally
 # redefines rpc_create_batch / rpc_get_org_batches (text-sig) over the d07 uuid-sig —
@@ -217,8 +223,14 @@ rpc_self_auto_match_batch|rpc_get_market_batches|rpc_self_activate_pool_request|
 rpc_self_match_batch_to_pool|rpc_self_advance_pool_status|rpc_get_pool_matches|\
 rpc_get_my_pools|rpc_self_close_due_pools|rpc_self_accept_offer|\
 rpc_get_incoming_offers|rpc_self_reject_offer|rpc_self_confirm_delivery|\
+rpc_self_pool_close_now|rpc_self_pool_accept_partial|rpc_self_pool_return_batches|\
 rpc_send_message|rpc_list_channels|rpc_list_messages|rpc_mark_channel_read|rpc_archive_channel|\
 rpc_delete_account|rpc_accept_org_invitation|rpc_review_org_field_change"
+# ARS-695 (rpc_self_pool_*): org-параметра нет НАМЕРЕННО — владелец заявки берётся из
+# fn_my_org_ids() по pools/pool_requests. Принять organization_id от клиента здесь
+# значило бы повторить ровно ту дыру, которую этот же слайс закрывает у канонических
+# rpc_pool_accept_partial/rpc_pool_return_batches (FR-013): там клиент присылал org
+# и сам себе её сверял. Исключение — как у rpc_delete_account ниже, по той же причине.
 # rpc_delete_account (B6/ARS-110): deliberately zero-arg — self-service account
 # deletion derives the actor from auth.uid()/fn_current_user_id() only. Accepting
 # a client-supplied organization_id (or user_id) here would be the exact bug P-AI-2

@@ -351,12 +351,22 @@ Pool FSM (M4 §4) работает на уровне **контейнера** н
 - **По строкам:** строка достигла `max` (тотал ещё нет) → pending Offer этой категории → `withdrawn`, новые не матчатся; заявка добирает другими категориями.
 
 ### Шаг 6 — Underfill (окно истекло, тотал не набран)
-- `total_filled == 0` → `expired_empty`. `0 < filled < target` → `awaiting_mpk_decision`. Уведомление (высокая, time-sensitive). Окно = `mpk_decision_window` (24ч).
+- `total_filled == 0` → `expired_empty`. `0 < filled < min_pool_heads` → `closed_unfilled` **без решения МПК** (ARS-695, порог из `tsp_config`, дефолт 10 голов — владелец 11.09). `min_pool_heads <= filled < target` → `awaiting_mpk_decision`. Уведомление (высокая, time-sensitive). Окно = `mpk_decision_window` (24ч).
+- **Закрыть заявку можно и до истечения окна** — кнопкой МПК (`rpc_self_pool_close_now`): правило порога одно и то же, дом один (P4). Сама кнопка «набрана» больше не утверждает: исход считает база.
 
 | Решение | Переход | Эффект |
 |---|---|---|
-| **A. Вернуть** (`rpc_pool_return_batches`) | `closed_unfilled` | Matched → `published` (`pool_line_id`=NULL, `deal_price`=NULL). Фермеры уведомлены (M6-A 9b). **Дефолт при молчании** (D-TSP-10) |
-| **B. Принять частично** (`rpc_pool_accept_partial`) | `closed_partial` | Собранный микс → `confirmed`. target = filled |
+| **A. Вернуть** (`rpc_self_pool_return_batches`) | `closed_unfilled` | Matched → `published` (`pool_line_id`=NULL, `deal_price`=NULL), счётчики заявки уменьшены на возвращённое. Фермеры уведомлены (M6-A 9b). **Дефолт при молчании** (D-TSP-10) |
+| **B. Принять частично** (`rpc_self_pool_accept_partial`) | `closed_partial` | Собранный микс → `confirmed`, контакты раскрыты. target = filled |
+
+> **ARS-695 (2026-09-14).** Исполнители — **self-serve** RPC, а не канонические
+> `rpc_pool_return_batches` / `rpc_pool_accept_partial`: канон торгового слоя = self-serve
+> adapter (D-TSP-CANON-01), а канонические знают лишь один маршрут матча
+> (`batches.pool_line_id`) и оставили бы проданные куски (`batch_allocations`) в тупике.
+> Обе выведены из пути и revoked (FR-013), отставка — ARS-98.
+> Дефолт «вернуть» исполняет ленивое подметание при заходе МПК в кабинет: планировщика
+> нет (ARS-694 заблокирован ARS-264), поэтому «через 24 ч» означает «при первом заходе
+> после 24 ч», а не в минуту истечения.
 
 - **Гранулярность — order-level (D-M6-14):** решение на всю заявку. Селективный возврат по строкам отложен.
 
