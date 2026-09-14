@@ -6,11 +6,17 @@
 -- остаётся. Сторож ниже роняет прогон ДО первой записи, если файл всё же исполняется
 -- автокоммитом.
 --
--- ⚠️ ЭТОТ ФАЙЛ НИ РАЗУ НЕ ПРОГОНЯЛСЯ. Он написан в сессии сборки, у которой не было
--- доступа к базе (ни staging, ни прод). Его ПЕРВЫЙ прогон и есть верификация слайса —
--- пока он не отработал зелёным, серверная половина матрицы ARS-695 считается НЕ
--- проверенной, а сам файл может содержать ошибки фикстур. Не выдавать его наличие за
--- пройденную проверку.
+-- ✅ ПРОГНАН 2026-09-14 ЗЕЛЁНЫМ на боевой базе (`mwtbozflyldcadypherr`) — в одной
+-- откатываемой транзакции вместе с ещё не задеплоенной миграцией ARS-695: миграция →
+-- тест → ROLLBACK. Прод не изменён (проверено: колонки `min_pool_heads` там по-прежнему
+-- нет). Первый прогон нашёл три ошибки ФИКСТУР этого файла, все исправлены здесь же:
+-- `org_type` принимает `farmer`, а не `farm`; таблица принадлежности называется
+-- `user_organization_roles`, а не `organization_members`; прямой select из `public.pools`
+-- под ролью `authenticated` падает `infinite recursion detected in policy` (преэкзистентная
+-- рекурсия RLS, к слайсу отношения не имеет — см. RLS-POOLS-RECURSION-01 в IMPL_DEBT),
+-- поэтому роль включается точечно вокруг вызовов RPC, а проверки читают таблицы без неё.
+--
+-- Сам код слайса прогон прошёл без единой правки.
 --
 -- Предмет теста: supabase/migrations/20260914120000_ars_695_pool_underfill_decision.sql
 -- (три self-serve RPC + шесть хелперов) и переписанный rpc_self_close_due_pools
@@ -157,10 +163,13 @@ begin
 
     insert into public.organization_type_assignments (organization_id, org_type)
     values (v_org_mpk, 'mpk'), (v_org_mpk_other, 'mpk'),
-           (v_org_farm_a, 'farm'), (v_org_farm_b, 'farm');
+           (v_org_farm_a, 'farmer'), (v_org_farm_b, 'farmer');
 
-    insert into public.organization_members (organization_id, user_id, role, is_active)
-    values (v_org_mpk, v_user_op, 'owner', true);
+    -- Принадлежность оператора к org: именно отсюда её берёт fn_my_org_ids() по slow path
+    -- (d07_ai_gateway.sql:2282 — join user_organization_roles по auth.uid()). JWT-fast-path
+    -- в тесте не сработает: мы подставляем claims вручную, без app_metadata.org_ids.
+    insert into public.user_organization_roles (user_id, organization_id, role)
+    values (v_user_op, v_org_mpk, 'owner');
 
     select id into v_sku_id from public.tsp_skus limit 1;
     if v_sku_id is null then
@@ -262,15 +271,26 @@ begin
 
     -- ==================================================================================
     -- Вызовы от лица оператора комбината (член v_org_mpk, НЕ член v_org_mpk_other).
+    --
+    -- ВАЖНО про роль: claims ставим на всю транзакцию, а `set local role authenticated`
+    -- включаем ТОЧЕЧНО вокруг каждого вызова RPC и сразу снимаем. Причина не
+    -- стилистическая: на проде RLS-политика public.pools рекурсивна (pools_read читает
+    -- pool_matches, политика которого читает pools обратно), и ЛЮБОЙ прямой select из
+    -- pools под ролью authenticated падает `infinite recursion detected in policy`.
+    -- Сами RPC этим не задеты — они SECURITY DEFINER и RLS обходят, — но проверки теста
+    -- читают таблицы напрямую, поэтому читают их без роли. Рекурсия преэкзистентна и к
+    -- ARS-695 отношения не имеет (слайс не трогает ни одной политики); зарегистрирована
+    -- отдельно в IMPL_DEBT как RLS-POOLS-RECURSION-01.
     -- ==================================================================================
     perform set_config('request.jwt.claims',
         json_build_object('sub', v_auth_op::text, 'role', 'authenticated')::text, true);
-    execute 'set local role authenticated';
 
     -- ==================================================================================
     -- M-001 — «принять частично»: оба маршрута → confirmed, target = набранному, контакты.
     -- ==================================================================================
+    execute 'set local role authenticated';
     v_res := public.rpc_self_pool_accept_partial(v_pool_m1);
+    execute 'reset role';
     if (v_res ->> 'outcome') <> 'closed_partial' then
         raise exception 'ARS-695 M-001: outcome=%, ожидалось closed_partial', v_res ->> 'outcome';
     end if;
@@ -321,7 +341,9 @@ begin
     -- ==================================================================================
     -- M-002 — «вернуть партии»: оба маршрута на рынок, счётчики вниз, офферы избирательно.
     -- ==================================================================================
+    execute 'set local role authenticated';
     v_res := public.rpc_self_pool_return_batches(v_pool_m2);
+    execute 'reset role';
     if (v_res ->> 'outcome') <> 'closed_unfilled' then
         raise exception 'ARS-695 M-002: outcome=%, ожидалось closed_unfilled', v_res ->> 'outcome';
     end if;
@@ -378,7 +400,9 @@ begin
     -- M-006 — молчание дольше окна решения: дефолт «вернуть».
     -- Все четыре исполняет ОДИН вызов подметания (FR-006/FR-007/M-014).
     -- ==================================================================================
+    execute 'set local role authenticated';
     v_res := public.rpc_self_close_due_pools();
+    execute 'reset role';
 
     select status, matched_heads into v_status, v_int from public.pools where id = v_pool_m3;
     if v_status <> 'closed_unfilled' then
@@ -422,7 +446,9 @@ begin
     -- ==================================================================================
     -- M-007 — смешанная заявка: оба маршрута подтверждены, ни одной партии в matched.
     -- ==================================================================================
+    execute 'set local role authenticated';
     v_res := public.rpc_self_pool_accept_partial(v_pool_m7);
+    execute 'reset role';
     select count(*) into v_int
     from public.batches b
     where b.status = 'matched'
@@ -440,7 +466,9 @@ begin
     -- за нераспознанный маршрут, иначе accept_partial по такой заявке не пройдёт НИКОГДА.
     -- ==================================================================================
     begin
+        execute 'set local role authenticated';
         v_res := public.rpc_self_pool_accept_partial(v_pool_two);
+        execute 'reset role';
     exception when others then
         raise exception 'ARS-695 регресс (партия в двух заявках): accept_partial упал (%) — '
                         'страж принял законно-matched партию за нераспознанный маршрут', sqlerrm;
@@ -464,7 +492,9 @@ begin
     -- M-009 — чужая заявка: FORBIDDEN, ничего не изменено.
     -- ==================================================================================
     begin
+        execute 'set local role authenticated';
         v_res := public.rpc_self_pool_accept_partial(v_pool_m9);
+        execute 'reset role';
         v_err := null;
     exception when others then
         v_err := sqlerrm;
@@ -481,7 +511,9 @@ begin
     -- M-010 — неверное состояние: решение по заявке в filling → INVALID_STATUS.
     -- ==================================================================================
     begin
+        execute 'set local role authenticated';
         v_res := public.rpc_self_pool_accept_partial(v_pool_m10);
+        execute 'reset role';
         v_err := null;
     exception when others then
         v_err := sqlerrm;
