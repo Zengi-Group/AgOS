@@ -157,7 +157,7 @@
 
 #### TSPF-LIFE-01 · UNHAPPY→OK · Окно оффера истекло без согласных (BT-09)
 `layer:sql+ui` `canon:MS4-BT-09;D-M6-3` `impl:d02_tsp.sql` `auto:candidate:sql` `status:active`
-- **Предусловие:** offering, окно истекло (конфиг `price_decision_after_minutes`; на staging = 1 мин тестовый дефолт, не 24ч — сверять с БД, не с этим текстом), акцептов нет.
+- **Предусловие:** offering, окно истекло (конфиг `price_decision_after_minutes`; боевое значение — 1440 мин = сутки, `D-PRICEREC-01`, ARS-690; до 11.09.2026 стояла тестовая 1 мин — сверять с БД, не с этим текстом), акцептов нет.
 - **Ожидание:** партия → decision (awaiting_price_decision); на Главной карточка «Покупатели не согласились по X ₸/кг» с действиями «Снизить до X−100 ₸/кг» (шаг из конфига) и «Другие варианты».
 
 #### TSPF-LIFE-02 · HAPPY · Снижение цены и ребродкаст (BT-11)
@@ -238,5 +238,5 @@
 - **Ожидание:** правка возвращает в draft-семантику (publish_at пересчитывается при смене ready_from); отмена — свободно, без пометок. Примечание: редактирование scheduled в UI отложено (хвост из мозга) — если кнопки нет, фиксировать как gap, не как pass.
 
 #### TSPF-LIFE-19 · EDGE · Таймер снижения цены (poll-driven)
-`layer:ui` `canon:DECISIONS_LOG:BATCH-SPLIT-01(price_decision_after_minutes)` `impl:tsp_config` `auto:none` `status:active`
+`layer:ui` `canon:DECISIONS_LOG:D-PRICEREC-01(price_decision_after_minutes)` `impl:tsp_config` `auto:none` `status:active`
 - **Ожидание:** переход offering → decision управляется конфигом `price_decision_after_minutes` (poll-driven); прогон сверяет фактическое значение конфига, не хардкод 24 ч.
