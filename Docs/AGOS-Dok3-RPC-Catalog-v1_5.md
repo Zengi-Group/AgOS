@@ -119,6 +119,21 @@
 | RPC-19 | `rpc_set_price_grid` | Market/TSP | admin | 📋 Planned | uuid (price_grid_id) |
 | RPC-20 | `rpc_publish_price_index_value` | Market/TSP | admin | 📋 Planned | uuid (value_id) |
 | RPC-62 | `rpc_get_mpk_reputation` | Market/TSP | public | ✅ Implemented (ARS-360; G3 deploy pending) | jsonb aggregate only |
+| RPC-M4-13 | `rpc_self_pool_close_now` | Market/TSP | web | ✅ Implemented (ARS-695) | jsonb { poolId, outcome, matchedHeads, targetHeads, minPoolHeads } |
+| RPC-M4-14 | `rpc_self_pool_accept_partial` | Market/TSP | web | ✅ Implemented (ARS-695) | jsonb { poolId, outcome, confirmedUnits, matchedHeads } |
+| RPC-M4-15 | `rpc_self_pool_return_batches` | Market/TSP | web | ✅ Implemented (ARS-695) | jsonb { poolId, outcome, returnedUnits } |
+
+> **ARS-695, аддитивные изменения формы существующих self-serve RPC**
+> (D-RPC-CONTRACT-SYNC-01; сами они в этом каталоге не описаны — self-serve слой ждёт
+> каталогизации в конвергенции ARS-98/314, контракт закреплён снапшотом
+> `contracts/rpc_return_keys.txt`):
+> `rpc_self_close_due_pools()` — `{filled, closed}` дополнены `{awaitingDecision, unfilled,
+> expiredEmpty}`; старые ключи на месте, `closed` = сумма терминально закрытых без набора.
+> Правило 30 % в теле снято — его заменил `tsp_config.min_pool_heads`.
+> `rpc_get_my_pools()` — в каждую заявку добавлен `minPoolHeads` (порог из данных, P8:
+> экран обязан объяснить оператору, почему у недобравшейся заявки нет хода).
+> `rpc_self_advance_pool_status(uuid, text)` — принимает `awaiting_mpk_decision`
+> и ставит `awaiting_decision_at`; сигнатура не менялась (P7).
 
 ### 1.3. Feed & Nutrition
 
@@ -856,7 +871,15 @@ Caller вычисляется через `batch.pool_line_id → pools.organizat
 
 → `uuid` (deal_review_id). Повторный вызов → `REVIEW_ALREADY_SUBMITTED`, UPDATE отсутствует. Батч блокируется; вторая отправка точной пары farmer/MPK атомарно выставляет `visible_at` на обоих. Timeout reveal и любые изменения после reveal отсутствуют.
 
-### RPC-M4-10 `rpc_pool_return_batches` [WEB] [AI] ✅ Implemented (Section 8)
+### RPC-M4-10 `rpc_pool_return_batches` [WEB] [AI] ⛔ Не в рабочем пути (ARS-695)
+
+> **ARS-695 (FR-013):** из рабочего пути выведена, `execute` отозван у `public/anon/authenticated`.
+> Причина: знает только ОДИН маршрут матча (`batches.pool_line_id`) и оставила бы куски
+> (`batch_allocations`) в тупике. Рабочая замена — `rpc_self_pool_return_batches` ниже.
+> В теле дополнительно стоит ownership-гейт `fn_my_org_ids()`: до слайса функция сверяла
+> присланный клиентом `p_organization_id` сама с собой, а недостижима дыра была лишь
+> потому, что недостижим статус `awaiting_mpk_decision` — этот слайс его и открыл.
+> Отставка функции — ARS-98 / Слайс D.
 
 МПК возвращает batches после `awaiting_mpk_decision`. D-TSP-10.
 
@@ -869,7 +892,10 @@ Caller вычисляется через `batch.pool_line_id → pools.organizat
 
 **Семантика:** `pools.status: awaiting_mpk_decision → closed_unfilled`; matched batches → `published`; `batch.pool_line_id = NULL`; pending offers → `withdrawn` (S5 fix); reset `pool_lines.current_volume_kg = 0`.
 
-### RPC-M4-11 `rpc_pool_accept_partial` [WEB] [AI] ✅ Implemented (Section 8)
+### RPC-M4-11 `rpc_pool_accept_partial` [WEB] [AI] ⛔ Не в рабочем пути (ARS-695)
+
+> **ARS-695 (FR-013):** как и `rpc_pool_return_batches` выше — revoke + ownership-гейт,
+> рабочая замена `rpc_self_pool_accept_partial`. Отставка — ARS-98 / Слайс D.
 
 МПК принимает partial fill. D-TSP-10.
 
@@ -879,6 +905,44 @@ Caller вычисляется через `batch.pool_line_id → pools.organizat
 | `p_pool_id` | uuid | ✓ |
 
 → `int` (число конфирмованных батчей). `pools.status: awaiting_mpk_decision → closed_partial`; matched → `confirmed`.
+
+### RPC-M4-13..15 `rpc_self_pool_*` — точка выбора при недоборе [WEB] ✅ Implemented (ARS-695)
+
+Self-serve выход из недобравшейся заявки. Канон торгового слоя = self-serve adapter
+(D-TSP-CANON-01), поэтому канонические `rpc_pool_accept_partial` / `rpc_pool_return_batches`
+НЕ поднимаются, а заменяются (FR-013). Все три `SECURITY DEFINER`, гейт `fn_my_org_ids()`
+по владельцу заявки, **без клиентского org-параметра** (его приём и был дырой у канонических).
+
+Живут в `supabase/migrations/20260914120000_ars_695_pool_underfill_decision.sql`.
+
+| RPC | Параметр | → |
+|-----|----------|---|
+| `rpc_self_pool_close_now` | `p_pool_id uuid` | `jsonb {poolId, outcome, matchedHeads, targetHeads, minPoolHeads}` |
+| `rpc_self_pool_accept_partial` | `p_pool_id uuid` | `jsonb {poolId, outcome, confirmedUnits, matchedHeads}` |
+| `rpc_self_pool_return_batches` | `p_pool_id uuid` | `jsonb {poolId, outcome, returnedUnits}` |
+
+**Семантика.**
+- `close_now` — кнопка «Закрыть заявку» (из `filling`). Исход считает общий хелпер
+  `fn_tsp_pool_settle_underfill`, тот же, что у подметания (одно правило, один дом, P4):
+  `matched >= target` → `closed_filled` · `matched = 0` → `expired_empty` ·
+  `matched >= tsp_config.min_pool_heads` → `awaiting_mpk_decision` · иначе → `closed_unfilled`
+  с автоматическим возвратом партий. Молча «набрана» недобор больше не становится.
+- `accept_partial` — `awaiting_mpk_decision → closed_partial`; матчи **обоих маршрутов**
+  → `confirmed`; контакты раскрыты (D-M6-5/12); `target_heads` приведён к набранному
+  (иначе заявка вечно недобрана в своих же числах — MS4 §2.5 B).
+- `return_batches` — `awaiting_mpk_decision → closed_unfilled`; матчи отменены, партии
+  → `published` с `deal_price_per_kg = NULL`; счётчики заявки уменьшены на возвращённое;
+  pending-офферы по возвращённым партиям к ЭТОМУ комбинату → `withdrawn` (к другим — целы).
+
+**Два маршрута матча (FR-005)** — предикат общий с read-model ARS-684: маршрут «кусок» =
+строки `batch_allocations` заявки; маршрут «целиком» = `batches.pool_line_id` у батча, **не
+имеющего ни одной** строки `batch_allocations` (любой пул, любой статус). После применения
+решения страж `fn_tsp_pool_assert_settled` требует, чтобы ни одна партия заявки не осталась
+`matched`; осталась — транзакция откатывается целиком (M-007).
+
+**Ошибки:** `AUTH_REQUIRED` · `POOL_NOT_FOUND` · `FORBIDDEN` (чужая заявка) ·
+`INVALID_STATUS` (не то состояние; он же достаётся проигравшему в гонке двух операторов —
+строка заявки берётся `FOR UPDATE`, смешанного исхода нет) · `UNSETTLED_MATCHES` (M-007).
 
 ### RPC-M4-12 `rpc_cancel_pool` [WEB] [ADMIN] ✅ Implemented (Section 8 addendum)
 

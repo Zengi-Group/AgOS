@@ -285,7 +285,10 @@ it('ARS-684 M-013: null пришёл ПЕРВЫМ ответом — «пост�
 it('ARS-684 M-015: реальный пул (UUID), ветка набора — демо-элементов нет вовсе', async () => {
   mountModal(baseProps({ pool: makePool({ status: 'filling' }) }))
 
-  await expect.element(page.getByText('Все набраны'), T).toBeInTheDocument()
+  // ARS-695: якорь «ветка набора отрисовалась» переименован вместе с кнопкой
+  // («Все набраны» → «Закрыть заявку»: исход недобора теперь считает база, а не
+  // утверждает оператор). Проверяемое M-015 не изменилось — это две строки ниже.
+  await expect.element(page.getByText('Закрыть заявку'), T).toBeInTheDocument()
   expect(document.body.textContent).not.toContain('+ Добавить поставщика')
   expect(document.body.textContent).not.toContain('Истёк срок')
 })

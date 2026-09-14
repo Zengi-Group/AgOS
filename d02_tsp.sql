@@ -4203,6 +4203,16 @@ begin
         raise exception 'FORBIDDEN: caller does not own pool %', p_pool_id
             using errcode = 'P0001';
     end if;
+    -- ARS-695 FR-013 (контейнмент, аддитивно — сигнатура не трогается, P7): выше
+    -- проверяется лишь то, что клиент прислал СВОЙ же p_organization_id — параметр,
+    -- который он полностью контролирует. Любой вызывающий мог передать чужую пару
+    -- (org, pool) и закрыть чужую заявку. До этого слайса дыра была недостижима
+    -- только потому, что недостижим сам статус awaiting_mpk_decision; слайс делает
+    -- статус достижимым, поэтому гейт ставится тем же PR. Отставка функции — ARS-98.
+    if not (p_organization_id = any (public.fn_my_org_ids())) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
+            using errcode = 'P0001';
+    end if;
     if v_pool.status != 'awaiting_mpk_decision' then
         raise exception 'INVALID_STATUS: pool must be awaiting_mpk_decision (current %)',
             v_pool.status using errcode = 'P0001';
@@ -4290,7 +4300,16 @@ end; $$;
 
 comment on function public.rpc_pool_return_batches(uuid, uuid) is
     'D-TSP-10 / Microstep6 §4f step 6A | FSM pools: awaiting_mpk_decision -> closed_unfilled.
-     Returns: count of batches returned to published.';
+     Returns: count of batches returned to published.
+     ARS-695 FR-013: НЕ в рабочем пути. Канон торгового слоя = self-serve adapter
+     (D-TSP-CANON-01); рабочий возврат — rpc_self_pool_return_batches, который покрывает
+     ОБА маршрута матча (batch_allocations + batches.pool_line_id). Эта функция знает
+     только второй, поэтому оставила бы куски в тупике. Оставлена под revoke до отставки
+     (дом — ARS-98 / Слайс D).';
+-- ARS-695 FR-013: функция не попала в систем-ревок 26.07 (20260726130000) — на ней жил
+-- дефолтный PUBLIC-грант. Пока статус awaiting_mpk_decision был недостижим, дыра была
+-- недостижима вместе с ним; этот слайс делает статус достижимым → отзываем явно.
+revoke execute on function public.rpc_pool_return_batches(uuid, uuid) from public, anon, authenticated;
 
 
 -- ------------------------------------------------------------
@@ -4324,6 +4343,13 @@ begin
 
     if v_pool.organization_id != p_organization_id then
         raise exception 'FORBIDDEN: caller does not own pool %', p_pool_id
+            using errcode = 'P0001';
+    end if;
+    -- ARS-695 FR-013 (контейнмент, аддитивно — сигнатура не трогается, P7): см. тот же
+    -- гейт в rpc_pool_return_batches выше. p_organization_id приходит от клиента и им же
+    -- сверяется — этого мало; org обязана принадлежать вызывающему.
+    if not (p_organization_id = any (public.fn_my_org_ids())) then
+        raise exception 'FORBIDDEN: caller does not belong to organization %', p_organization_id
             using errcode = 'P0001';
     end if;
     if v_pool.status != 'awaiting_mpk_decision' then
@@ -4374,7 +4400,12 @@ end; $$;
 
 comment on function public.rpc_pool_accept_partial(uuid, uuid) is
     'D-TSP-10 / Microstep6 §4f step 6B | FSM pools: awaiting_mpk_decision -> closed_partial.
-     All matched batches -> confirmed. Returns: count of confirmed batches.';
+     All matched batches -> confirmed. Returns: count of confirmed batches.
+     ARS-695 FR-013: НЕ в рабочем пути. Рабочее подтверждение — rpc_self_pool_accept_partial
+     (оба маршрута матча + приведение target_heads к набранному). Оставлена под revoke до
+     отставки (дом — ARS-98 / Слайс D).';
+-- ARS-695 FR-013: см. rpc_pool_return_batches выше — тот же пропуск систем-ревока 26.07.
+revoke execute on function public.rpc_pool_accept_partial(uuid, uuid) from public, anon, authenticated;
 
 
 -- ------------------------------------------------------------
@@ -5571,6 +5602,30 @@ comment on column public.tsp_config.price_decision_after_minutes is
      переводится в awaiting_price_decision (экран снижения цены). Дефолт 1440 мин = сутки
      (D-PRICEREC-01, владелец 11.09) — в одном шаге с offer_window_hours/
      mpk_decision_window_hours. Было 1 мин: тестовое значение миграции 20260702200000.';
+
+-- ARS-695 (FR-008, P8): порог осмысленности закупки — сколько голов должно набраться,
+-- чтобы недобравшаяся заявка вообще получила право на решение МПК. Ниже порога выбора
+-- нет: партии возвращаются автоматически (FR-006). НЕ путать с min_split_heads выше —
+-- та про размер КУСКА при дроблении, эта про осмысленность ЗАЯВКИ целиком.
+-- Дефолт 10 голов (владелец, 11.09). Право правки — у инженера: меняется строкой
+-- tsp_config, без выкладки кода и без экрана в админке.
+alter table public.tsp_config
+    add column if not exists min_pool_heads int not null default 10;
+-- Урок ARS-690: `add column if not exists` не трогает дефолт уже существующей колонки.
+-- Для новой колонки это неважно (её ещё нет нигде), но явный `set default` держит
+-- инвариант «канон = прод» и при повторной выкладке файла.
+alter table public.tsp_config
+    alter column min_pool_heads set default 10;
+alter table public.tsp_config drop constraint if exists chk_tsp_config_min_pool_heads;
+alter table public.tsp_config add  constraint chk_tsp_config_min_pool_heads
+    check (min_pool_heads > 0);
+comment on column public.tsp_config.min_pool_heads is
+    'ARS-695 (FR-008): минимум голов на ЗАЯВКУ, при котором недобор даёт МПК точку выбора
+     (awaiting_mpk_decision: принять частично | вернуть партии). Набрано меньше порога —
+     выбора нет, партии возвращаются автоматически (closed_unfilled, FR-006); набрано
+     ноль — expired_empty (MS4 PT-04). Дефолт 10 (владелец 11.09). Отличать от
+     min_split_heads: та — минимальный размер куска, эта — осмысленность заявки.
+     Отступление от MS4 §2.5 (там порога нет вовсе) — FR-021, канон правится этим же PR.';
 
 -- ------------------------------------------------------------
 -- 9.5: НОВАЯ ТАБЛИЦА — batch_allocations (кусок = сделка)

@@ -1347,7 +1347,10 @@ as $$
 declare
     v_pool    public.pools%rowtype;
     v_req     public.pool_requests%rowtype;
-    v_allowed text[] := array['filled','executing','dispatched','delivered','executed','closed'];
+    -- ARS-695 (FR-002): + awaiting_mpk_decision — статус, который до этого слайса был
+    -- недостижим на self-serve пути вовсе (QA TSPM-CLOSE-03, долг TSP-FLOW-10).
+    v_allowed text[] := array['filled','executing','dispatched','delivered','executed',
+                              'closed','awaiting_mpk_decision'];
 begin
     if not (p_new_status = any (v_allowed)) then
         raise exception 'INVALID_STATUS' using errcode = 'P0002';
@@ -1371,6 +1374,23 @@ begin
         update public.pools
         set status = 'closed', closed_at = now(), updated_at = now()
         where id = p_pool_id;
+    elsif p_new_status = 'awaiting_mpk_decision' then
+        -- FR-006: ниже порога заявка выбора НЕ получает. Без этой проверки ручной перевод
+        -- был бы дырой в обход правила порога: оператор загоняет заявку 2/220 прямо в точку
+        -- выбора и закрывает её принятием — правило живёт в fn_tsp_pool_settle_underfill,
+        -- мимо которого такой путь проходит. Из UI статус недостижим (REAL_STATUSES его не
+        -- содержит), но функция открыта роли authenticated, поэтому гейт нужен в теле.
+        if v_pool.matched_heads < public.fn_tsp_pool_min_heads() then
+            raise exception 'BELOW_MIN_HEADS: набрано % при минимуме % — точка выбора не положена',
+                v_pool.matched_heads, public.fn_tsp_pool_min_heads() using errcode = 'P0002';
+        end if;
+        -- FR-012: у входа в точку выбора есть своя отметка времени — от неё считается
+        -- окно молчания FR-007. coalesce: повторный перевод не перезапускает окно.
+        update public.pools
+        set status = 'awaiting_mpk_decision',
+            awaiting_decision_at = coalesce(awaiting_decision_at, now()),
+            updated_at = now()
+        where id = p_pool_id;
     else
         update public.pools set status = p_new_status, updated_at = now() where id = p_pool_id;
     end if;
@@ -1378,9 +1398,15 @@ begin
 end;
 $$;
 comment on function public.rpc_self_advance_pool_status(uuid, text) is
-    'КАНОН d02 | Слайс 6 | МПК двигает статус пула. executing → раскрытие контактов (D40).
-     Гейт «пул моей org» (через pool_request). Партии остаются matched (в d02 у них нет
-     состояний confirmed/delivered — фермеру это показывается по статусу пула).';
+    'КАНОН d02 | Слайс 6 | ARS-695 | МПК двигает статус пула. executing → раскрытие
+     контактов (D40). Гейт «пул моей org» (через pool_request). + awaiting_mpk_decision
+     со своей отметкой времени (FR-002/FR-012).
+     ИСПРАВЛЕНО ARS-695: прежний текст утверждал, будто «в d02 у партий нет состояний
+     confirmed/delivered». Это неверно — batches_status_check содержит их обоих
+     (d02_tsp.sql:5572-5574), а D-TSP-11 прямо требует confirmed после закрытия заявки
+     и только из него dispatch. Ложная посылка прожила в комментарии до 14.09 и чуть не
+     стала «противоречием канона» в тикете ARS-695; переходы партий делают
+     rpc_self_pool_accept_partial / rpc_self_pool_return_batches, не эта функция.';
 revoke execute on function public.rpc_self_advance_pool_status(uuid, text) from public, anon;
 grant  execute on function public.rpc_self_advance_pool_status(uuid, text) to authenticated;
 
@@ -1448,6 +1474,14 @@ grant  execute on function public.rpc_get_pool_matches(uuid) to authenticated;
 -- ============================================================
 -- 17. rpc_get_my_pools — пулы текущего МПК (RawPool[]). Гейт через pool_request.
 -- lines = accepted_categories (фронтовые [{code,price}]).
+-- ARS-695 (FR-010), аддитивно: + minPoolHeads — экран обязан объяснить оператору, ПОЧЕМУ
+-- у недобравшейся заявки нет хода («Минимум для закупки — K голов»). Порог живёт в данных
+-- (P8), поэтому приезжает с заявкой, а не зашит в UI.
+-- Комментарий стоит ЗДЕСЬ, а не внутри jsonb_build_object, намеренно: contract_snapshot.py
+-- режет аргументы по запятым и матчит ключ с позиции 0, поэтому `--`-строка между парами
+-- съедает следующий ключ — он молча исчезает из contracts/rpc_return_keys.txt, и CHECK 11
+-- перестаёт видеть контракт, который обязан стеречь. Баг экстрактора зарегистрирован в
+-- IMPL_DEBT (CONTRACT-SNAPSHOT-COMMENT-01); пока он жив — комментарии держим снаружи.
 -- ============================================================
 create or replace function public.rpc_get_my_pools()
 returns jsonb
@@ -1474,7 +1508,8 @@ begin
                     from public.pool_lines pl
                     where pl.pool_id = p.id and pl.is_active = true
                 ), '[]'::jsonb),
-                'contactRevealed', (p.mpk_contact_revealed_at is not null)
+                'contactRevealed', (p.mpk_contact_revealed_at is not null),
+                'minPoolHeads',    public.fn_tsp_pool_min_heads()
             )
             order by p.created_at desc
         ), '[]'::jsonb)
@@ -1503,44 +1538,146 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-    v_filled int := 0;
-    v_closed int := 0;
+    v_filled    int := 0;
+    v_closed    int := 0;
+    v_awaiting  int := 0;
+    v_unfilled  int := 0;
+    v_empty     int := 0;
+    v_failed    int := 0;
+    v_window    int;
+    v_id        uuid;
+    v_outcome   text;
+    v_org       uuid;
 begin
     if public.fn_current_user_id() is null then
         raise exception 'AUTH_REQUIRED' using errcode = 'P0001';
     end if;
 
-    with due as (
-        select p.id, p.target_heads, p.matched_heads
+    -- ARS-695 (FR-009): правило 30 % снято. Оно подменяло решение комбината: недобор
+    -- ≥30 % принудительно засчитывался как «набрана» (анти-farmer-friendly, D-TSP-10
+    -- нарушен — QA TSPM-CLOSE-03), а <30 % уходил в legacy 'closed', оставляя партии
+    -- висеть matched на мёртвой заявке. Замена — порог из данных + точка выбора
+    -- (fn_tsp_pool_settle_underfill). Снимается ТЕМ ЖЕ деплоем, что вводится порог:
+    -- раньше — у авто-закрытия не осталось бы порога вообще и возврата не было бы.
+    for v_id in
+        select p.id
         from public.pools p
         join public.pool_requests pr on pr.id = p.pool_request_id
         where pr.organization_id = any (public.fn_my_org_ids())
           and p.status = 'filling'
           and current_date >= (date_trunc('month', pr.target_month) + interval '1 month')::date
-    ),
-    upd_filled as (
-        update public.pools p
-        set status = 'filled', filled_at = now(), updated_at = now()
-        from due
-        where p.id = due.id and due.matched_heads >= ceil(due.target_heads * 0.30)
-        returning 1
-    ),
-    upd_closed as (
-        update public.pools p
-        set status = 'closed', closed_at = now(), updated_at = now()
-        from due
-        where p.id = due.id and due.matched_heads < ceil(due.target_heads * 0.30)
-        returning 1
-    )
-    select (select count(*) from upd_filled), (select count(*) from upd_closed)
-    into v_filled, v_closed;
+    loop
+        -- Блокировка строки заявки (M-011): подметание и кнопка комбината ходят одним
+        -- маршрутом, поэтому обе берут строку под FOR UPDATE и не смешивают исходы.
+        -- Курсор выше открыт по снапшоту: пока мы ждали блокировку, оператор мог нажать
+        -- «Закрыть заявку» и заявка уже не в filling. Перечитываем статус ПОД блокировкой
+        -- и молча пропускаем — применить решение второй раз значило бы закрыть заявку
+        -- дважды и разойтись со своим же INVALID_STATUS на кнопке.
+        perform 1 from public.pools where id = v_id for update;
+        if not exists (select 1 from public.pools where id = v_id and status = 'filling') then
+            continue;
+        end if;
+        -- Каждая заявка обрабатывается в своей подтранзакции: до ARS-695 подметание было
+        -- одним UPDATE и упасть не могло, теперь оно зовёт settle_underfill со стражом
+        -- M-007, который умеет raise. Без изоляции ОДНА заявка с нераспознанным маршрутом
+        -- откатывала бы всё подметание org — и у остальных заявок отказал бы и авто-возврат,
+        -- и вход в точку выбора, молча и навсегда (фронт зовёт эту RPC в пустом catch).
+        begin
+            v_outcome := public.fn_tsp_pool_settle_underfill(v_id);
+            if    v_outcome = 'closed_filled'         then v_filled   := v_filled   + 1;
+            elsif v_outcome = 'awaiting_mpk_decision' then v_awaiting := v_awaiting + 1;
+            elsif v_outcome = 'expired_empty'         then v_empty    := v_empty    + 1;
+            else                                           v_unfilled := v_unfilled + 1;
+            end if;
+        exception when others then
+            v_failed := v_failed + 1;
+            raise warning 'ARS-695 sweep: заявка % не закрыта (%): %', v_id, sqlstate, sqlerrm;
+        end;
+    end loop;
 
-    return jsonb_build_object('filled', v_filled, 'closed', v_closed);
+    -- FR-007: молчание комбината дольше окна решения = «вернуть» (D-M6-1, дефолт в
+    -- пользу фермера). Исполняется этим же ленивым подметанием, а не планировщиком
+    -- (ARS-694 заблокирован ARS-264) — значит не в минуту истечения окна, а при
+    -- первом заходе в кабинет. Обещать мгновенность слайс не вправе (FR-015).
+    select mpk_decision_window_hours into v_window
+    from public.tsp_config where is_active = true limit 1;
+    v_window := coalesce(v_window, 24);
+
+    for v_id in
+        select p.id
+        from public.pools p
+        join public.pool_requests pr on pr.id = p.pool_request_id
+        where pr.organization_id = any (public.fn_my_org_ids())
+          and p.status = 'awaiting_mpk_decision'
+          and p.awaiting_decision_at is not null
+          and p.awaiting_decision_at + make_interval(hours => v_window) <= now()
+    loop
+        -- Та же гонка, что и в первом цикле: пока ждали блокировку, комбинат мог сам
+        -- выбрать ход и заявка уже не ждёт решения. Дефолт «вернуть» не должен
+        -- перебивать состоявшееся решение оператора.
+        perform 1 from public.pools where id = v_id for update;
+        if not exists (
+            select 1 from public.pools where id = v_id and status = 'awaiting_mpk_decision'
+        ) then
+            continue;
+        end if;
+        -- Та же изоляция подтранзакцией, что и в первом цикле.
+        begin
+        perform public.fn_tsp_pool_release_matches(v_id);
+        update public.pools
+        set status     = 'closed_unfilled',
+            closed_at  = coalesce(closed_at, now()),
+            updated_at = now()
+        where id = v_id;
+        perform public.fn_tsp_pool_assert_settled(v_id);
+
+        select coalesce(p.organization_id, pr.organization_id) into v_org
+        from public.pools p
+        left join public.pool_requests pr on pr.id = p.pool_request_id
+        where p.id = v_id;
+
+        insert into public.platform_events (
+            event_type, entity_type, entity_id, organization_id,
+            actor_type, actor_id, payload, is_audit
+        ) values (
+            'market.pool.closed_unfilled', 'pools', v_id, v_org,
+            'system', public.fn_current_user_id(),
+            jsonb_build_object('pool_id', v_id, 'reason', 'decision_window_elapsed',
+                               'window_hours', v_window),
+            -- is_audit=true — как у канонической rpc_pool_return_batches (d02_tsp.sql:4293):
+            -- закрытие по молчанию тоже решает судьбу чужих партий.
+            true
+        );
+        v_unfilled := v_unfilled + 1;
+        exception when others then
+            v_failed := v_failed + 1;
+            raise warning 'ARS-695 sweep (окно решения): заявка % не закрыта (%): %',
+                v_id, sqlstate, sqlerrm;
+        end;
+    end loop;
+
+    -- Форма расширена АДДИТИВНО (D-RPC-CONTRACT-SYNC-01): filled/closed остаются на
+    -- месте для существующих потребителей, closed теперь = сумма терминально закрытых
+    -- без набора. contracts/rpc_return_keys.txt и Dok 3 обновлены этим же PR.
+    v_closed := v_unfilled + v_empty;
+    return jsonb_build_object(
+        'filled',           v_filled,
+        'closed',           v_closed,
+        'awaitingDecision', v_awaiting,
+        'unfilled',         v_unfilled,
+        'expiredEmpty',     v_empty,
+        'failed',           v_failed
+    );
 end;
 $$;
 comment on function public.rpc_self_close_due_pools() is
-    'КАНОН d02 | Слайс 6 | Авто-закрытие просроченных пулов своих org (гейт через
-     pool_request). filling + месяц истёк → filled (>=30%) | closed (<30%). Без pg_cron.';
+    'КАНОН d02 | Слайс 6 | ARS-695 | Ленивое подметание просроченных заявок своих org
+     (гейт через pool_request, без pg_cron). filling + месяц истёк → правило порога
+     fn_tsp_pool_settle_underfill (одно на кнопку и на подметание, P4): closed_filled |
+     awaiting_mpk_decision | closed_unfilled | expired_empty. Плюс FR-007: заявка,
+     простоявшая в awaiting_mpk_decision дольше tsp_config.mpk_decision_window_hours,
+     закрывается возвратом партий (дефолт в пользу фермера, D-M6-1). Правило 30 %
+     снято — его заменил tsp_config.min_pool_heads.';
 revoke execute on function public.rpc_self_close_due_pools() from public, anon;
 grant  execute on function public.rpc_self_close_due_pools() to authenticated;
 

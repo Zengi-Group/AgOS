@@ -354,8 +354,14 @@ begin
 
     -- Пул набрался по головам → закрыть + раскрыть контакт + подтвердить его куски + rollup.
     if (v_pool.matched_heads + v_take) >= v_pool.target_heads then
+        -- ARS-695 (FR-012): + filled_at. Статусная логика НЕ меняется (FR-001) — дописана
+        -- одна отметка времени. Без неё у колонки не осталось бы писателя вовсе: единственный
+        -- стоял в снятой ветке 30 % (rpc_self_close_due_pools), а этот живой путь пишет
+        -- completed_at. Расхождение «completed_at на closed_filled» преэкзистентное и здесь
+        -- не чинится — это менять статусную логику замороженного пути (FR-020, дом ARS-314).
         update public.pools
         set status = 'closed_filled', completed_at = now(),
+            filled_at = coalesce(filled_at, now()),
             mpk_contact_revealed_at = coalesce(mpk_contact_revealed_at, now()), updated_at = now()
         where id = v_pool.id and status = 'filling';
         if found then

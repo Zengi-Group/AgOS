@@ -15,6 +15,7 @@ interface RawPool {
   createdAtIso: string | null
   lines: { code?: string; price?: number }[]
   contactRevealed: boolean
+  minPoolHeads?: number   // ARS-695 (FR-010): порог закупки из tsp_config
 }
 
 interface RawMatch {
@@ -41,8 +42,12 @@ interface RawMatch {
 // DB-статус пула → фронтовый PoolStatus (dispatched/delivered показываем как «Приёмка»).
 function mapStatus(s: string): PoolStatus {
   if (s === 'dispatched' || s === 'delivered') return 'executing'
+  // ARS-695 (FR-010): заявка, ждущая решения комбината, — ОТДЕЛЬНОЕ состояние, а не
+  // «Набрана». Схлопывание сюда было прямой ложью экрана: недобравшаяся заявка
+  // показывалась набранной, и у оператора не было хода, которым её закрыть.
+  if (s === 'awaiting_mpk_decision') return 'awaiting_decision'
   // Канон-статусы close: авто-закрытый/частичный пул → «набран, готов к приёмке».
-  if (s === 'closed_filled' || s === 'closed_partial' || s === 'awaiting_mpk_decision') return 'filled'
+  if (s === 'closed_filled' || s === 'closed_partial') return 'filled'
   if (s === 'completed') return 'executed'
   if (s === 'expired_empty' || s === 'closed_unfilled' || s === 'cancelled') return 'closed'
   if (s === 'filling' || s === 'filled' || s === 'executing' || s === 'executed' || s === 'closed') {
@@ -77,6 +82,8 @@ function toPool(r: RawPool): Pool {
     lines,
     suppliers: [],
     createdAt: fmtDay(r.createdAtIso),
+    minPoolHeads: r.minPoolHeads,
+    dbStatus: r.status,
   }
 }
 
@@ -130,9 +137,13 @@ export function nextPoolsRead(cur: PoolsRead, r: MyPoolsRead): PoolsRead {
   return r.kind === 'failed' ? 'failed' : 'ready'
 }
 
-// Авто-закрытие просроченных пулов (D-AUTOCLOSE-01): дедлайн (конец target_month)
-// прошёл → >=30% набрано = filled (успех), иначе = closed. Ленивый вызов из шелла.
-// Ошибки/нет backend/аноним — тихо пропускаем (фолбэк на seed остаётся у caller).
+// Авто-закрытие просроченных заявок (D-AUTOCLOSE-01). Ленивый вызов из шелла — планировщика
+// нет (ARS-694 заблокирован ARS-264), поэтому подметание происходит при заходе в кабинет.
+// ARS-695: правило «>=30% = набрана» снято. Исход считает fn_tsp_pool_settle_underfill по
+// порогу tsp_config.min_pool_heads: закрыта как набранная · ждёт решения комбината · возврат
+// партий · пустая. Ошибки/нет backend/аноним — тихо пропускаем (фолбэк на seed у caller);
+// каждая заявка обрабатывается в своей подтранзакции, поэтому одна проблемная не срывает
+// подметание остальных — в ответе такие приходят счётчиком `failed`.
 export async function closeDuePools(): Promise<void> {
   try {
     await supabase.rpc('rpc_self_close_due_pools', {})

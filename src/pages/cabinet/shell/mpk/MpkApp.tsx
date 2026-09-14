@@ -315,6 +315,30 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
     await refetchPools()
   }
 
+  // ARS-695 · закрытие заявки и точка выбора при недоборе (FR-002/003/004).
+  // Правило порога живёт в SQL — фронт не решает исход, а показывает то, что вернула
+  // база (одно правило на кнопку и на подметание, P4). Бросают при ошибке.
+  const closePool = async (poolId: string): Promise<string> => {
+    const { data, error } = await supabase.rpc('rpc_self_pool_close_now', { p_pool_id: poolId })
+    if (error) throw new Error(error.message)
+    await refetchPools()
+    return (data as { outcome?: string } | null)?.outcome ?? ''
+  }
+
+  const acceptPartialPool = async (poolId: string) => {
+    const { error } = await supabase.rpc('rpc_self_pool_accept_partial', { p_pool_id: poolId })
+    if (error) throw new Error(error.message)
+    host.haptics('medium')   // S2.1-паттерн: сделка закрыта — ключевое действие
+    await refetchPools()
+  }
+
+  const returnPoolBatches = async (poolId: string) => {
+    const { error } = await supabase.rpc('rpc_self_pool_return_batches', { p_pool_id: poolId })
+    if (error) throw new Error(error.message)
+    await refetchPools()
+    await refetchMarket()   // возвращённые партии снова на рынке — список обязан это показать
+  }
+
   // Реальный оффер МПК → партия фермера. Бросает при ошибке (caller покажет тост).
   const offerBatch = async (poolId: string, batchId: string, heads: number, price: number) => {
     const { error } = await supabase.rpc('rpc_self_match_batch_to_pool', {
@@ -474,6 +498,9 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
                 onLoadMatches={loadPoolMatches}
                 onConfirmDelivery={confirmDelivery}
                 onSubmitReview={submitMpkReview}
+                onClosePool={closePool}
+                onAcceptPartial={acceptPartialPool}
+                onReturnBatches={returnPoolBatches}
               />
             )}
           </IonModal>
