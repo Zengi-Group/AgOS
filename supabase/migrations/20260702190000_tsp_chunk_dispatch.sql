@@ -411,6 +411,8 @@ declare
     v_new_status text;
     v_evt       text;
     v_uid       uuid := public.fn_current_user_id();
+    v_pool_id   uuid;     -- маршрут «целиком»: заявка, в которой висит партия
+    v_pool_st   text;     -- её статус — терминальной счётчик не правим (FR-006)
 begin
     if v_uid is null then raise exception 'AUTH_REQUIRED' using errcode = 'P0001'; end if;
 
@@ -454,6 +456,55 @@ begin
             v_reversed  := v_reversed + v_alloc.heads;
             v_penalized := v_penalized + 1;
         end loop;
+    end if;
+
+    -- 2b. ВТОРОЙ МАРШРУТ МАТЧА — партия, привязанная ЦЕЛИКОМ (TSP-WITHDRAW-POOLCOUNTER-01).
+    -- Цикл выше знает только куски, поэтому для партии без аллокаций не срабатывало НИЧЕГО:
+    -- у заявки не уменьшалось набранное (она навсегда считала эти головы своими и не могла
+    -- добрать), а событие писалось как 'cancelled_before_match' — «снята до матча», хотя
+    -- партия была продана, то есть фермер не отвечал за отказ от сделки. Канон требует обоих
+    -- действий: MS6 §4f шаг 8c — «у МПК filled −= … Авто-пишется в cancelled_after_match →
+    -- рейтинг фермера (D-TSP-14)». Эмпирика 17.09: заявка 80/80 при 29 реальных головах.
+    --
+    -- Предикат маршрута — «нет НИ ОДНОЙ аллокации у партии» (как в read-model ARS-684,
+    -- 20260910120000:126-141): fn_tsp_alloc_chunk пишет batches.pool_line_id на первом куске,
+    -- поэтому дроблёная партия тоже имеет привязку — и без этого условия её головы вычлись бы
+    -- дважды: раз циклом по кускам, раз здесь (M-004).
+    if v_batch.pool_line_id is not null
+       and coalesce(v_batch.matched_heads, 0) > 0
+       and not exists (select 1 from public.batch_allocations a where a.batch_id = p_batch_id)
+    then
+        select p.id, p.status into v_pool_id, v_pool_st
+        from public.pool_lines pl
+        join public.pools p on p.id = pl.pool_id
+        where pl.id = v_batch.pool_line_id;
+
+        -- FR-006: у терминальной заявки счётчик — история закрытой сделки, а не живой
+        -- остаток; её числа не трогаем. Живой заявке возвращаем место, чтобы она добрала.
+        if v_pool_st is not null and v_pool_st not in
+           ('cancelled','closed_filled','closed_partial','closed_unfilled',
+            'completed','expired_empty','executed','closed') then
+            v_vol := coalesce(round(v_batch.matched_heads * v_batch.avg_weight_kg)::int, 0);
+            update public.pool_lines
+            set current_heads     = greatest(current_heads - v_batch.matched_heads, 0),
+                current_volume_kg = greatest(current_volume_kg - v_vol, 0),
+                updated_at        = now()
+            where id = v_batch.pool_line_id;
+            update public.pools
+            set matched_heads = greatest(matched_heads - v_batch.matched_heads, 0),
+                updated_at    = now()
+            where id = v_pool_id;
+        end if;
+
+        -- FR-004: партия была продана — за отказ отвечают одинаково, каким бы маршрутом
+        -- она ни была привязана. v_penalized ниже превращает событие в cancelled_after_match.
+        insert into public.batch_events (batch_id, event_type, metadata, created_by)
+        values (p_batch_id, 'cancelled_after_match',
+            jsonb_build_object('pool_id', v_pool_id, 'pool_line_id', v_batch.pool_line_id,
+                               'heads', v_batch.matched_heads, 'penalty', true,
+                               'route', 'batch'), v_uid);
+        v_reversed  := v_reversed + v_batch.matched_heads;
+        v_penalized := v_penalized + 1;
     end if;
 
     -- Снять остаток с рынка: отозвать «висящие» pending-офферы (безплатно).
@@ -506,7 +557,13 @@ comment on function public.rpc_self_withdraw_batch(uuid, boolean) is
     'Слайс 9 (S1b+S3) | Самоотмена партии с учётом дробления. Остаток снимается всегда/безплатно.
      matched-куски — только p_include_matched=true и ЗА ШТРАФ (реверс + cancelled_after_match).
      Итоговый статус: v_active=0→cancelled, иначе rollup (батч = отстающий активный кусок).
-     confirmed/dispatched/delivered батч снять нельзя. Гейт fn_my_org_ids().';
+     confirmed/dispatched/delivered батч снять нельзя. Гейт fn_my_org_ids().
+     TSP-WITHDRAW-POOLCOUNTER-01: реверс и штраф покрывают ОБА маршрута матча — куски
+     (batch_allocations) и партию целиком (batches.pool_line_id у партии без аллокаций).
+     Второй маршрут раньше не обрабатывался вовсе: заявка навсегда считала снятые головы
+     набранными и не могла добрать, а снятие проданной партии писалось как
+     cancelled_before_match — без штрафа репутации (MS6 §4f шаг 8c). У ТЕРМИНАЛЬНОЙ заявки
+     счётчик не правится: её числа — история закрытой сделки.';
 revoke execute on function public.rpc_self_withdraw_batch(uuid, boolean) from public, anon;
 grant  execute on function public.rpc_self_withdraw_batch(uuid, boolean) to authenticated;
 
