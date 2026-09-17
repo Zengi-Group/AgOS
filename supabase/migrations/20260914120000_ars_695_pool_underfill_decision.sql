@@ -245,7 +245,17 @@ begin
 
         select * into v_batch from public.batches where id = v_alloc.batch_id for update;
 
-        if v_active = 0 then
+        if v_batch.status in ('cancelled', 'failed', 'expired', 'delivered') then
+            -- ARS-314 (FR-004 фикса отмены заявки): терминальную партию не воскрешаем.
+            -- Первая редакция этой ветки различала только «есть живые куски / нет» и
+            -- поэтому возвращала на рынок снятую фермером партию, а уже доставленную
+            -- откатывала в partially_matched — по сути выдавала вторую жизнь закрытой
+            -- сделке. Найдено на прогоне ремонта осиротевших кусков 14.09; здесь тот же
+            -- дефект того же класса, вылеченный тем же правилом.
+            update public.batches
+            set matched_heads = v_active, updated_at = now()
+            where id = v_alloc.batch_id;
+        elsif v_active = 0 then
             -- Кусков не осталось — партия снова целиком на рынке (FR-004).
             update public.batches
             set matched_heads     = 0,
