@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:native": "tsc -b && vite build --mode native",
+    "build:native": "tsc -b && VITE_APP_TARGET=native vite build --mode native",
     "cap:sync": "npm run build:native && cap sync",
     "cap:sync:ios": "npm run build:native && cap sync ios",
     "cap:sync:android": "npm run build:native && cap sync android",
