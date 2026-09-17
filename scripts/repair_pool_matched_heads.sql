@@ -1,4 +1,4 @@
--- РЕМОНТ ДАННЫХ · счётчики живых заявок, разошедшиеся с реальностью
+-- РЕМОНТ ДАННЫХ · счётчики заявок, разошедшиеся с реальностью
 -- Причина — TSP-WITHDRAW-POOLCOUNTER-01: `rpc_self_withdraw_batch` не уменьшал счётчики
 -- заявки при снятии партии, привязанной ЦЕЛИКОМ (реверс жил только в цикле по кускам).
 -- Заявка навсегда считала снятые головы набранными и не могла добрать.
@@ -12,15 +12,30 @@
 -- вовсе, статус не рыночный и не терминальный). Предикат маршрута — тот же, что в
 -- read-model ARS-684 и в фиксе: «нет НИ ОДНОЙ аллокации у партии».
 --
+-- ОБЛАСТЬ ДЕЙСТВИЯ (FR-006, сужено владельцем 17.09): ремонт правит счётчик у ЛЮБОЙ заявки,
+-- включая терминальную. Это не переписывание истории: числа были неверны ИЗНАЧАЛЬНО. У
+-- e382d9cb «80 голов» не были правдой никогда — на том же экране сумма сделки посчитана по
+-- фактическим партиям (29 × 400 × 1800 = 20 880 000 ₸), то есть сохранялось противоречие, а
+-- не история. Первая редакция скрипта терминальные пропускала и потому не чинила НИЧЕГО:
+-- единственное расхождение в базе — как раз у заявки в статусе completed.
+-- Рабочий поток при этом не изменился: `rpc_self_withdraw_batch` терминальную заявку
+-- по-прежнему не трогает (стережёт тест M-005).
+--
 -- ЧЕГО РЕМОНТ НЕ ДЕЛАЕТ:
---   · не трогает ТЕРМИНАЛЬНЫЕ заявки (closed_*, completed, cancelled, expired_empty,
---     executed, closed) — их числа это история закрытой сделки, а не живой остаток (FR-006);
 --   · не трогает события и репутацию: двое фермеров, снявших проданные партии до фикса,
 --     штрафа избежали, и переписывать историю снятий задним числом запрещено (FR-010) —
 --     это был бы подлог, а не ремонт;
 --   · не меняет статусы партий — только счётчики заявок и их строк.
 --
--- Идемпотентность: берёт только заявки, где счётчик расходится с пересчётом. Повторный
+-- ТОЛЬКО ЗАВЫШЕННЫЕ СЧЁТЧИКИ. Правится случай `счётчик > факта` — это и есть след дефекта:
+-- головы не вычли при снятии. Обратный случай (`счётчик < факта`, чаще всего 0 при непустом
+-- объёме) — НЕ трогаем: это историческая незаполненность, `pool_lines.current_heads` добавлена
+-- позже данных (d02_tsp.sql §9.3) и у старых строк осталась нулём, хотя current_volume_kg
+-- заполнен верно. Заполнять её задним числом — отдельное решение с другим обоснованием, и
+-- смешивать его с ремонтом дефекта нельзя: замер 17.09 показал 5 таких строк против 1 реального
+-- следа, то есть «ремонт» тронул бы в основном не то, ради чего затевался.
+--
+-- Идемпотентность: берёт только заявки, где счётчик ЗАВЫШЕН относительно пересчёта. Повторный
 -- прогон после успешного применения не найдёт ничего.
 
 do $$
@@ -31,7 +46,7 @@ declare
     v_fixed  int := 0;
     v_lines  int := 0;
 begin
-    raise notice '=== ДО РЕМОНТА: живые заявки, где счётчик врёт ===';
+    raise notice '=== ДО РЕМОНТА: заявки, где счётчик врёт ===';
     for v_pool in
         select p.id, p.status, p.target_heads, p.matched_heads,
                coalesce((select sum(a.heads) from public.batch_allocations a
@@ -43,12 +58,10 @@ begin
                            and not exists (select 1 from public.batch_allocations a2
                                             where a2.batch_id = b.id)), 0) as real_heads
         from public.pools p
-        where p.status not in ('cancelled','closed_filled','closed_partial','closed_unfilled',
-                               'completed','expired_empty','executed','closed')
         order by p.matched_heads desc
     loop
-        if v_pool.matched_heads <> v_pool.real_heads then
-            raise notice 'заявка % (%): счётчик % → реально % (из % целевых)',
+        if v_pool.matched_heads > v_pool.real_heads then
+            raise notice 'заявка % (%): счётчик % завышен, реально % (из % целевых)',
                 left(v_pool.id::text, 8), v_pool.status, v_pool.matched_heads,
                 v_pool.real_heads, v_pool.target_heads;
         end if;
@@ -66,11 +79,9 @@ begin
                            and not exists (select 1 from public.batch_allocations a2
                                             where a2.batch_id = b.id)), 0) as real_heads
         from public.pools p
-        where p.status not in ('cancelled','closed_filled','closed_partial','closed_unfilled',
-                               'completed','expired_empty','executed','closed')
         for update of p
     loop
-        if v_pool.matched_heads <> v_pool.real_heads then
+        if v_pool.matched_heads > v_pool.real_heads then
             update public.pools
             set matched_heads = v_pool.real_heads, updated_at = now()
             where id = v_pool.id;
@@ -99,15 +110,15 @@ begin
                                             where a2.batch_id = b.id)), 0) as real_vol
         from public.pool_lines pl
         join public.pools p on p.id = pl.pool_id
-        where p.status not in ('cancelled','closed_filled','closed_partial','closed_unfilled',
-                               'completed','expired_empty','executed','closed')
         for update of pl
     loop
-        if v_line.current_heads <> v_line.real_heads
-           or v_line.current_volume_kg <> v_line.real_vol then
+        -- greatest: если завышено только одно из двух полей, второе не занижаем до факта —
+        -- иначе ремонт дефекта попутно заполнил бы исторические нули (см. шапку).
+        if v_line.current_heads > v_line.real_heads
+           or v_line.current_volume_kg > v_line.real_vol then
             update public.pool_lines
-            set current_heads     = v_line.real_heads,
-                current_volume_kg = v_line.real_vol,
+            set current_heads     = least(v_line.current_heads, v_line.real_heads),
+                current_volume_kg = least(v_line.current_volume_kg, v_line.real_vol),
                 updated_at        = now()
             where id = v_line.id;
             v_lines := v_lines + 1;
@@ -119,9 +130,7 @@ begin
     -- ── Контроль: после ремонта расхождений быть не должно ───────────────────────────
     select count(*) into v_real
     from public.pools p
-    where p.status not in ('cancelled','closed_filled','closed_partial','closed_unfilled',
-                           'completed','expired_empty','executed','closed')
-      and p.matched_heads <>
+    where p.matched_heads >
           coalesce((select sum(a.heads) from public.batch_allocations a
                      where a.pool_id = p.id and a.status <> 'cancelled'), 0)
         + coalesce((select sum(b.heads) from public.batches b
@@ -131,8 +140,8 @@ begin
                       and not exists (select 1 from public.batch_allocations a2
                                        where a2.batch_id = b.id)), 0);
     if v_real > 0 then
-        raise exception 'РЕМОНТ НЕ ПОЛНЫЙ: у % живых заявок счётчик всё ещё расходится', v_real;
+        raise exception 'РЕМОНТ НЕ ПОЛНЫЙ: у % заявок счётчик всё ещё завышен', v_real;
     end if;
-    raise notice 'контроль пройден: у живых заявок счётчик сходится с реальностью';
+    raise notice 'контроль пройден: завышенных счётчиков не осталось';
 end;
 $$;
