@@ -28,6 +28,18 @@ sys.path.insert(0, "scripts")
 import agos_db as db  # noqa: E402
 
 
+def safe_print(text: str) -> None:
+    """Печать, которая не роняет прогон из-за кодировки консоли.
+
+    NOTICE из PL/pgSQL приходят с юникодом (стрелки, тире), а консоль Windows живёт в
+    cp1251 — прямой print на таком тексте бросает UnicodeEncodeError. Потерять
+    оформление сообщения не жалко, потерять управление посреди работы с боевой базой —
+    очень.
+    """
+    enc = (sys.stdout.encoding or "utf-8")
+    sys.stdout.write(text.encode(enc, errors="replace").decode(enc, errors="replace") + "\n")
+
+
 def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     apply_mode = "--apply" in sys.argv
@@ -72,23 +84,30 @@ def main() -> int:
     try:
         cur.execute("select 1")   # открыть транзакцию до основного запроса
         cur.execute(body)
-        print("SQL выполнен без ошибок.")
+        safe_print("SQL выполнен без ошибок.")
     except Exception as exc:
         failed = True
-        print(f"ОШИБКА: {type(exc).__name__}")
-        print(str(exc)[:3000])
+        safe_print(f"ОШИБКА: {type(exc).__name__}")
+        safe_print(str(exc)[:3000])
     finally:
-        for note in conn.notices:
-            print("  ", note.rstrip())
+        # Завершаем транзакцию ПЕРВЫМ делом, до любой печати: печать умеет падать
+        # (консоль Windows в cp1251 не кодирует стрелки и прочий юникод из NOTICE),
+        # и если положить её раньше, скрипт умрёт с открытой транзакцией. База в этом
+        # случае откатит её сама при обрыве соединения — но полагаться на обрыв вместо
+        # явного решения нельзя, тем более в режиме --apply, где ценой будет НЕ
+        # применённое изменение, которое скрипт уже объявил применённым.
         if failed or not apply_mode:
             conn.rollback()
-            print("-" * 70)
-            print("ROLLBACK выполнен — база не изменена.")
+            outcome = "ROLLBACK выполнен — база не изменена."
         else:
             conn.commit()
-            print("-" * 70)
-            print("COMMIT выполнен — изменения применены.")
+            outcome = "COMMIT выполнен — изменения применены."
         conn.close()
+
+        for note in conn.notices:
+            safe_print("  " + note.rstrip())
+        safe_print("-" * 70)
+        safe_print(outcome)
     return 1 if failed else 0
 
 

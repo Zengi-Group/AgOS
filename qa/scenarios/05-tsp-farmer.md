@@ -202,7 +202,7 @@
 - **Ожидание:** партия → confirmed; покупатель РАСКРЫВАЕТСЯ («Сделка подтверждена. Покупатель: <МПК>. Цена: Z ₸/кг»); на Главной «Отметьте отгрузку». Для дроблёной партии раскрытие — per-кусок по закрытию ЕГО пула.
 
 #### TSPF-LIFE-11 · UNHAPPY→OK · Underfill: МПК вернул партии (BT-14)
-`layer:sql+ui` `canon:MS4-BT-14;D-TSP-10` `impl:d02_tsp.sql` `auto:candidate:sql` `status:blocked:TSP-FLOW-10`
+`layer:sql+ui` `canon:MS4-BT-14;D-TSP-10` `impl:d02_tsp.sql` `auto:candidate:sql` `status:blocked:NOTIF-DISPATCH-01`
 - **Ожидание:** партия matched → published, deal_price сброшен; уведомление «Покупатель не набрал нужный объём — ваша партия снова в продаже. Это не связано с вашей партией»; партия снова участвует в matching.
 
 #### TSPF-LIFE-12 · HAPPY · Retry-match: published-партия матчится с новым пулом (BT-05)

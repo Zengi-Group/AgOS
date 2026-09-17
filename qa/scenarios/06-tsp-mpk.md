@@ -44,7 +44,7 @@
 - **Ожидание:** matched-партии возвращаются в published (как BT-14), pending-офферы отзываются, фермеры уведомлены; заявка cancelled.
 
 #### TSPM-POOL-07 · EDGE · Окно истекло, 0 партий (PT-04)
-`layer:sql` `canon:MS4-PT-04` `impl:rpc_self_close_due_pools` `auto:candidate:sql` `status:blocked:TSP-FLOW-10`
+`layer:sql` `canon:MS4-PT-04` `impl:rpc_self_close_due_pools` `auto:candidate:sql` `status:active`
 - **Ожидание:** заявка → expired_empty (терминал), без решения МПК.
 
 #### TSPM-POOL-08 · EDGE · Лимиты строк: max_heads/current_heads
@@ -87,12 +87,12 @@
 - **Ожидание:** пул закрывается (overshoot тотала допустим на последнем батче; overshoot категорийного MAX — нет); все matched-партии → confirmed; DealClosedModal с итогами; контакты сторон раскрываются симметрично (D-M6-5/12).
 
 #### TSPM-CLOSE-02 · UNHAPPY→EDGE · Underfill: решение МПК (PT-03/06/07)
-`layer:ui+rpc` `canon:MS4-§2.5;D-TSP-10;D-M6-14` `impl:rpc_pool_accept_partial/rpc_pool_return_batches` `auto:candidate:sql` `status:blocked:TSP-FLOW-10`
+`layer:ui+rpc` `canon:MS4-§2.5;D-TSP-10;D-M6-14` `impl:rpc_self_pool_accept_partial/rpc_self_pool_return_batches` `auto:candidate:sql` `status:active`
 - **Предусловие:** окно поставки вышло, 0 < filled < target.
 - **Ожидание:** окно решения 24 ч: «принять частично» → matched-партии confirmed на набранный объём (target=filled); «вернуть партии» → партии published (TSPF-LIFE-11); решение — на весь заказ, не по строкам (D-M6-14).
 
 #### TSPM-CLOSE-03 · EDGE · Молчание 24 ч → дефолт «вернуть»
-`layer:sql` `canon:MS4-D-TSP-10` `impl:rpc_self_close_due_pools` `auto:candidate:sql` `status:blocked:TSP-FLOW-10`
+`layer:sql` `canon:MS4-D-TSP-10` `impl:rpc_self_close_due_pools` `auto:candidate:sql` `status:active`
 - **Ожидание:** нет решения МПК за mpk_decision_window → система применяет «вернуть партии» (farmer-friendly дефолт); повторный вызов решения после дефолта → «решение принято».
 
 #### TSPM-CLOSE-04 · HAPPY · Приёмка поставок (BT-18, per-batch)
