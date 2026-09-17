@@ -1,6 +1,6 @@
 ---
 status: agreed           # гейт замысла проведён 2026-09-17 (G2-карточка: 3 вопроса закрыты, 11 находок ревью качества триажированы); код (/build) — после подписи g2_approved
-g2_approved:             # ставит ТОЛЬКО человек: scripts/approve-g2.sh <спек>
+g2_approved: 2026-09-17 · Dias Zhagaparov
 baseline_commit:         # пусто до /build
 brain_spec: [[projects/agos/specs/mpk-desktop-trading]]
 task_home: ARS-718 (Linear, team ARS, проект «Рынок TSP»)
