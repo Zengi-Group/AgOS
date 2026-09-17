@@ -32,7 +32,7 @@
 - **Ожидание:** система не предлагает цену < пола; шаг из конфига.
 
 #### E2E-TSP-04 · UNHAPPY→OK · Underfill: оба исхода
-`layer:sql` `canon:MS4-§2.5;D-TSP-10;D-M6-14` `impl:d02_tsp.sql` `auto:candidate:sql` `status:blocked:TSP-FLOW-10`
+`layer:sql` `canon:MS4-§2.5;D-TSP-10;D-M6-14` `impl:d02_tsp.sql` `auto:candidate:sql` `status:active`
 - **Сценарий A:** window expired, filled<target → accept_partial → target=filled, партии confirmed.
 - **Сценарий B:** return_batches (или дефолт по молчанию 24 ч) → партии published, deal_price=NULL, pool closed_unfilled.
 
