@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { PhIcon } from '../../components/icons/PhIcon'
 import { fmtMoney } from '../../tsp/data/tsp-utils'
 import { NBSP } from '../../tsp/data/tsp-dicts'
-import { mpkCatName, type Pool, type SupplierRow } from '../types'
+import { DELIVERY_STATUS_LABEL, mpkCatName, type Pool, type SupplierRow } from '../types'
 import { avgLinePrice, closureReason, fillPct, isAvgPrice, statusLabel } from './requests-model'
 
 export type MonitorView = 'overview' | 'suppliers'
@@ -35,12 +35,8 @@ interface Props {
   onConfirmDelivery: (row: SupplierRow) => Promise<void>
 }
 
-const DELIVERY_LABEL: Record<SupplierRow['deliveryStatus'], string> = {
-  awaiting_dispatch: 'Ждёт отгрузки',
-  in_transit: 'В пути',
-  delivered: 'Принято',
-  withdrawn: 'Снята',
-}
+// ARS-731 (FR-008): локальная карта подписей удалена — она была вторым домом одного
+// факта и уже разошлась с мобильным монитором в словах. Подпись берётся из types.ts.
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -248,7 +244,7 @@ export function RequestMonitor({
               <div className="mpkr-cell">{fmtMoney(s.price)}{NBSP}₸/кг</div>
               <div className="mpkr-cell">
                 <span className={`mpkc-badge ${s.deliveryStatus === 'delivered' ? 'green' : 'neutral'}`}>
-                  {DELIVERY_LABEL[s.deliveryStatus]}
+                  {DELIVERY_STATUS_LABEL[s.deliveryStatus]}
                 </span>
               </div>
               <div className="mpkr-cell">

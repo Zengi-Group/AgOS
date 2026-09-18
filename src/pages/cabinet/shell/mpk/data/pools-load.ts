@@ -160,10 +160,16 @@ function toSupplier(m: RawMatch): SupplierRow {
     id: m.matchId,
     heads: m.heads,
     price: m.price,
+    // ARS-731 (FR-006/FR-008): различие состояний заводится ЗДЕСЬ и больше нигде.
+    // Прежний хвост `: 'awaiting_dispatch'` накрывал и `active` — неподтверждённая
+    // сделка показывалась ждущей отгрузки, хотя фермеру нечего было нажать.
+    // Значение вне четвёрки rpc_get_pool_matches не выдаём за известное (FR-006).
     deliveryStatus:
       m.status === 'delivered' ? 'delivered'
       : m.status === 'dispatched' ? 'in_transit'
-      : 'awaiting_dispatch',
+      : m.status === 'confirmed' ? 'awaiting_dispatch'
+      : m.status === 'active' ? 'not_confirmed'
+      : 'unknown',
     farmName: m.farmName ?? undefined,
     district: m.region,
     // Слайс 9 (S4): поля для документа сделки + карточки поставщика.

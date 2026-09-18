@@ -323,7 +323,13 @@ it('ARS-684 M-017: onConfirmDelivery отверг INVALID_STATUS, перечит
   await expect.element(page.getByText('КХ Дубль'), T).toBeInTheDocument()
   await page.getByText('Подтвердить приёмку').click()
 
-  await expect.element(page.getByText('✓ Принята'), T).toBeInTheDocument()
+  // ARS-731 (FR-006/FR-008): подпись состояния переехала в единственный дом
+  // (mpk/types.ts DELIVERY_STATUS_LABEL) со словами, заданными FR-006 дословно:
+  // у `delivered` это «Принято». Прежнее «Принята» жило только здесь и расходилось
+  // с десктопным монитором — ожидание правится вслед за подписанным требованием,
+  // а не под код. Утверждение теста не изменилось: после отказа INVALID_STATUS
+  // строка показывает состояние ИЗ БАЗЫ и тоста об ошибке нет.
+  await expect.element(page.getByText('✓ Принято'), T).toBeInTheDocument()
   expect(toast).not.toHaveBeenCalled()
 })
 

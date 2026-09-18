@@ -9,7 +9,7 @@ import { NBSP } from '../../tsp/data/tsp-dicts'
 import { printDealDoc, fmtDealDate, type DealDocData } from '../../data/deal-doc'
 import { useGradeFormula } from '@/hooks/useGradeFormula'
 import { useRevealedBatch } from '../data/revealed-batch'
-import { mpkCatName, type Pool, type SupplierRow } from '../types'
+import { DELIVERY_STATUS_LABEL, mpkCatName, type Pool, type SupplierRow } from '../types'
 
 interface Props {
   pool: Pool
@@ -38,14 +38,11 @@ function supplierCatLabel(s: SupplierRow): string {
   const grade = s.grade ? GRADE_RU[s.grade] : ''
   return [cat, grade].filter(Boolean).join(' · ')
 }
+// ARS-731 (FR-008): подпись берётся из единственного дома (types.ts), а не
+// перечисляется здесь второй раз. `default: return ''` был молчанием на неизвестном
+// значении — теперь неизвестное называется неизвестным (FR-006).
 function deliveryLabel(st: SupplierRow['deliveryStatus']): string {
-  switch (st) {
-    case 'awaiting_dispatch': return 'Ожидает отгрузки'
-    case 'in_transit':        return 'В пути'
-    case 'delivered':         return 'Принята'
-    case 'withdrawn':         return 'Отозвана'
-    default:                  return ''
-  }
+  return DELIVERY_STATUS_LABEL[st] ?? DELIVERY_STATUS_LABEL.unknown
 }
 function supplierSum(s: SupplierRow): number {
   return s.avgWeight ? Math.round(s.heads * s.avgWeight * s.price) : 0
@@ -542,9 +539,20 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                     <a href={`tel:${s.farmPhone}`}>{s.farmPhone}</a>
                   </div>
                 )}
+                {/* ARS-731 (FR-006/FR-007): сделка ещё не подтверждена — заявка набирается.
+                    Хода приёмки здесь нет и быть не может: обе RPC приёмки требуют
+                    `dispatched`, а отгрузку отмечает фермер, которому кнопка откроется
+                    только после подтверждения. Экран, честный в подписи и лживый в
+                    кнопке, — не исправление. */}
+                {s.deliveryStatus === 'not_confirmed' && (
+                  <div className="supplier-status">{deliveryLabel(s.deliveryStatus)}</div>
+                )}
+                {s.deliveryStatus === 'unknown' && (
+                  <div className="supplier-status">{deliveryLabel(s.deliveryStatus)}</div>
+                )}
                 {s.deliveryStatus === 'awaiting_dispatch' && (
                   <>
-                    <div className="supplier-status">Ожидает отгрузки</div>
+                    <div className="supplier-status">{deliveryLabel(s.deliveryStatus)}</div>
                     {/* Реальный пул: отгрузку отмечает фермер в своём кабинете. Демо-кнопка — только для seed. */}
                     {!realPool && (
                       <Cta variant="ghost" onClick={() => patchSupplier(s.id, { deliveryStatus: 'in_transit' })}>
@@ -555,7 +563,7 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                 )}
                 {s.deliveryStatus === 'in_transit' && (
                   <>
-                    <div className="supplier-status transit">В пути</div>
+                    <div className="supplier-status transit">{deliveryLabel(s.deliveryStatus)}</div>
                     <Cta onClick={() => {
                       if (realPool && onConfirmDelivery) {
                         // ARS-684 FR-002: адрес приёмки по маршруту строки — кусок (allocation.id)
@@ -588,7 +596,7 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                 )}
                 {s.deliveryStatus === 'delivered' && (
                   <>
-                    <div className="supplier-status done">✓ Принята</div>
+                    <div className="supplier-status done">✓ {deliveryLabel(s.deliveryStatus)}</div>
                     {/* FR-006/M-010,011: отзыв достижим сразу после приёмки, не дожидаясь закрытия
                         всего пула — но ТОЛЬКО на маршруте «партия». Канонический
                         rpc_submit_deal_review гейтит по статусу ПАРТИИ
@@ -614,7 +622,7 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                     />}
                   </>
                 )}
-                {s.deliveryStatus === 'withdrawn' && <div className="supplier-status">Отозвана</div>}
+                {s.deliveryStatus === 'withdrawn' && <div className="supplier-status">{deliveryLabel(s.deliveryStatus)}</div>}
                 {realPool && s.batchId && <RevealedBatchDetail batchId={s.batchId} />}
               </div>
             ))}
