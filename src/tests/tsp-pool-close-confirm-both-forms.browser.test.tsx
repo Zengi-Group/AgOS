@@ -291,7 +291,12 @@ it('ARS-731 M-010: партия matched — видно, чего ждать; п�
     heads: 30, avgWeight: 430, price: 1700, district: 'Илийский район',
   })
 
-  await expect.poll(() => document.body.textContent ?? '', T).toContain('заявка ещё набирается')
+  // Текст говорит о факте, а не о процессе: `matched` достижим и при заявке в
+  // awaiting_mpk_decision, где «набирается» было бы ложью (Spec Change Log, 2026-09-18).
+  await expect.poll(() => document.body.textContent ?? '', T)
+    .toContain('Покупатель ещё не закрыл заявку')
+  expect(document.body.textContent, 'вернулась формулировка про процесс набора')
+    .not.toContain('ещё набирается')
   const text = document.body.textContent ?? ''
   // HS-2 / FR-009: объяснение ДОБАВЛЕНО к предупреждению, а не заменило его.
   expect(text, 'предупреждение о штрафе исчезло вместе с добавлением объяснения')
