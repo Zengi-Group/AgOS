@@ -1,6 +1,6 @@
 ---
 status: agreed           # гейт замысла проведён 2026-09-17 (G2-карточка: 3 вопроса закрыты, 11 находок ревью качества триажированы); код (/build) — после подписи g2_approved
-g2_approved: 2026-09-17 · Dias Zhagaparov
+g2_approved: 2026-09-18 · Dias Zhagaparov
 baseline_commit: 574fd154c1d6263797b2538a8d5324ed5f712290  # /build ARS-718, зафиксирован 2026-09-18 до первой правки
 review_iterations: 1     # якорь 7, сборка 18.09: 33 находки трёх прогонов → 5 корней, все patch/defer; intent_gap/bad_spec нет, откатов не было. Порог HALT — >5
 brain_spec: [[projects/agos/specs/mpk-desktop-trading]]
