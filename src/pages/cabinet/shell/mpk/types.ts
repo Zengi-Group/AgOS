@@ -69,7 +69,14 @@ export interface SupplierRow {
   rating?: number        // 1–5 · демо-данные (seed/addSupplier); реальные строки рейтинг не несут — см. myRating
   heads: number
   price: number
-  deliveryStatus: 'awaiting_dispatch' | 'in_transit' | 'delivered' | 'withdrawn'
+  // ARS-731 (FR-006): rpc_get_pool_matches отдаёт ЧЕТЫРЕ значения статуса
+  // (active/confirmed/dispatched/delivered). До ARS-731 первые два схлопывались в
+  // awaiting_dispatch — неподтверждённая сделка выдавала себя за ждущую отгрузки,
+  // то есть комбинат ждал фермера, а фермеру нечего было нажать.
+  // `not_confirmed` = сделка ещё не подтверждена (заявка набирается).
+  // `unknown` = значение вне четвёрки: показываем честно, а не выдаём за известное.
+  deliveryStatus: 'not_confirmed' | 'awaiting_dispatch' | 'in_transit' | 'delivered'
+                | 'withdrawn' | 'unknown'
   farmName?: string      // null до executing
   district?: string
   myRating?: number      // оценка МПК после executed
@@ -87,6 +94,21 @@ export interface SupplierRow {
   // ARS-684 (двухмаршрутная read-model): маршрут строки — кусок партии (batch_allocations)
   // или партия целиком (batches.pool_line_id). Определяет, какую RPC приёмки звать.
   source?: 'allocation' | 'batch'
+}
+
+/** ARS-731 (FR-008): ЕДИНСТВЕННЫЙ дом подписи состояния строки поставщика.
+ *  Обе поверхности монитора — мобильный PoolMonitorModal и десктопный RequestMonitor —
+ *  берут подпись отсюда. До ARS-731 у каждой была своя формулировка одного и того же
+ *  состояния («Ждёт отгрузки» / «Ожидает отгрузки», «Принята» / «Принято»), и добавление
+ *  третьей вместе с новым состоянием только закрепило бы расхождение (P4).
+ *  Слова четырёх состояний из базы заданы FR-006 дословно. */
+export const DELIVERY_STATUS_LABEL: Record<SupplierRow['deliveryStatus'], string> = {
+  not_confirmed:     'Сделка ещё не подтверждена',
+  awaiting_dispatch: 'Ожидает отгрузки',
+  in_transit:        'В пути',
+  delivered:         'Принято',
+  withdrawn:         'Отозвана',
+  unknown:           'Состояние неизвестно',
 }
 
 export interface Pool {
