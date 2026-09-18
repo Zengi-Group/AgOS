@@ -180,7 +180,10 @@ it('M-003: клик по непостроенному пункту сайдба�
   // Дожидаемся конца загрузки: до неё в теле скелет, и сравнивать «до/после» нечего.
   await expect.poll(() => document.querySelector('.agos-mpk-console .mpkc-stub'), T).not.toBeNull()
 
-  await page.getByRole('button', { name: 'Мои заявки' }).click()
+  // Пункт взят НЕ «Мои заявки»: с ARS-718 он построен (Slice 10 `FR-020`) и ведёт на свой
+  // экран, то есть подсказки у него больше нет по замыслу, а не по регрессии. `FR-013`
+  // остался в силе для четырёх непостроенных — на одном из них строка и проверяется.
+  await page.getByRole('button', { name: 'Маркет-борд' }).click()
   await expect.poll(() => document.querySelector('.agos-mpk-console .mpkc-soon')?.textContent?.trim(), T)
     .toBe('Раздел в разработке')
   // Экран не уехал: URL, подсветка вкладки и тело раздела те же.

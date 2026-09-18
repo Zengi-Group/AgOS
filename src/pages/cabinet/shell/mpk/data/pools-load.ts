@@ -83,6 +83,9 @@ function toPool(r: RawPool): Pool {
     suppliers: [],
     createdAt: fmtDay(r.createdAtIso),
     minPoolHeads: r.minPoolHeads,
+    // ARS-718: поле ответа RPC перестаёт теряться при маппинге — раскрытие контактов
+    // считает база, экран его показывает (Slice 11 M-012/M-016).
+    contactRevealed: r.contactRevealed,
     dbStatus: r.status,
   }
 }
