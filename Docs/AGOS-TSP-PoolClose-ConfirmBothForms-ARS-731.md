@@ -1,5 +1,5 @@
 ---
-status: draft            # G2 не пройден: подпись g2_approved ставит человек своим терминалом
+status: agreed           # гейт замысла проведён 2026-09-18 (карточка G2: 4 решения владельца закрыты, ревью качества — 18 дыр по 5 осям, все закрыты правкой до гейта); код (/build) — после подписи g2_approved
 g2_approved:
 baseline_commit:         # пусто до /build
 brain_spec: [[projects/agos/specs/tsp-farmer-sell-flow]]
