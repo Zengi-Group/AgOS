@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { loadAccountProfile, type AccountProfile } from '@/lib/account'
-import { mpkProfileTabFromUrl, mpkRouteToUrl } from '../nav'
+import { mpkProfileTabFromUrl, mpkRouteToUrl, MPK_REQUESTS_URL } from '../nav'
 import type { MpkProfileTab } from '../types'
 import { ProfileSidebar } from './ProfileSidebar'
 import { ProfileTabs, profileTabLabel } from './ProfileTabs'
@@ -311,7 +311,14 @@ export function MpkProfileApp() {
         monogram={initials(profile?.ownerName, 'МПК')}
         theme={theme}
         soonHint={soonHint}
-        onSelect={(item) => setSoonHint(item.id === 'profile' ? null : item.id)}
+        activeId="profile"
+        onSelect={(item) => {
+          // Slice 11 `FR-002` / Slice 10 `FR-020`: «Мои заявки» больше не непостроенный
+          // пункт — он ведёт на свой экран. Остальные четыре по-прежнему только
+          // показывают подсказку и URL не трогают (`FR-013`, M-003).
+          if (item.id === 'requests') { setSoonHint(null); navigate(MPK_REQUESTS_URL); return }
+          setSoonHint(item.id === 'profile' ? null : item.id)
+        }}
         onThemeToggle={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
         onBackToMpk={backToMpk}
       />

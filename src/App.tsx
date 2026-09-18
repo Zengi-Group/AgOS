@@ -82,6 +82,7 @@ const MpkApp = lazy(() => import('@/pages/cabinet/shell/mpk/MpkApp').then(m => (
 // рядом с Ionic-оболочкой закупок (§1.2), поэтому свой v6-роут, а не ветка внутри MpkApp:
 // Ionic-остров и телефонный каркас ей не нужны. Тоже lazy — свой CSS-скоуп и токены.
 const MpkProfileApp = lazy(() => import('@/pages/cabinet/shell/mpk/profile/MpkProfileApp').then(m => ({ default: m.MpkProfileApp })))
+const MpkRequestsApp = lazy(() => import('@/pages/cabinet/shell/mpk/requests/MpkRequestsApp').then(m => ({ default: m.MpkRequestsApp })))
 const HerdOverview = lazy(() => import('@/pages/cabinet/herd/HerdOverview').then(m => ({ default: m.HerdOverview })))
 const HerdGroupForm = lazy(() => import('@/pages/cabinet/herd/HerdGroupForm').then(m => ({ default: m.HerdGroupForm })))
 const FeedInventory = lazy(() => import('@/pages/cabinet/feed/FeedInventory').then(m => ({ default: m.FeedInventory })))
@@ -244,6 +245,10 @@ function App() {
                   внутри той же авторизации (Slice10 §1.2). Мобильный шелл закупок ниже
                   не меняется (HS-2 / FR-005). */}
               <Route path="/mpk/profile/*" element={<Suspense fallback={<BootScreen />}><MpkProfileApp /></Suspense>} />
+              {/* Slice11 (ARS-718) · «Мои заявки» — первый торговый раздел той же консоли.
+                  Тоже ДО общего `/mpk/*`, иначе адрес перехватит Ionic-шелл закупок.
+                  Живые URL не меняются: раздел добавлен, ничего не переименовано (FR-001). */}
+              <Route path="/mpk/requests/*" element={<Suspense fallback={<BootScreen />}><MpkRequestsApp /></Suspense>} />
               <Route path="/mpk/*" element={<Suspense fallback={<BootScreen />}><MpkApp /></Suspense>} />
               {/* Легаси web-кабинет + админ/эксперт-консоль: только web-таргет (§8). */}
               {!IS_NATIVE && (

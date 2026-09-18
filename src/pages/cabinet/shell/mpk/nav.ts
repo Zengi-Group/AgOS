@@ -29,6 +29,26 @@ export function mpkProfileTabFromUrl(pathname: string): MpkProfileTab | null {
   return (MPK_PROFILE_TABS as readonly string[]).includes(tab ?? '') ? tab as MpkProfileTab : null
 }
 
+// ── Slice11 (ARS-718) · раздел «Мои заявки» десктопной консоли ────────────────
+// Аддитивно: `MpkRoute` НЕ расширяется. Раздел живёт вне Ionic-стека закупок (его
+// монтирует v6-роут App.tsx, как и консоль профиля), а новый вариант union заставил бы
+// разбирать его в `MpkApp` — то есть править мобильный шелл, что слайсу запрещено
+// (FR-014). Карта URL остаётся одна на обе поверхности — этот файл (P4/P6).
+
+export const MPK_REQUESTS_URL = '/mpk/requests'
+
+export const mpkRequestUrl = (poolId: string): string => `${MPK_REQUESTS_URL}/${poolId}`
+
+/** `/mpk/requests/:poolId` → id заявки; `/mpk/requests` (список) и любой более глубокий
+ *  адрес → null. Глубже второго сегмента — такой же неканонический адрес, как
+ *  `/mpk/profile/org/что-угодно`: его разбирает список, а не монитор. */
+export function mpkRequestPoolIdFromUrl(pathname: string): string | null {
+  const seg = mpkSegments(pathname)
+  if (seg[0] !== 'requests') return null
+  if (seg.length !== 2) return null
+  return seg[1] || null
+}
+
 export function mpkRouteToUrl(r: MpkRoute): string {
   switch (r.name) {
     case 'tsp': return '/mpk/tsp'

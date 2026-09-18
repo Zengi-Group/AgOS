@@ -17,7 +17,12 @@ export interface SidebarNavItem {
   label: string
 }
 
-// §2 · таблица пунктов. `profile` — единственный построенный на десктопе (этот слайс).
+// Построенные на десктопе разделы. Множество принадлежит не одному слайсу: `profile` —
+// Slice 10, `requests` — Slice 11 (`FR-020` Slice 10, `FR-002` Slice 11). Каждый следующий
+// построенный раздел добавляется сюда своим id, а не правкой текста подсказки.
+export const BUILT_SECTIONS = new Set(['profile', 'requests'])
+
+// §2 · таблица пунктов.
 export const SIDEBAR_PRIMARY: SidebarNavItem[] = [
   { id: 'dashboard', icon: 'dashboard', label: 'Главная' },
   { id: 'requests', icon: 'fileText', label: 'Мои заявки' },
@@ -39,6 +44,9 @@ interface ProfileSidebarProps {
   /** id пункта, под которым показана подсказка «Раздел в разработке»; null — нет подсказки.
    *  Подсказка принадлежит ПУНКТУ, а не экрану: контент и URL она не меняет (M-003). */
   soonHint: string | null
+  /** id раздела, в котором пользователь сейчас находится. По умолчанию `profile` —
+   *  поведение консоли профиля до Slice 11 не меняется. */
+  activeId?: string
   onSelect: (item: SidebarNavItem) => void
   onThemeToggle: () => void
   onBackToMpk: () => void
@@ -46,21 +54,23 @@ interface ProfileSidebarProps {
 
 export function ProfileSidebar({
   orgName, farmName, userName, monogram,
-  theme, soonHint, onSelect, onThemeToggle, onBackToMpk,
+  theme, soonHint, activeId = 'profile', onSelect, onThemeToggle, onBackToMpk,
 }: ProfileSidebarProps) {
   const renderItem = (item: SidebarNavItem) => {
-    // Построен на десктопе только профиль — он и есть активный раздел консоли. Остальные
-    // пять пунктов кликабельны и честно сообщают о себе, но никуда не ведут (FR-009/FR-013).
-    // Приглушённого начертания у них НЕТ: оно давало в светлой теме 2.49:1 при норме 4.5
-    // (подробности — profile-console.css). Непостроенность сообщает подсказка по клику.
-    const built = item.id === 'profile'
+    // Построенных на десктопе разделов два (`BUILT_SECTIONS`), а подсвечен тот, в котором
+    // пользователь сейчас: «построен» и «активен» — разные факты, и с приходом Slice 11
+    // они разошлись. Остальные четыре пункта кликабельны и честно сообщают о себе, но
+    // никуда не ведут (`FR-013` Slice 10). Приглушённого начертания у них НЕТ: оно давало
+    // в светлой теме 2.49:1 при норме 4.5 (подробности — profile-console.css).
+    const built = BUILT_SECTIONS.has(item.id)
+    const active = item.id === activeId
     const hinted = item.id === soonHint
     return (
       <div key={item.id}>
         <button
           type="button"
-          className={`mpkc-item${built ? ' on' : ''}`}
-          aria-current={built ? 'page' : undefined}
+          className={`mpkc-item${active ? ' on' : ''}`}
+          aria-current={active ? 'page' : undefined}
           aria-expanded={built ? undefined : hinted}
           onClick={() => onSelect(item)}
         >
