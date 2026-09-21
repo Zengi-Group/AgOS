@@ -154,7 +154,7 @@ rpc_self_match_batch_to_pool: deal_price_per_kg,pool_id,pool_line_id,via
 rpc_self_pool_accept_partial: confirmedUnits,confirmed_units,matchedHeads,matched_heads,original_target_heads,outcome,poolId,pool_id
 rpc_self_pool_close_now: matchedHeads,minPoolHeads,outcome,poolId,targetHeads
 rpc_self_pool_return_batches: outcome,poolId,pool_id,reason,returnedUnits,returned_units
-rpc_self_review_due_batches: moved,trigger
+rpc_self_review_due_batches: afterMinutes,after_minutes,moved,offersExpired,trigger
 rpc_send_message: author_actor_type,author_user_id,channel_id,message_id,preview
 rpc_set_batch_terms: batch_id,farmer_price_per_kg,ready_from,ready_to,status
 rpc_set_farm_activity_types: current,inserted,removed
