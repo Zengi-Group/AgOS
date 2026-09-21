@@ -1,5 +1,5 @@
 ---
-status: draft            # → agreed на G2
+status: agreed           # гейт замысла проведён 2026-09-21: три решения владельца закрыты, живых Open Questions нет, ревью качества — 18 дыр по 5 осям, все закрыты правкой до гейта; код (/build) — после подписи g2_approved
 g2_approved:             # ставит ТОЛЬКО человек: scripts/approve-g2.sh <спек>
 baseline_commit:         # пусто до /build
 brain_spec: [[projects/agos/specs/tsp-farmer-sell-flow]]
