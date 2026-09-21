@@ -2918,3 +2918,15 @@ guard, Save-гейт описания, `displayValue` БИН, `EditableRow` read
 **Files**: `supabase/migrations/20260921120000_ars_760_price_decision_after_market_refusal.sql`, `scripts/deploy/repair_ars760_stuck_price_decision.sql`, `tests/ars_760_price_decision_after_market_refusal_test.sql`, `tests/ars_760_price_decision_repair_test.sql`, `cross_check.sh`, `contracts/rpc_return_keys.txt`, `Docs/AGOS-TSP-Flow-Microsteps/AGOS-Microstep4-BatchPoolOffer-v1_0.md`, `qa/scenarios/05-tsp-farmer.md`, `src/pages/cabinet/shell/hooks/useBatches.ts`, `IMPL_DEBT.md`, `Docs/AGOS-TSP-PriceDecisionEntry-ARS-760.md`.
 
 ---
+
+### 2026-09-21: ARS-760 закрыт — выложен на прод, ремонт применён, дрейф 0
+
+**What**: миграция `20260921120000_ars_760_price_decision_after_market_refusal.sql` применена на прод (`deploy.py`, 1/1): новое тело `rpc_self_review_due_batches` и починенный `rpc_lower_batch_price` (`published_at = now()`). Скрипт `scripts/deploy/repair_ars760_stuck_price_decision.sql` применён (`run_sql_rollback.py --apply`): возвращена на рынок **1** партия — `f473d040` (20 голов), стоявшая в точке решения с 2026-07-02 при нуле предложений.
+
+**Why**: до выкладки мерж ничего не менял — на проде продолжало работать возрастное правило, и уценка партий без интереса рынка шла как прежде (`merge ≠ deploy`, CLAUDE.md).
+
+**Consequences**: проверено на проде после выкладки — статус `published`, цена **2100 не изменена** (`FR-006`), `awaiting_price_decision_at` обнулён, `published_at` обновлён, `offering_at` пуст (`FR-014`); в `batch_events` ровно одна строка `returned_to_published` с `created_by = NULL` и `metadata.via = repair_ars760`; ремонтом тронута ровно 1 партия, лишнего не задето. Повторный прогон ремонта: 0 строк, 0 событий (`FR-007` подтверждён на проде, не только в тесте). Контрольный замер: партий в точке решения без отказа рынка — **0**; в точке решения вообще — **0**. `prod_diff.py`: **дрейф 0** по всем пяти категориям (361 функция в git = 361 на проде), включая `acl-divergent` — права не менялись. Автоматической уценки в системе не осталось ни на одном пути. Порядок соблюдён: `ARS-760` выложен **до** планировщика `ARS-694`, иначе расписание сделало бы снижение цены ежесуточным и безучастным к человеку.
+
+**Files**: прод-выкладка; запись без изменений кода.
+
+---
