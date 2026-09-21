@@ -70,6 +70,13 @@
   line-height: 1.55;
 }
 
+/* ARS-756 · шрифт задаёт ЗОНА, а не тег. Глобальное `h1..h6 { @apply font-serif }`
+   (src/index.css) — намеренное правило кабинета фермера, трогать его нельзя. Но оно
+   стоит прямо на теге и потому перебивает `font-family`, унаследованный от контейнера
+   консоли: любой семантический заголовок здесь выходил серифом («Статус уточняется» в
+   Обзоре, пять карточек в разделе «Предприятие»). Возвращаем зоне её гарнитуру. */
+.agos-mpk-console :is(h1, h2, h3, h4, h5, h6) { font-family: var(--font-sans); }
+
 /* Светлая тема консоли — набор «светлая/ds» (§1.3 выписки): намеренно сведён к
    daylight-палитре AgOS, поэтому переключение не конфликтует с каноном фермерской зоны. */
 .agos-mpk-console[data-theme='light'] {
@@ -396,6 +403,10 @@
   font-weight: 600;
   white-space: nowrap;
 }
+/* ARS-756: тон `blue` отдавался моделью (requests-model.STATUS_LABEL, статус `filling`
+   → «Набирается»), но правила под него здесь не было — чип падал на базовый серый.
+   Токены `--blue`/`--blue-m` определены в обеих темах наравне с остальными тонами. */
+.agos-mpk-console .mpkc-badge.blue { color: var(--blue); background: var(--blue-m); }
 .agos-mpk-console .mpkc-badge.green { color: var(--green); background: var(--green-m); }
 .agos-mpk-console .mpkc-badge.amber { color: var(--amber); background: var(--amber-m); }
 .agos-mpk-console .mpkc-badge.red { color: var(--red); background: var(--red-m); }
