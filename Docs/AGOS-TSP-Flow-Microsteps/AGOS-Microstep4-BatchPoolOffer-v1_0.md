@@ -301,10 +301,11 @@ stateDiagram-v2
     published --> cancelled: farmer cancel
 
     offering --> matched: MPK accepts Offer (T_offer_accept)
-    offering --> awaiting_price_decision: 24h window expired, no acceptors
+    offering --> awaiting_price_decision: all Offers of current round expired, none pending (BT-09)
     offering --> cancelled: farmer cancel
 
     awaiting_price_decision --> offering: farmer lowers price (broadcast)
+    awaiting_price_decision --> published: entered without market refusal — one-off repair (BT-20, ARS-760)
     awaiting_price_decision --> cancelled: farmer cancel
 
     matched --> confirmed: Pool closes (filled or partial-accepted)
@@ -334,9 +335,9 @@ stateDiagram-v2
 | BT-06 | published | offering | farmer edits price/data, rebroadcast | Farmer owner | Offers (re)issued |
 | BT-07 | published | cancelled | farmer cancel | Farmer owner | — |
 | BT-08 | offering | matched | MPK accepts one Offer | MPK user | Offer.accepted, other Offers → withdrawn, Batch → matched in MPK's Pool, deal_price = offer_price |
-| BT-09 | offering | awaiting_price_decision | all Offers expired | System (scheduled job) | Farmer notified with suggested price |
+| BT-09 | offering | awaiting_price_decision | all Offers expired — **в нынешнем выходе на рынок** (`offers.expires_at >= batches.published_at`): есть хотя бы один `expired` и ни одного `pending`. Возраст партии основанием НЕ является (ARS-760) | System (свип из кабинета фермера; расписания нет — ARS-694) | Farmer notified with suggested price |
 | BT-10 | offering | cancelled | farmer cancel | Farmer owner | All Offers → withdrawn |
-| BT-11 | awaiting_price_decision | offering | farmer lowers price | Farmer owner | New Offers broadcast at new price |
+| BT-11 | awaiting_price_decision | offering | farmer lowers price | Farmer owner | New Offers broadcast at new price. **Реальность расходится с этой строкой (зафиксировано ARS-760, 2026-09-21):** задеплоенный фермерский путь — адаптерный `rpc_lower_price`, который переводит партию в **`published`** (и `published_at = now()`), а в `offering` её двигает уже последующий `rpc_self_auto_match_batch`, если нашёлся МПК. Прямо в `offering` уходит только канонический `rpc_lower_batch_price`, и он `published_at` НЕ обновляет |
 | BT-12 | awaiting_price_decision | cancelled | farmer cancel | Farmer owner | — |
 | BT-13 | matched | confirmed | Pool closes (filled, overshoot, or partial-accepted) | System (in close_pool transaction) | — |
 | BT-14 | matched | published | Pool window expired, MPK chose 'return_batches' | System (in pool_mpk_returns_batches) | pool_id = NULL, deal_price = NULL |
@@ -345,6 +346,7 @@ stateDiagram-v2
 | BT-17 | confirmed | cancelled | admin-only cancel | Admin TURAN | BatchEvent(type='cancelled_during_execution') |
 | BT-18 | dispatched | delivered | delivery confirmed | MPK acknowledges receipt | — |
 | BT-19 | dispatched | cancelled | admin-only cancel | Admin TURAN | — |
+| BT-20 | awaiting_price_decision | published | ① партия попала в точку решения НЕ по отказу рынка (ARS-760) · ② **фермер снижает цену** — задеплоенный путь `rpc_lower_price` (см. оговорку к BT-11) | ① System (разовый ремонт, `scripts/deploy/repair_ars760_stuck_price_decision.sql`) · ② Farmer owner | ① Цена НЕ меняется (FR-006); `awaiting_price_decision_at = NULL`, `published_at = now()` (новый круг окна BT-09), `offering_at = NULL`; BatchEvent(type='returned_to_published', created_by=NULL) · ② цена снижается, `published_at = now()`, BatchEvent(type='price_lowered') |
 
 ---
 

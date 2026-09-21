@@ -13,7 +13,14 @@ set -uo pipefail
 CRITICAL=0
 SIGNIFICANT=0
 MINOR=0
-SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d11_norms.sql d12_messaging.sql d13_billing.sql d14_governance.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql supabase/migrations/20260914120000_ars_695_pool_underfill_decision.sql)
+SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d11_norms.sql d12_messaging.sql d13_billing.sql d14_governance.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql supabase/migrations/20260914120000_ars_695_pool_underfill_decision.sql supabase/migrations/20260921120000_ars_760_price_decision_after_market_refusal.sql)
+# ARS-760 (2026-09-21): миграция правила ценового решения добавлена сюда по тому же
+# правилу. Следствие названо заранее (FR-008 слайса): до неё строка снапшота
+# `rpc_self_review_due_batches` описывала ТЕЛО ИЗ 20260622120000 (`moved,trigger`),
+# потому что тело из 20260702200000 в SQL_FILES не входит и CHECK 11 его не видел —
+# дом этой дыры ARS-757. С регистрацией строка снапшота меняется на живую форму
+# ответа; перегенерация идёт тем же PR вместе с записью в DECISIONS_LOG
+# (D-RPC-CONTRACT-SYNC-01): «снапшот молчал, потому что не смотрел», а не «контракт сломали».
 # ARS-695 (2026-09-14): миграция точки выбора добавлена сюда по правилу строкой ниже —
 # три новых self-serve RPC и пять хелперов иначе остались бы файлом, чьи дубликаты и
 # возвращаемые контракты никто не проверяет, при том что Verification слайса прямо
@@ -64,7 +71,18 @@ echo "--- CHECK 1: Duplicate function definitions ---"
 # (p_organization_id, p_batch_id, p_reason). UNLIKE create_batch the adapter does NOT
 # drop the d02 sig, so both coexist — a latent overload also tracked by CHECK 9 and
 # retired (d02 sig) in convergence Slice D.
-DUP_WHITELIST="fn_my_org_ids|fn_is_admin|fn_is_expert|rpc_list_animal_categories|rpc_create_batch|rpc_get_org_batches|rpc_cancel_batch"
+# rpc_self_review_due_batches (ARS-760, 2026-09-21): тело правила ценового решения
+# переопределяется миграцией 20260921120000 поверх 20260622120000. Порядок применения
+# даёт выигрыш последнему: d-файлы, затем supabase/migrations/ по имени, а
+# 20260921120000 > 20260702200000 > 20260622120000. Проверка дубля ВНУТРИ файла (L-1)
+# при этом сохраняется для всех имён — порядок веток в CHECK 1 исправлен тем же PR.
+# rpc_lower_batch_price (ARS-760, там же): та же миграция переопределяет его поверх
+# d02_tsp.sql, добавляя published_at = now() (снижение цены начинает новый круг окна
+# FR-001). Тело в миграции взято С ПРОДА (pg_get_functiondef), а не из d02: версия d02 —
+# Слайс-9-aware и на прод не выкладывалась (DEBT-PROD-DRIFT-01). Это значит, что d02 и
+# прод по этой функции РАСХОДЯТСЯ и дальше — расхождение не создано здесь, но теперь у
+# него два дома в SQL_FILES, и выигрывает миграция.
+DUP_WHITELIST="fn_my_org_ids|fn_is_admin|fn_is_expert|rpc_list_animal_categories|rpc_create_batch|rpc_get_org_batches|rpc_cancel_batch|rpc_self_review_due_batches|rpc_lower_batch_price"
 
 # Extract all function names from CREATE OR REPLACE FUNCTION lines
 # BSD-safe: use [[:space:]]+ instead of \s+; case-insensitive via tr
@@ -78,12 +96,12 @@ dupes=$(echo "$all_funcs" | uniq -d)
 if [ -n "$dupes" ]; then
   crit_before=$CRITICAL
   while IFS= read -r fname; do
-    # Skip known intentional upgrades
-    if echo "$fname" | grep -qE "^(${DUP_WHITELIST})$"; then
-      echo "  WHITELISTED: ${fname} (intentional upgrade — d07 JWT fast path version is canonical)"
-      continue
-    fi
-    # Count occurrences per file (same-file duplicate = always critical)
+    # Count occurrences per file (same-file duplicate = always critical).
+    # ВЫШЕ белого списка и намеренно: белый список заведён под МЕЖФАЙЛОВОЕ
+    # переопределение («выигрывает последний файл»), и дубль ВНУТРИ одного файла он
+    # прощать не должен — это ровно инцидент L-1, где поздний CREATE OR REPLACE молча
+    # отменяет ранний фикс. До 2026-09-21 `continue` стоял выше этого цикла, поэтому
+    # для каждого имени из списка сторож L-1 был выключен (найдено ревью ARS-760).
     for f in "${SQL_FILES[@]}"; do
       count=$(grep -c -i "create or replace function.*${fname}" "$f" 2>/dev/null || true)
       if [ "$count" -gt 1 ]; then
@@ -91,6 +109,11 @@ if [ -n "$dupes" ]; then
         ((CRITICAL++))
       fi
     done
+    # Skip known intentional upgrades — только для межфайлового дубля ниже
+    if echo "$fname" | grep -qE "^(${DUP_WHITELIST})$"; then
+      echo "  WHITELISTED: ${fname} (намеренное межфайловое переопределение — выигрывает последний файл в порядке применения; причина каждой записи — в комментарии к DUP_WHITELIST)"
+      continue
+    fi
     # Check cross-file duplicates
     locations=$(grep -l -i "create or replace function.*${fname}" "${SQL_FILES[@]}" 2>/dev/null | tr '\n' ', ')
     file_count=$(grep -l -i "create or replace function.*${fname}" "${SQL_FILES[@]}" 2>/dev/null | wc -l | tr -d ' ')
