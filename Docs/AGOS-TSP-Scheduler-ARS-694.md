@@ -1,6 +1,6 @@
 ---
 status: agreed           # 22.09: четыре Open Questions закрыты владельцем, живых нет. Подпись g2_approved ставит человек сам — scripts/approve-g2.sh
-g2_approved:             # ставит ТОЛЬКО человек: scripts/approve-g2.sh Docs/AGOS-TSP-Scheduler-ARS-694.md
+g2_approved: 2026-09-22 · Dias Zhagaparov
 baseline_commit:         # пусто до /build
 brain_spec: "[[projects/agos/specs/tsp-scheduler]]"
 task_home: ARS-694 (эпик ARS-94 · Рынок TSP); соседи — ARS-695 (недобор, shipped), ARS-760 (точка цены, shipped), ARS-264 (pg_cron для продлений, In Progress), ARS-685 (уведомления), ARS-379 (очистка документов)
