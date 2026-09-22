@@ -2944,3 +2944,15 @@ guard, Save-гейт описания, `displayValue` БИН, `EditableRow` read
 **Files**: `supabase/migrations/20260922120000_ars_694_tsp_flow_shared_sweep.sql`, `supabase/migrations/20260922130000_ars_694_tsp_flow_pg_cron.sql`, `tests/ars_694_tsp_flow_scheduler_test.sql`, `cross_check.sh`, `contracts/rpc_return_keys.txt`, `Docs/AGOS-Dok3-RPC-Catalog-v1_5.md`, `Docs/AGOS-TSP-Scheduler-ARS-694.md`, `Docs/AGOS-TSP-PoolDecision-Underfill-ARS-695.md`, `Docs/AGOS-TSP-PriceDecisionEntry-ARS-760.md`, `IMPL_DEBT.md`.
 
 ---
+
+### 2026-09-22: ARS-694 выложен на прод — планировщик закупочного флоу армирован, дрейф 0
+
+**What**: обе миграции применены на прод (`deploy.py`, по одной, 1/1 каждая): `20260922120000_ars_694_tsp_flow_shared_sweep.sql` (два общих хелпера `fn_tsp_sweep_due_*`, две кабинетные обёртки, два глобальных входа `rpc_process_tsp_*`, строки `rpc_name_registry`) и `20260922130000_ars_694_tsp_flow_pg_cron.sql` (`create extension pg_cron` + два задания). Порядок соблюдён: функции ДО расписания — задание зовёт функции.
+
+**Why**: мерж ничего не меняет на проде (`merge ≠ deploy`, CLAUDE.md). До выкладки четыре правила флоу продолжали исполняться только из открытого браузера.
+
+**Consequences**: проверено после выкладки. `prod_diff.py` — **дрейф 0** по всем пяти категориям (git 365 функций = прод 365; было 361 — прибавились ровно два хелпера и два входа), `acl-divergent` 0 (права легли как объявлены). Инфра: `pg_cron` **ЕСТЬ** в списке расширений — установка прошла на живом проекте под ролью `postgres` через пулер, как и предсказывал замер. `cron.job` глазами (сверка его не читает — `OBS-CRON-JOB-NOT-IN-PRODDIFF-01`): **ровно два задания**, `tsp-pool-closures` и `tsp-batch-reviews`, оба `'0 * * * *'`, `active=t`, роль `postgres`, база `postgres`, команды `select public.rpc_process_tsp_*(500)`. **`membership-renewals` в `cron.job` НЕТ** — `FR-015` подтверждён на проде, а не только в тексте: установка расширения движок продлений не вооружила. Замер очереди на момент выкладки (09:40 UTC): заявок с прошедшим дедлайном 0, просроченных предложений 0, партий, ждущих точки решения по цене, — **1** (`d439c7bf`, 20 голов). Первый тик — 10:00 UTC (15:00 по Алматы).
+
+**Files**: прод-выкладка; запись без изменений кода.
+
+---
