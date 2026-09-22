@@ -346,7 +346,9 @@ stateDiagram-v2
 | BT-17 | confirmed | cancelled | admin-only cancel | Admin TURAN | BatchEvent(type='cancelled_during_execution') |
 | BT-18 | dispatched | delivered | delivery confirmed | MPK acknowledges receipt | — |
 | BT-19 | dispatched | cancelled | admin-only cancel | Admin TURAN | — |
-| BT-20 | awaiting_price_decision | published | ① партия попала в точку решения НЕ по отказу рынка (ARS-760) · ② **фермер снижает цену** — задеплоенный путь `rpc_lower_price` (см. оговорку к BT-11) | ① System (разовый ремонт, `scripts/deploy/repair_ars760_stuck_price_decision.sql`) · ② Farmer owner | ① Цена НЕ меняется (FR-006); `awaiting_price_decision_at = NULL`, `published_at = now()` (новый круг окна BT-09), `offering_at = NULL`; BatchEvent(type='returned_to_published', created_by=NULL) · ② цена снижается, `published_at = now()`, BatchEvent(type='price_lowered') |
+| BT-20 | awaiting_price_decision | published | ① партия попала в точку решения НЕ по отказу рынка (ARS-760) · ② **фермер меняет цену** — снижает **или поднимает** (ARS-755); задеплоенный путь `rpc_lower_price` (см. оговорку к BT-11) · ③ **фермер оставляет цену прежней** — «Оставить цену и ждать» (ARS-755 FR-006) | ① System (разовый ремонт, `scripts/deploy/repair_ars760_stuck_price_decision.sql`) · ②③ Farmer owner | ① Цена НЕ меняется (FR-006); `awaiting_price_decision_at = NULL`, `published_at = now()` (новый круг окна BT-09), `offering_at = NULL`; BatchEvent(type='returned_to_published', created_by=NULL) · ② цена = ровно названная фермером (зажим снят ARS-755), `published_at = now()`, живые `pending`-Offers → `withdrawn` до записи новой цены (ARS-755 FR-007), BatchEvent(type='price_lowered' — имя неточно с ARS-755, см. IMPL_DEBT) · ③ цена НЕ меняется, `published_at = now()`, Offers **не гасятся** (ARS-755 M-017), BatchEvent(type='returned_to_published', created_by = фермер) |
+
+> ⚠️ **Коллизия id `BT-20`** (унаследована от ARS-760, названа ARS-755): id занят дважды — этой строкой (`awaiting_price_decision → published`) и строкой MS6 §138 (`draft → scheduled`), которая живёт в сценариях `TSPF-PUB-02`/`TSPF-RES-04`. Переименование — отдельное решение, здесь только фиксируется.
 
 ---
 
@@ -589,6 +591,8 @@ batch_event (
 ### D-TSP-8 — Понижение цены — фермерское решение, шаг — ассоциация
 
 После истечения Offers — фермер решает (понизить / отозвать). Процент снижения задаётся ассоциацией единый для всех категорий. Никаких авто-снижений без согласия.
+
+**AMEND ARS-755 (CEO, 2026-09-22) — цену назначает фермер, в любую сторону.** Словарь решения расширяется третьим вариантом: **поднять**. Записывается ровно та цена, которую фермер назвал — выше текущей, ниже или та же; ни шаг, ни защитная цена её не меняют. Шаг ассоциации (`tsp_config.price_step_down_amount`) остаётся **подсказкой** — он предлагает значение, но не ограничивает ввод; защитная цена остаётся **ориентиром** с мягким предупреждением (ровно `D-M6-3`: «задать вручную (с soft warning)»), а не запретом. Сохранение цены каноном уже разрешено (`D-M6-3`, MS6 §229 — «оставить и ждать (→ `published`)») и здесь не переопределяется. Потолка ручного ввода канон не вводил никогда: зажим `least(new, current − step)` в `rpc_lower_price` был дрейфом кода, а не правилом — снят ARS-755.
 
 ### D-TSP-9 — Pool закрывается автоматом при достижении target, overshoot принимается
 

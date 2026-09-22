@@ -117,7 +117,7 @@ rpc_list_livestock_prices: age_months,code,currency,livestock_category,price_per
 rpc_log_animal_event: animal_created,animal_id,event_id,event_type_code,farm_id,herd_group_id,occurred_at,ok,reason,replayed,status,tag_number
 rpc_log_herd_event: event_id,event_type,farm_id,group_id,value_after,value_before
 rpc_lower_batch_price: batch_id,broadcast_mpk_count,expires_at,floor_price_per_kg,mpk_org_id,new_price,new_price_per_kg,offer_id,offered_price_per_kg,old_price_per_kg,requested_price_per_kg,was_clamped
-rpc_lower_price: new_ask,old_ask,step
+rpc_lower_price: ask,new_ask,old_ask,reason,step
 rpc_mark_walkthrough: already_marked,farm_id,marked_at,marked_by,ok,walk_date,walkthrough_id
 rpc_match_batch_to_pool: batch_id,heads,match_id,pool_id
 rpc_migrate_animal_category: action,affected_herd_groups,from_code,status,strategy,to_code
