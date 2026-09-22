@@ -13,7 +13,16 @@ set -uo pipefail
 CRITICAL=0
 SIGNIFICANT=0
 MINOR=0
-SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d11_norms.sql d12_messaging.sql d13_billing.sql d14_governance.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql supabase/migrations/20260914120000_ars_695_pool_underfill_decision.sql supabase/migrations/20260921120000_ars_760_price_decision_after_market_refusal.sql supabase/migrations/20260922120000_ars_694_tsp_flow_shared_sweep.sql)
+SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d11_norms.sql d12_messaging.sql d13_billing.sql d14_governance.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql supabase/migrations/20260914120000_ars_695_pool_underfill_decision.sql supabase/migrations/20260921120000_ars_760_price_decision_after_market_refusal.sql supabase/migrations/20260922120000_ars_694_tsp_flow_shared_sweep.sql supabase/migrations/20260922140000_ars_755_farmer_owns_price.sql)
+# ARS-755 (2026-09-22): миграция «цену назначает фермер» добавлена сюда по тому же
+# правилу — в ней живут живые тела rpc_lower_price, rpc_lower_batch_price и
+# fn_tsp_batch_json. Снапшот меняется у rpc_lower_price (ветка события
+# returned_to_published добавила ключи ask/reason), перегенерация идёт тем же PR вместе
+# с записью в DECISIONS_LOG (D-RPC-CONTRACT-SYNC-01).
+# ⚠️ ОГОВОРКА, найденная ревью якоря 7: аддитивный ключ priceStepDown у fn_tsp_batch_json
+# CHECK 11 НЕ ВИДИТ — contract_snapshot.py:83 пропускает всё, что не начинается с `rpc_`.
+# Приписывать этой проверке контракты `fn_*` нельзя: пропажа ключа прошла бы зелёной.
+# Прибор ключа — прямое утверждение в tests/ars_755_farmer_owns_price_test.sql (M-010).
 # ARS-694 (2026-09-22): миграция общего тела правил флоу добавлена сюда по тому же
 # правилу — в ней живут ДВА новых глобальных входа (rpc_process_tsp_*) и обе
 # кабинетные обёртки, то есть ровно те контракты, которые CHECK 11 обязан видеть.
@@ -94,7 +103,19 @@ echo "--- CHECK 1: Duplicate function definitions ---"
 # зовёт его с fn_my_org_ids(). Выигрывает последний файл в порядке применения
 # (20260922120000 > 20260921120000 > 20260622120000). Сигнатуры и форма ответа не
 # меняются — CHECK 11 держит это утверждение.
-DUP_WHITELIST="fn_my_org_ids|fn_is_admin|fn_is_expert|rpc_list_animal_categories|rpc_create_batch|rpc_get_org_batches|rpc_cancel_batch|rpc_self_review_due_batches|rpc_self_close_due_pools|rpc_lower_batch_price"
+# rpc_lower_price, fn_tsp_batch_json (ARS-755, 2026-09-22): обе переопределяются
+# миграцией 20260922140000 поверх 20260622120000. Выигрывает последний в порядке
+# применения: d-файлы, затем supabase/migrations/ по имени, а 20260922140000 больше
+# всех существующих. ВАЖНО, какое тело взято за основу — не самое старое, а ЖИВОЕ:
+# для rpc_lower_price это 20260702200000 (там published_at = now(), рестарт таймера),
+# для fn_tsp_batch_json — 20260731074557 (ARS-360, канонический review). Ни тот, ни
+# другой файл в SQL_FILES не входит, поэтому CHECK 1 их не видит и пару показывает
+# только с 20260622120000 — это не значит, что правка легла поверх тела 2026-06-22.
+# rpc_lower_batch_price (ARS-755, там же): третий дом того же имени — d02_tsp.sql,
+# 20260921120000 и теперь 20260922140000. Тело взято из 20260921120000 (= прод + строка
+# ARS-760), а не из d02: версия d02 по-прежнему Слайс-9-aware и на прод не выкладывалась
+# (DEBT-PROD-DRIFT-01). Расхождение d02↔прод не создано здесь и не закрыто здесь.
+DUP_WHITELIST="fn_my_org_ids|fn_is_admin|fn_is_expert|rpc_list_animal_categories|rpc_create_batch|rpc_get_org_batches|rpc_cancel_batch|rpc_self_review_due_batches|rpc_self_close_due_pools|rpc_lower_batch_price|rpc_lower_price|fn_tsp_batch_json"
 
 # Extract all function names from CREATE OR REPLACE FUNCTION lines
 # BSD-safe: use [[:space:]]+ instead of \s+; case-insensitive via tr

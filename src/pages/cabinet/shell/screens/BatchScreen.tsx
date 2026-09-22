@@ -295,21 +295,42 @@ function SplitPanel({ batch }: { batch: Batch }) {
 }
 
 // ── DecisionActions (state=decision) — .mk-rec + .dec-act. Логика/prot сохранены ──
-function DecisionActions({ batch, onPatch, toast }: {
-  batch: Batch; onPatch: (p: Partial<Batch>, successToast?: string) => void; toast: (t: string) => void
+// ARS-755: проп toast убран — все три действия теперь ведут к записи цены и сообщают о
+// результате через successToast самого onPatch (тост больше не выдаётся «на месте», без RPC).
+function DecisionActions({ batch, onPatch }: {
+  batch: Batch; onPatch: (p: Partial<Batch>, successToast?: string) => void
 }) {
   const [customOn, setCustomOn] = useState(false)
   const [custom, setCustom] = useState('')
   const prot = protPrice(batch)
   const cur = batch.price ?? 0
-  const lowered = cur - 100
-  const lowerBlocked = prot != null && lowered < prot
-  const applyPrice = (newPrice: number) => {
-    onPatch({ state: 'offering', price: newPrice, deadlineLabel: 'завтра, 14:30' }, 'Предложение отправлено покупателям по новой цене')
+  // ARS-755 FR-005: шаг приходит с партией из tsp_config (P4/P8). Ключа нет — подсказки нет.
+  const step = typeof batch.priceStepDown === 'number' ? batch.priceStepDown : null
+  const lowered = step != null ? cur - step : null
+  // ARS-755 FR-003: защитная цена — ОРИЕНТИР, а не запрет. Подсказку ниже неё не предлагаем
+  // сами, но ручной ввод ниже разрешён и записывается как введён (soft warning, D-M6-3).
+  const lowerBlocked = lowered == null || lowered <= 0 || (prot != null && lowered < prot)
+  // ARS-755 FR-006/M-006: тост называет то, что произошло на самом деле. «Оставить цену»
+  // идёт через ту же запись цены (текущей) — но обещать «по новой цене» там было бы ложью.
+  // `deadlineLabel` больше НЕ выдумывается (найдено ревью якоря 7): сервер ставит партию в
+  // `published` и при смене цены гасит старые предложения, так что срока ответа в этот
+  // момент не существует ни одного. Прежний хардкод «завтра, 14:30» печатал фермеру
+  // несуществующий дедлайн — тот же класс лжи, который чинит слайс. Настоящий срок
+  // приезжает с ближайшим рефетчем (deadlineLabel из fn_tsp_batch_json).
+  const applyPrice = (newPrice: number, successToast?: string) => {
+    onPatch(
+      { state: 'offering', price: newPrice, deadlineLabel: undefined },
+      // ARS-755 M-001 (сверка замысел↔реальность, прогон 2): тост НАЗЫВАЕТ записанную цену.
+      // Строка матрицы требует «тост называет 1600» — константа «по новой цене» этого не
+      // делает, а весь слайс про то, что подтверждённое фермеру число и записанное совпадают.
+      successToast ?? `Предложение отправлено покупателям по ${fmtMoney(newPrice)}${NBSP}₸/кг`,
+    )
   }
   const customNum = parseInt(custom, 10)
-  const customValid = !Number.isNaN(customNum) && customNum > 0 && (prot == null || customNum >= prot)
-  const recPrice = lowerBlocked ? prot! : lowered
+  // ARS-755 FR-002: верхней границы нет, жёсткой нижней нет — активна для любого целого > 0.
+  const customValid = !Number.isNaN(customNum) && customNum > 0
+  const customBelowProt = prot != null && !Number.isNaN(customNum) && customNum < prot
+  const recPrice = lowered
 
   if (customOn) {
     return (
@@ -317,10 +338,22 @@ function DecisionActions({ batch, onPatch, toast }: {
         <label className="mk-field">
           <span className="mk-lab">Своя цена, ₸/кг</span>
           <input className="mk-input mk-mono price" inputMode="numeric" value={custom} autoFocus
-            onChange={(e) => setCustom(e.target.value.replace(/\D/g, '').slice(0, 5))} />
+            // ARS-755 FR-002 (сверка замысел↔реальность): верхней границы ввода нет —
+            // прежний `.slice(0, 5)` был потолком 99 999 ₸/кг, которого замысел не вводил.
+            // Остаётся только фильтр цифр; сумму отвергает сервер, а не длина поля.
+            onChange={(e) => setCustom(e.target.value.replace(/\D/g, ''))} />
         </label>
+        {/* ARS-755 FR-004: правило названо словами ДО нажатия. */}
+        <div className="mk-hint">Цену назначаете вы — можно поднять, снизить или оставить прежней.</div>
+        {/* ARS-755 FR-008: факт без совета — экран не комментирует решение фермера о цене.
+            После ARS-760 в точку решения попадает только партия, которой отказали. */}
+        <div className="mk-hint">По {fmtMoney(cur)}{NBSP}₸/кг покупателей не нашлось.</div>
+        {/* ARS-755 FR-003: защитная цена остаётся ориентиром, ввод ниже разрешён. */}
         {prot != null && (
-          <div className="mk-hint">Защитная цена ассоциации — {fmtMoney(prot)}{NBSP}₸/кг. Ниже назначить нельзя.</div>
+          <div className="mk-hint">Защитная цена ассоциации — {fmtMoney(prot)}{NBSP}₸/кг.</div>
+        )}
+        {customBelowProt && (
+          <div className="bat-warn-note" style={{ marginTop: 6 }}>Ниже защитного уровня — назначить можно, цена запишется как введена.</div>
         )}
         <div className="dec-row-actions stack">
           <button className="dec-act primary" disabled={!customValid} onClick={() => customValid && applyPrice(customNum)}>
@@ -333,22 +366,50 @@ function DecisionActions({ batch, onPatch, toast }: {
   }
   return (
     <div className="dec-row"><div className="dec-row-body">
-      <div className="mk-rec">
-        <div className="mk-rec-k">Рекомендуем</div>
-        <div className="mk-rec-v mk-mono">{fmtMoney(recPrice)}{NBSP}₸/кг</div>
-        <div className="mk-rec-s">
-          было <span className="mk-mono">{fmtMoney(cur)}{NBSP}₸/кг</span>
-          {!lowerBlocked && <> · ≈ <span className="mk-mono">{fmtMoney(lowered * (batch.heads ?? 0) * (batch.avgWeight ?? 0))}{NBSP}₸</span> за партию</>}
+      {/* ARS-755 FR-005: блок подсказки ассоциации сохранён (HS-2), но число — из настройки.
+          Шага нет (ключ пуст) или подсказка ушла бы ниже защитной — блок не показываем. */}
+      {!lowerBlocked && (
+        <div className="mk-rec">
+          <div className="mk-rec-k">Рекомендуем</div>
+          <div className="mk-rec-v mk-mono">{fmtMoney(recPrice!)}{NBSP}₸/кг</div>
+          <div className="mk-rec-s">
+            было <span className="mk-mono">{fmtMoney(cur)}{NBSP}₸/кг</span>
+            {' '}· ≈ <span className="mk-mono">{fmtMoney(recPrice! * (batch.heads ?? 0) * (batch.avgWeight ?? 0))}{NBSP}₸</span> за партию
+          </div>
         </div>
-      </div>
+      )}
+      {/* ARS-755 M-011 (сверка замысел↔реальность): строка матрицы называет состоянием
+          «экран точки решения», а не «форма ввода», — факт должен быть виден ДО нажатия.
+          Совета при этом нет никакого (FR-008, ст. 171). */}
+      <div className="mk-hint">По {fmtMoney(cur)}{NBSP}₸/кг покупателей не нашлось.</div>
+      {/* ARS-755 FR-003: защитная цена — ориентир, и число видно НА САМОМ экране решения,
+          а не только внутри формы своей цены (найдено ревью якоря 7: иначе фермер выбирает
+          вслепую, пока не откроет ввод). Запрета за собой не несёт. */}
+      {prot != null && (
+        <div className="mk-hint">Защитная цена ассоциации — {fmtMoney(prot)}{NBSP}₸/кг.</div>
+      )}
+      {/* ARS-755 FR-004: правило названо словами до нажатия — и на первом экране тоже. */}
+      <div className="mk-hint">Цену назначаете вы — можно поднять, снизить или оставить прежней.</div>
       <div className="dec-row-actions stack">
         {!lowerBlocked && (
-          <button className="dec-act primary" onClick={() => applyPrice(lowered)}>Снизить и предложить снова</button>
+          <button className="dec-act primary" onClick={() => applyPrice(recPrice!)}>Снизить и предложить снова</button>
         )}
         <button className="dec-act alt" onClick={() => setCustomOn(true)}>Назначить свою цену</button>
-        <button className="dec-act link" onClick={() => toast('Партия остаётся в продаже. TURAN оповестит, когда появится подходящий покупатель')}>
-          Оставить цену и ждать
-        </button>
+        {/* ARS-755 FR-006: действие исполняет своё обещание — партия ВОЗВРАЩАЕТСЯ на рынок
+            с неизменной ценой (та же RPC с текущей ценой; событие returned_to_published).
+            Раньше здесь был только тост, и текст «остаётся в продаже» был неправдой. */}
+        {/* Цены у партии может не быть вовсе (`price` из fn_tsp_batch_json — coalesce
+            фермерской и справочной, обе могут быть пусты): тогда `cur` = 0, и действие
+            ушло бы в RPC нулём и вернулось сырым INVALID_INPUT на ход «ничего не меняю».
+            Нечего оставлять — нечего и предлагать (найдено ревью якоря 7). */}
+        {cur > 0 && (
+          <button
+            className="dec-act link"
+            onClick={() => applyPrice(cur, 'Партия снова в продаже по прежней цене. TURAN оповестит, когда появится подходящий покупатель')}
+          >
+            Оставить цену и ждать
+          </button>
+        )}
       </div>
     </div></div>
   )
@@ -564,7 +625,7 @@ export function BatchScreen({ batch, account, orgId, onBack, backLabel = 'Мои
           )}
 
           {st === 'decision' && (
-            <div className="blk mk-dec-blk"><DecisionActions batch={batch} onPatch={onPatch} toast={toast} /></div>
+            <div className="blk mk-dec-blk"><DecisionActions batch={batch} onPatch={onPatch} /></div>
           )}
 
           {hasDeal(batch) && (
@@ -656,7 +717,11 @@ export function BatchScreen({ batch, account, orgId, onBack, backLabel = 'Мои
         batch={batch}
         open={sheet === 'price'}
         onClose={() => setSheet((s) => (s === 'price' ? null : s))}
-        onConfirm={(newPrice) => { onPatch({ price: newPrice }, 'Цена обновлена'); setSheet(null) }}
+        onConfirm={(newPrice) => {
+          // ARS-755 M-001/M-012: тост называет записанное число и во второй точке ввода.
+          onPatch({ price: newPrice }, `Цена обновлена: ${fmtMoney(newPrice)}${NBSP}₸/кг`)
+          setSheet(null)
+        }}
       />
     </IonShellFrame>
   )

@@ -3,7 +3,7 @@
 // rpc_cancel_batch (RPC-11) — отмена партии.
 // Остальные переходы state — оптимистично локально (TSP-4).
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { appStorage } from '@/platform/storage'
 import type { Batch } from '../types'
@@ -45,6 +45,12 @@ interface UseBatchesResult {
 
 export function useBatches(accountId?: string | null): UseBatchesResult {
   const [batches, setBatches] = useState<Batch[]>([])
+  // ARS-755 M-014: зеркало состояния для отката цены. Снимок нельзя брать из localStorage
+  // (найдено ревью якоря 7): в приватном окне и при недоступном хранилище loadLocal вернёт
+  // пустой список, откат молча не сработает — и фермер увидит ошибку РЯДОМ с несохранённой
+  // ценой на экране. Ref всегда несёт то, что сейчас показано.
+  const batchesRef = useRef<Batch[]>([])
+  batchesRef.current = batches
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const lsKey = lsKeyFor(accountId)
@@ -165,6 +171,13 @@ export function useBatches(accountId?: string | null): UseBatchesResult {
       return
     }
 
+    // ARS-755 M-014: снимок ДО оптимистичной записи. Для смены цены ошибка RPC больше не
+    // глотается — значение откатывается, а ошибка доходит до фермера (тост успеха не
+    // показывается). Для остальных патчей демо-режим «нет backend → живём локально»
+    // сохраняется как был: цена — единственный факт, который нельзя показывать неправдой.
+    const isPriceWrite = patch.price !== undefined
+    const before = isPriceWrite ? batchesRef.current.find((b) => b.id === id) : undefined
+
     // Оптимистичное обновление + сохранить локально (демо без backend)
     setBatches((prev) => {
       const next = prev.map((b) => (b.id === id ? { ...b, ...patch } : b))
@@ -182,34 +195,49 @@ export function useBatches(accountId?: string | null): UseBatchesResult {
         // rpc_dispatch_batch — confirmed → dispatched
         const { error } = await supabase.rpc('rpc_dispatch_batch', { p_batch_id: id })
         if (error) throw error
-      } else if (patch.state === 'offering' && patch.price !== undefined) {
-        // rpc_lower_price — decision → offering с новой ценой
+      } else if (patch.price !== undefined && (patch.state === 'offering' || patch.state === undefined)) {
+        // ARS-755: ОБЕ ценовые двери кабинета сведены в одну ветку — точка решения
+        // (`DecisionActions`, patch несёт state:'offering') и шторка «Изменить цену»
+        // (patch без state). До слайса вторая уходила в `rpc_update_price`, чьё тело —
+        // осознанный no-op ('Цена фермера упразднена (ст.171)', 20260622120000): фермер
+        // видел тост «Цена обновлена», в БД не менялось ничего. Ветки разделять больше
+        // нечем — правило цены одно (P4), и ре-броадкаст ниже нужен обеим одинаково:
+        // найдено ревью якоря 7, что у шторки его не было, и смена цены из неё гасила
+        // старые предложения (FR-007), не рассылая новых.
         const { error } = await supabase.rpc('rpc_lower_price', {
           p_batch_id:  id,
           p_new_price: patch.price,
         })
         if (error) throw error
         // Переоценка → повторный авто-матч (D-AUTOMATCH-01): по новой цене партия
-        // может теперь подойти под пул. Сматчилось — обновляем локально.
-        try {
-          const { data: m } = await supabase.rpc('rpc_self_auto_match_batch', { p_batch_id: id })
-          const match = m as { matched?: boolean; dealPrice?: number } | null
-          if (match?.matched) {
-            setBatches((prev) => {
-              const next = prev.map((b) =>
-                b.id === id ? { ...b, state: 'matched' as Batch['state'], dealPrice: match.dealPrice ?? b.dealPrice } : b)
-              saveLocal(lsKey, next)
-              return next
-            })
-          }
-        } catch { /* нет backend — пропускаем */ }
-      } else if (patch.price !== undefined && patch.state === undefined) {
-        // rpc_update_price — только смена цены без смены state
-        const { error } = await supabase.rpc('rpc_update_price', {
-          p_batch_id:  id,
-          p_new_price: patch.price,
-        })
-        if (error) throw error
+        // может теперь подойти под пул.
+        // ARS-755 (сверка замысел↔реальность): зовём ТОЛЬКО при фактической смене цены.
+        // «Оставить цену и ждать» (M-006/M-017) через этот вызов идти не должно: живое тело
+        // rpc_self_auto_match_batch при непустом рынке делает broadcast — уводит партию в
+        // `offering` и переставляет живым предложениям `expires_at`, обнуляя `responded_at`
+        // (20260918120000:128-138). А замысел требует ровно обратного: партия остаётся
+        // `published`, предложения не трогаются, потому что они по-прежнему честны.
+        const priceChanged = before?.price !== patch.price
+        if (priceChanged) {
+          try {
+            const { data: m } = await supabase.rpc('rpc_self_auto_match_batch', { p_batch_id: id })
+            const match = m as { matched?: boolean; dealPrice?: number } | null
+            if (match?.matched) {
+              setBatches((prev) => {
+                const next = prev.map((b) =>
+                  b.id === id ? { ...b, state: 'matched' as Batch['state'], dealPrice: match.dealPrice ?? b.dealPrice } : b)
+                saveLocal(lsKey, next)
+                return next
+              })
+            }
+          } catch { /* нет backend — пропускаем */ }
+        }
+        // Правду о статусе приносит сервер, а не оптимистичный патч: rpc_lower_price ставит
+        // `published`, а auto_match мог увести в `offering`/`matched`. Без рефетча экран до
+        // 20-секундного поллинга показывал бы «Партия отправлена покупателям» под тостом
+        // «снова в продаже по прежней цене» (найдено сверкой замысел↔реальность). Соседние
+        // ветки (_withdraw, _dispatchReady) синхронизируются ровно так же.
+        await fetch({ silent: true })
       } else if (patch.review !== undefined) {
         // rpc_submit_review — отзыв фермера о покупателе
         const r = patch.review as { r1: number; r2: number; comment?: string }
@@ -224,6 +252,16 @@ export function useBatches(accountId?: string | null): UseBatchesResult {
       // Остальные локальные патчи (deadlineLabel, dispatchedLabel и т.д.) —
       // только UI, RPC не нужны
     } catch (e: unknown) {
+      if (isPriceWrite) {
+        // ARS-755 M-014: цену не оставляем «успешной» вслепую — откатываем к снимку и
+        // пробрасываем ошибку, чтобы CabinetApp.patchBatch показал её вместо тоста успеха.
+        setBatches((prev) => {
+          const next = prev.map((b) => (b.id === id && before ? before : b))
+          saveLocal(lsKey, next)
+          return next
+        })
+        throw e
+      }
       // Нет backend (схема не задеплоена / офлайн) — оставляем локальное
       // изменение (уже сохранено в localStorage), не откатываем и не падаем.
       // Когда backend появится, RPC отработает и рефетч синхронизирует данные.

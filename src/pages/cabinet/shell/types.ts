@@ -83,6 +83,10 @@ export interface Batch {
   fatness?: string
   district?: string
   price?: number
+  // ARS-755 FR-005: шаг подсказки «снизить и предложить снова» приходит с партией из
+  // tsp_config.price_step_down_amount (fn_tsp_batch_json). Ключа нет — подсказку не
+  // показываем: своего числа фронт не держит (P4/P8, хардкод `cur − 100` удалён).
+  priceStepDown?: number | null
   dealPrice?: number | null
   matchedHeads?: number         // Слайс 9: сколько голов уже продано (сумма кусков)
   remainingHeads?: number       // Слайс 9: сколько осталось на рынке
