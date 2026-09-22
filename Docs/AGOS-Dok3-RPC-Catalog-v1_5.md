@@ -122,6 +122,8 @@
 | RPC-M4-13 | `rpc_self_pool_close_now` | Market/TSP | web | ✅ Implemented (ARS-695) | jsonb { poolId, outcome, matchedHeads, targetHeads, minPoolHeads } |
 | RPC-M4-14 | `rpc_self_pool_accept_partial` | Market/TSP | web | ✅ Implemented (ARS-695) | jsonb { poolId, outcome, confirmedUnits, matchedHeads } |
 | RPC-M4-15 | `rpc_self_pool_return_batches` | Market/TSP | web | ✅ Implemented (ARS-695) | jsonb { poolId, outcome, returnedUnits } |
+| RPC-M4-16 | `rpc_process_tsp_pool_closures` | Market/TSP | cron (service_role) | ✅ Implemented (ARS-694) | jsonb { filled, closed, awaitingDecision, unfilled, expiredEmpty, failed, truncated } |
+| RPC-M4-17 | `rpc_process_tsp_batch_reviews` | Market/TSP | cron (service_role) | ✅ Implemented (ARS-694) | jsonb { moved, afterMinutes, offersExpired, truncated } |
 
 > **ARS-695, аддитивные изменения формы существующих self-serve RPC**
 > (D-RPC-CONTRACT-SYNC-01; сами они в этом каталоге не описаны — self-serve слой ждёт
@@ -134,6 +136,16 @@
 > экран обязан объяснить оператору, почему у недобравшейся заявки нет хода).
 > `rpc_self_advance_pool_status(uuid, text)` — принимает `awaiting_mpk_decision`
 > и ставит `awaiting_decision_at`; сигнатура не менялась (P7).
+
+> **ARS-694, вынос тела правил в общий хелпер** (D-RPC-CONTRACT-SYNC-01):
+> `rpc_self_close_due_pools()` и `rpc_self_review_due_batches()` — сигнатуры и форма
+> ответа НЕ изменились (P7); тело стало обёрткой над `fn_tsp_sweep_due_pools` /
+> `fn_tsp_sweep_due_batches` с `p_org_ids => fn_my_org_ids()` и `p_limit => null`.
+> Предусловие `AUTH_REQUIRED` осталось в обёртках. Измеренное следствие выноса: из
+> строк снапшота `contracts/rpc_return_keys.txt` ушли ключи **payload событий**
+> (`pool_id, reason, window_hours` и `trigger, after_minutes`) — они уехали в регион
+> `fn_`-хелпера, который снапшот не снимает. Ключи ОТВЕТА обеих RPC на месте
+> побайтово; формы ответа это не касается.
 
 ### 1.3. Feed & Nutrition
 
@@ -943,6 +955,47 @@ Self-serve выход из недобравшейся заявки. Канон �
 **Ошибки:** `AUTH_REQUIRED` · `POOL_NOT_FOUND` · `FORBIDDEN` (чужая заявка) ·
 `INVALID_STATUS` (не то состояние; он же достаётся проигравшему в гонке двух операторов —
 строка заявки берётся `FOR UPDATE`, смешанного исхода нет) · `UNSETTLED_MATCHES` (M-007).
+
+### RPC-M4-16..17 `rpc_process_tsp_*` — глобальные входы планировщика [CRON] ✅ Implemented (ARS-694)
+
+Серверное расписание закупочного флоу. Правила НЕ меняются: тело каждого вынесено в
+общий хелпер с параметром охвата, а кабинетный свип и джоб зовут **одно и то же тело**
+(P4). Различий между вызывающими ровно три: охват организаций, предел объёма,
+предусловие авторизации.
+
+Живут в `supabase/migrations/20260922120000_ars_694_tsp_flow_shared_sweep.sql`;
+расписание — в `20260922130000_ars_694_tsp_flow_pg_cron.sql`.
+
+| RPC | Параметр | → |
+|-----|----------|---|
+| `rpc_process_tsp_pool_closures` | `p_limit integer default 500` | `jsonb {filled, closed, awaitingDecision, unfilled, expiredEmpty, failed, truncated}` |
+| `rpc_process_tsp_batch_reviews` | `p_limit integer default 500` | `jsonb {moved, afterMinutes, offersExpired, truncated}` |
+
+**Семантика.**
+- `pool_closures` — тело `fn_tsp_sweep_due_pools(null, p_limit)`: заявка `filling` с
+  истёкшим месяцем поставки → `fn_tsp_pool_settle_underfill`; заявка, простоявшая в
+  `awaiting_mpk_decision` дольше `tsp_config.mpk_decision_window_hours`, → возврат партий
+  и `closed_unfilled` (событие `market.pool.closed_unfilled`, `actor_id = null`).
+- `batch_reviews` — тело `fn_tsp_sweep_due_batches(null, p_limit)`: pending-офферы с
+  истёкшим `expires_at` → `expired`; партия `offering` без pending и с expired нынешнего
+  выхода на рынок → `awaiting_price_decision` + `batch_events.price_decision_due`
+  (`created_by = null`). Счётчика `failed` у этой ветки нет: тело set-based, отказ роняет
+  оператор целиком, прогон повторяется следующим тиком.
+
+**Охват и права.** `p_org_ids = null` (все организации) достижим ТОЛЬКО отсюда:
+`execute` отозван у `anon` и `authenticated`, выдан `service_role`; org-параметра нет
+сознательно (исключение CHECK 5) — принять его от клиента значило бы отдать
+пользователю право писать в чужие сделки (изоляция данных, ст. 171).
+
+**Объём и гонки.** Строки берутся порцией `p_limit` под `for update skip locked`:
+занятая кабинетом или оператором строка пропускается и достаётся следующему прогону,
+прогон не ждёт блокировку. `truncated = true` — взят полный `p_limit`, остаток уйдёт в
+следующий прогон (затор виден, а не молчалив).
+
+**Расписание.** Два джоба pg_cron, `tsp-pool-closures` и `tsp-batch-reviews`, оба
+`'0 * * * *'` (раз в час, UTC). Меняется миграцией, не из UI: расписание живёт в
+`cron.job`, а не в `tsp_config` (P4). Джоба нет → продукт возвращается к браузерному
+поведению, данные целы. Единственный след прогона — `cron.job_run_details`.
 
 ### RPC-M4-12 `rpc_cancel_pool` [WEB] [ADMIN] ✅ Implemented (Section 8 addendum)
 

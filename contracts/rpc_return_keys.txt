@@ -126,6 +126,8 @@ rpc_pool_accept_partial: confirmed_batches,partial_accept,pool_id
 rpc_pool_return_batches: batch_id,mpk_org_id,offer_id,pool_id,reason,returned_batches
 rpc_process_membership_application: contact_info,decision,decision_notes,from_level,new_level,org_name,reject_reason,to_level
 rpc_process_membership_renewals: amount,currency,deferred,expired,from_state,period_end,processed,reason,renewed
+rpc_process_tsp_batch_reviews: afterMinutes,moved,offersExpired,truncated
+rpc_process_tsp_pool_closures: awaitingDecision,closed,expiredEmpty,failed,filled,truncated,unfilled
 rpc_publish_batch: ai_context,batch_id,heads,message,sku_code,status,target_month
 rpc_publish_pool: pool_id
 rpc_record_vaccination: heads,plan_item_id,product_id,record_id
@@ -148,13 +150,13 @@ rpc_search_knowledge_chunks: chunk_id,chunks,content,query,relevance_score,searc
 rpc_self_accept_offer: batchId,dealPrice,deal_price_per_kg,offer_id,poolId,poolLineId,pool_id,pool_line_id
 rpc_self_activate_pool_request: deal_price_per_kg,pool_id,pool_line_id,request_id,sweptMatched,sweptOffered,trigger,via
 rpc_self_auto_match_batch: dealPrice,deal_price_per_kg,matched,matchedHeads,offers,poolId,poolLineId,pool_id,pool_line_id,reason,trigger,via
-rpc_self_close_due_pools: awaitingDecision,closed,expiredEmpty,failed,filled,pool_id,reason,unfilled,window_hours
+rpc_self_close_due_pools: awaitingDecision,closed,expiredEmpty,failed,filled,unfilled
 rpc_self_confirm_delivery: pool_id,via
 rpc_self_match_batch_to_pool: deal_price_per_kg,pool_id,pool_line_id,via
 rpc_self_pool_accept_partial: confirmedUnits,confirmed_units,matchedHeads,matched_heads,original_target_heads,outcome,poolId,pool_id
 rpc_self_pool_close_now: matchedHeads,minPoolHeads,outcome,poolId,targetHeads
 rpc_self_pool_return_batches: outcome,poolId,pool_id,reason,returnedUnits,returned_units
-rpc_self_review_due_batches: afterMinutes,after_minutes,moved,offersExpired,trigger
+rpc_self_review_due_batches: afterMinutes,moved,offersExpired
 rpc_send_message: author_actor_type,author_user_id,channel_id,message_id,preview
 rpc_set_batch_terms: batch_id,farmer_price_per_kg,ready_from,ready_to,status
 rpc_set_farm_activity_types: current,inserted,removed

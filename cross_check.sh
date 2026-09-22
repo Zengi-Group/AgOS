@@ -13,7 +13,13 @@ set -uo pipefail
 CRITICAL=0
 SIGNIFICANT=0
 MINOR=0
-SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d11_norms.sql d12_messaging.sql d13_billing.sql d14_governance.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql supabase/migrations/20260914120000_ars_695_pool_underfill_decision.sql supabase/migrations/20260921120000_ars_760_price_decision_after_market_refusal.sql)
+SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d11_norms.sql d12_messaging.sql d13_billing.sql d14_governance.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql supabase/migrations/20260914120000_ars_695_pool_underfill_decision.sql supabase/migrations/20260921120000_ars_760_price_decision_after_market_refusal.sql supabase/migrations/20260922120000_ars_694_tsp_flow_shared_sweep.sql)
+# ARS-694 (2026-09-22): миграция общего тела правил флоу добавлена сюда по тому же
+# правилу — в ней живут ДВА новых глобальных входа (rpc_process_tsp_*) и обе
+# кабинетные обёртки, то есть ровно те контракты, которые CHECK 11 обязан видеть.
+# Вторая миграция слайса (20260922130000_ars_694_tsp_flow_pg_cron.sql) сюда НЕ
+# добавлена сознательно: в ней нет ни одной функции — только create extension и два
+# cron.schedule, проверять в ней CHECK 1/7/11 нечего.
 # ARS-760 (2026-09-21): миграция правила ценового решения добавлена сюда по тому же
 # правилу. Следствие названо заранее (FR-008 слайса): до неё строка снапшота
 # `rpc_self_review_due_batches` описывала ТЕЛО ИЗ 20260622120000 (`moved,trigger`),
@@ -82,7 +88,13 @@ echo "--- CHECK 1: Duplicate function definitions ---"
 # Слайс-9-aware и на прод не выкладывалась (DEBT-PROD-DRIFT-01). Это значит, что d02 и
 # прод по этой функции РАСХОДЯТСЯ и дальше — расхождение не создано здесь, но теперь у
 # него два дома в SQL_FILES, и выигрывает миграция.
-DUP_WHITELIST="fn_my_org_ids|fn_is_admin|fn_is_expert|rpc_list_animal_categories|rpc_create_batch|rpc_get_org_batches|rpc_cancel_batch|rpc_self_review_due_batches|rpc_lower_batch_price"
+# rpc_self_close_due_pools, rpc_self_review_due_batches (ARS-694, 2026-09-22): обе
+# кабинетные RPC переопределяются миграцией 20260922120000 поверх 20260622120000 и
+# 20260921120000 — тело правила вынесено в общий хелпер (fn_tsp_sweep_due_*), обёртка
+# зовёт его с fn_my_org_ids(). Выигрывает последний файл в порядке применения
+# (20260922120000 > 20260921120000 > 20260622120000). Сигнатуры и форма ответа не
+# меняются — CHECK 11 держит это утверждение.
+DUP_WHITELIST="fn_my_org_ids|fn_is_admin|fn_is_expert|rpc_list_animal_categories|rpc_create_batch|rpc_get_org_batches|rpc_cancel_batch|rpc_self_review_due_batches|rpc_self_close_due_pools|rpc_lower_batch_price"
 
 # Extract all function names from CREATE OR REPLACE FUNCTION lines
 # BSD-safe: use [[:space:]]+ instead of \s+; case-insensitive via tr
@@ -215,6 +227,7 @@ rpc_list_home_banners|\
 rpc_list_animal_categories|rpc_list_feed_items|rpc_list_feed_categories|\
 rpc_list_feed_prices|rpc_list_feed_consumption_norms|\
 rpc_list_membership_plans|rpc_process_membership_renewals|\
+rpc_process_tsp_pool_closures|rpc_process_tsp_batch_reviews|\
 rpc_admin_list_membership_plans|rpc_admin_upsert_membership_plan|rpc_admin_set_membership_plan_active|\
 rpc_admin_list_subscriptions|rpc_admin_get_subscription|\
 rpc_admin_record_manual_payment|rpc_admin_extend_subscription|rpc_admin_change_subscription_plan|\
@@ -249,6 +262,11 @@ rpc_get_incoming_offers|rpc_self_reject_offer|rpc_self_confirm_delivery|\
 rpc_self_pool_close_now|rpc_self_pool_accept_partial|rpc_self_pool_return_batches|\
 rpc_send_message|rpc_list_channels|rpc_list_messages|rpc_mark_channel_read|rpc_archive_channel|\
 rpc_delete_account|rpc_accept_org_invitation|rpc_review_org_field_change"
+# ARS-694 (rpc_process_tsp_*): org-параметра нет НАМЕРЕННО — это ГЛОБАЛЬНЫЕ входы
+# джоба, их охват и есть «все организации» (FR-007). Принять organization_id от
+# клиента здесь значило бы отдать пользователю право писать в чужие сделки, ровно то,
+# что FR-010 запрещает; вместо параметра стоят гранты — anon/authenticated отозваны,
+# execute только у service_role. Тот же случай, что rpc_process_membership_renewals.
 # ARS-695 (rpc_self_pool_*): org-параметра нет НАМЕРЕННО — владелец заявки берётся из
 # fn_my_org_ids() по pools/pool_requests. Принять organization_id от клиента здесь
 # значило бы повторить ровно ту дыру, которую этот же слайс закрывает у канонических
