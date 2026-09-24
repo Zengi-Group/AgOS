@@ -277,6 +277,15 @@ SQL не меняется: тела RPC не трогаем (`FR-012`, `FR-013`)
   `M-010` в `Matrix Test Audit` ниже — переписываются в `/build ARS-691`, не здесь ·
   `DECISIONS_LOG.md` (запись ARS-691 2026-09-24) · мозг `tsp-farmer-sell-flow` (decision log).
 
+- **SC-003** [2026-09-24, решение владельца в ARS-754] `FR-012` отнёс приведение
+  `rpc_self_match_batch_to_pool` «под атомарную (non-split) модель» к дому `ARS-314`, не этому
+  слайсу. Это решение **принимает `ARS-754`**: `Docs/AGOS-TSP-WholeBatchOnly-ARS-754.md` делает
+  ручную привязку атомарной — привязка проходит целиком или отказывает `BATCH_DOES_NOT_FIT`,
+  ничего не пишется. Сам `FR-012` и код этого слайса не меняются — SQL здесь не трогался и не
+  трогается сейчас, ARS-754 правит тела новой миграцией в `supabase/migrations/`, `d02_tsp.sql` не трогается (`ARS-754 FR-019`).
+  `propagated:` `Docs/AGOS-TSP-WholeBatchOnly-ARS-754.md` (`FR-013` ⑥) · `IMPL_DEBT.md`
+  (запись про `ARS-314`, дом задачи `rpc_cancel_pool`, правится той же задачей W-4).
+
 ## Matrix Test Audit  (append-only)
 
 Сверка по id, не по смыслу. Прогон: `npx vitest run --project routers --reporter=verbose`

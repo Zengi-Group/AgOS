@@ -2,7 +2,9 @@
 // заголовок + верт. трекер .mk-trk + .mk-money + .mk-buyer + .mk-dec-blk (decision) +
 // .mk-acc аккордеоны (данные/история) + kebab-меню вторичных действий.
 // Вся логика сохранена: onPatch-сигналы (_withdraw/_dispatchReady), prot-валидация,
-// SplitPanel (Слайс 9), deal-doc, 3 шторки (Withdraw/Dispatch/BatchPrice), haptics.
+// deal-doc, 3 шторки (Withdraw/Dispatch/BatchPrice), haptics.
+// ARS-754 (FR-008): партия продаётся только целиком — SplitPanel/«ПРОДАЖА ЧАСТЯМИ»
+// и статус `partial` убраны с экранов фермера.
 
 import { useState } from 'react'
 import type { CSSProperties } from 'react'
@@ -109,7 +111,7 @@ function buildFarmerDealDoc(batch: Batch, account?: FarmerAccount | null): DealD
   }
 }
 
-const DEAL_STATES = new Set(['matched', 'confirmed', 'dispatched', 'delivered', 'partial'])
+const DEAL_STATES = new Set(['matched', 'confirmed', 'dispatched', 'delivered'])
 function hasDeal(batch: Batch): boolean {
   return DEAL_STATES.has(batch.state)
     && (batch.dealPrice != null
@@ -136,7 +138,7 @@ const PATH_STAGES = [
 ]
 function stageIndex(state: string): number {
   if (state === 'draft' || state === 'scheduled') return 0
-  if (state === 'published' || state === 'offering' || state === 'decision' || state === 'partial') return 1
+  if (state === 'published' || state === 'offering' || state === 'decision') return 1
   if (state === 'matched' || state === 'confirmed') return 2
   if (state === 'dispatched') return 3
   if (state === 'delivered') return 4
@@ -214,7 +216,7 @@ function BatchPath({ batch }: { batch: Batch }) {
 // ── Зоны ────────────────────────────────────────────────────────────────────
 const HERO_TONE: Record<string, string> = {
   draft: 'neutral', scheduled: 'neutral', published: 'neutral', dispatched: 'neutral', cancelled: 'neutral',
-  offering: 'amber', decision: 'amber', partial: 'neutral', matched: 'green', confirmed: 'green', delivered: 'green',
+  offering: 'amber', decision: 'amber', matched: 'green', confirmed: 'green', delivered: 'green',
 }
 
 function TierH({ label, count }: { label: string; count?: number }) {
@@ -253,43 +255,6 @@ function BuyerCard({ batch }: { batch: Batch }) {
       <div className="mk-buyer-k">Покупатель</div>
       <div className="mk-buyer-n">{name}</div>
       {phone && <div className="mk-buyer-m mk-mono">{phone}</div>}
-    </div>
-  )
-}
-
-// Слайс 9 — прогресс частичной продажи + покупатели по кускам.
-function SplitPanel({ batch }: { batch: Batch }) {
-  const allocs = Array.isArray(batch.allocations) ? batch.allocations : []
-  const total = typeof batch.heads === 'number' ? batch.heads : 0
-  const matched = typeof batch.matchedHeads === 'number' ? batch.matchedHeads : 0
-  const remaining = typeof batch.remainingHeads === 'number'
-    ? batch.remainingHeads
-    : Math.max(total - matched, 0)
-  if (allocs.length === 0 && matched === 0) return null
-  const pct = total > 0 ? Math.min(Math.round((matched / total) * 100), 100) : 0
-  const withdrawn = remaining > 0 && (batch.state === 'matched' || batch.state === 'confirmed')
-  return (
-    <div className="mk-headsum">
-      <div className="mk-headsum-top">
-        <span>Продано {matched} из {total} гол.</span>
-        {remaining > 0 && <span>{withdrawn ? `остаток снят (${remaining})` : `на рынке ещё ${remaining}`}</span>}
-      </div>
-      <div className="mk-headbar"><i style={{ width: `${pct}%` }} /></div>
-      {allocs.length > 0 && (
-        <div style={{ marginTop: 10 }}>
-          {allocs.map((a, i) => (
-            <div className="mk-acc-row" key={i}>
-              <span className="mk-acc-k">
-                {a.heads} гол. · {fmtMoney(a.price)}{NBSP}₸/кг
-                {chunkStatusLabel(a.status) ? ` · ${chunkStatusLabel(a.status)}` : ''}
-              </span>
-              <span className="mk-acc-v">
-                {a.buyer ? `${a.buyer}${a.buyerPhone ? ` · ${a.buyerPhone}` : ''}` : 'скрыт до закрытия сделки'}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
@@ -508,12 +473,6 @@ export function BatchScreen({ batch, account, orgId, onBack, backLabel = 'Мои
     menu.push({ t: 'Снять с продажи', icon: 'ban', danger: true, fn: () => setSheet('withdraw') })
   } else if (st === 'offering') {
     menu.push({ t: 'Снять с продажи', icon: 'ban', danger: true, fn: () => setSheet('withdraw') })
-  } else if (st === 'partial') {
-    caption = 'Часть партии уже продана. Остаток продолжает продаваться автоматически.'
-    const allocs = Array.isArray(batch.allocations) ? batch.allocations : []
-    const readyHeads = allocs.filter((a) => a.status === 'confirmed').reduce((s, a) => s + a.heads, 0)
-    if (readyHeads > 0) primary = { t: `Отгрузить готовое (${readyHeads} гол.)`, green: true, fn: () => setSheet('dispatch') }
-    menu.push({ t: 'Снять с продажи', icon: 'ban', danger: true, fn: () => setSheet('withdraw') })
   } else if (st === 'matched') {
     // ARS-731 (FR-009): состояние без хода обязано называть, чего оно ждёт — иначе экран
     // молчит там, где фермер ищет кнопку отгрузки. Кнопки здесь по-прежнему нет: пока
@@ -542,10 +501,6 @@ export function BatchScreen({ batch, account, orgId, onBack, backLabel = 'Мои
   const hasPrice = batch.price != null || batch.dealPrice != null
   const moneyLabel = batch.dealPrice != null ? 'ЦЕНА СДЕЛКИ' : 'ВАША ЦЕНА'
   const showBuyer = ['confirmed', 'dispatched', 'delivered'].includes(st) && !!strField(batch, 'buyer')
-  const showSplit = st === 'partial'
-    || (Array.isArray(batch.allocations) && batch.allocations.length > 1)
-    || ((st === 'matched' || st === 'confirmed') && typeof batch.matchedHeads === 'number'
-        && typeof batch.heads === 'number' && batch.matchedHeads < batch.heads)
 
   const details: [string, string | number | undefined][] = [
     ['Сорт', grade ?? undefined],
@@ -603,13 +558,6 @@ export function BatchScreen({ batch, account, orgId, onBack, backLabel = 'Мои
             <div className="blk">
               <TierH label="ПОКУПАТЕЛЬ" />
               <BuyerCard batch={batch} />
-            </div>
-          )}
-
-          {showSplit && (
-            <div className="blk">
-              <TierH label="ПРОДАЖА ЧАСТЯМИ" />
-              <SplitPanel batch={batch} />
             </div>
           )}
 
@@ -693,12 +641,9 @@ export function BatchScreen({ batch, account, orgId, onBack, backLabel = 'Мои
         open={sheet === 'withdraw'}
         onClose={() => setSheet((s) => (s === 'withdraw' ? null : s))}
         onConfirm={(includeMatched) => {
-          const hasSold = (typeof batch.matchedHeads === 'number' ? batch.matchedHeads : 0) > 0
           onPatch(
             { _withdraw: includeMatched ? 'matched' : 'remainder' },
-            includeMatched ? 'Партия снята — отмена проданного отмечена'
-            : hasSold        ? 'Остаток снят с продажи'
-            :                  'Партия снята с продажи',
+            includeMatched ? 'Партия снята — отмена проданного отмечена' : 'Партия снята с продажи',
           )
           setSheet(null)
         }}

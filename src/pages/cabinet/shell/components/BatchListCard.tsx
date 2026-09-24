@@ -11,7 +11,7 @@ import { PhIcon } from './icons/PhIcon'
 // тон статуса (в карточке полиш делает чип монохромным — тон косметический)
 const STATE_TONE: Record<string, string> = {
   draft: 'neutral', scheduled: 'blue', published: 'blue', offering: 'amber', decision: 'amber',
-  partial: 'blue', matched: 'green', confirmed: 'green', dispatched: 'neutral', delivered: 'green', cancelled: 'neutral',
+  matched: 'green', confirmed: 'green', dispatched: 'neutral', delivered: 'green', cancelled: 'neutral',
 }
 const PULSE = new Set(['offering'])
 

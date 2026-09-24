@@ -1,10 +1,10 @@
-// AgOS · TSP-2 · Слайс 9 (S1b) · Шторка «Снять с продажи?» с учётом дробления.
-// Три режима:
-//   • partial — часть продана: снять ТОЛЬКО остаток (безплатно) ИЛИ + отменить
-//     проданные куски (за штраф). Подтверждённые куски снять нельзя (RLS/RPC).
-//   • matched — покупатель найден, остатка нет: снятие = отмена проданного (штраф).
+// AgOS · TSP-2 · Слайс 9 (S1b) · Шторка «Снять с продажи?».
+// Два режима:
+//   • matched — покупатель найден: снятие = отмена проданного (штраф).
 //   • default — ничего не продано: обычное снятие без последствий.
-// onConfirm(includeMatched) — true = отменить и matched-куски (за штраф).
+// onConfirm(includeMatched) — true = отменить matched-сделку (за штраф).
+// ARS-754 (FR-008 ④): партия продаётся только целиком — режима «часть продана,
+// снять остаток» больше нет, ветка `partial` убрана.
 
 import { Sheet } from '../Sheet'
 import { Cta } from '../Cta'
@@ -18,36 +18,9 @@ interface Props {
 }
 
 export function WithdrawSheet({ batch, open, onClose, onConfirm }: Props) {
-  const matchedHeads = typeof batch.matchedHeads === 'number' ? batch.matchedHeads : 0
-  const total = typeof batch.heads === 'number' ? batch.heads : 0
-  const remaining = typeof batch.remainingHeads === 'number'
-    ? batch.remainingHeads
-    : Math.max(total - matchedHeads, 0)
-
   return (
     <Sheet open={open} onClose={onClose}>
-      {batch.state === 'partial' ? (
-        <>
-          <div className="sh-t">Снять с продажи?</div>
-          <div className="sh-b">
-            Продано {matchedHeads} из {total} гол.{remaining > 0 ? `, на рынке ещё ${remaining}.` : '.'}{' '}
-            Можно снять только непроданный остаток — проданные куски останутся.
-          </div>
-          {remaining > 0 && (
-            <Cta variant="danger" onClick={() => onConfirm(false)}>
-              Снять остаток ({remaining} гол.)
-            </Cta>
-          )}
-          <div className="sh-b" style={{ marginTop: 8 }}>
-            ⚠ Отмена уже проданных кусков будет отмечена и повлияет на рейтинг.
-            Подтверждённые сделки (пул заполнен) снять нельзя.
-          </div>
-          <Cta variant="danger" onClick={() => onConfirm(true)}>
-            Снять остаток и отменить проданное
-          </Cta>
-          <Cta variant="ghost" onClick={onClose}>Отмена</Cta>
-        </>
-      ) : batch.state === 'matched' ? (
+      {batch.state === 'matched' ? (
         <>
           <div className="sh-t">Снять партию с продажи?</div>
           <div className="sh-b">

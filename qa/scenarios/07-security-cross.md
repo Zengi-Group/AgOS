@@ -51,7 +51,7 @@
 
 #### SEC-RVL-01 · UNHAPPY · Фермер не видит покупателя до confirmed
 `layer:rpc+ui` `canon:D-M6-5;K-03` `impl:fn_tsp_batch_json` `auto:candidate:sql(E2E-TSP-02)` `status:active`
-- **Ожидание:** ни в одном состоянии до confirmed UI/RPC не отдают идентичность МПК (`fn_tsp_batch_json` отдаёт buyer только при `mpk_contact_revealed_at != null`); после confirmed — раскрытие; для дроблёной партии — per-кусок.
+- **Ожидание:** ни в одном состоянии до confirmed UI/RPC не отдают идентичность МПК (`fn_tsp_batch_json` отдаёт buyer только при `mpk_contact_revealed_at != null`); после confirmed — раскрытие.
 
 #### SEC-RVL-02 · UNHAPPY · МПК не видит фермера до confirmed
 `layer:rpc+ui` `canon:D-M6-12` `impl:d02_tsp.sql` `auto:candidate:sql` `status:active`
