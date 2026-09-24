@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { loadAccountProfile, type AccountProfile } from '@/lib/account'
-import { mpkProfileTabFromUrl, mpkRouteToUrl, MPK_REQUESTS_URL } from '../nav'
+import { mpkProfileTabFromUrl, mpkRouteToUrl, MPK_OFFERS_URL, MPK_REQUESTS_URL } from '../nav'
 import type { MpkProfileTab } from '../types'
 import { ProfileSidebar } from './ProfileSidebar'
 import { ProfileTabs, profileTabLabel } from './ProfileTabs'
@@ -314,9 +314,15 @@ export function MpkProfileApp() {
         activeId="profile"
         onSelect={(item) => {
           // Slice 11 `FR-002` / Slice 10 `FR-020`: «Мои заявки» больше не непостроенный
-          // пункт — он ведёт на свой экран. Остальные четыре по-прежнему только
-          // показывают подсказку и URL не трогают (`FR-013`, M-003).
+          // пункт — он ведёт на свой экран. ARS-785 / `FR-021`: то же у «Входящих офферов».
+          // Остальные три по-прежнему только показывают подсказку и URL не трогают
+          // (`FR-013`, M-003).
+          //
+          // Переход обязан появиться здесь ВМЕСТЕ с записью id в `BUILT_SECTIONS`: подсказку
+          // гасит множество, а ведёт — этот обработчик, и построенный пункт без своей ветки
+          // оказался бы мёртвым молча — ни подсказки, ни перехода.
           if (item.id === 'requests') { setSoonHint(null); navigate(MPK_REQUESTS_URL); return }
+          if (item.id === 'offers') { setSoonHint(null); navigate(MPK_OFFERS_URL); return }
           setSoonHint(item.id === 'profile' ? null : item.id)
         }}
         onThemeToggle={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}

@@ -75,7 +75,8 @@ function mountAppAt(path: string) {
 }
 
 beforeEach(async () => {
-  await page.viewport(1440, 900)
+  // Ниже 1024px: с ARS-785 шире этого `/mpk/offers` отдаёт десктопную консоль, а не MpkApp.
+  await page.viewport(390, 844)
   net.acceptError = null
   net.rejectError = null
   consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
