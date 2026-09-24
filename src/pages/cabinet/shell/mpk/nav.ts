@@ -49,6 +49,15 @@ export function mpkRequestPoolIdFromUrl(pathname: string): string | null {
   return seg[1] || null
 }
 
+// ── ARS-785 · раздел «Входящие офферы» десктопной консоли ─────────────────────
+// Адрес НЕ новый: `/mpk/offers` уже принадлежит мобильному шеллу (`MpkRoute.offers`,
+// `RouteV5` в `MpkApp`). Десктопная консоль встаёт на ТОТ ЖЕ адрес и делится им по ширине
+// экрана (решение владельца 24.09): v6-роут перехватывает путь, но ниже 1024px рендерит
+// мобильный экран офферов. Поэтому здесь только имя константы — ни `MpkRoute`, ни
+// `mpkRouteToUrl`/`mpkUrlToRoute` не трогаются: мобильная карта URL остаётся прежней,
+// живой адрес не переименован (P7), мобильный шелл не правится.
+export const MPK_OFFERS_URL = '/mpk/offers'
+
 export function mpkRouteToUrl(r: MpkRoute): string {
   switch (r.name) {
     case 'tsp': return '/mpk/tsp'

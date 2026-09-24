@@ -83,6 +83,7 @@ const MpkApp = lazy(() => import('@/pages/cabinet/shell/mpk/MpkApp').then(m => (
 // Ionic-остров и телефонный каркас ей не нужны. Тоже lazy — свой CSS-скоуп и токены.
 const MpkProfileApp = lazy(() => import('@/pages/cabinet/shell/mpk/profile/MpkProfileApp').then(m => ({ default: m.MpkProfileApp })))
 const MpkRequestsApp = lazy(() => import('@/pages/cabinet/shell/mpk/requests/MpkRequestsApp').then(m => ({ default: m.MpkRequestsApp })))
+const MpkOffersApp = lazy(() => import('@/pages/cabinet/shell/mpk/offers/MpkOffersApp').then(m => ({ default: m.MpkOffersApp })))
 const HerdOverview = lazy(() => import('@/pages/cabinet/herd/HerdOverview').then(m => ({ default: m.HerdOverview })))
 const HerdGroupForm = lazy(() => import('@/pages/cabinet/herd/HerdGroupForm').then(m => ({ default: m.HerdGroupForm })))
 const FeedInventory = lazy(() => import('@/pages/cabinet/feed/FeedInventory').then(m => ({ default: m.FeedInventory })))
@@ -249,6 +250,12 @@ function App() {
                   Тоже ДО общего `/mpk/*`, иначе адрес перехватит Ionic-шелл закупок.
                   Живые URL не меняются: раздел добавлен, ничего не переименовано (FR-001). */}
               <Route path="/mpk/requests/*" element={<Suspense fallback={<BootScreen />}><MpkRequestsApp /></Suspense>} />
+              {/* ARS-785 · «Входящие офферы» — второй торговый раздел консоли. В отличие
+                  от профиля и заявок адрес НЕ новый: `/mpk/offers` уже был маршрутом
+                  мобильного шелла. Один URL делится по ширине экрана (решение владельца
+                  24.09) — ниже 1024px MpkOffersApp сам отдаёт управление MpkApp, поэтому
+                  перехват этого пути ничего не отнимает у телефона (P7). */}
+              <Route path="/mpk/offers" element={<Suspense fallback={<BootScreen />}><MpkOffersApp /></Suspense>} />
               <Route path="/mpk/*" element={<Suspense fallback={<BootScreen />}><MpkApp /></Suspense>} />
               {/* Легаси web-кабинет + админ/эксперт-консоль: только web-таргет (§8). */}
               {!IS_NATIVE && (

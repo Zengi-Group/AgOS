@@ -470,7 +470,11 @@ it('M-014: reload, назад и вперёд — экран всегда соо
 })
 
 // ── M-015 · сайдбар ──────────────────────────────────────────────────────────
-it('M-015: «Мои заявки» ведут на экран, остальные четыре показывают подсказку и не меняют URL', async () => {
+// ARS-785: «Входящие офферы» вышли из этого списка — раздел построен, у него свой экран и
+// своя строка приёмки (mpk-offers-desktop.browser.test.tsx). M-015 продолжает утверждать
+// ровно то же, что утверждал: непостроенные пункты честно сообщают о себе и не меняют URL.
+// Их стало трое — счёт в названии поправлен, предмет строки не менялся.
+it('M-015: «Мои заявки» ведут на экран, остальные три показывают подсказку и не меняют URL', async () => {
   store.pools = FIVE_POOLS()
   mountAppAt('/mpk/profile/overview')
   await expect.poll(() => document.querySelector('.agos-mpk-console .mpkc-side'), T).not.toBeNull()
@@ -479,7 +483,7 @@ it('M-015: «Мои заявки» ведут на экран, остальны�
   await expect.poll(() => window.location.pathname, T).toBe('/mpk/requests')
   await expect.poll(() => rows().length, T).toBe(5)
 
-  for (const label of ['Главная', 'Входящие офферы', 'Маркет-борд', 'Документы сделок']) {
+  for (const label of ['Главная', 'Маркет-борд', 'Документы сделок']) {
     await page.getByRole('button', { name: label }).click()
     await expect.poll(() => document.querySelector('.mpkc-soon')?.textContent?.trim(), T).toBe('Раздел в разработке')
     expect(window.location.pathname, `пункт «${label}» не должен менять URL`).toBe('/mpk/requests')
