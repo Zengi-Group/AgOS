@@ -18,9 +18,9 @@ export interface SidebarNavItem {
 }
 
 // Построенные на десктопе разделы. Множество принадлежит не одному слайсу: `profile` —
-// Slice 10, `requests` — Slice 11 (`FR-020` Slice 10, `FR-002` Slice 11). Каждый следующий
-// построенный раздел добавляется сюда своим id, а не правкой текста подсказки.
-export const BUILT_SECTIONS = new Set(['profile', 'requests'])
+// Slice 10, `requests` — Slice 11, `offers` — ARS-785 (`FR-020`/`FR-021` Slice 10). Каждый
+// следующий построенный раздел добавляется сюда своим id, а не правкой текста подсказки.
+export const BUILT_SECTIONS = new Set(['profile', 'requests', 'offers'])
 
 // §2 · таблица пунктов.
 export const SIDEBAR_PRIMARY: SidebarNavItem[] = [
@@ -57,9 +57,9 @@ export function ProfileSidebar({
   theme, soonHint, activeId = 'profile', onSelect, onThemeToggle, onBackToMpk,
 }: ProfileSidebarProps) {
   const renderItem = (item: SidebarNavItem) => {
-    // Построенных на десктопе разделов два (`BUILT_SECTIONS`), а подсвечен тот, в котором
+    // Построенных на десктопе разделов три (`BUILT_SECTIONS`), а подсвечен тот, в котором
     // пользователь сейчас: «построен» и «активен» — разные факты, и с приходом Slice 11
-    // они разошлись. Остальные четыре пункта кликабельны и честно сообщают о себе, но
+    // они разошлись. Остальные три пункта кликабельны и честно сообщают о себе, но
     // никуда не ведут (`FR-013` Slice 10). Приглушённого начертания у них НЕТ: оно давало
     // в светлой теме 2.49:1 при норме 4.5 (подробности — profile-console.css).
     const built = BUILT_SECTIONS.has(item.id)

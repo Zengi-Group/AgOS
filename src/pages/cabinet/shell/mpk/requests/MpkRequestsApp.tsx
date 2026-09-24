@@ -15,7 +15,7 @@ import { loadAccountProfile, type AccountProfile } from '@/lib/account'
 import { PhIcon } from '../../components/icons/PhIcon'
 import { closeDuePools, loadPoolMatches, readMyPools } from '../data/pools-load'
 import { acceptPartial, confirmDeliveryRow, returnBatches } from '../data/pool-actions'
-import { MPK_REQUESTS_URL, mpkRequestPoolIdFromUrl, mpkRequestUrl } from '../nav'
+import { MPK_OFFERS_URL, MPK_REQUESTS_URL, mpkRequestPoolIdFromUrl, mpkRequestUrl } from '../nav'
 import type { Pool, SupplierRow } from '../types'
 import { ProfileSidebar } from '../profile/ProfileSidebar'
 import { CreateRequestModal } from './CreateRequestModal'
@@ -305,6 +305,10 @@ export function MpkRequestsApp() {
         onSelect={(item) => {
           if (item.id === 'requests') { setSoonHint(null); goList('all'); return }
           if (item.id === 'profile') { setSoonHint(null); backToProfile(); return }
+          // ARS-785 / Slice 10 `FR-021`: «Входящие офферы» построены и ведут на свой
+          // экран. Ветка появляется здесь вместе с записью id в `BUILT_SECTIONS` — иначе
+          // построенный пункт молча мёртв: подсказку множество уже погасило, а перехода нет.
+          if (item.id === 'offers') { setSoonHint(null); navigate(MPK_OFFERS_URL); return }
           setSoonHint(item.id)
         }}
         onThemeToggle={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}

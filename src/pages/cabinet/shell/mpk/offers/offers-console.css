@@ -1,0 +1,71 @@
+/* AgOS · ARS-785 · Раздел «Входящие офферы» десктопной консоли МПК.
+ *
+ * Оболочка, шапка, заглушки, скелет и типографика строк — общие с консолью
+ * (`profile-console.css` + `requests-console.css`), они здесь не переопределяются.
+ * Своё у раздела только одно: СЕТКА строки. У офферов пять своих колонок
+ * (партия · поголовье · тоннаж · цена · срок ответа), и подгонять под них сетку заявок
+ * значило бы править чужой раздел ради своего.
+ *
+ * Зона `[data-shell]` — дизайн-система v12: ни одного нового токена, только существующие. */
+
+.agos-mpk-console .mpko-head,
+.agos-mpk-console .mpko-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.4fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.agos-mpk-console .mpko-head {
+  padding: 0 14px 8px;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg3);
+}
+
+/* Строка оффера — НЕ кнопка и не ссылка: открывать здесь нечего, отвечать — ARS-786.
+   Поэтому ни hover-подсветки, ни курсора-указателя: карточка не обещает хода, которого
+   у неё нет. */
+.agos-mpk-console .mpko-row {
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 1px solid var(--bd-s);
+  border-radius: var(--r-lg);
+  background: var(--bg-s);
+  color: var(--fg);
+  font-size: var(--fs-sm);
+}
+
+.agos-mpk-console .mpko-cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.agos-mpk-console .mpko-cell-title { gap: 2px; }
+
+.agos-mpk-console .mpko-num {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Срок ответа — факт со шкалой времени, не тревога: нейтральный цвет текста, без
+   красного и без побуждения торопиться (ст. 171). */
+.agos-mpk-console .mpko-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--fg2);
+  white-space: nowrap;
+}
+
+/* Общая для списка сноска про анонимность идёт ПОСЛЕ строк — у общего `.mpkr-note`
+   только нижний отступ, здесь нужен верхний. */
+.agos-mpk-console .mpko .mpkr-note { margin-top: 14px; }
