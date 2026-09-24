@@ -340,6 +340,13 @@ _(пусто — четыре развилки закрыты 24.09, см. `Clar
   `completed 29/80`) не тронуты, по одному `remainder_withdrawn` (`created_by` null,
   `repair = ARS-754`, погашено офферов 0); `M-009` — `partially_matched` на проде 0;
   `M-012` — повторный просмотр: под признаком 0, ничего не меняется.
+- [2026-09-24] Выкладка ② — **миграция `20260924120000` на проде** (`deploy.py --files`, чистое
+  дерево, git `f4e26be`; до того `--rollback-only` — OK). `prod_diff.py` — **дрейф 0** (365/365,
+  body-divergent 0, acl-divergent 0); тела `fn_tsp_alloc_chunk` и
+  `rpc_self_match_batch_to_pool` на проде = новой миграции, по одной сигнатуре; права прежние
+  (`rpc_self_match_batch_to_pool` — `authenticated`, аллокатор закрыт); `M-009` — 0.
+  Открыто принятое спеком окно ②→③: до мержа оператор МПК на новом отказе видит запасную
+  фразу и «Код: BATCH_DOES_NOT_FIT».
 
 ## Matrix Test Audit  (append-only)
 
