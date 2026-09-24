@@ -41,10 +41,15 @@
 `layer:sql` `canon:MS6-§3` `impl:d02_tsp.sql` `auto:candidate:sql` `status:blocked:TSP-FLOW-02`
 - **Шаги:** publish с окном >7 дней → scheduled; симулировать наступление publish_at → джоб → matching → matched/offering/published.
 
-#### E2E-TSP-06 · EDGE · Дробление: кусок = сделка
-`layer:sql` `canon:DECISIONS_LOG:BATCH-SPLIT-01` `impl:d02 SECTION 9 batch_allocations` `auto:candidate:sql` `status:active`
-- **Шаги:** партия 40 голов → пул со строкой max 15 → кусок 15 matched, партия partially_matched; второй пул → ещё кусок; отгрузка/приёмка per-кусок.
-- **Ожидание:** статус батча = rollup «отстающего» куска; min-правило куска (≥5, остаток 0 или ≥5); confirmed-куски не отменяются фермером.
+#### E2E-TSP-06 · EDGE · Партия не влезает целиком → отказ BATCH_DOES_NOT_FIT (ARS-754)
+`layer:sql` `canon:DECISIONS_LOG:BATCH-SPLIT-01 AMEND ARS-754` `impl:rpc_self_match_batch_to_pool` `auto:candidate:sql` `status:active`
+- **Шаги:** партия N голов → ручная привязка (МПК) к заявке, в которой свободно меньше N голов
+  (или потолок строки меньше N).
+- **Ожидание:** отказ `BATCH_DOES_NOT_FIT`, оператор МПК видит фразу словаря «Партия продаётся
+  только целиком — в заявке не хватает места для всех её голов.»; ничего не записано (ни строки
+  сделки, ни счётчиков заявки/строки); партия остаётся `published`. Партия либо привязывается
+  целиком, либо не привязывается вовсе — живого дробления нет (переписано под `ARS-754 FR-002/FR-006`,
+  было «Дробление: кусок = сделка»; `batch_allocations` остаётся формой записи целой сделки).
 
 #### E2E-TSP-07 · EDGE · FCFS-гонка на accept
 `layer:sql` `canon:MS4-§2.3` `impl:d02_tsp.sql` `auto:candidate:sql` `status:active`

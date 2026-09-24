@@ -2,12 +2,14 @@
 
 > Канон: **Microstep 4** (Batch/Pool/Offer FSM, переходы BT-01…BT-23) + **Microstep 6 §M6-A**
 > (флоу фермера), Dok6-Slice5a. Реальность: `BatchWizard.tsx` (5 шагов), `BatchScreen.tsx`,
-> self-serve adapter `rpc_self_*` (миграции) + canon-слой d02_tsp.sql; дробление партии —
-> `batch_allocations` (Слайсы 8–9, кусок = сделка).
+> self-serve adapter `rpc_self_*` (миграции) + canon-слой d02_tsp.sql; партия продаётся только
+> целиком (`ARS-754`) — кусок (`batch_allocations`, Слайсы 8–9) остаётся формой записи целой
+> сделки ручного маршрута, живого дробления нет.
 >
 > Конфиг (standards-as-data, `tsp_config`): offer_window = 24 ч; mpk_decision_window = 24 ч;
 > шаг снижения цены = 100 ₸/кг (стоп на защитной цене, D-M6-3); publish_lead = 7 дней
-> (D-M6-9); лимит активных партий = 5; мин. кусок дробления = 5 голов (min_split_heads).
+> (D-M6-9); лимит активных партий = 5; `min_split_heads` — легаси-параметр дробления, новых
+> партий не касается (`ARS-754`).
 > Валидации: голов 1–500, вес 100–800 кг, возраст 3–120 мес.
 >
 > Словарь фермера (D-TSP-16): слова Pool/Offer/match/target/filled в UI НЕ появляются.
@@ -190,9 +192,15 @@
 - **Ожидание:** предупреждение «Покупатель уже найден. Отмена будет отмечена и повлияет на рейтинг. Если пул уже заполнен — снять нельзя, свяжитесь с TURAN»; при подтверждении — партия cancelled, `pool.filled_volume` уменьшен, пул остаётся filling; событие cancelled_after_match записано (штрафа в MVP нет, D-TSP-14).
 
 #### TSPF-LIFE-08 · EDGE · Снятие дроблёной партии (batch_allocations)
-`layer:ui+rpc` `canon:BATCH-SPLIT-01(DECISIONS_LOG)` `impl:WithdrawSheet+d02 SECTION 9` `auto:candidate:sql` `status:active`
-- **Предусловие:** часть голов продана (куски matched/confirmed).
-- **Ожидание:** три исхода: «Снять остаток (N гол.)» — бесплатно, проданные куски остаются; «Снять остаток и отменить проданное» — с пометкой о рейтинге; confirmed-куски (пул заполнен) снять нельзя — блокирует RPC/RLS. Правило минимума куска: ≥ min_split_heads (5), остаток 0 или ≥ min.
+`layer:ui+rpc` `canon:BATCH-SPLIT-01(DECISIONS_LOG)` `impl:WithdrawSheet+d02 SECTION 9` `auto:candidate:sql` `status:withdrawn:ARS-754`
+- **Снят — ARS-754 (партия продаётся только целиком).** Живого дробления новых партий нет —
+  кусок (`batch_allocations`) остаётся только формой записи целой сделки ручного маршрута,
+  сценарий «частичное снятие дроблёной партии» для новых партий недостижим. Прежний текст
+  сохранён как история (id не переиспользуется): «Предусловие: часть голов продана (куски
+  matched/confirmed). Ожидание: три исхода: «Снять остаток (N гол.)» — бесплатно, проданные
+  куски остаются; «Снять остаток и отменить проданное» — с пометкой о рейтинге; confirmed-куски
+  (пул заполнен) снять нельзя — блокирует RPC/RLS. Правило минимума куска: ≥ min_split_heads
+  (5), остаток 0 или ≥ min.» См. `Docs/AGOS-TSP-WholeBatchOnly-ARS-754.md` (`FR-013` ⑨).
 
 #### TSPF-LIFE-09 · UNHAPPY · Отмена после confirmed — только через админа (BT-17)
 `layer:ui+rpc` `canon:MS4-BT-17;D-TSP-15` `impl:BatchScreen` `auto:candidate:sql` `status:active`
@@ -201,7 +209,7 @@
 
 #### TSPF-LIFE-10 · HAPPY · Пул закрылся → confirmed + раскрытие (BT-13)
 `layer:sql+ui` `canon:MS4-BT-13;D-TSP-11;D-M6-5` `impl:d02_tsp.sql auto-close` `auto:tests/tsp_happy_path` `status:active`
-- **Ожидание:** партия → confirmed; покупатель РАСКРЫВАЕТСЯ («Сделка подтверждена. Покупатель: <МПК>. Цена: Z ₸/кг»); на Главной «Отметьте отгрузку». Для дроблёной партии раскрытие — per-кусок по закрытию ЕГО пула.
+- **Ожидание:** партия → confirmed; покупатель РАСКРЫВАЕТСЯ («Сделка подтверждена. Покупатель: <МПК>. Цена: Z ₸/кг»); на Главной «Отметьте отгрузку».
 
 #### TSPF-LIFE-11 · UNHAPPY→OK · Underfill: МПК вернул партии (BT-14)
 `layer:sql+ui` `canon:MS4-BT-14;D-TSP-10` `impl:d02_tsp.sql` `auto:candidate:sql` `status:blocked:NOTIF-DISPATCH-01`
@@ -219,7 +227,7 @@
 #### TSPF-LIFE-14 · HAPPY · Отгрузка (BT-16, D-M6-10)
 `layer:ui+rpc` `canon:MS4-BT-16;D-M6-10` `impl:DispatchSheet+rpc_dispatch_batch/rpc_self_dispatch_ready` `auto:candidate:sql` `status:active`
 - **Предусловие:** confirmed.
-- **Ожидание:** «Партия отгружена» → DispatchSheet: категория, число голов (для дроблёной — только confirmed-куски), цена сделки; подтверждение → dispatched («В пути»), покупатель уведомлён; дроблёный батч — по-кусковая отгрузка.
+- **Ожидание:** «Партия отгружена» → DispatchSheet: категория, число голов партии, цена сделки; подтверждение → dispatched («В пути»), покупатель уведомлён.
 
 #### TSPF-LIFE-15 · HAPPY · Приёмка покупателем → delivered (BT-18)
 `layer:sql+ui` `canon:MS4-BT-18;D-M6-10` `impl:d02_tsp.sql` `auto:candidate:sql(E2E-TSP-02)` `status:active`

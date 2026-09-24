@@ -98,3 +98,15 @@ it('ARS-691 M-015: повторная оценка — фраза «Отзыв �
     text: 'Отзыв по этой поставке уже отправлен.', code: null,
   })
 })
+
+// ARS-754 FR-005: ручная привязка отказывает, когда партия не влезает целиком — фраза
+// называет причину словами, без чисел и без технического хвоста RPC (code остаётся null).
+it('FR-005 BATCH_DOES_NOT_FIT: партия продаётся только целиком — фраза без цифр и без хвоста, code = null', () => {
+  const raw = 'BATCH_DOES_NOT_FIT: batch heads=23 exceed remaining capacity=9 in pool_line abc123'
+  const r = rpcErrorText(new Error(raw))
+  expect(r).toEqual({
+    text: 'Партия продаётся только целиком — в заявке не хватает места для всех её голов.', code: null,
+  })
+  expect(r.code, 'технический хвост не должен утечь в code').toBeNull()
+  expect(r.text, 'фраза не должна содержать цифр из технического хвоста').not.toMatch(/\d/)
+})

@@ -13,7 +13,11 @@ set -uo pipefail
 CRITICAL=0
 SIGNIFICANT=0
 MINOR=0
-SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d11_norms.sql d12_messaging.sql d13_billing.sql d14_governance.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql supabase/migrations/20260914120000_ars_695_pool_underfill_decision.sql supabase/migrations/20260921120000_ars_760_price_decision_after_market_refusal.sql supabase/migrations/20260922120000_ars_694_tsp_flow_shared_sweep.sql supabase/migrations/20260922140000_ars_755_farmer_owns_price.sql)
+SQL_FILES=(d01_kernel.sql d02_tsp.sql d03_feed.sql d04_vet.sql d05_ops_edu.sql d07_ai_gateway.sql d08_epidemic.sql d09_consulting.sql d10_public_site.sql d11_norms.sql d12_messaging.sql d13_billing.sql d14_governance.sql supabase/migrations/20260622120000_tsp_canonical_rebind.sql supabase/migrations/20260914120000_ars_695_pool_underfill_decision.sql supabase/migrations/20260921120000_ars_760_price_decision_after_market_refusal.sql supabase/migrations/20260922120000_ars_694_tsp_flow_shared_sweep.sql supabase/migrations/20260922140000_ars_755_farmer_owns_price.sql supabase/migrations/20260924120000_ars_754_whole_batch_only.sql)
+# ARS-754 (2026-09-24): миграция «партия продаётся только целиком» добавлена сюда по тому
+# же правилу — в ней живые тела rpc_self_match_batch_to_pool и fn_tsp_alloc_chunk.
+# Снапшот CHECK 11 не меняется: форма ответа RPC прежняя (uuid), jsonb_build_object в
+# новом теле нет, и contract_snapshot.py оставляет строку прежнего определения (FR-016).
 # ARS-755 (2026-09-22): миграция «цену назначает фермер» добавлена сюда по тому же
 # правилу — в ней живут живые тела rpc_lower_price, rpc_lower_batch_price и
 # fn_tsp_batch_json. Снапшот меняется у rpc_lower_price (ветка события
@@ -115,7 +119,11 @@ echo "--- CHECK 1: Duplicate function definitions ---"
 # 20260921120000 и теперь 20260922140000. Тело взято из 20260921120000 (= прод + строка
 # ARS-760), а не из d02: версия d02 по-прежнему Слайс-9-aware и на прод не выкладывалась
 # (DEBT-PROD-DRIFT-01). Расхождение d02↔прод не создано здесь и не закрыто здесь.
-DUP_WHITELIST="fn_my_org_ids|fn_is_admin|fn_is_expert|rpc_list_animal_categories|rpc_create_batch|rpc_get_org_batches|rpc_cancel_batch|rpc_self_review_due_batches|rpc_self_close_due_pools|rpc_lower_batch_price|rpc_lower_price|fn_tsp_batch_json"
+# rpc_self_match_batch_to_pool (ARS-754, 2026-09-24): переопределяется миграцией
+# 20260924120000 поверх 20260622120000. Тело взято из ЖИВОГО 20260702160000 (Слайс 9,
+# в SQL_FILES не входит; прод = этот файл, сверено 24.09), а не из 20260622120000.
+# fn_tsp_alloc_chunk в SQL_FILES определён один раз — в списке не нужен.
+DUP_WHITELIST="fn_my_org_ids|fn_is_admin|fn_is_expert|rpc_list_animal_categories|rpc_create_batch|rpc_get_org_batches|rpc_cancel_batch|rpc_self_review_due_batches|rpc_self_close_due_pools|rpc_lower_batch_price|rpc_lower_price|fn_tsp_batch_json|rpc_self_match_batch_to_pool"
 
 # Extract all function names from CREATE OR REPLACE FUNCTION lines
 # BSD-safe: use [[:space:]]+ instead of \s+; case-insensitive via tr
