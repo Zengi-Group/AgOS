@@ -16,15 +16,21 @@
 //     от заявок, мобильный экран СУЩЕСТВУЕТ, и отправлять оператора к компьютеру от
 //     работающего экрана было бы регрессом.
 //
-// Отвечать на офферы в десктопной консоли — ARS-786. Здесь их только видно.
+// ARS-786: ходы по офферу — принять и отклонить — живут здесь же. Заявку-получателя
+// выбирает БАЗА (наибольший бид), экран называет её из ответа; исход показан на месте, а
+// не тостом, и список после любого хода перечитывается.
 
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loadAccountProfile, type AccountProfile } from '@/lib/account'
 import { PhIcon } from '../../components/icons/PhIcon'
 import { readIncomingOffers } from '../data/offers-load'
+import { acceptOffer, explainOfferFailure, rejectOffer } from '../data/offer-actions'
+import { readMyPools } from '../data/pools-load'
 import { MPK_REQUESTS_URL } from '../nav'
-import type { IncomingOffer } from '../types'
+import { fmtMoney } from '../../tsp/data/tsp-utils'
+import { NBSP } from '../../tsp/data/tsp-dicts'
+import type { IncomingOffer, Pool } from '../types'
 import { ProfileSidebar } from '../profile/ProfileSidebar'
 import { OffersList } from './OffersList'
 import '../profile/profile-console.css'
@@ -50,6 +56,19 @@ export function MpkOffersApp() {
   const [offers, setOffers] = useState<IncomingOffer[]>([])
   const [offersRead, setOffersRead] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [offersToken, setOffersToken] = useState(0)
+
+  // ARS-786 · исход хода. `flash` — успех, `failure` — отказ; оба не гаснут сами (довод
+  // `.mpkr-flash` из «Моих заявок»: на десктопе оператор читает результат там же, где
+  // нажал). `busyId` запирает кнопки на время хода.
+  const [busy, setBusy] = useState<{ id: string; kind: 'accept' | 'reject' } | null>(null)
+  const [flash, setFlash] = useState<string | null>(null)
+  const [failure, setFailure] = useState<{ text: string; rawCode: string | null } | null>(null)
+
+  // Заявки читаются РАДИ ИМЕНИ заявки-получателя: `rpc_self_accept_offer` возвращает
+  // только `poolId` (проверено по телу функции), а обещание экрана — назвать заявку.
+  // Своего названия заявки у RPC нет, поэтому берём его из списка, который консоль и так
+  // умеет читать (`readMyPools`). Отказ этого чтения ход не ломает — см. `poolTitle`.
+  const [pools, setPools] = useState<Pool[]>([])
 
   const [wide, setWide] = useState(() =>
     typeof window === 'undefined' ? true : window.matchMedia(WIDE_QUERY).matches)
@@ -89,7 +108,82 @@ export function MpkOffersApp() {
     return () => { alive = false }
   }, [offersToken, wide])
 
-  const refetch = useCallback(() => { setOffersToken((n) => n + 1) }, [])
+  // Список заявок — только ради имени заявки-получателя после принятия. Читается вместе с
+  // офферами: к моменту хода имя уже под рукой, и ход не ждёт второго запроса.
+  useEffect(() => {
+    if (!wide) return
+    let alive = true
+    void readMyPools().then((r) => {
+      if (alive && r.kind === 'ok') setPools(r.pools)
+      // Отказ молчит намеренно: без имени заявки ход всё равно состоится и будет назван
+      // (см. `poolTitle`), а свой отказ у этого чтения оператору сообщать не о чем.
+    })
+    return () => { alive = false }
+  }, [offersToken, wide])
+
+  // Ручное перечитывание («Повторить», клик по своему пункту сайдбара) гасит исход
+  // прошлого хода: оставить его — значит держать над свежим списком сообщение о том,
+  // чего на экране уже нет.
+  const refetch = useCallback(() => {
+    setFlash(null)
+    setFailure(null)
+    setOffersToken((n) => n + 1)
+  }, [])
+
+  /** Имя заявки по id из ответа RPC. Не нашли (список не прочитан или заявка новая) —
+   *  говорим «в вашу заявку», а не выдумываем название и не показываем сырой uuid. */
+  const poolTitle = useCallback((poolId: string): string => {
+    const hit = pools.find((p) => p.id === poolId)
+    // Предлог внутри обеих веток: снаружи он дал бы «принята «Высшая · Алматы»» без «в».
+    return hit ? `в заявку «${hit.title}»` : 'в вашу заявку'
+  }, [pools])
+
+  // Один дом обоих ходов: запереть кнопки → позвать базу → показать исход → перечитать.
+  // Перечитывание идёт в ЛЮБОМ случае, включая отказ: после `INVALID_STATUS` или
+  // `OFFER_EXPIRED` список на экране заведомо устарел, и оставить его — значит дать
+  // оператору нажать второй раз по тому же мёртвому офферу (тот же довод, что в
+  // `RequestMonitor.run()`).
+  // Компонент мог уйти (смена ширины, уход в другой раздел), пока база отвечала: тогда
+  // ставить состояние и перечитывать некуда и незачем.
+  const alive = useRef(true)
+  useEffect(() => () => { alive.current = false }, [])
+
+  const runAction = useCallback(async (
+    offerId: string,
+    kind: 'accept' | 'reject',
+    act: () => Promise<string>,
+  ) => {
+    setBusy({ id: offerId, kind })
+    setFlash(null)
+    setFailure(null)
+    try {
+      const text = await act()
+      if (alive.current) setFlash(text)
+    } catch (e) {
+      // Ошибку отдаём словарю ЦЕЛИКОМ, не текстом: он сам различает `LocalError`
+      // (собственный текст фронта) от кода базы и логирует исходное сообщение.
+      if (alive.current) setFailure(explainOfferFailure(e))
+    } finally {
+      if (alive.current) {
+        setBusy(null)
+        // Перечитываем И офферы, И заявки: принятие могло закрыть заявку-получателя
+        // (`closed_filled`), и следующий ход назвал бы уже неактуальное состояние.
+        setOffersToken((n) => n + 1)
+      }
+    }
+  }, [])
+
+  const onAccept = useCallback((offerId: string) => runAction(offerId, 'accept', async () => {
+    const r = await acceptOffer(offerId)
+    // Заявку и цену называем ИЗ ОТВЕТА базы: `dealPrice` — бид комбината, не ask фермера
+    // (`D-M6-DEALPRICE`), и предсказывать его экран не вправе.
+    return `Партия принята ${poolTitle(r.poolId)} · цена сделки ${fmtMoney(r.dealPrice)}${NBSP}₸/кг`
+  }), [runAction, poolTitle])
+
+  const onReject = useCallback((offerId: string) => runAction(offerId, 'reject', async () => {
+    await rejectOffer(offerId)
+    return 'Предложение отклонено — партия осталась доступна другим комбинатам'
+  }), [runAction])
 
   // Ниже 1024px адрес обслуживает мобильный шелл — он сам разберёт путь своим роутером.
   // Пока его чанк едет, показываем пустой каркас, а не чужую разметку: это доли секунды,
@@ -127,7 +221,27 @@ export function MpkOffersApp() {
           </div>
         </div>
 
-        <OffersList status={offersRead} offers={offers} onRetry={refetch} />
+        {/* Исход хода — над списком, не тостом: оператор читает его там же, где нажал,
+            и он не исчезает сам (образец `.mpkr-flash` из «Моих заявок»). */}
+        {flash && <div className="mpkr-flash" role="status">{flash}</div>}
+        {failure && (
+          <div className="mpkr-flash bad" role="alert">
+            {failure.text}
+            {/* Код показываем ТОЛЬКО когда не смогли его перевести: опознанный код
+                оператору ничего не говорит, а неопознанный — единственное, с чем он
+                придёт в поддержку. */}
+            {failure.rawCode && <span className="mpko-code">{failure.rawCode}</span>}
+          </div>
+        )}
+
+        <OffersList
+          status={offersRead}
+          offers={offers}
+          onRetry={refetch}
+          onAccept={onAccept}
+          onReject={onReject}
+          busy={busy}
+        />
       </main>
     </div>
   )
