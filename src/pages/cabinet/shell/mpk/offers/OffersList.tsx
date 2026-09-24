@@ -1,11 +1,11 @@
 // AgOS · ARS-785 · Список входящих офферов в десктопной консоли МПК.
+// AgOS · ARS-786 · + два хода по офферу: принять и отклонить.
 //
-// Партия фермера без прямого матча разослана подходящим МПК (broadcast, FCFS, окно 24 ч)
-// и здесь ВИДНА. Отвечать на неё — ARS-786: кнопок «Принять»/«Отклонить» в этом разделе
-// нет намеренно, и это не забытая работа.
+// Партия фермера без прямого матча разослана подходящим МПК (broadcast, FCFS, окно 24 ч).
 //
 // Личность фермера не раскрыта (`D-M6-12`) — только характеристики партии. Ст. 171:
-// карточка сообщает факты и срок, но не подталкивает («осталось ответить», не «успейте»).
+// карточка сообщает факты и срок, но не подталкивает («осталось ответить», не «успейте»);
+// у обоих ходов нейтральный вес — экран не советует, какой выбрать.
 
 import { PhIcon } from '../../components/icons/PhIcon'
 import { fmtMoney } from '../../tsp/data/tsp-utils'
@@ -19,9 +19,24 @@ interface Props {
   status: 'loading' | 'ready' | 'failed'
   offers: IncomingOffer[]
   onRetry: () => void
+  /** ARS-786 · ходы по офферу. Оба возвращают промис: строка блокирует свои кнопки, пока
+   *  база не ответила, иначе двойной клик ушёл бы вторым вызовом по уже отвеченному
+   *  офферу. Исход показывает родитель — он же перечитывает список. */
+  onAccept: (offerId: string) => Promise<void>
+  onReject: (offerId: string) => Promise<void>
+  /** Идущий ход: id оффера и КАКОЙ именно ход. Вид нужен, чтобы «Отправляем…» встало на
+   *  нажатой кнопке: без него отклонение подписывало бы собой «Принять». */
+  busy: { id: string; kind: 'accept' | 'reject' } | null
 }
 
-function OfferRow({ offer }: { offer: IncomingOffer }) {
+function OfferRow({ offer, onAccept, onReject, busyKind, anyBusy }: {
+  offer: IncomingOffer
+  onAccept: (id: string) => Promise<void>
+  onReject: (id: string) => Promise<void>
+  /** Какой ход идёт ПО ЭТОЙ строке; null — по ней ход не идёт. */
+  busyKind: 'accept' | 'reject' | null
+  anyBusy: boolean
+}) {
   const tonnes = offerTonnes(offer)
   return (
     <div className="mpko-row">
@@ -60,11 +75,32 @@ function OfferRow({ offer }: { offer: IncomingOffer }) {
         <span className="mpko-left"><PhIcon name="clock" size={13} />{deadlineLabel(offer)}</span>
         <span className="mpkr-row-sub">готовы {offer.windowLabel}</span>
       </div>
+
+      {/* Ст. 171: оба хода равны по весу — ни «Принять» не выделено как рекомендуемое,
+          ни «Отклонить» не спрятано. Экран не советует, он даёт совершить. */}
+      <div className="mpko-cell mpko-cell-acts">
+        <button
+          type="button"
+          className="mpkc-stub-act"
+          onClick={() => { void onAccept(offer.id) }}
+          disabled={anyBusy}
+        >
+          {busyKind === 'accept' ? 'Отправляем…' : 'Принять'}
+        </button>
+        <button
+          type="button"
+          className="mpkc-stub-act"
+          onClick={() => { void onReject(offer.id) }}
+          disabled={anyBusy}
+        >
+          {busyKind === 'reject' ? 'Отправляем…' : 'Отклонить'}
+        </button>
+      </div>
     </div>
   )
 }
 
-export function OffersList({ status, offers, onRetry }: Props) {
+export function OffersList({ status, offers, onRetry, onAccept, onReject, busy }: Props) {
   // Порядок задаётся здесь, а не приходит порядком строк RPC: «по сроку ответа» —
   // требование экрана (см. `sortByDeadline`).
   const rows = sortByDeadline(offers)
@@ -115,9 +151,22 @@ export function OffersList({ status, offers, onRetry }: Props) {
                 <div className="mpko-cell">Тоннаж</div>
                 <div className="mpko-cell">Цена</div>
                 <div className="mpko-cell">Срок ответа</div>
+                <div className="mpko-cell">Ответ</div>
               </div>
               <div className="mpkr-rows">
-                {rows.map((o) => <OfferRow key={o.id} offer={o} />)}
+                {rows.map((o) => (
+                  <OfferRow
+                    key={o.id}
+                    offer={o}
+                    onAccept={onAccept}
+                    onReject={onReject}
+                    busyKind={busy?.id === o.id ? busy.kind : null}
+                    // Ход в разделе ровно один: пока идёт этот, остальные строки тоже
+                    // заперты — иначе оператор успел бы ответить на два оффера, из которых
+                    // второй мог быть отозван первым (FCFS-сиблинги).
+                    anyBusy={busy !== null}
+                  />
+                ))}
               </div>
               {/* D-M6-12 · сказано один раз для списка, а не на каждой карточке: факт
                   общий для всех офферов и на карточке превращался бы в шум. */}

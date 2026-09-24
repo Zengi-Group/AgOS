@@ -294,17 +294,18 @@ it('ниже 1024px тот же адрес отдаёт мобильный ше�
   expect(window.location.pathname, 'живой адрес не переписан (P7)').toBe('/mpk/offers')
 })
 
-// ── граница слайса: отвечать — ARS-786, здесь только видно ───────────────────
-it('ARS-785 граница: в разделе нет кнопок «Принять»/«Отклонить» — отвечать это ARS-786', async () => {
+// ── чтение ничего не мутирует ────────────────────────────────────────────────
+// Прежняя редакция этого теста утверждала, что кнопок «Принять»/«Отклонить» в разделе
+// НЕТ — верная граница слайса ARS-785, снятая слайсом ARS-786, который эти ходы и
+// построил. Утверждение про кнопки переехало в `mpk-offers-actions.browser.test.tsx`
+// (там оно теперь обратное и доказывается). Здесь остаётся то, что ARS-785 утверждает
+// по-прежнему: САМО ЧТЕНИЕ раздела не зовёт ни одной мутирующей RPC.
+it('ARS-785: открытие раздела только читает — ни одного мутирующего вызова', async () => {
   store.offers = [makeOffer({ id: 'o1', hoursLeft: 5 })]
   mountAppAt('/mpk/offers')
   await expect.poll(() => rows().length, T).toBe(1)
 
-  const labels = Array.from(document.querySelectorAll<HTMLElement>('.agos-mpk-console button'))
-    .map((b) => b.textContent?.trim() ?? '')
-  expect(labels).not.toContain('Принять')
-  expect(labels).not.toContain('Отклонить')
-  // И ни одного вызова ходов по офферу — экран только читает.
-  expect(store.calls.map((c) => c.name)).not.toContain('rpc_self_accept_offer')
-  expect(store.calls.map((c) => c.name)).not.toContain('rpc_self_reject_offer')
+  const called = store.calls.map((c) => c.name)
+  expect(called).not.toContain('rpc_self_accept_offer')
+  expect(called).not.toContain('rpc_self_reject_offer')
 })
