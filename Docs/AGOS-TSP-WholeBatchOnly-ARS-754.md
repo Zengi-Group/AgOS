@@ -1,5 +1,5 @@
 ---
-status: agreed           # G2 проведён 2026-09-24 (три круга ревью качества спека: 19 · 16 · 13 дыр, все закрыты); подпись ставит человек (approve-g2.sh)
+status: shipped          # G3: PR #224 → main b4fbabb (2026-09-24). Выкладка по порядку спека: ① ремонт --apply (обе партии delivered, partially_matched = 0), ② миграция 20260924120000 (prod_diff — дрейф 0), ③ мерж → Vercel; сверено по отданному бандлу turanstandard.kz (237 чанков): фраза BATCH_DOES_NOT_FIT в pools-load-ClG9RGZl.js, текстов «частями» ноль, «Продана частично» админки на месте (FR-018). История: agreed на G2 24.09 (три круга ревью качества: 19 · 16 · 13 дыр)
 g2_approved: 2026-09-24 · Dias Zhagaparov
 baseline_commit: 4ab2ad7bb64c57bb87ac65f2555a1d151034f83f   # /build 2026-09-24, до первой правки (HEAD main)
 brain_spec: "[[projects/agos/specs/tsp-farmer-sell-flow]]"
