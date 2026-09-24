@@ -40,6 +40,12 @@ const store = vi.hoisted(() => ({
   failPools: false,
   failActivate: false,
   failDecisionOnce: false,
+  failConfirmOnce: false,
+  // ARS-691: точный текст отказа для решения / создания / запуска (null — без отказа).
+  decisionErrorMessage: null as string | null,
+  createErrorMessage: null as string | null,
+  activateErrorMessage: null as string | null,
+  activateNoPoolId: false,
   poolsDelayMs: 0,
 }))
 
@@ -85,6 +91,7 @@ vi.mock('@/lib/supabase', () => {
           case 'rpc_get_pool_matches':
             return ok(store.matches)
           case 'rpc_self_pool_accept_partial': {
+            if (store.decisionErrorMessage !== null) return { data: null, error: { message: store.decisionErrorMessage } }
             if (store.failDecisionOnce) {
               store.failDecisionOnce = false
               // Заявку уже перевели мимо этого экрана (подметание/телефон) — база отвечает
@@ -106,14 +113,21 @@ vi.mock('@/lib/supabase', () => {
             return ok({ outcome: 'awaiting_mpk_decision' })
           case 'rpc_self_confirm_delivery':
           case 'rpc_self_confirm_delivery_alloc': {
+            if (store.failConfirmOnce) {
+              store.failConfirmOnce = false
+              return { data: null, error: { message: 'INVALID_STATUS: allocation is delivered, expected dispatched' } }
+            }
             const id = (args.p_batch_id ?? args.p_allocation_id) as string
             const row = store.matches.find((m) => m.batchId === id || m.matchId === id)
             if (row) row.status = 'delivered'
             return ok(true)
           }
           case 'rpc_self_create_pool_request':
+            if (store.createErrorMessage !== null) return { data: null, error: { message: store.createErrorMessage } }
             return ok('req-1')
           case 'rpc_self_activate_pool_request':
+            if (store.activateErrorMessage !== null) return { data: null, error: { message: store.activateErrorMessage } }
+            if (store.activateNoPoolId) return ok({})
             if (store.failActivate) return { data: null, error: { message: 'ACTIVATION_FAILED' } }
             store.pools.push(makePool({ id: 'p-new', status: 'filling', totalHeads: 220, filledHeads: 0 }))
             return ok({ pool_id: 'p-new' })
@@ -186,6 +200,11 @@ beforeEach(async () => {
   store.failPools = false
   store.failActivate = false
   store.failDecisionOnce = false
+  store.failConfirmOnce = false
+  store.decisionErrorMessage = null
+  store.createErrorMessage = null
+  store.activateErrorMessage = null
+  store.activateNoPoolId = false
   store.poolsDelayMs = 0
 })
 
@@ -293,7 +312,8 @@ it('M-006: «Принять частично» зовёт rpc_self_pool_accept_p
 })
 
 // ── M-006 · обработка ошибки: INVALID_STATUS → перечитать и показать актуальное ──────────
-it('M-006: INVALID_STATUS — названа причина И показано актуальное состояние заявки', async () => {
+// ARS-691 M-005: причина названа фразой словаря в красной плашке, сырого кода нет.
+it('M-006 · ARS-691 M-005: INVALID_STATUS — названа причина И показано актуальное состояние заявки', async () => {
   store.pools = [makePool({ id: 'p-dec', status: 'awaiting_mpk_decision', filledHeads: 24, totalHeads: 220 })]
   store.failDecisionOnce = true
   mountAppAt('/mpk/requests/p-dec')
@@ -301,7 +321,8 @@ it('M-006: INVALID_STATUS — названа причина И показано 
   await expect.element(page.getByText('Нужно ваше решение').first(), T).toBeInTheDocument()
   await page.getByRole('button', { name: /Принять частично/ }).click()
 
-  await expect.element(page.getByText(/INVALID_STATUS/), T).toBeInTheDocument()
+  await expect.element(page.getByText('Статус уже изменился. Обновите экран и проверьте, что сейчас.'), T).toBeInTheDocument()
+  expect(document.querySelector('.mpkr-flash.bad')?.textContent).not.toContain('INVALID_STATUS')
   // Главное: экран не остался с прежними кнопками над изменившейся заявкой.
   await expect.element(page.getByText('Заявка недобрала'), T).toBeInTheDocument()
   expect(document.body.textContent).not.toContain('Принять частично')
@@ -401,6 +422,24 @@ it('M-011: приёмка по маршруту «кусок» и «партия
     () => Array.from(document.querySelectorAll('.mpkr-srow')).every((r) => r.textContent?.includes('Принято')),
     T,
   ).toBe(true)
+})
+
+// ── ARS-691 M-013 · приёмка уже подтверждена (десктоп) ───────────────────────
+// Спек `Docs/AGOS-TSP-MpkErrorText-ARS-691.md`: на десктопе подавления INVALID_STATUS нет
+// (FR-007) — оператор видит фразу словаря в красной плашке, а не сырой код с хвостом.
+it('ARS-691 M-013: приёмка отвергнута INVALID_STATUS — красная плашка с фразой, кода и хвоста нет', async () => {
+  store.pools = [makePool({ id: 'p-ship', status: 'closed_filled', filledHeads: 200, contactRevealed: true })]
+  store.matches = [makeMatch({ matchId: 'alloc-1', batchId: 'b-1', source: 'allocation', status: 'dispatched', farmName: 'КХ Жаксылык' })]
+  store.failConfirmOnce = true
+  mountAppAt('/mpk/requests/p-ship?view=suppliers')
+
+  await expect.poll(() => document.querySelectorAll('.mpkr-srow button').length, T).toBe(1)
+  document.querySelector<HTMLButtonElement>('.mpkr-srow button')!.click()
+
+  await expect.poll(() => document.querySelector('.mpkr-flash.bad')?.textContent ?? null, T)
+    .toBe('Статус уже изменился. Обновите экран и проверьте, что сейчас.')
+  expect(document.querySelector('.mpkr-flash.bad .rpc-error-code'), 'знакомый код — строки кода нет').toBeNull()
+  expect(document.body.textContent).not.toContain('expected dispatched')
 })
 
 // ── M-012 · контакты до сделки ───────────────────────────────────────────────
@@ -580,4 +619,70 @@ it('M-020: активация отказала — названа причина
   store.failActivate = false
   await page.getByRole('button', { name: 'Опубликовать заявку' }).click()
   await expect.poll(() => rows().length, T).toBe(1)
+})
+
+// ── ARS-691 · десктоп: плашка отказа и собственные тексты фронта ─────────────
+// Спек `Docs/AGOS-TSP-MpkErrorText-ARS-691.md`. Здесь — точный текст плашки, а не регулярка
+// по коду: `/ACTIVATION_FAILED/` находит и сырую строку базы, и «Код: …», и поэтому не
+// различает старое и новое поведение.
+const FALLBACK_PHRASE = 'Не удалось выполнить действие. Повторите или сообщите в поддержку.'
+const flashBad = () => document.querySelector('.agos-mpk-console .mpkr-flash.bad')
+
+async function openFormAndPublish() {
+  mountAppAt('/mpk/requests')
+  await expect.element(page.getByText('Заявок пока нет'), T).toBeInTheDocument()
+  await page.getByRole('button', { name: 'Новая заявка' }).first().click()
+  await page.getByLabelText('Общий объём закупа, голов').fill('220')
+  await page.getByRole('button', { name: 'Следующий' }).click()
+  await page.getByLabelText('Цена ₸/кг').first().fill('1700')
+  await page.getByRole('button', { name: 'Опубликовать заявку' }).click()
+}
+
+it('ARS-691 M-007 · FR-004 · решение по заявке: незнакомый код — фраза и «Код: …» 12px цветом плашки', async () => {
+  store.pools = [makePool({ id: 'p-dec', status: 'awaiting_mpk_decision', filledHeads: 24, totalHeads: 220 })]
+  store.decisionErrorMessage = 'UNSETTLED_MATCHES: 2 allocations still pending'
+  mountAppAt('/mpk/requests/p-dec')
+
+  await expect.element(page.getByText('Нужно ваше решение').first(), T).toBeInTheDocument()
+  await page.getByRole('button', { name: /Принять частично/ }).click()
+
+  await expect.poll(() => flashBad()?.querySelector('.rpc-error-code')?.textContent ?? null, T).toBe('Код: UNSETTLED_MATCHES')
+  const flash = flashBad()!
+  expect(flash.textContent).toBe(FALLBACK_PHRASE + 'Код: UNSETTLED_MATCHES')
+  const line = getComputedStyle(flash.querySelector('.rpc-error-code')!)
+  expect(line.fontSize).toBe('12px')
+  expect(line.opacity).toBe('1')
+  expect(line.color).toBe(getComputedStyle(flash).color)
+})
+
+it('ARS-691 M-007 · заведение заявки: запуск отказал незнакомым кодом — общая фраза под префиксом и код отдельно', async () => {
+  store.failActivate = true
+  await openFormAndPublish()
+
+  await expect.poll(() => flashBad()?.textContent ?? null, T)
+    .toBe('Заявка не заведена: ' + FALLBACK_PHRASE + 'Код: ACTIVATION_FAILED')
+})
+
+it('ARS-691 M-011: создание отвергнуто FORBIDDEN — «Заявка не заведена: » + фраза прав, хвоста нет', async () => {
+  store.createErrorMessage = 'FORBIDDEN: organization not owned by current user'
+  await openFormAndPublish()
+
+  await expect.poll(() => flashBad()?.textContent ?? null, T)
+    .toBe('Заявка не заведена: У вашей учётной записи нет прав на это действие.')
+})
+
+it('ARS-691 M-014: запуск прошёл без pool_id — собственный текст фронта показан как есть', async () => {
+  store.activateNoPoolId = true
+  await openFormAndPublish()
+
+  await expect.poll(() => flashBad()?.textContent ?? null, T)
+    .toBe('Заявка не заведена: Заявка создана, но не опубликована (нет pool_id)')
+})
+
+it('ARS-691 M-010 · FR-013 (десктоп): база отказала без текста — запасная фраза fail() как есть', async () => {
+  store.activateErrorMessage = ''
+  await openFormAndPublish()
+
+  await expect.poll(() => flashBad()?.textContent ?? null, T)
+    .toBe('Заявка не заведена: Заявка создана, но не опубликована')
 })

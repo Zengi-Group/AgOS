@@ -39,6 +39,7 @@ import { seedPools } from './data/pools'
 import { loadMarketBatches, seedMarketBatches, type MarketBatch } from './data/market'
 import { readMyPools, nextPoolsRead, loadPoolMatches, closeDuePools, type MyPoolsRead } from './data/pools-load'
 import { loadIncomingOffers } from './data/offers-load'
+import { rpcErrorText } from './data/rpc-error-text'
 import { mpkRouteToUrl, mpkUrlToRoute, mpkRouteKey, mpkDirFor } from './nav'
 import type {
   IncomingOffer, MpkMembership, MpkModal, MpkRoute, MpkSheet, MpkState, MpkTypeStatus, PendingDeal, Pool, PoolsRead, SupplierRow,
@@ -134,7 +135,7 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
   const [route, setRoute] = useState<MpkRoute>(() => mpkUrlToRoute(window.location.pathname))
   const [modal, setModal] = useState<MpkModal>(null)
   const [sheet, setSheet] = useState<MpkSheet>(null)
-  const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
+  const [toast, setToast] = useState<{ id: number; text: string; code?: string } | null>(null)
 
   // S-2 (архитект-ревью ARS-152): параметры модалов переживают dismiss-анимацию —
   // контент размонтируется в onDidDismiss, а не в момент isOpen=false (урок ревью
@@ -351,8 +352,9 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
 
   const tspOpen = typeStatus === 'approved' && membershipHasAccess(membership)
 
-  const showToast = (text: string) => {
-    const t = { id: Date.now(), text }
+  // ARS-691: `code` — строка «Код: …» под фразой отказа (FR-004), только от rpcErrorText.
+  const showToast = (text: string, code?: string) => {
+    const t = { id: Date.now(), text, code }
     setToast(t)
     setTimeout(() => setToast((cur) => (cur && cur.id === t.id ? null : cur)), 2800)
   }
@@ -420,11 +422,11 @@ export function MpkApp({ initialState }: MpkAppProps = {}) {
       onAccept={(id) =>
         acceptOffer(id)
           .then(() => showToast('Оффер принят — партия в вашей заявке'))
-          .catch((e) => { showToast('Не удалось принять: ' + (e instanceof Error ? e.message : '')); throw e })}
+          .catch((e) => { const r = rpcErrorText(e); showToast('Не удалось принять: ' + r.text, r.code ?? undefined); throw e })}
       onReject={(id) =>
         rejectOffer(id)
           .then(() => showToast('Оффер отклонён'))
-          .catch((e) => { showToast('Не удалось: ' + (e instanceof Error ? e.message : '')); throw e })}
+          .catch((e) => { const r = rpcErrorText(e); showToast('Не удалось: ' + r.text, r.code ?? undefined); throw e })}
       onRefresh={pullAll}
     />
   )

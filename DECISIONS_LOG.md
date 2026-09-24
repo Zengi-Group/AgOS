@@ -3026,3 +3026,17 @@ desc limit 1` — оператор не выбирает; считать стр�
 **Files**: `src/pages/cabinet/shell/mpk/offers/{MpkOffersApp.tsx,OffersList.tsx,offers-model.ts,offers-console.css}`, `src/pages/cabinet/shell/mpk/data/offers-load.ts`, `src/pages/cabinet/shell/mpk/nav.ts`, `src/pages/cabinet/shell/mpk/profile/{ProfileSidebar.tsx,MpkProfileApp.tsx}`, `src/pages/cabinet/shell/mpk/requests/MpkRequestsApp.tsx`, `src/App.tsx`, `src/tests/{mpk-offers-read.browser.test.ts,mpk-offers-desktop.browser.test.tsx,mpk-requests-desktop.browser.test.tsx}`, `Docs/AGOS-Dok6-Slice10-MPK-Profile.md`, `Docs/AGOS-TSP-IncomingOffers-Desktop-A-ARS-785.md`, `IMPL_DEBT.md`.
 
 ---
+
+### 2026-09-24: ARS-691 — код: отказы базы в зоне МПК показываются фразой из словаря
+
+**What**: новый модуль `mpk/data/rpc-error-text.ts` — `rpcErrorText(e) → { text, code }` по таблице D спека и `LocalError` для собственных текстов фронта. Все 13 точек вывода таблицы P (мобильный шелл и десктоп «Мои заявки») берут текст из словаря вместо `e.message`. Незнакомый код — общая фраза плюс строка «Код: …» 12px (тост, плашка десктопа, подсказка формы); общий `Toast`/`ToastState` получили необязательное `code` — фермерский тост не меняется. Полный текст ошибки — в `console.error`. SQL и RPC не тронуты (`FR-009`).
+
+**Why**: оператор МПК видел «BATCH_FULLY_MATCHED», «ALLOC_FAILED: … кусок …», латинский сорт и не понимал, что делать (живая проверка ARS-687). Решения по дому словаря и незнакомому коду — в записи G2 выше.
+
+**Verify**: `tsc -b`, `npm run build` — зелёные; `npx vitest run --project routers` — 19 файлов, 230 тестов, все зелёные; новые тесты падают на baseline (16) и на подмене `LocalError`→`Error` (3). `cross_check.sh` — 0 critical, 3 significant (преэкзистентные PGRST203 Slice D), CHECK 11 без дельты. Ревью якоря 7: 13 находок, 0 противоречий, converge 32/32 — разбор в `Review Triage Log` спека. Живой заход оператором — до мержа, человеком.
+
+**Consequences**: **Легко** — новый код отказа = одна строка словаря. **Трудно** — словарь следует за текстами исключений руками; забытый код виден по «Код: …». В ledger: `MPK-CREATE-POOL-ACTIVATE-PREFIX-01`, `MPK-ERROR-JWT-EXPIRED-01`, `MPK-ERROR-TOAST-DURATION-01`, `MPK-REQUESTS-FLASH-STALE-OK-01`, `MPK-ERROR-CONSOLE-DETAILS-LOST-01`.
+
+**Files**: `src/pages/cabinet/shell/mpk/data/rpc-error-text.ts`, `mpk/data/pool-actions.ts`, `mpk/MpkApp.tsx`, `mpk/modals/{BatchDetailModal,PoolMonitorModal,CreatePoolModal}.tsx`, `mpk/requests/{RequestMonitor,CreateRequestModal}.tsx`, `mpk/requests/requests-console.css`, `components/Toast.tsx`, `types.ts`, `cabinet.css`, 8 тестовых файлов в `src/tests/`, `Docs/AGOS-TSP-MpkErrorText-ARS-691.md`, `Docs/AGOS-TSP-MarketBoard-RequirePool-ARS-687.md`, `IMPL_DEBT.md`.
+
+---

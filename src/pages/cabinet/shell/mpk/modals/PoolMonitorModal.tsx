@@ -9,13 +9,14 @@ import { NBSP } from '../../tsp/data/tsp-dicts'
 import { printDealDoc, fmtDealDate, type DealDocData } from '../../data/deal-doc'
 import { useGradeFormula } from '@/hooks/useGradeFormula'
 import { useRevealedBatch } from '../data/revealed-batch'
+import { rpcErrorText } from '../data/rpc-error-text'
 import { DELIVERY_STATUS_LABEL, mpkCatName, type Pool, type SupplierRow } from '../types'
 
 interface Props {
   pool: Pool
   onClose: () => void
   onPatch: (patch: Partial<Pool>) => void
-  toast: (text: string) => void
+  toast: (text: string, code?: string) => void
   onContactTuran: () => void
   mpk?: { orgName: string; region: string; bin: string }            // реквизиты МПК — для документа сделки
   onAdvance?: (poolId: string, status: string) => Promise<void>     // реальный перевод статуса в БД
@@ -306,7 +307,8 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
     if (realPool && onAdvance && st && REAL_STATUSES.includes(st)) {
       onAdvance(pool.id, st).catch((e) => {
         onPatch({ status: prevStatus })
-        toast('Не удалось обновить статус: ' + (e instanceof Error ? e.message : ''))
+        const r = rpcErrorText(e)
+        toast('Не удалось обновить статус: ' + r.text, r.code ?? undefined)
       })
     }
   }
@@ -377,7 +379,7 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                 // Исход, которого мы не знаем, — не повод утверждать «набрана» (FR-002).
                 else toast('Заявка закрыта — обновите список')
               })
-              .catch((e) => toast('Не удалось закрыть заявку: ' + (e instanceof Error ? e.message : '')))
+              .catch((e) => { const r = rpcErrorText(e); toast('Не удалось закрыть заявку: ' + r.text, r.code ?? undefined) })
               .finally(() => setClosing(false))
           }}>
             {closing ? 'Закрываем…' : 'Закрыть заявку'}
@@ -408,7 +410,7 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
       run(pool.id)
         .then(() => { toast(okText); onClose() })
         // M-013: запрос не дошёл — заявка осталась в точке выбора, кнопки снова живы.
-        .catch((e) => toast('Не удалось применить решение: ' + (e instanceof Error ? e.message : '')))
+        .catch((e) => { const r = rpcErrorText(e); toast('Не удалось применить решение: ' + r.text, r.code ?? undefined) })
         .finally(() => setClosing(false))
     }
     return (
@@ -583,7 +585,8 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                             reloadMatches().then((rows) => {
                               const fresh = rows?.find((r) => r.id === s.id)
                               if (msg.includes('INVALID_STATUS') && fresh?.deliveryStatus === 'delivered') return
-                              toast('Не удалось: ' + msg)
+                              const r = rpcErrorText(e)
+                              toast('Не удалось: ' + r.text, r.code ?? undefined)
                             })
                           })
                       } else {
@@ -615,7 +618,8 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                           onSubmitReview(s.batchId, n).catch((e) => {
                             // Не оставляем на экране оценку, которой нет в базе (FR-005).
                             patchSupplier(s.id, { myRating: prev })
-                            toast('Не удалось отправить отзыв: ' + (e instanceof Error ? e.message : ''))
+                            const r = rpcErrorText(e)
+                            toast('Не удалось отправить отзыв: ' + r.text, r.code ?? undefined)
                           })
                         }
                       }}
@@ -713,7 +717,8 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                       if (realPool && s.batchId && onSubmitReview) {
                         onSubmitReview(s.batchId, n).catch((e) => {
                           patchSupplier(s.id, { myRating: prev })
-                          toast('Не удалось отправить отзыв: ' + (e instanceof Error ? e.message : ''))
+                          const r = rpcErrorText(e)
+                          toast('Не удалось отправить отзыв: ' + r.text, r.code ?? undefined)
                         })
                       }
                     }}

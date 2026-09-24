@@ -4,5 +4,10 @@ import type { ToastState } from '../types'
 
 export function Toast({ toast }: { toast: ToastState | null }) {
   if (!toast) return null
-  return <div className="toast" key={toast.id}>{toast.text}</div>
+  return (
+    <div className="toast" key={toast.id}>
+      {toast.text}
+      {toast.code && <div className="rpc-error-code">Код: {toast.code}</div>}
+    </div>
+  )
 }

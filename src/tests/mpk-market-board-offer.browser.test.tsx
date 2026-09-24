@@ -184,7 +184,8 @@ it('ARS-687 M-001: реальная партия + выбранная реаль
 })
 
 // ── M-002 · заявка не выбрана ─────────────────────────────────────────────────────────
-it('ARS-687 M-002: реальная партия, селектор на «Без привязки» — кнопка неактивна, рядом дословная причина', async () => {
+// ARS-691 M-018 (FR-010): словарь отказов причину недоступной кнопки не трогает.
+it('ARS-687 M-002 · ARS-691 M-018: реальная партия, селектор на «Без привязки» — кнопка неактивна, рядом дословная причина', async () => {
   mountModal(baseProps())
 
   await expect.element(
@@ -347,9 +348,10 @@ it('ARS-687 M-009: два нажатия подряд — привязка од�
 })
 
 // ── M-010 · отказ привязки ────────────────────────────────────────────────────────────
-it('ARS-687 M-010: база отказала — строка отказа показана дословно, сделка не объявляется, попытку можно повторить', async () => {
-  const dbLine = 'ALLOC_FAILED: в заявке нет места / цена < ask фермера'
-  const onMatch = vi.fn(async () => { throw new Error(dbLine) })
+// ARS-691 FR-008 (SC-002 в спеке ARS-687): «строка отказа дословно» заменена фразой
+// словаря (ARS-691 M-001). Остальное в M-010 — сделка не объявляется, повтор возможен — в силе.
+it('ARS-687 M-010 · ARS-691 M-001: база отказала — фраза словаря вместо кода, сделка не объявляется, попытку можно повторить', async () => {
+  const onMatch = vi.fn(async () => { throw new Error('BATCH_FULLY_MATCHED') })
   const onClose = vi.fn()
   const onOffer = vi.fn()
   const toast = vi.fn()
@@ -359,10 +361,27 @@ it('ARS-687 M-010: база отказала — строка отказа по�
   sendButton().click()
 
   await expect.poll(() => toast.mock.calls.length, T).toBe(1)
-  expect(String(toast.mock.calls[0]![0])).toContain(dbLine)
+  expect(toast.mock.calls[0]![0]).toBe('Не удалось отправить оффер: Все головы этой партии уже разобраны.')
+  expect(toast.mock.calls[0]![1], 'знакомый код — строки кода нет').toBeUndefined()
   expect(onClose).not.toHaveBeenCalled()
   expect(onOffer).not.toHaveBeenCalled()
   await expect.poll(() => sendButton().disabled, T).toBe(false)
+})
+
+// ── ARS-691 M-007 · незнакомый код отказа привязки ───────────────────────────────────
+it('ARS-691 M-007: незнакомый код — общая фраза, код уходит в тост вторым аргументом, хвоста нет', async () => {
+  const onMatch = vi.fn(async () => { throw new Error('UNKNOWN_DIMENSION: livestock_condition') })
+  const toast = vi.fn()
+  mountModal(baseProps({ onMatch, toast }))
+
+  await page.getByRole('combobox').selectOptions(REAL_POOL_A)
+  sendButton().click()
+
+  await expect.poll(() => toast.mock.calls.length, T).toBe(1)
+  expect(toast.mock.calls[0]).toEqual([
+    'Не удалось отправить оффер: Не удалось выполнить действие. Повторите или сообщите в поддержку.',
+    'UNKNOWN_DIMENSION',
+  ])
 })
 
 // ── M-011 · «Сделка состоялась» недостижима ───────────────────────────────────────────

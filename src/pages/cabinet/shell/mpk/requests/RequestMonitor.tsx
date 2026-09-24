@@ -12,6 +12,7 @@ import { PhIcon } from '../../components/icons/PhIcon'
 import { fmtMoney } from '../../tsp/data/tsp-utils'
 import { NBSP } from '../../tsp/data/tsp-dicts'
 import { DELIVERY_STATUS_LABEL, mpkCatName, type Pool, type SupplierRow } from '../types'
+import { rpcErrorText } from '../data/rpc-error-text'
 import { avgLinePrice, closureReason, fillPct, isAvgPrice, statusLabel } from './requests-model'
 
 export type MonitorView = 'overview' | 'suppliers'
@@ -53,7 +54,7 @@ export function RequestMonitor({
 }: Props) {
   const [busy, setBusy] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<{ text: string; code: string | null } | null>(null)
   // id строки, по которой идёт приёмка: блокируется одна кнопка, а не весь список.
   const [confirming, setConfirming] = useState<string | null>(null)
 
@@ -76,7 +77,7 @@ export function RequestMonitor({
         // подметанием или из телефона): называем причину И перечитываем заявку, чтобы
         // экран показал актуальное состояние, а не прежние кнопки над изменившейся
         // заявкой. Без перечитывания оператор жал бы по несуществующему ходу.
-        setError(e instanceof Error ? e.message : 'Не удалось применить решение')
+        setError(rpcErrorText(e))
         setFlash(null)
         onRefresh()
       })
@@ -266,7 +267,7 @@ export function RequestMonitor({
                       onConfirmDelivery(s)
                         .then(() => setFlash('Приёмка подтверждена'))
                         // M-011: отказ — строка остаётся в прежнем состоянии, и это сказано.
-                        .catch((e) => setError(e instanceof Error ? e.message : 'Не удалось подтвердить приёмку'))
+                        .catch((e) => setError(rpcErrorText(e)))
                         .finally(() => setConfirming(null))
                     }}
                   >
@@ -311,7 +312,12 @@ export function RequestMonitor({
       <div className="mpkc-body">
         <div className="mpkc-body-inner">
           {flash && <div className="mpkr-flash" role="status">{flash}</div>}
-          {error && <div className="mpkr-flash bad" role="alert">{error}</div>}
+          {error && (
+            <div className="mpkr-flash bad" role="alert">
+              {error.text}
+              {error.code && <div className="rpc-error-code">Код: {error.code}</div>}
+            </div>
+          )}
           {view === 'overview' ? overview() : supplierList()}
         </div>
       </div>

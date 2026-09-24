@@ -309,7 +309,8 @@ it('ARS-684 M-016: первая загрузка — видно «Загрузк
 })
 
 // ── M-017 · повторная приёмка не показывается оператору как ошибка ──────────────────
-it('ARS-684 M-017: onConfirmDelivery отверг INVALID_STATUS, перечит вернул «принята» — тост не показан', async () => {
+// ARS-691 M-006 (FR-007): подавление INVALID_STATUS для уже принятой строки сохранено.
+it('ARS-684 M-017 · ARS-691 M-006: onConfirmDelivery отверг INVALID_STATUS, перечит вернул «принята» — тост не показан', async () => {
   let call = 0
   const row = makeSupplier({ id: 's-dup', source: 'allocation', deliveryStatus: 'in_transit', farmName: 'КХ Дубль' })
   const onLoadMatches = vi.fn(async () => {
@@ -345,4 +346,78 @@ it('ARS-684 M-018: своя прошлая оценка либо прочерк 
   expect(rowsText.some((t) => t.includes('★ 3.0'))).toBe(true)
   expect(rowsText.some((t) => t.includes('★ —'))).toBe(true)
   expect(document.body.textContent).not.toContain('4.5')
+})
+
+// ── ARS-691 · точки вывода монитора пула (таблица P) ──────────────────────────────────
+// Спек `Docs/AGOS-TSP-MpkErrorText-ARS-691.md`. Каждая точка проверяется отдельно: словарь
+// сам по себе покрыт юнит-тестом, а здесь — что точка берёт текст из словаря, а не
+// `e.message`, и передаёт код незнакомого отказа вторым аргументом тоста (FR-001, FR-004).
+const PHRASE_INVALID = 'Статус уже изменился. Обновите экран и проверьте, что сейчас.'
+const PHRASE_FALLBACK = 'Не удалось выполнить действие. Повторите или сообщите в поддержку.'
+
+it('ARS-691 M-015 · отзыв (партия принята): повторная оценка — фраза словаря, хвоста нет', async () => {
+  const row = makeSupplier({ id: 's-rev', source: 'batch', batchId: 'batch-rev', deliveryStatus: 'delivered', farmName: 'КХ Отзыв' })
+  const onSubmitReview = vi.fn(async () => { throw new Error('REVIEW_ALREADY_SUBMITTED: review for this allocation exists') })
+  const toast = vi.fn()
+  mountModal(baseProps({ pool: makePool({ status: 'executing' }), onLoadMatches: vi.fn(async () => [row]), onSubmitReview, toast }))
+
+  await expect.poll(() => starButtons().length, T).toBe(5)
+  starButtons()[3]!.click()
+
+  await expect.poll(() => toast.mock.calls.length, T).toBe(1)
+  expect(toast.mock.calls[0]).toEqual(['Не удалось отправить отзыв: Отзыв по этой поставке уже отправлен.', undefined])
+})
+
+it('ARS-691 M-007 · отзыв (сделка завершена): незнакомый код — общая фраза и код вторым аргументом', async () => {
+  const row = makeSupplier({ id: 's-rev2', source: 'allocation', batchId: 'batch-rev2', deliveryStatus: 'delivered', farmName: 'КХ Итог' })
+  const onSubmitReview = vi.fn(async () => { throw new Error('UNKNOWN_DIMENSION: livestock_condition') })
+  const toast = vi.fn()
+  mountModal(baseProps({ pool: makePool({ status: 'executed' }), onLoadMatches: vi.fn(async () => [row]), onSubmitReview, toast }))
+
+  await expect.poll(() => starButtons().length, T).toBe(5)
+  starButtons()[3]!.click()
+
+  await expect.poll(() => toast.mock.calls.length, T).toBe(1)
+  expect(toast.mock.calls[0]).toEqual(['Не удалось отправить отзыв: ' + PHRASE_FALLBACK, 'UNKNOWN_DIMENSION'])
+})
+
+it('ARS-691 M-004 · приёмка (мобильный), отказ не подавлен: фраза прав, хвоста нет', async () => {
+  const row = makeSupplier({ id: 's-forb', source: 'allocation', deliveryStatus: 'in_transit', farmName: 'КХ Чужая' })
+  const onConfirmDelivery = vi.fn(async () => { throw new Error('FORBIDDEN: pool not owned by current user') })
+  const toast = vi.fn()
+  mountModal(baseProps({ pool: makePool({ status: 'executing' }), onLoadMatches: vi.fn(async () => [row]), onConfirmDelivery, toast }))
+
+  await expect.element(page.getByText('КХ Чужая'), T).toBeInTheDocument()
+  await page.getByText('Подтвердить приёмку').click()
+
+  await expect.poll(() => toast.mock.calls.length, T).toBe(1)
+  expect(toast.mock.calls[0]).toEqual(['Не удалось: У вашей учётной записи нет прав на это действие.', undefined])
+})
+
+it('ARS-691 FR-001 · «Закрыть заявку»: отказ базы — фраза словаря вместо кода', async () => {
+  const onClosePool = vi.fn(async (): Promise<string> => { throw new Error('POOL_NOT_FILLING: pool status is closed_filled') })
+  const toast = vi.fn()
+  mountModal(baseProps({ pool: makePool({ status: 'filling', filledHeads: 40 }), onLoadMatches: vi.fn(async () => []), onClosePool, toast }))
+
+  await page.getByText('Закрыть заявку').click()
+
+  await expect.poll(() => toast.mock.calls.length, T).toBe(1)
+  expect(toast.mock.calls[0]).toEqual(['Не удалось закрыть заявку: Заявка больше не набирает партии — привязать к ней нельзя.', undefined])
+})
+
+it('ARS-691 FR-001 · перевод статуса («Завершить»): отказ базы — фраза словаря, статус откатан', async () => {
+  const row = makeSupplier({ id: 's-done', source: 'allocation', deliveryStatus: 'delivered', farmName: 'КХ Готово' })
+  const onAdvance = vi.fn(async () => { throw new Error('INVALID_STATUS: pool must be executing') })
+  const onPatch = vi.fn()
+  const toast = vi.fn()
+  mountModal(baseProps({ pool: makePool({ status: 'executing' }), onLoadMatches: vi.fn(async () => [row]), onAdvance, onPatch, toast }))
+
+  await expect.element(page.getByText('Завершить'), T).toBeInTheDocument()
+  await page.getByText('Завершить').click()
+
+  await expect.poll(() => toast.mock.calls.some((c) => String(c[0]).startsWith('Не удалось обновить статус')), T).toBe(true)
+  expect(toast.mock.calls.find((c) => String(c[0]).startsWith('Не удалось обновить статус'))).toEqual(
+    ['Не удалось обновить статус: ' + PHRASE_INVALID, undefined],
+  )
+  expect(onPatch).toHaveBeenLastCalledWith({ status: 'executing' })
 })

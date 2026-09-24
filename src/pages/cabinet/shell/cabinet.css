@@ -400,6 +400,9 @@
   animation: agos-toast-in .2s ease;
 }
 @keyframes agos-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+/* ARS-691 FR-004: строка «Код: …» под фразой отказа — в тосте и в подсказке формы МПК.
+   12px, цвет контейнера без приглушения (R-21: мелкий серый текст — дефект). */
+.agos-cabinet-stage .rpc-error-code { font-size: 12px; margin-top: 4px; }
 
 /* ---------- Главная · стикер цены в хедере ---------- */
 .agos-cabinet-stage .sticker {

@@ -172,7 +172,9 @@ it('ARS-695 M-009/M-010: FORBIDDEN и INVALID_STATUS доходят до опе�
   await page.getByText('Вернуть партии').click()
 
   await expect.poll(() => toast.mock.calls.length, T).toBe(1)
-  expect(String(toast.mock.calls[0]![0])).toContain('INVALID_STATUS')
+  // ARS-691: INVALID_STATUS — ответ базы; на экране его фраза, сырого кода и хвоста нет.
+  expect(toast.mock.calls[0]![0]).toBe('Не удалось применить решение: Статус уже изменился. Обновите экран и проверьте, что сейчас.')
+  expect(String(toast.mock.calls[0]![0])).not.toContain('INVALID_STATUS')
   expect(onClose).not.toHaveBeenCalled()
 })
 

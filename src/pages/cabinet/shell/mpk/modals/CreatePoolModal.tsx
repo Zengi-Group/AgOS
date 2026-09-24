@@ -6,6 +6,7 @@ import { REGIONS, DISTRICTS } from '@/pages/registration/constants'
 import { BREEDS } from '@/pages/cabinet/shell/tsp/data/tsp-dicts'
 import { Cta } from '../../components/Cta'
 import { useGradeFormula } from '@/hooks/useGradeFormula'
+import { LocalError, rpcErrorText } from '../data/rpc-error-text'
 import { MPK_CATS, mpkCatName, mpkCatFloor, type MpkCatKey, type Pool, type PoolLine } from '../types'
 
 interface Props {
@@ -39,7 +40,7 @@ const CAT_KEYS = Object.keys(MPK_CATS) as MpkCatKey[]
 export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
   useGradeFormula()
   const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
+  const [err, setErr] = useState<{ text: string; code: string | null } | null>(null)
   const [totalHeads, setTotalHeads] = useState('')
   // Мультивыбор областей: пустой набор = «Все области».
   const [regionIds, setRegionIds] = useState<string[]>([])
@@ -113,9 +114,10 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
 
   // Записать заявку в БД: create_pool_request → activate. Реальный pool_id
   // проставляем в Pool.id, чтобы оффер на партию матчился к настоящему пулу.
-  // Ошибки НЕ глотаем — пробрасываем наверх, чтобы пользователь увидел причину
-  // (напр. «функция не найдена» = миграция 20260701150000 не применена), а
-  // фейковый пул не добавлялся в UI (полл потом всё равно бы его затёр).
+  // Ошибки НЕ глотаем — пробрасываем наверх, чтобы оператор увидел, что заявка не
+  // сохранилась, а фейковый пул не добавлялся в UI (полл потом всё равно бы его затёр).
+  // Причину оператор читает фразой словаря (ARS-691); сырой текст базы — например,
+  // «функция не найдена» = миграция 20260701150000 не применена — только в console.error.
   const persist = async (pool: Pool): Promise<Pool> => {
     if (!orgId) return pool
     const { data: reqId, error: e1 } = await supabase.rpc('rpc_self_create_pool_request', {
@@ -134,13 +136,13 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
       p_notes: null,
     })
     if (e1) throw new Error(e1.message)
-    if (!reqId) throw new Error('Заявка не создана (пустой ответ сервера)')
+    if (!reqId) throw new LocalError('Заявка не создана (пустой ответ сервера)')
     const { data: act, error: e2 } = await supabase.rpc('rpc_self_activate_pool_request', {
       p_request_id: reqId,
     })
     if (e2) throw new Error(e2.message)
     const poolId = (act as { pool_id?: string } | null)?.pool_id
-    if (!poolId) throw new Error('Пул не активирован (нет pool_id)')
+    if (!poolId) throw new LocalError('Пул не активирован (нет pool_id)')
     return { ...pool, id: poolId }
   }
 
@@ -153,7 +155,7 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
       onSubmit(pool)   // успех: закрывает модал и добавляет пул в MpkApp
     } catch (e) {
       // Оставляем модал открытым, показываем реальную причину — пул НЕ добавляем.
-      setErr(e instanceof Error ? e.message : 'Не удалось сохранить заявку')
+      setErr(rpcErrorText(e))
       setSaving(false)
     }
   }
@@ -286,7 +288,8 @@ export function CreatePoolModal({ orgId, onClose, onSubmit }: Props) {
 
         {err && (
           <div className="mpk-error-hint" style={{ marginBottom: 8 }}>
-            Не удалось сохранить заявку: {err}
+            Не удалось сохранить заявку: {err.text}
+            {err.code && <div className="rpc-error-code">Код: {err.code}</div>}
           </div>
         )}
 

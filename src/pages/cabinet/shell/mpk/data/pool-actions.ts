@@ -20,12 +20,14 @@
 
 import { supabase } from '@/lib/supabase'
 import type { SupplierRow } from '../types'
+import { LocalError } from './rpc-error-text'
 
 /** Ошибка RPC → Error с сообщением базы: оператору показывают причину, а не
  *  «что-то пошло не так» (FR-024, урок IDENTITY-14 — сырой текст SDK идёт в причину,
- *  а решение, что именно показать, принимает экран). */
+ *  а решение, что именно показать, принимает экран). Текста базы нет — своя запасная
+ *  фраза, помеченная `LocalError`: экран покажет её как есть, мимо словаря (ARS-691 FR-013). */
 function fail(message: string | undefined, fallback: string): never {
-  throw new Error(message && message.trim() ? message : fallback)
+  throw message && message.trim() ? new Error(message) : new LocalError(fallback)
 }
 
 /** Точка выбора · принять набранное (ARS-695 M-001). */
@@ -79,13 +81,13 @@ export async function createPoolRequest(input: CreateRequestInput): Promise<stri
     p_notes: null,
   })
   if (e1) fail(e1.message, 'Не удалось создать заявку')
-  if (!reqId) throw new Error('Заявка не создана (пустой ответ сервера)')
+  if (!reqId) throw new LocalError('Заявка не создана (пустой ответ сервера)')
 
   const { data: act, error: e2 } = await supabase.rpc('rpc_self_activate_pool_request', {
     p_request_id: reqId,
   })
   if (e2) fail(e2.message, 'Заявка создана, но не опубликована')
   const poolId = (act as { pool_id?: string } | null)?.pool_id
-  if (!poolId) throw new Error('Заявка создана, но не опубликована (нет pool_id)')
+  if (!poolId) throw new LocalError('Заявка создана, но не опубликована (нет pool_id)')
   return poolId
 }

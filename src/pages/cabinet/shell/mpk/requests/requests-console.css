@@ -226,6 +226,8 @@
   font-size: var(--fs-sm);
 }
 .agos-mpk-console .mpkr-flash.bad { background: var(--red-m); color: var(--red); }
+/* ARS-691 FR-004: строка «Код: …» под фразой отказа — 12px, цвет плашки без приглушения. */
+.agos-mpk-console .rpc-error-code { font-size: 12px; margin-top: 4px; }
 
 /* Кнопка-действие: тот же контрол, что в заглушках консоли, плюс главный вариант. */
 .agos-mpk-console .mpkc-stub-act.primary {

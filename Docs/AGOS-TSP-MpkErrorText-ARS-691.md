@@ -1,7 +1,8 @@
 ---
 status: agreed           # draft → agreed на G2 (2026-09-24: Open Questions пусто, два круга ревью качества закрыты); код (/build) начинается не ниже agreed
 g2_approved: 2026-09-24 · Dias Zhagaparov
-baseline_commit:         # пусто до /build
+baseline_commit: f464445fec0f71d24ff50256568ecd483ed6c545   # /build 2026-09-24, до первой правки кода
+build_loopbacks: 1        # SC-001 (bad_spec, код не менялся)
 brain_spec: "[[projects/agos/specs/tsp-farmer-sell-flow]]"
 task_home: "Linear ARS-691 (проект «Рынок TSP», эпик ARS-94)"
 ---
@@ -123,8 +124,9 @@ BATCH_FULLY_MATCHED», «ALLOC_FAILED: строка не смогла приня
   это другая функция; профиль не трогаем, FR-011). Запись в консоль по FR-006.
   Там же `class LocalError extends Error` — пометка собственного текста фронта (FR-013):
   `rpcErrorText` отдаёт `message` такого объекта как есть, без строки кода. `LocalError` бросают
-  ровно четыре места: запасная ветка `fail()` (`pool-actions.ts`, только когда текста базы нет),
-  `pool-actions.ts` «пустой ответ сервера» и «нет pool_id», `CreatePoolModal` «нет pool_id».
+  ровно пять мест: запасная ветка `fail()` (`pool-actions.ts`, только когда текста базы нет),
+  `pool-actions.ts` «пустой ответ сервера» и «нет pool_id», `CreatePoolModal` «пустой ответ
+  сервера» и «нет pool_id» (SC-001).
 - **Events:** нет.
 - **UI contract:** в `MpkApp` локальный тип тоста `{ id; text }` получает `code?: string`, а
   `showToast(text, code?)` — необязательный второй аргумент. Проп модалок
@@ -151,7 +153,8 @@ BATCH_FULLY_MATCHED», «ALLOC_FAILED: строка не смогла приня
 `INVALID_STATUS` ответом базы, а не текстом экрана, поэтому канон соседей не меняется.
 Не наблюдаемы в интерфейсе, проверяются диффом: FR-009 (ни одного `.sql`), FR-011 (ни одного файла
 в `mpk/profile/` и фермерской зоне), FR-012 (префикс формы не тронут). `tsc -b`, сборка, `cross_check.sh` (SQL не меняется, CHECK 11 без дельты). Живой
-заход оператором МПК на партии без остатка (сценарий M-001). Converge по FR-008 против ARS-687.
+заход оператором МПК: предложение на партию в заявку без строки под её сорт (сценарий M-003,
+SC-003). Converge по FR-008 против ARS-687.
 
 ## Open Questions
 
@@ -201,8 +204,30 @@ BATCH_FULLY_MATCHED», «ALLOC_FAILED: строка не смогла приня
   интерфейса код недостижим и идёт по FR-004 · опровергло бы: поле ввода голов у оператора.
 
 ## Implementation Notes  (append-only)
+- [2026-09-24, /build] Код CSS строки кода — `.rpc-error-code` в двух зонах (`cabinet.css` для тоста и
+  подсказки формы, `requests-console.css` для плашки десктопа): 12px, цвет наследуется. Сеть
+  распознаётся после проверки кода, по трём текстам fetch (Chrome / Firefox / Safari) — FR-005.
+- [2026-09-24, /build] Имена двух тестов соседей получили метку ARS-691 (`ARS-687 M-002 · ARS-691
+  M-018`, `ARS-684 M-017 · ARS-691 M-006`) — аудит сверяет по id; логика тестов не менялась.
 
 ## Spec Change Log  (append-only)
+- **SC-001** [2026-09-24, якорь 6] Design contract: «`LocalError` бросают ровно четыре места» →
+  пять. `CreatePoolModal` бросает и «Заявка не создана (пустой ответ сервера)» — свой текст фронта;
+  без пометки он ушёл бы в `FALLBACK` вопреки замороженному `FR-013`. Код выведен из `FR-013`, поэтому
+  повторный вывод даёт тот же код (отката нет, KEEP = весь дифф) · `propagated:` Design contract (эта
+  же правка), Review Triage Log ниже.
+- **SC-002** [2026-09-24, якорь 7] Verification расширена: кроме юнит-теста словаря — тест на каждую
+  точку вывода таблицы P (что точка берёт текст из словаря и передаёт код), плюс уровень `MpkApp`
+  (`mpk-error-text-app`). Причина — находка ревью дыр проверки: откат любой точки к `e.message`
+  проходил зелёным · `propagated:` Matrix Test Audit ниже.
+- **SC-003** [2026-09-24, перед G3, решение владельца] Живой заход: «партия без остатка» (M-001) →
+  «заявка без строки под сорт партии» (M-003). Партия продаётся только целиком (решение 26.07,
+  подтверждено владельцем 24.09): проданная партия получает статус `matched`, и база раньше ответит
+  `BATCH_NOT_AVAILABLE`. `BATCH_FULLY_MATCHED` достижим лишь на партиях, разрезанных дефектом
+  ARS-754, воспроизводить его живьём не нужно. M-003 проверяет тот же механизм (фраза вместо кода,
+  хвост с латинским сортом скрыт) на обычном случае. M-001 и его фраза в замороженном блоке не
+  меняются: код в словаре остаётся на случай данных ARS-754 · `propagated:` Verification (эта
+  правка), Matrix Test Audit ниже, чек-лист PR #220.
 
 ## Review Triage Log  (append-only)
 Ревью качества спека (слепое, свежий контекст, 2026-09-24): 12 дыр по 4 осям (4 Gap · 6 Conflict · 2 Vague). Все закрыты правкой черновика ДО заморозки.
@@ -230,3 +255,35 @@ BATCH_FULLY_MATCHED», «ALLOC_FAILED: строка не смогла приня
 - Conflict · 11px и `.7` против канона R-21 — medium · → 12px, цвет без приглушения.
 - Gap · FR-009…012 без M-строк — low · → M-018 для FR-010; FR-009/011/012 — проверка диффом (Verification).
 - Gap · тестов отрисовки тоста нет, M-016 неизмерим — medium · → новый браузерный тест.
+
+Ревью кода, якорь 7 (/build, 2026-09-24; слепая пара + converge, свежий контекст): 13 находок, 0 `contradicts`. Converge — 32/32 id реализованы, `unrequested` нет.
+- Дыры проверки · точки таблицы P проверялись только юнит-тестом словаря: откат любой к `e.message` (PoolMonitorModal ×5, MpkApp ×2, BatchDetailModal с кодом, RequestMonitor с кодом, CreateRequestModal точным текстом, места `LocalError`) — medium · корень один: план Verification · **patch** — тесты добавлены, падают на baseline (16) и на подмене `LocalError`→`Error` (3); SC-002. Не bad_spec: код верен, дефект только в проверке.
+- «Ровно четыре места `LocalError`» при пяти в коде (edge-hunter + converge + verification-gap) — low · **bad_spec** → SC-001, код не меняется (выведен из FR-013).
+- Строка M-010 в Matrix Test Audit ARS-687 со старым именем теста (SC-002 ARS-687 обещал) (все трое) — low · **patch** → строка дописана под аудитом ARS-687.
+- Устаревший комментарий `CreatePoolModal` «пользователь увидит причину» — low · **patch** → комментарий переписан.
+- «JWT expired» → FALLBACK — maybe-false · **defer** → `MPK-ERROR-JWT-EXPIRED-01`.
+- Тост с кодом гаснет через 2,8 с — maybe-false (допущение названо) · **defer** → `MPK-ERROR-TOAST-DURATION-01`.
+- Десктоп: зелёная плашка не сбрасывается при отказе приёмки — low, преэкзистентно · **defer** → `MPK-REQUESTS-FLASH-STALE-OK-01`.
+- Мобильная форма: «Не удалось сохранить» при отказе запуска — low, преэкзистентно · **defer** → `MPK-CREATE-POOL-ACTIVATE-PREFIX-01`.
+- В консоль уходит только `message`, без `details`/`code` — low, преэкзистентные обёртки · **defer** → `MPK-ERROR-CONSOLE-DETAILS-LOST-01`.
+
+## Matrix Test Audit  (append-only)
+Прогон `npx vitest run --project routers --reporter=verbose` (2026-09-24): **19 файлов, 230 passed, 0 failed**. Каждый тест называет свой id.
+
+| id | тест (файл) |
+|----|-------------|
+| M-001 | `ARS-691 M-001` (`mpk-rpc-error-text`) · `ARS-687 M-010 · ARS-691 M-001` (`mpk-market-board-offer`) |
+| M-002, M-003, M-008, M-009, M-012 | `ARS-691 M-00x` (`mpk-rpc-error-text`) |
+| M-004 | `ARS-691 M-004` (`mpk-rpc-error-text`) · `ARS-691 M-004 · приёмка` (`mpk-pool-monitor`) |
+| M-005 | `ARS-691 M-005` (`mpk-rpc-error-text`) · `M-006 · ARS-691 M-005` (`mpk-requests-desktop`) |
+| M-006 | `ARS-684 M-017 · ARS-691 M-006` (`mpk-pool-monitor`) |
+| M-007 | `mpk-rpc-error-text` · `mpk-market-board-offer` · `mpk-pool-monitor` (отзыв) · `mpk-error-text-ui` (тост) · `mpk-error-text-app` («Принять») · `mpk-requests-desktop` (решение, заведение) |
+| M-010 | `ARS-691 M-010` (`mpk-rpc-error-text`) · `ARS-691 M-010 · FR-013 (десктоп)` (`mpk-requests-desktop`) |
+| M-011 | `ARS-691 M-011` (`mpk-rpc-error-text`, `mpk-requests-desktop`) |
+| M-013 | `ARS-691 M-013` (`mpk-requests-desktop`) |
+| M-014 | `ARS-691 M-014` (`mpk-rpc-error-text`, `mpk-requests-desktop`, `mpk-error-text-ui`) |
+| M-015 | `ARS-691 M-015` (`mpk-rpc-error-text`, `mpk-pool-monitor`) |
+| M-016, M-017 | `ARS-691 M-016`, `ARS-691 M-017` (`mpk-error-text-ui`) |
+| M-018 | `ARS-687 M-002 · ARS-691 M-018` (`mpk-market-board-offer`) |
+
+Живой заход оператором МПК (M-003: партия в заявку без строки под её сорт, SC-003) — **не проведён**, делает человек до мержа.
