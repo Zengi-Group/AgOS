@@ -1,5 +1,5 @@
 ---
-status: agreed           # draft → agreed на G2 (2026-09-24: Open Questions пусто, два круга ревью качества закрыты); код (/build) начинается не ниже agreed
+status: shipped          # G3: PR #220 → main bc4ab5b (2026-09-24). Только фронт — выложен Vercel при мерже; сверено по отданному бандлу: словарь в чанке pools-load-Bx6UdcHP.js, фраза M-001 на месте. SQL не менялся — prod_diff не требуется. История: agreed на G2 24.09 (Open Questions пусто, два круга ревью качества)
 g2_approved: 2026-09-24 · Dias Zhagaparov
 baseline_commit: f464445fec0f71d24ff50256568ecd483ed6c545   # /build 2026-09-24, до первой правки кода
 build_loopbacks: 1        # SC-001 (bad_spec, код не менялся)
