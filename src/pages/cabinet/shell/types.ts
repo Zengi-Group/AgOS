@@ -114,6 +114,7 @@ export interface AiMsg {
 export interface ToastState {
   id: number
   text: string
+  code?: string   // ARS-691 FR-004: незнакомый код отказа — второй строкой «Код: …»
 }
 
 export interface ShellState {

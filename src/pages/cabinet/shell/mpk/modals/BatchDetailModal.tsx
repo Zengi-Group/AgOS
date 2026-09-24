@@ -5,6 +5,7 @@ import { Cta } from '../../components/Cta'
 import { fmtMoney } from '../../tsp/data/tsp-utils'
 import { NBSP } from '../../tsp/data/tsp-dicts'
 import type { MarketBatch } from '../data/pools'
+import { rpcErrorText } from '../data/rpc-error-text'
 import type { PendingDeal, Pool, PoolsRead } from '../types'
 
 interface Props {
@@ -13,7 +14,7 @@ interface Props {
   // ARS-687 (FR-009): исход чтения заявок — «грузится» и «не загрузился» отличимы от «пусто».
   poolsState: PoolsRead
   onClose: () => void
-  toast: (text: string) => void
+  toast: (text: string, code?: string) => void
   // ARS-687 (FR-006/M-011): для реальной партии это единственный путь отправки, поэтому проп
   // обязателен — незаданный вернул бы выдуманную сделку через onOffer.
   onMatch: (poolId: string, batchId: string, heads: number, price: number) => Promise<void>  // реальный оффер (price = бид МПК ≥ ask)
@@ -105,7 +106,8 @@ export function BatchDetailModal({
         toast('Оффер отправлен — партия привязана к закупке')
         onClose()
       } catch (e: unknown) {
-        toast('Не удалось отправить оффер: ' + (e instanceof Error ? e.message : ''))
+        const r = rpcErrorText(e)
+        toast('Не удалось отправить оффер: ' + r.text, r.code ?? undefined)
         sendingRef.current = false; setSending(false)
       }
       return

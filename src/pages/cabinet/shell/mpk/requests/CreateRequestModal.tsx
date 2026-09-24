@@ -11,6 +11,7 @@ import { BREEDS } from '@/pages/cabinet/shell/tsp/data/tsp-dicts'
 import { useGradeFormula } from '@/hooks/useGradeFormula'
 import { PhIcon } from '../../components/icons/PhIcon'
 import { createPoolRequest } from '../data/pool-actions'
+import { rpcErrorText } from '../data/rpc-error-text'
 import { MPK_CATS, mpkCatFloor, mpkCatName, type MpkCatKey } from '../types'
 
 interface Props {
@@ -48,7 +49,7 @@ export function CreateRequestModal({ organizationId, onClose, onCreated }: Props
   const [districtIds, setDistrictIds] = useState<string[]>([])
   const [lines, setLines] = useState<FormLine[]>([{ catKey: 'vysshaya', price: 0, breed: '' }])
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<{ text: string; code: string | null } | null>(null)
 
   const headsNum = parseInt(heads, 10)
   const headsValid = !Number.isNaN(headsNum) && headsNum > 0
@@ -91,7 +92,7 @@ export function CreateRequestModal({ organizationId, onClose, onCreated }: Props
       .catch((e) => {
         // M-020: причина названа, модалка остаётся открытой, в список ничего не добавляем —
         // список перечитывается из базы, а не дорисовывается на клиенте.
-        setError(e instanceof Error ? e.message : 'Не удалось создать заявку')
+        setError(rpcErrorText(e))
         setSaving(false)
       })
   }
@@ -270,7 +271,12 @@ export function CreateRequestModal({ organizationId, onClose, onCreated }: Props
               ].filter(Boolean).join(' · ')}
             </div>
           )}
-          {error && <div className="mpkr-flash bad" role="alert">Заявка не заведена: {error}</div>}
+          {error && (
+            <div className="mpkr-flash bad" role="alert">
+              Заявка не заведена: {error.text}
+              {error.code && <div className="rpc-error-code">Код: {error.code}</div>}
+            </div>
+          )}
         </div>
 
         <div className="mpkr-modal-foot">
