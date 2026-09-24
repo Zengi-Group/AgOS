@@ -2970,3 +2970,15 @@ guard, Save-гейт описания, `displayValue` БИН, `EditableRow` read
 **Files**: `supabase/migrations/20260922140000_ars_755_farmer_owns_price.sql`, `src/pages/cabinet/shell/screens/BatchScreen.tsx`, `src/pages/cabinet/shell/components/sheets/BatchPriceSheet.tsx`, `src/pages/cabinet/shell/hooks/useBatches.ts`, `src/pages/cabinet/shell/types.ts`, `cross_check.sh`, `contracts/rpc_return_keys.txt`, `Docs/AGOS-TSP-Flow-Microsteps/AGOS-Microstep4-BatchPoolOffer-v1_0.md`, `qa/scenarios/05-tsp-farmer.md`, `qa/scenarios/08-backend-e2e.md`, `IMPL_DEBT.md`, `Docs/AGOS-TSP-FarmerOwnsPrice-ARS-755.md`.
 
 ---
+
+### 2026-09-24: ARS-691 — отказы базы в зоне МПК показываются фразой из словаря на фронте (G2 подписан, кода нет)
+
+**What**: слайс-спек `Docs/AGOS-TSP-MpkErrorText-ARS-691.md` (FR-001..014 · M-001..018), `g2_approved: 2026-09-24 · Dias Zhagaparov`. Оператор МПК вместо сырой строки исключения («Не удалось отправить оффер: BATCH_FULLY_MATCHED») видит прежний префикс действия + фразу из таблицы D (21 код); незнакомый код → общая фраза и строка «Код: …» 12px; технический хвост после двоеточия (латинский сорт, «кусок») не показывается никогда; полный текст — в `console.error`. Четыре решения владельца: **G1** — `ARS-687 M-010` («строка отказа дословно») заменяется новым слайсом, а не переподписью (SC-002 в ARS-687); **дом словаря** — код фронта, один модуль зоны МПК; **незнакомый код** — фраза + код мелко; **фермерская зона** — не входит.
+
+**Why**: живая проверка ARS-687 на проде 11.09 — оператор не понял ни что случилось, ни что делать. Отвергнуто: таблица фраз в БД (P8) — экрана правки нет, правка всё равно шла бы через разработчика, и появилась бы вторая модель рядом с профилем МПК, где уже принято правило ARS-362 «тексты ошибок на клиенте, база шлёт код»; маршрут по `errcode` — один код несёт разные `errcode` в разных функциях (`BATCH_NOT_FOUND` = P0002/P0004/P0005), маршрут по тексту кода; код только в консоли — по скриншоту оператора причину не понять. Два слепых круга ревью качества спека (12 и 10 дыр, все закрыты до заморозки) вскрыли, что три фразы черновика лгали о коде: `ALLOC_FAILED` не про цену (её отсекает `BID_BELOW_ASK` раньше), `NO_MATCHING_POOL_LINE` не только про цену, `BELOW_MIN_HEADS`/`NO_REMAINING_HEADS` из интерфейса недостижимы.
+
+**Consequences**: **Легко** — новый код = одна строка словаря; SQL и контракты RPC не трогаются (`FR-009`, CHECK 11 без дельты). **Трудно** — словарь следует за текстами исключений руками: новый `raise` в RPC закупочного флоу без строки в таблице D уйдёт в общую фразу (видно по «Код: …»). Переписываются три выпущенных теста, ждущих сырой код (ARS-687 `M-010`, ARS-695 `M-010`, ARS-718 `M-006`) — канон соседей не меняется: их строки называют ответ базы, не текст экрана. Отрезано в ledger: `FARMER-RAW-RPC-ERRORS-01`, `MPK-CREATE-REQUEST-ACTIVATE-PREFIX-01`.
+
+**Files**: `Docs/AGOS-TSP-MpkErrorText-ARS-691.md`, `Docs/AGOS-TSP-MarketBoard-RequirePool-ARS-687.md` (SC-002), `IMPL_DEBT.md`, `DECISIONS_LOG.md`.
+
+---
