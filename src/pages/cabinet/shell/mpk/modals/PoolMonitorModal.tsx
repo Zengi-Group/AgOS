@@ -11,6 +11,7 @@ import { useGradeFormula } from '@/hooks/useGradeFormula'
 import { useRevealedBatch } from '../data/revealed-batch'
 import { rpcErrorText } from '../data/rpc-error-text'
 import { DELIVERY_STATUS_LABEL, mpkCatName, type Pool, type SupplierRow } from '../types'
+import { avgLinePrice, purchaseAvgPrice, purchaseAvgText, supplierPriceText } from '../requests/requests-model'
 
 interface Props {
   pool: Pool
@@ -104,11 +105,8 @@ function buildMpkDealDoc(pool: Pool, suppliers: SupplierRow[], mpk?: Props['mpk'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 // Статусы, которые принимает rpc_self_advance_pool_status ('expired' — демо-only).
 const REAL_STATUSES: Pool['status'][] = ['filled', 'executing', 'executed', 'closed']
-
-function avgLinePrice(pool: Pool): number {
-  if (pool.lines.length === 0) return 0
-  return Math.round(pool.lines.reduce((s, l) => s + l.price, 0) / pool.lines.length)
-}
+// ARS-831 FR-005: формула цены заявки (`avgLinePrice`) живёт в `requests/requests-model.ts`
+// вместе с закупочной — локальной копии здесь больше нет.
 
 function StarPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   return (
@@ -282,6 +280,15 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
   const matchesEmptyNote = realPool && liveSuppliers !== null && liveSuppliers.length === 0
     ? <div className="pool-card-sub">Поставщиков пока нет</div>
     : null
+  // ARS-831 FR-004 · состояние закупочной = состояние списка на экране: первое чтение идёт →
+  // «считается…»; первое отказало (строк ещё нет) → «не удалось посчитать»; опрос отказал
+  // ПОСЛЕ прочитанного списка → число по прежним строкам (их держит `applyMatches`).
+  const purchaseText = purchaseAvgText(
+    matchesLoadingNote ? 'loading'
+      : matchesError && liveSuppliers === null ? 'failed'
+      : purchaseAvgPrice(suppliers),
+  )
+  const purchaseNote = <div className="pool-card-sub">Средняя закупочная {purchaseText}</div>
 
   const downloadDoc = () => {
     const ok = printDealDoc(buildMpkDealDoc(pool, suppliers, mpk))
@@ -332,6 +339,7 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
           <div>
             <div className="mpk-field-label">Поставщики ({suppliers.length})</div>
             {matchesErrorNote}
+            {purchaseNote}
             {matchesLoadingNote ?? matchesEmptyNote ?? (suppliers.length === 0 ? null : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {suppliers.map((s) => (
@@ -507,6 +515,7 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
           </div></div>
           <Cta variant="ghost" onClick={downloadDoc}>Скачать документ сделки</Cta>
           {matchesErrorNote}
+          {purchaseNote}
           {matchesLoadingNote}
           {/* M-005: набранный пул с пустым списком — ровно тот симптом, с которого начался
               слайс, поэтому подпись обязана быть и здесь, а не только в ветке filling
@@ -527,7 +536,7 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
                 </div>
                 {supplierCatLabel(s) && <div className="supplier-row-s">{supplierCatLabel(s)}</div>}
                 <div className="supplier-row-s">
-                  {s.heads} гол{s.avgWeight ? ` · ~${s.avgWeight}${NBSP}кг` : ''} · {fmtMoney(s.price)}{NBSP}₸/кг
+                  {s.heads} гол{s.avgWeight ? ` · ~${s.avgWeight}${NBSP}кг` : ''} · {supplierPriceText(s)}
                   {supplierSum(s) > 0 ? ` · ≈ ${fmtMoney(supplierSum(s))}${NBSP}₸` : ''}
                 </div>
                 {/* FR-003/M-001: телефон хозяйства В СТРОКЕ, а не только в печатном документе.
@@ -678,7 +687,9 @@ export function PoolMonitorModal({ pool, onClose, onPatch, toast, onContactTuran
           <>
             <div className="mpk-banner ok"><div className="mpk-banner-t">✓ Сделка завершена</div></div>
             <div className="pool-card-sub">
-              {pool.filledHeads} гол · ср. цена {fmtMoney(avgPrice)}{NBSP}₸/кг
+              {/* ARS-831 FR-007: у завершённой сделки читают, почём купили, — закупочная
+                  вместо прежней «ср. цена» (среднее цен категорий заявки). */}
+              {pool.filledHeads} гол · средняя закупочная {purchaseText}
               {dealSum > 0 ? ` · сумма ≈ ${fmtMoney(dealSum)}${NBSP}₸` : ''}
             </div>
             {/* M-013 / M-016: сообщение о сбое чтения и признак загрузки нужны и здесь —

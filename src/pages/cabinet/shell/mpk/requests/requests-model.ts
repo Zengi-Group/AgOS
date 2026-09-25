@@ -11,7 +11,9 @@
 // схлопнутому значению вкладку «Не состоялись» от «Завершённые» отличить ещё можно,
 // а причину закрытия (FR-010) — уже нет.
 
-import { mpkCatName, type Pool } from '../types'
+import { mpkCatName, type Pool, type SupplierRow } from '../types'
+import { fmtMoney } from '../../tsp/data/tsp-utils'
+import { NBSP } from '../../tsp/data/tsp-dicts'
 
 export type RequestsTab = 'all' | 'filling' | 'decision' | 'shipping' | 'done' | 'failed'
 /** Вкладка, в которую попадает заявка. «Все» — не исход раскладки, а объединение. */
@@ -128,14 +130,57 @@ export function closureReason(pool: Pool): { title: string; note: string } | nul
   }
 }
 
-/** FR-005 · цена строки списка. У многострочной заявки — средняя по строкам, тем же
- *  правилом, что монитор мобильного шелла (`avgLinePrice`,
- *  `modals/PoolMonitorModal.tsx`): одно число не должно считаться двумя способами (P4).
- *  Второй дом формулы здесь — вынужденный: извлечь её в общий модуль нельзя, мобильные
- *  модалки слайс не правит (FR-014). Долг записан в `IMPL_DEBT`. */
+/** «Цена заявки» — средняя цен строк заявки (сколько комбинат ГОТОВ платить). ARS-831
+ *  FR-005: единственный дом формулы — мобильный монитор берёт её отсюда же (цена заявки
+ *  в демо-ветках), локальная копия в `modals/PoolMonitorModal.tsx` удалена. */
 export function avgLinePrice(pool: Pool): number {
   if (pool.lines.length === 0) return 0
   return Math.round(pool.lines.reduce((s, l) => s + l.price, 0) / pool.lines.length)
+}
+
+/** ARS-831 FR-003 · есть ли у строки поставщика цена. В базе цена всегда `> 0` (CHECK,
+ *  `d02_tsp.sql:1178-1179`), поэтому пустая приходит как `null` под типом `number`:
+ *  «не больше нуля» и «не число» — одно и то же «нет цены». Одно правило на расчёт и на
+ *  «—» в строке поставщика обеих поверхностей. */
+export function hasPrice(s: SupplierRow): boolean {
+  return typeof s.price === 'number' && s.price > 0
+}
+
+/** Цена строки поставщика для экрана: «—», а не «0 ₸/кг», когда цены нет (FR-003). */
+export function supplierPriceText(s: SupplierRow): string {
+  return hasPrice(s) ? `${fmtMoney(s.price)}${NBSP}₸/кг` : '—'
+}
+
+export type PurchaseAvg =
+  | { kind: 'value'; value: number; basis: 'kg' | 'heads' }
+  | { kind: 'empty' }
+  | { kind: 'no_price' }
+
+/** ARS-831 FR-002/FR-003 · «Средняя закупочная» — почём комбинат купил: деньги ÷ килограммы
+ *  по строкам поставщиков, которые показывает список. Нет веса хотя бы у одной строки —
+ *  ВСЁ число по головам (двух правил внутри одного числа нет); нет цены хотя бы у одной —
+ *  числа нет. Состояния «читается» / «отказ» — у вызывающего (FR-004): сюда приходят уже
+ *  прочитанные строки. */
+export function purchaseAvgPrice(rows: SupplierRow[]): PurchaseAvg {
+  if (rows.length === 0) return { kind: 'empty' }
+  if (!rows.every(hasPrice)) return { kind: 'no_price' }
+  const byKg = rows.every((r) => (r.avgWeight ?? 0) > 0)
+  const weight = (r: SupplierRow) => (byKg ? r.heads * (r.avgWeight as number) : r.heads)
+  const money = rows.reduce((s, r) => s + r.price * weight(r), 0)
+  const amount = rows.reduce((s, r) => s + weight(r), 0)
+  return { kind: 'value', value: Math.round(money / amount), basis: byKg ? 'kg' : 'heads' }
+}
+
+/** Текст «Средней закупочной» — один на обе поверхности (M-008: то же число и тот же
+ *  признак расчёта). Нигде не 0 вместо состояния (FR-004). */
+export function purchaseAvgText(p: PurchaseAvg | 'loading' | 'failed'): string {
+  if (p === 'loading') return 'считается…'
+  if (p === 'failed') return 'не удалось посчитать'
+  switch (p.kind) {
+    case 'empty': return 'пока нет сделок'
+    case 'no_price': return 'нельзя посчитать: у поставщика нет цены'
+    case 'value': return `${fmtMoney(p.value)}${NBSP}₸/кг${p.basis === 'heads' ? ' · по головам' : ''}`
+  }
 }
 
 /** Показывать ли подпись «средняя» рядом с ценой (FR-005). */

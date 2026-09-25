@@ -161,7 +161,7 @@ export function RequestsList({ status, pools, counts, tab, onTab, onOpen, onCrea
                 <div className="mpkr-cell mpkr-cell-title">Заявка</div>
                 <div className="mpkr-cell">Состояние</div>
                 <div className="mpkr-cell">Набор</div>
-                <div className="mpkr-cell">Цена</div>
+                <div className="mpkr-cell">Цена заявки</div>
                 <div className="mpkr-cell">Срок</div>
               </div>
               <div className="mpkr-rows">

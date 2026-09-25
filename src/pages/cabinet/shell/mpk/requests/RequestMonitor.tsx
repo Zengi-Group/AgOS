@@ -13,7 +13,10 @@ import { fmtMoney } from '../../tsp/data/tsp-utils'
 import { NBSP } from '../../tsp/data/tsp-dicts'
 import { DELIVERY_STATUS_LABEL, mpkCatName, type Pool, type SupplierRow } from '../types'
 import { rpcErrorText } from '../data/rpc-error-text'
-import { avgLinePrice, closureReason, fillPct, isAvgPrice, statusLabel } from './requests-model'
+import {
+  avgLinePrice, bucketOf, closureReason, fillPct, isAvgPrice, purchaseAvgPrice, purchaseAvgText,
+  statusLabel, supplierPriceText,
+} from './requests-model'
 
 export type MonitorView = 'overview' | 'suppliers'
 
@@ -155,9 +158,24 @@ export function RequestMonitor({
             </div>
           </div>
         </Field>
-        <Field label="Цена">
+        <Field label="Цена заявки">
           {fmtMoney(avgLinePrice(pool))}{NBSP}₸/кг{isAvgPrice(pool) ? ' · средняя по строкам' : ''}
         </Field>
+        {/* ARS-831 FR-006 · у несостоявшейся заявки купленного нет — поля нет. FR-004 ·
+            состояние числа = состояние списка поставщиков (`matchesStatus`); «Повторить» —
+            то же перечитывание, что во вкладке «Поставщики». */}
+        {bucketOf(pool) !== 'failed' && (
+          <Field label="Средняя закупочная">
+            {purchaseAvgText(
+              matchesStatus === 'ready' ? purchaseAvgPrice(suppliers ?? []) : matchesStatus,
+            )}
+            {matchesStatus === 'failed' && (
+              <div>
+                <button type="button" className="mpkc-stub-act" onClick={onRetryMatches}>Повторить</button>
+              </div>
+            )}
+          </Field>
+        )}
         <Field label="Срок поставки">{pool.targetMonth}</Field>
         <Field label="География">{pool.region}</Field>
         {/* Порога нет в ответе — плитки нет: молчание честнее правдоподобной константы. */}
@@ -242,7 +260,7 @@ export function RequestMonitor({
                   {[s.breed, s.avgWeight ? `~${s.avgWeight} кг` : null].filter(Boolean).join(' · ')}
                 </span>
               </div>
-              <div className="mpkr-cell">{fmtMoney(s.price)}{NBSP}₸/кг</div>
+              <div className="mpkr-cell">{supplierPriceText(s)}</div>
               <div className="mpkr-cell">
                 <span className={`mpkc-badge ${s.deliveryStatus === 'delivered' ? 'green' : 'neutral'}`}>
                   {DELIVERY_STATUS_LABEL[s.deliveryStatus]}
