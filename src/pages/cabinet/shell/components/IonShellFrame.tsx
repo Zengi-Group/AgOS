@@ -10,8 +10,9 @@ interface Props {
   label?: string
   children: ReactNode
   // P-4 (ARS-220): таб-бар переехал в единый постоянный IonTabs (CabinetApp), фрейм его
-  // больше НЕ рендерит. `noTabs` сохранён для совместимости вызовов (в т.ч. МПК) — сейчас
-  // no-op; скрытие бара на детальных экранах решается на уровне IonTabs (hideTabBar).
+  // больше НЕ рендерит; скрытие бара на детальных экранах решается на уровне IonTabs (hideTabBar).
+  // `noTabs` = «экран без меню»: без него рамка резервирует высоту бара под контентом и поднимает
+  // док-футер над баром (.has-tabbar, ARS-822).
   noTabs?: boolean
   // Pull-to-refresh (spec §7): экраны с поллингом передают свой рефетч.
   onRefresh?: () => Promise<unknown>
@@ -43,7 +44,9 @@ export function IonShellFrame({ label, children, noTabs, onRefresh, footer, foot
         )}
         <div className="phone-scroll">{children}</div>
       </IonContent>
-      {footer && <div className={'sh-foot' + (footBare ? ' bare' : '')}>{footer}</div>}
+      {/* ARS-822 FR-001/002: док баровой страницы поднимается над таб-баром — тот же статичный
+          признак (нет noTabs), что у резерва контента выше. Правило — ionic.css .sh-foot.has-tabbar. */}
+      {footer && <div className={'sh-foot' + (footBare ? ' bare' : '') + (noTabs ? '' : ' has-tabbar')}>{footer}</div>}
     </IonPage>
   )
 }

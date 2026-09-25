@@ -15,7 +15,7 @@ import { IonReactRouter } from '@ionic/react-router'
 // @ts-expect-error v5-alias пакет без @types — импорты v5-острова (спайк-проверено).
 // RouteV5 — иначе конфликт имён с типом Route из './types'. RedirectV5 — нормализация
 // старых плоских deep-link/push-путей в канонический таб-URL (N-2 backward-compat).
-import { Route as RouteV5, Redirect as RedirectV5, useLocation } from 'react-router-dom-v5'
+import { Route as RouteV5, Redirect as RedirectV5, useLocation, useHistory } from 'react-router-dom-v5'
 import '@ionic/react/css/core.css'
 import './cabinet.css'
 import './ionic.css'
@@ -138,11 +138,53 @@ setupIonicReact({ mode: 'ios' })
 
 // Мост v5-роутера: отдаёт ionRouter наружу для go() и синкает URL → Route-состояние
 // (browser-back / edge-swipe / deep-link меняют URL мимо go()).
-function IonBridge({ onIon, onPath }: { onIon: (ion: UseIonRouterResult) => void; onPath: (path: string) => void }) {
+// ARS-822 (FR-005/006): «назад»/«вперёд» браузера, аппаратный Android (Capacitor → history.back)
+// и системные жесты ОС — это POP истории острова. onPop решает до перехода (свайп Ionic внутри
+// приложения идёт мимо POP, через replace — его доводит syncFromPath):
+// 'allow' — пропустить; 'stay' — отменить (history откатывает POP, экран не меняется);
+// 'market' — отменить и увести на «Рынок» (после отката, когда история снова на текущей записи).
+type PopVerdict = 'allow' | 'stay' | 'market'
+function IonBridge({ onIon, onPath, onPop, onPopToMarket }: {
+  onIon: (ion: UseIonRouterResult) => void
+  onPath: (path: string) => void
+  onPop: (pathname: string) => PopVerdict
+  onPopToMarket: () => void
+}) {
   const ion = useIonRouter()
   useEffect(() => { onIon(ion) })
   const loc = useLocation() as { pathname: string }
   useEffect(() => { onPath(loc.pathname) }, [loc.pathname, onPath])
+  const history = useHistory()
+  const onPopRef = useRef(onPop)
+  onPopRef.current = onPop
+  const onPopToMarketRef = useRef(onPopToMarket)
+  onPopToMarketRef.current = onPopToMarket
+  useEffect(() => {
+    let pending: PopVerdict | null = null
+    const settle = () => {
+      const verdict = pending
+      pending = null
+      if (verdict === 'market') onPopToMarketRef.current()
+    }
+    const unblock = history.block((location: { pathname: string }, action: string) => {
+      if (action !== 'POP') return undefined
+      const verdict = onPopRef.current(location.pathname)
+      if (verdict === 'allow') return undefined
+      pending = verdict
+      // revertPop не откатывает, если не знает ключ записи (перезагрузка посреди флоу): браузер
+      // остался на вытолкнутой записи, остров — на прежней. Выравниваем браузер по острову.
+      setTimeout(() => {
+        if (pending === null || window.location.pathname === history.location.pathname) return
+        history.replace(history.location)
+        settle()
+      }, 400)
+      return false
+    })
+    // Откат POP (history v4 revertPop) завершается уведомлением слушателей — уводим после него,
+    // иначе replace перезаписал бы чужую запись истории.
+    const unlisten = history.listen(() => { if (pending !== null) settle() })
+    return () => { unblock(); unlisten() }
+  }, [history])
   return null
 }
 
@@ -439,8 +481,15 @@ export function CabinetApp() {
   const NAV_ANIM_MS = 650
   const navBusyUntilRef = useRef(0)
   const navBusy = () => performance.now() < navBusyUntilRef.current
+  // ARS-822 (FR-005..008): конец флоу публикации. Пока фермер на экране результата, на партии,
+  // открытой «К партии», или на «Главной» после «На главную» и никуда оттуда не переходил —
+  // «назад» ведёт на «Рынок». Любой другой переход (go, URL мимо go, шторка на «Главной») снимает.
+  const flowExitRef = useRef<{ at: 'pub' | 'batch' | 'home'; url: string } | null>(null)
+  // Адреса покинутых экранов результата: «вперёд»/«назад» на них отменяется (FR-005).
+  const deadPubUrlsRef = useRef<Set<string>>(new Set())
   const go = (r: Route) => {
     const from = routeRef.current
+    flowExitRef.current = null
     setRoute(r)
     if (routeKey(from) === routeKey(r)) return   // тот же экран — обновилось только состояние (back/tid)
     const ion = ionRef.current
@@ -471,6 +520,32 @@ export function CabinetApp() {
     else ion.push(routeToUrl(r), 'back')
     navBusyUntilRef.current = performance.now() + NAV_ANIM_MS
   }
+  // ARS-822: переход внутри конца флоу публикации БЕЗ новой записи в истории — текущая запись
+  // заменяется, поэтому ни мастер, ни экран результата под «назад» не остаются (FR-005).
+  // action 'pop' на корень вкладки (а не 'replace'): таб-бар Ionic сбрасывает запомненный адрес
+  // покинутой вкладки только на pop — иначе «Рынок» в меню снова открыл бы экран результата (FR-008).
+  const goFlow = (r: Route, dir: 'forward' | 'root', action: 'replace' | 'pop', at: 'pub' | 'batch' | 'home') => {
+    const url = routeToUrl(r)
+    setRoute(r)
+    flowExitRef.current = { at, url }
+    navBusyUntilRef.current = performance.now() + NAV_ANIM_MS
+    ionRef.current?.push(url, dir, action)
+  }
+  const onPop = (pathname: string): PopVerdict => {
+    if (deadPubUrlsRef.current.has(pathname)) return 'stay'
+    const flow = flowExitRef.current
+    if (!flow) return 'allow'
+    flowExitRef.current = null
+    if (flow.at === 'pub') deadPubUrlsRef.current.add(flow.url)
+    // Запись под текущей уже «Рынок» (вход кнопкой «Продать») — обычный pop, без лишней записи.
+    return pathname === routeToUrl({ name: 'market' }) ? 'allow' : 'market'
+  }
+  // «‹ Рынок» на партии из «К партии» (FR-007) — тот же путь, что системный «назад» (FR-006б).
+  const historyBack = () => {
+    if (navBusy()) return
+    if (window.history.length <= 1) { go({ name: 'market' }); return }   // партия — первая запись вкладки
+    window.history.back()
+  }
   // Подпись к «‹ назад» в SubHead внутренних страниц — из имени back-роута (нативный iOS-стиль).
   const backLabelFor = (r?: Route): string => {
     const labels: Record<string, string> = {
@@ -482,8 +557,20 @@ export function CabinetApp() {
   // `back` при этом не восстанавливается — onBack-хендлеры используют `route.back ?? fallback`.
   const syncFromPath = useCallback((path: string) => {
     const r = urlToRoute(path)
+    // ARS-822: URL сменился мимо go/goFlow (таб-бар, свайп Ionic) — фермер ушёл, конец флоу снят.
+    if (routeKey(routeRef.current) !== routeKey(r)) {
+      const flow = flowExitRef.current
+      flowExitRef.current = null
+      // С результата и партии (меню скрыто) мимо go уводит только свайп Ionic — на запись под
+      // экраном, а не на «Рынок» (вход из «Моих партий» или мастера фермы). FR-006(а/б).
+      if (flow && flow.at !== 'home' && r.name !== 'market') { goRef.current({ name: 'market' }); return }
+    }
     setRoute((cur) => (routeKey(cur) === routeKey(r) ? cur : r))
   }, [])
+  // ARS-822 FR-006(в): открытие шторки на «Главной» после «На главную» — тоже переход.
+  useEffect(() => {
+    if (sheet && flowExitRef.current?.at === 'home') flowExitRef.current = null
+  }, [sheet])
   // C10 (аудит 2026-07-13): тёплый deep-link (тап по push при открытом приложении) должен
   // переключать экран ВНУТРИ v5-острова. v6-navigate (PushDeepLinkBridge) меняет внешний URL,
   // но остров с собственным history-инстансом его не слышит. Подписываемся на host.onDeepLink
@@ -765,7 +852,8 @@ export function CabinetApp() {
           addBatch(batch)
           host.haptics('heavy')   // S2.1: публикация партии — крупное действие
           pubVariantRef.current[batch.id] = variant
-          go({ name: 'pub', batchId: batch.id })
+          // ARS-822 FR-005: результат ЗАМЕНЯЕТ мастер в истории — «назад» в заполненную форму невозможен.
+          goFlow({ name: 'pub', batchId: batch.id }, 'forward', 'replace', 'pub')
         }}
         onExit={() => goBackTo({ name: 'market' })}
         onTuran={() => go({ name: 'turan', back: { name: 'market' } })}
@@ -782,8 +870,8 @@ export function CabinetApp() {
         <PubResult
           variant={pubVariantRef.current[batch.id] ?? 'D'}
           batch={batch}
-          onToBatch={() => go({ name: 'batch', batchId: batch.id })}
-          onToList={() => go({ name: 'p1list' })}
+          onToBatch={() => goFlow({ name: 'batch', batchId: batch.id, back: { name: 'market' } }, 'forward', 'replace', 'batch')}
+          onToHome={() => goFlow({ name: 'home' }, 'root', 'pop', 'home')}
         />
       </IonPage>
     )
@@ -826,7 +914,7 @@ export function CabinetApp() {
         batch={currentBatch}
         account={profile ? { name: profile.name, bin: profile.bin, phone: profile.phone, district: profile.district } : null}
         orgId={profile?.orgId ?? null}
-        onBack={() => goBackTo(route.back ?? { name: 'p1list' })}
+        onBack={() => (flowExitRef.current?.at === 'batch' ? historyBack() : goBackTo(route.back ?? { name: 'p1list' }))}
         backLabel={backLabelFor(route.back)}
         onPatch={(patch, successToast) => patchBatch(currentBatch.id, patch, successToast)}
         onNew={() => {
@@ -1003,7 +1091,7 @@ export function CabinetApp() {
         <div className="phone">
           <IonApp>
             <IonReactRouter>
-              <IonBridge onIon={(ion) => { ionRef.current = ion }} onPath={syncFromPath} />
+              <IonBridge onIon={(ion) => { ionRef.current = ion }} onPath={syncFromPath} onPop={onPop} onPopToMarket={() => go({ name: 'market' })} />
               {/* P-4 (ARS-220): IonTabs владеет ОДНИМ постоянным IonTabBar — он больше не
                   пересобирается при каждом переходе (раньше таб-бар рендерился внутри каждой
                   страницы через IonShellFrame). Роуты в outlet не изменены. */}

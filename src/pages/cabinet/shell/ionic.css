@@ -68,6 +68,12 @@
 .agos-cabinet-stage ion-content.agos-ion-content.has-tabbar {
   --padding-bottom: var(--tabbar-h);
 }
+/* ARS-822 FR-001/002: док-футер баровой страницы (IonShellFrame без noTabs) целиком над баром.
+   ЗАМЕНЯЕТ отступ дока (market-proto.css .sh-foot, 14px + safe-area), safe-area — один раз.
+   Одно правило на все экраны вкладок (бывшее частное правило «Фермы» в cabinet.css снято). */
+.agos-cabinet-stage .sh-foot.has-tabbar {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
 .agos-cabinet-stage ion-tab-bar.agos-tabbar ion-tab-button {
   --padding-start: 2px;
   --padding-end: 2px;

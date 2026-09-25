@@ -15,7 +15,8 @@ interface PubResultProps {
   variant: PubVariant
   batch: Batch
   onToBatch: () => void
-  onToList?: () => void
+  // ARS-822 FR-004: единственный выход рядом с главной кнопкой — «На главную» (R-14, R-27).
+  onToHome: () => void
 }
 
 // Пауза-поиск между публикацией и результатом. Автоматч уже отработал синхронно
@@ -29,7 +30,7 @@ const SEARCH_PHRASES = [
   'Проверяем покупателей в вашем районе…',
 ]
 
-export function PubResult({ variant, batch, onToBatch, onToList }: PubResultProps) {
+export function PubResult({ variant, batch, onToBatch, onToHome }: PubResultProps) {
   const [searching, setSearching] = useState(variant !== 'D')
   const [phraseIdx, setPhraseIdx] = useState(0)
 
@@ -101,7 +102,7 @@ export function PubResult({ variant, batch, onToBatch, onToList }: PubResultProp
       </IonContent>
       <div className="sh-foot">
         <MkCta onClick={onToBatch}>К партии</MkCta>
-        {onToList && <button className="mk-link" onClick={onToList}>К моим партиям</button>}
+        <button className="mk-link" onClick={onToHome}>На главную</button>
       </div>
     </>
   )

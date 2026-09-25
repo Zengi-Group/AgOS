@@ -1331,7 +1331,5 @@
     color:var(--fg3); font-size:12.5px; line-height:1.35; }
 .agos-cabinet-stage .fm-cap-voice-ic { display:flex; flex-shrink:0; color:var(--fg3); }
 .agos-cabinet-stage .fm-cap-foot { font-size:11px; color:var(--fg3); text-align:center; line-height:1.5; }
-/* Ферма = таб-рут: постоянный таб-бар (position:absolute, ~59px) перекрывает нижнюю часть
-   док-футера. Поднимаем CTA над баром доп. padding-bottom. Скоуп по IonPage[data-screen-label]
-   — визард-футеры (полноэкранные, без таб-бара) не трогаем. */
-.agos-cabinet-stage [data-screen-label="Ферма"] .sh-foot { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+/* Подъём CTA «Записать событие» над таб-баром — общее правило рамки для всех экранов вкладок:
+   ionic.css .sh-foot.has-tabbar (ARS-822 FR-002; частное правило по data-screen-label снято). */
