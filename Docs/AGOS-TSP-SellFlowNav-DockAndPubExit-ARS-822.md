@@ -1,5 +1,5 @@
 ---
-status: agreed           # G2-карточка показана 2026-09-25: 4 круга слепого ревью (14→8→5→4, все закрыты; правки круга 4 не ревьюились), Open Questions пусто; подпись — approve-g2.sh
+status: shipped          # 2026-09-25: #230 влит (a0e9dcb), фронт на проде, сверено по бандлу. G2-карточка показана 2026-09-25: 4 круга слепого ревью (14→8→5→4, все закрыты; правки круга 4 не ревьюились), Open Questions пусто; подпись — approve-g2.sh
 g2_approved: 2026-09-25 · Dias Zhagaparov
 baseline_commit: 24b8465309bb402f754e06fe736a71dd3ee8b1b7   # записан /build 2026-09-25 до первой правки кода
 brain_spec: [[projects/agos/specs/tsp-farmer-sell-flow]]
