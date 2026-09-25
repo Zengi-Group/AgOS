@@ -14,7 +14,7 @@ import { NBSP } from '../../tsp/data/tsp-dicts'
 import { DELIVERY_STATUS_LABEL, mpkCatName, type Pool, type SupplierRow } from '../types'
 import { rpcErrorText } from '../data/rpc-error-text'
 import {
-  avgLinePrice, bucketOf, closureReason, fillPct, isAvgPrice, purchaseAvgPrice, purchaseAvgText,
+  bucketOf, closureReason, fillPct, purchaseAvgPrice, purchaseAvgText,
   statusLabel, supplierPriceText,
 } from './requests-model'
 
@@ -158,9 +158,9 @@ export function RequestMonitor({
             </div>
           </div>
         </Field>
-        <Field label="Цена заявки">
-          {fmtMoney(avgLinePrice(pool))}{NBSP}₸/кг{isAvgPrice(pool) ? ' · средняя по строкам' : ''}
-        </Field>
+        {/* ARS-857 FR-002 · поля «Цена заявки» здесь нет: оно было простым средним цен блока
+            «Категории заявки» ниже (правило §5 канона). Формула осталась в requests-model — её
+            берут список заявок и телефон. */}
         {/* ARS-831 FR-006 · у несостоявшейся заявки купленного нет — поля нет. FR-004 ·
             состояние числа = состояние списка поставщиков (`matchesStatus`); «Повторить» —
             то же перечитывание, что во вкладке «Поставщики». */}

@@ -203,13 +203,13 @@ afterEach(() => {
 
 // ── десктоп ───────────────────────────────────────────────────────────────────
 
-it('ARS-831 M-001: десктоп, пример владельца — «Средняя закупочная 2 020 ₸/кг», «Цена заявки» как была', async () => {
+it('ARS-831 M-001: десктоп, пример владельца — «Средняя закупочная 2 020 ₸/кг», поля «Цена заявки» нет (ARS-857)', async () => {
   store.pools = [makePool({ status: 'closed_filled' })]
   store.matches = [makeMatch(80, 2000, 400), makeMatch(20, 2100, 400)]
   mountDesktop(`/mpk/requests/${POOL_ID}`)
 
   await expect.poll(() => field('Средняя закупочная'), T).toBe('2 020 ₸/кг')
-  expect(field('Цена заявки')).toBe('1 900 ₸/кг · средняя по строкам')
+  expect(field('Цена заявки'), 'поле снято ARS-857 FR-002').toBeNull()
   expect(field('Цена'), 'прежней подписи «Цена» больше нет').toBeNull()
 })
 
@@ -221,13 +221,13 @@ it('ARS-831 M-003: десктоп, у строки нет веса — «2 020 �
   await expect.poll(() => field('Средняя закупочная'), T).toBe('2 020 ₸/кг · по головам')
 })
 
-it('ARS-831 M-005: десктоп, заявка набирается и поставщиков нет — «пока нет сделок», цена заявки видна', async () => {
+it('ARS-831 M-005: десктоп, заявка набирается и поставщиков нет — «пока нет сделок», поля «Цена заявки» нет (ARS-857)', async () => {
   store.pools = [makePool({ status: 'filling', filledHeads: 0 })]
   store.matches = []
   mountDesktop(`/mpk/requests/${POOL_ID}`)
 
   await expect.poll(() => field('Средняя закупочная'), T).toBe('пока нет сделок')
-  expect(field('Цена заявки')).toBe('1 900 ₸/кг · средняя по строкам')
+  expect(field('Цена заявки'), 'поле снято ARS-857 FR-002').toBeNull()
 })
 
 it('ARS-831 M-006: десктоп, строки ещё читаются — «считается…», не 0 и не «пока нет сделок»', async () => {
@@ -249,7 +249,7 @@ it('ARS-831 M-007: десктоп, чтение отказало — «не уд
   mountDesktop(`/mpk/requests/${POOL_ID}`)
 
   await expect.poll(() => field('Средняя закупочная'), T).toBe('не удалось посчитатьПовторить')
-  expect(field('Цена заявки')).toBe('1 900 ₸/кг · средняя по строкам')
+  expect(field('Цена заявки'), 'поле снято ARS-857 FR-002').toBeNull()
   // Отказ виден и во вкладке «Поставщики» — состояние числа = состояние списка (FR-004).
   await page.getByRole('tab', { name: 'Поставщики' }).click()
   await expect.element(page.getByText('Поставщики не загрузились'), T).toBeInTheDocument()
@@ -305,7 +305,7 @@ it('ARS-831 M-014: десктоп, заявка не состоялась — п
     store.matches = [makeMatch(80, 2000, 400)]
     mountDesktop(`/mpk/requests/${POOL_ID}`)
     await expect.element(page.getByText(title, { exact: true }), T).toBeInTheDocument()
-    expect(field('Цена заявки'), status).toBe('1 900 ₸/кг · средняя по строкам')
+    expect(field('Цена заявки'), `${status}: поле снято ARS-857 FR-002`).toBeNull()
     expect(field('Средняя закупочная'), status).toBeNull()
     expect(plain(document.body.textContent), status).not.toContain('закупочная')
     unmount()
