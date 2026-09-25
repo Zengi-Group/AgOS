@@ -1,7 +1,7 @@
 ---
 status: agreed           # G2 одобрен 2026-09-25 (Dias Zhagaparov); подпись — approve-g2.sh; кода нет
 g2_approved: 2026-09-25 · Dias Zhagaparov
-baseline_commit:         # пусто до /build; записывается ДО первой правки: $(git rev-parse HEAD)
+baseline_commit: 6554a832406268533d51593c071a670a0625fb4e # записан /build 2026-09-25 до первой правки
 brain_spec: [[projects/agos/specs/mpk-desktop-trading]]
 task_home: ARS-857 (Linear, team ARS, проект «Рынок TSP»)
 ---
@@ -168,6 +168,8 @@ task_home: ARS-857 (Linear, team ARS, проект «Рынок TSP»)
 
 ## Implementation Notes  (append-only)
 
+- [2026-09-25, /build] Код: `RequestMonitor.tsx` — поле «Цена заявки» снято, из импорта ушли `avgLinePrice`/`isAvgPrice` (другого потребителя в файле нет). Канон §5 — правило `FR-005`. Тесты: новый `src/tests/ars-857-overview-no-request-price.browser.test.tsx` (M-001…M-006), в ARS-831 четыре проверки переведены на отсутствие поля. Мутант (вернуть `RequestMonitor.tsx` из baseline) роняет M-001…M-004. Снимок 1440 px — в стенде vitest (кабинет МПК требует входа): 5 полей в первом ряду, «Заявка создана» во втором — Assumption 2 подтверждено.
+
 ## Spec Change Log  (append-only)
 
 ## Review Triage Log  (append-only)
@@ -221,3 +223,9 @@ task_home: ARS-857 (Linear, team ARS, проект «Рынок TSP»)
 - Vague · «поле» против «повторено в тексте» — «полем или строкой текста».
 
 Правки круга 4 чужим ревью **не проверялись** — названо на гейте.
+
+### Якорь 7 · слепая пара + converge (2026-09-25, `/build`) — 2 находки, 0 блокеров
+
+Дифф `6554a832…рабочее дерево`. verification-gap: дыр нет. converge (ARS-857 + ARS-831 в силе, 38 id): находок нет, `unrequested` нет. Дифф канона `FR-005` (правки круга 4 G2) прочитан обоими — возражений нет.
+- edge-case-hunter · claim «в диффе нет строк `Spec Change Log` ARS-831/ARS-718 и абзаца мозга» — **false**: они записаны на якоре 5 и лежат в самом `baseline_commit` 6554a83 (ARS-831 `:237-256`, ARS-718 `:416-423`, мозг `mpk-desktop-trading.md:56-57`), поэтому в дифф от baseline не попадают; converge подтвердил `FR-001` по дереву.
+- edge-case-hunter · `M-004` проверял у «Не состоялись» только заголовок блока причины, не текст — **low** (матрица обещает «как до слайса») → **patch**: тест сверяет и текст причины для всех четырёх статусов. Перепрогон зелёный.
