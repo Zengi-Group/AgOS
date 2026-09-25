@@ -1,5 +1,5 @@
 ---
-status: agreed           # G2 пройден 2026-09-24 (одобрено в сессии /feature), подписан 2026-09-25; код — /build ARS-831
+status: shipped          # G2 подписан 2026-09-25; код — PR #227 (242dfa5), фронт на проде 2026-09-25, сверен по бандлу
 g2_approved: 2026-09-25 · Dias Zhagaparov
 baseline_commit: 9f64353c3e5fe652a1bcd3e1b6b71f9e248db9a0   # записан /build ARS-831 2026-09-25 до первой правки
 brain_spec: [[projects/agos/specs/mpk-desktop-trading]]
