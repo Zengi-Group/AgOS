@@ -3092,3 +3092,15 @@ desc limit 1` — оператор не выбирает; считать стр�
 **Files**: `src/pages/cabinet/shell/mpk/requests/{requests-model.ts,RequestMonitor.tsx,RequestsList.tsx}`, `src/pages/cabinet/shell/mpk/modals/PoolMonitorModal.tsx`, `src/tests/ars-831-purchase-avg-model.browser.test.ts` (new), `src/tests/ars-831-purchase-avg.browser.test.tsx` (new), `Docs/AGOS-TSP-MpkPurchaseAvgPrice-ARS-831.md`, `Docs/AGOS-Dok6-Slice11-MPK-Requests-Desktop-ARS-718.md`, `IMPL_DEBT.md`, `DECISIONS_LOG.md`.
 
 ---
+
+### 2026-09-25: ARS-831 НА ПРОДЕ — фронт сверен по отданному бандлу, SQL не выкладывался
+
+**What**: PR #227 влит в `main` коммитом `242dfa5` (05:41Z), все 7 проверок CI зелёные (`blast-radius`, `python`, `routers`, `sql-checks`, `web`, Vercel ×2). Linear `ARS-831` переведён в `Done` интеграцией, PR прикреплён. Спека → `status: shipped`. Деплой — **только фронт**: Vercel выложил с `main` сам, SQL не менялся, поэтому `deploy.py` не звался и `prod_diff.py` не требуется.
+
+**Why**: Сверка **по отданному бандлу, а не по статусу сборки** — тем же приёмом, что при ARS-684/687. Первая сверка в 05:42Z честно показала **старый** бандл (`index-BeY2uSG6.js`, строк слайса нет, прежняя «средняя по строкам» на месте): зелёная галочка Vercel на PR — это превью, а не прод. В 05:43Z `https://ag-os.vercel.app` стал отдавать `assets/index-OmIKXYSW.js`; в чанках `MpkApp-BDRo4j05.js`, `MpkRequestsApp-DFNtj1GA.js` найдены «Средняя закупочная», «средняя закупочная», «Цена заявки», прежней «ср. цена» нет; в общем чанке `requests-model-D0oYPIDw.js` — «нельзя посчитать: у поставщика нет цены», «по головам», «пока нет сделок», «не удалось посчитать», «считается…». Контрольная несуществующая строка не найдена — совпадения означают наличие кода, а не слепое совпадение grep.
+
+**Consequences**: Закупщик видит на проде, почём купил, на обеих поверхностях одним числом. **Живой заход оператором МПК после выкладки не делался** — визуальная приёмка на реальной заявке (`6a2549e3`, ожидается 2 020 рядом с 1 900) остаётся за владельцем.
+
+**Files**: `Docs/AGOS-TSP-MpkPurchaseAvgPrice-ARS-831.md` (`status: shipped`), `DECISIONS_LOG.md`. Код не менялся — выложено то, что уже в `main` (`242dfa5`). Прод-схема не трогалась.
+
+---
