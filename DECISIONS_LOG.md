@@ -3140,3 +3140,15 @@ desc limit 1` — оператор не выбирает; считать стр�
 **Files**: `Docs/AGOS-TSP-MpkOverviewNoRequestPrice-ARS-857.md` (new), `Docs/AGOS-TSP-MpkPurchaseAvgPrice-ARS-831.md` (Spec Change Log), `Docs/AGOS-Dok6-Slice11-MPK-Requests-Desktop-ARS-718.md` (Spec Change Log), `DECISIONS_LOG.md`. Код не менялся. Мозг: `apex-brain/projects/agos/specs/mpk-desktop-trading.md`, `projects/agos/_project.md`, `index.md`, `log.md` (запушено, `1f044bc`). Linear: ARS-857 (Spec & Design → Ready for Dev после подписи, `tier:mechanical`).
 
 ---
+
+### 2026-09-25: ARS-857 НА ПРОДЕ — обзор заявки МПК без поля «Цена заявки»
+
+**What**: PR #233 влит в `main` коммитом `de1393d`; CI зелёный (`sql-checks`, `python`, `routers`, `web`, `blast-radius`, Vercel). Linear ARS-857 → Done интеграцией. Спек → `status: shipped`. `RequestMonitor.tsx`: поле «Цена заявки» снято из обзора (FR-002), из импорта ушли `avgLinePrice`/`isAvgPrice` (в файле потребителя не осталось); формула в `requests-model.ts` на месте — её берут список и телефон (FR-007). Канон дизайна §5 — правило «не показывать выведенное число рядом с его исходными» (FR-005, без строки реестра CEO). Тесты: новый `ars-857-overview-no-request-price.browser.test.tsx` (M-001…M-006), в ARS-831 четыре проверки поля переведены на отсутствие. Деплой — только фронт (Vercel с `main`), SQL/RPC не менялись → `deploy.py` / `prod_diff.py` не требовались.
+
+**Why**: см. запись «ARS-857 — … (G2 одобрен, кода нет)» выше. **Сверка прода по отданному бандлу**: Vercel выложил `de1393d` в 12:06Z (`assets/index-hK4bX7Pr.js`); в `MpkRequestsApp-B5F3gku_.js` строки «средняя по строкам» нет, «Цена заявки» осталась одна — заголовок колонки списка (`mpkr-cell`, FR-004); «Средняя закупочная», «Категории заявки», «Минимум для закупки» на месте; контрольная несуществующая строка не найдена.
+
+**Consequences**: **Легко** — правило §5 ловит такие поля на следующих экранах до кода. **Трудно** — см. запись выше (сравнение «предлагал / купил» у многокатегорийной заявки — по строкам категорий). Проверка: 25/25 тестов затронутого домена, мутант (поле возвращено) роняет M-001…M-004; слепая пара — 2 находки (1 false: FR-001 записан в baseline; 1 patch: M-004 сверяет текст причины закрытия), converge — 38/38 id без расхождений; снимок 1440 px в стенде vitest — 5 + 1 полей, Assumption 2 подтверждено. Живой проход на проде под МПК-аккаунтом не делался (вход — только владельцем). `baseline_commit` спека `6554a83` — коммит ветки; в `main` то же дерево — `bae6b1c` (squash #232).
+
+**Files**: `src/pages/cabinet/shell/mpk/requests/RequestMonitor.tsx`, `src/tests/ars-857-overview-no-request-price.browser.test.tsx` (new), `src/tests/ars-831-purchase-avg.browser.test.tsx`, `Docs/AGOS-DesignRules-FarmerCabinet.md`, `Docs/AGOS-TSP-MpkOverviewNoRequestPrice-ARS-857.md`, `DECISIONS_LOG.md`.
+
+---

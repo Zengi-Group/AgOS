@@ -1,5 +1,5 @@
 ---
-status: agreed           # G2 одобрен 2026-09-25 (Dias Zhagaparov); подпись — approve-g2.sh; кода нет
+status: shipped          # PR #233 влит de1393d 2026-09-25; фронт на проде, сверено по бандлу (G2 — 2026-09-25, Dias Zhagaparov)
 g2_approved: 2026-09-25 · Dias Zhagaparov
 baseline_commit: 6554a832406268533d51593c071a670a0625fb4e # записан /build 2026-09-25 до первой правки
 brain_spec: [[projects/agos/specs/mpk-desktop-trading]]
