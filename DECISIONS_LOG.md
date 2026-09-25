@@ -3078,3 +3078,17 @@ desc limit 1` — оператор не выбирает; считать стр�
 **Files**: `Docs/AGOS-TSP-MpkPurchaseAvgPrice-ARS-831.md` (new), `Docs/AGOS-Dok6-Slice11-MPK-Requests-Desktop-ARS-718.md` (строка `Spec Change Log`), `IMPL_DEBT.md`, `DECISIONS_LOG.md`. Код не менялся. Мозг: `apex-brain/projects/agos/specs/mpk-desktop-trading.md`, `projects/agos/_project.md`, `index.md`, `log.md`. Linear: ARS-831.
 
 ---
+
+### 2026-09-25: ARS-831 — код: «Средняя закупочная» в заявке на десктопе и в телефоне, «Цена» → «Цена заявки»
+
+**What**: в `requests/requests-model.ts` — `purchaseAvgPrice` (деньги ÷ кг по строкам поставщиков; нет веса хотя бы у одной — всё число по головам; нет цены — `no_price`), `purchaseAvgText` (одна подпись на обе поверхности), `hasPrice` / `supplierPriceText` («—» вместо «0 ₸/кг»). Десктоп: поле «Цена» → «Цена заявки», рядом «Средняя закупочная» со состояниями «считается…» / «не удалось посчитать» + «Повторить» / «пока нет сделок»; во вкладке «Не состоялись» поля нет; колонка списка «Цена заявки». Телефон (`PoolMonitorModal`): строка закупочной в ветках набора и набранной/приёмки, у завершённой — вместо «ср. цена»; локальная копия `avgLinePrice` удалена (`FR-005`, формульная часть `MPK-POOL-RPC-TWO-HOMES-01` снята). Ни одной RPC и ни одного `.sql` не тронуто.
+
+**Why**: спек ARS-831 (G2 подписан 2026-09-25) — закупщик спрашивает «почём купил», экран отвечал «сколько готов платить». Помощники `hasPrice`/`supplierPriceText`/`purchaseAvgText` — один дом правила «нет цены» и подписи (`P4`, `M-008`), а не новая поверхность. Отвергнуто: считать закупочную отдельно в каждой поверхности (два числа разойдутся).
+
+**Verify**: `tsc -b`, `npm run build`; vitest routers 25 файлов / 281 тест (до патчей ревью), после патчей — слайс + соседи экранов заявки 71/71; все M-001…M-014 закрыты тестами с id в имени (`src/tests/ars-831-purchase-avg{,-model}.browser.test.ts(x)`), мутанты (`Math.floor`, снятая ветка «первый отказ» в телефоне) падают. `cross_check.sh` — 0 critical, 3 significant (преэкзистентные), CHECK 11 без дельты. Ревью якоря 7: 8 находок, 2 patch (тест округления; исправляющая строка `Spec Change Log` ARS-718 — `FR-022` дополняется, а не заменяется), 2 defer, 4 false — разбор в `Review Triage Log` спека.
+
+**Consequences**: **Легко** — одно число на двух поверхностях из одной функции. **Трудно** — два новых долга: `MPK-DEAL-SUM-BESIDE-NO-PRICE-01` (неполная «сумма ≈» рядом с «нельзя посчитать»), `MPK-REQUESTS-MATCHES-NOT-KEYED-01` (кадр чужой заявки при переходе на десктопе). Выкладка — только фронт, уезжает на Vercel при мерже; порядок SQL↔фронт не нужен.
+
+**Files**: `src/pages/cabinet/shell/mpk/requests/{requests-model.ts,RequestMonitor.tsx,RequestsList.tsx}`, `src/pages/cabinet/shell/mpk/modals/PoolMonitorModal.tsx`, `src/tests/ars-831-purchase-avg-model.browser.test.ts` (new), `src/tests/ars-831-purchase-avg.browser.test.tsx` (new), `Docs/AGOS-TSP-MpkPurchaseAvgPrice-ARS-831.md`, `Docs/AGOS-Dok6-Slice11-MPK-Requests-Desktop-ARS-718.md`, `IMPL_DEBT.md`, `DECISIONS_LOG.md`.
+
+---
